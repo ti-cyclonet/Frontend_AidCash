@@ -1,0 +1,43 @@
+<div class="sidebar" id="sidebar">
+  <div class="icon-menu pt-3">
+    <ng-container *ngFor="let option of optionsMenu">
+      <ng-container *ngIf="option.type === 'main_menu'">
+        <a 
+          [routerLink]="option.url"
+          routerLinkActive="active"
+          [ngStyle]="{
+            'position': option.description === 'Settings' ? 'fixed' : 'relative',
+            'bottom': option.description === 'Settings' ? '0' : 'auto'
+          }"
+          class="menu-item"
+          (click)="toggleSubmenu(option.id)">
+          <svg fill="currentcolor" viewBox="0 0 16 16">
+            <use [attr.xlink:href]="'./assets/icons/bootstrap-icons.svg#' + option.icon"></use>
+          </svg>
+          <div>{{ option.description }}</div>
+        
+          <!-- Renderiza el badge solo si hay submenú -->
+          <span class="badge" *ngIf="hasSubmenu(option.id)" [class.show]="isSubmenuOpen(option.id)">
+            <svg fill="currentcolor" viewBox="0 0 16 16" class="arrow-icon">
+              <use [attr.xlink:href]="'./assets/icons/bootstrap-icons.svg#' + (isSubmenuOpen(option.id) ? 'caret-up-fill' : 'caret-down-fill')"></use>
+            </svg>
+          </span>
+        </a>
+
+        <div *ngFor="let submenu of getSubmenus(option.id)"
+             class="submenu"
+             [class.show]="isSubmenuOpen(option.id)">
+          <a 
+            [routerLink]="submenu.url"
+            routerLinkActive="active"
+            class="submenu-item">
+            <svg fill="currentcolor" viewBox="0 0 16 16">
+              <use [attr.xlink:href]="'./assets/icons/bootstrap-icons.svg#' + submenu.icon"></use>
+            </svg>
+            {{ submenu.description }}
+          </a>
+        </div>
+      </ng-container>      
+    </ng-container>
+  </div>
+</div>

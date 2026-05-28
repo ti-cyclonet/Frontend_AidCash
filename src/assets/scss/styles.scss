@@ -1,0 +1,10 @@
+@import '~@angular/material/theming';
+
+:root {
+    --primary-text-color: #E6E6E6;          // Valor por defecto para texto
+    --primary-active-text-color: #000000;    // Valor por defecto para fondo
+    --primary-background-color: #FFF4C3;    // Valor por defecto para fondo
+    --sidebar-background-color: #808080;    // Valor por defecto para fondo de la sidebar
+    --header-background-color: #CC0000;    // Valor por defecto para fondo de la cabecera
+    --header-icon-color: #000000;    // Valor por defecto para el color de los iconos de la cabecera
+}

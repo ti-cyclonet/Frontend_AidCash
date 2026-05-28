@@ -1,0 +1,89 @@
+/* Estilo general para el contenedor principal cuando el sidebar está visible */
+.main-content.reduced-width {
+  margin-left: 100px; /* Ajuste según el ancho del sidebar */
+  width: calc(100% - 100px); /* Resta el ancho del sidebar al contenedor principal */
+  transition: margin-left 0.3s ease, width 0.3s ease;
+}
+
+/* Estilo para el contenedor principal cuando el sidebar está oculto o en pantallas pequeñas */
+.main-content.full-width {
+  margin-left: 0;
+  width: 100%;
+  transition: margin-left 0.3s ease, width 0.3s ease;
+}
+
+/* Estilo general para el sidebar */
+#sidebar {
+  transition: transform 0.3s ease, width 0.3s ease;
+  position: fixed; /* Fijo para pantallas pequeñas */
+  top: 0;
+  left: 0;
+  z-index: 1000; /* Asegúrate de que esté por encima del contenido */
+  width: 100px;
+}
+
+/* Estilo para el estado oculto de la barra lateral */
+#sidebar.hidden {
+  transform: translateX(-100%);
+}
+
+/* Estilo para el botón de toggle en la barra lateral */
+.sidebar-toggle-btn {
+  position: absolute;
+  top: 10px;
+  right: -30px; /* Ubica el botón por fuera del sidebar cuando está visible */
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 1001; /* Asegúrate de que esté por encima del contenido */
+}
+
+.sidebar-toggle-btn svg {
+  fill: var(--header-icon-color);
+  width: 30px;
+  height: 30px;
+}
+
+/* Ocultar el botón de toggle en pantallas grandes */
+@media (min-width: 992px) {
+  .sidebar-toggle-btn {
+    display: none;
+  }
+
+  .main-content.reduced-width {
+    margin-left: 100px;
+    width: calc(100% - 100px);
+  }
+}
+
+/* En pantallas menores de 992px */
+@media (max-width: 991.98px) {
+
+  /* Asegúrate de que el sidebar sea flotante en pantallas pequeñas */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100px;
+    height: 100vh;
+    z-index: 1000;
+  }
+
+  /* Cuando el sidebar está oculto, el contenedor principal ocupa el 100% del ancho */
+  .main-content.full-width {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  /* En pantallas pequeñas, el contenedor principal también debe ocupar el 100% del ancho cuando el sidebar esté visible */
+  .main-content.reduced-width {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  /* El botón de toggle se posiciona dentro del sidebar cuando está visible */
+  .sidebar-toggle-btn {
+    right: -30px; /* Ajuste la posición del botón de toggle */
+    top: 10px;
+  }
+}

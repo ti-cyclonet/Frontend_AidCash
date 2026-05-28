@@ -1,0 +1,45 @@
+/* Estilo para el contenedor del título */
+.title-container {
+  display: flex;
+  align-items: center; /* Centra verticalmente el contenido */
+  font-size: 1.0rem; /* Tamaño del texto del título */
+  color: #6E6E6E; /* Color del texto del título */
+  margin-bottom: 1rem; /* Espacio debajo del título */
+  margin-top: 1rem;    
+  padding-left: 1.5rem;
+}
+
+.title-container svg {
+  width: 20px; /* Tamaño del ícono SVG */
+  height: 20px; /* Tamaño del ícono SVG */
+  margin-right: 0.3rem; /* Espacio entre el ícono y el texto */
+  fill: #6E6E6E; /* Color del ícono SVG */
+}
+
+/* Estilo para el enlace en el contenedor del título */
+.title-link {
+  display: flex;
+  align-items: center; /* Alinea el ícono y el texto verticalmente */
+  color: #6E6E6E; /* Color del texto del enlace (debe coincidir con el color del texto normal) */
+  text-decoration: none; /* Elimina el subrayado del enlace */
+}
+
+/* Efecto hover para el enlace (opcional) */
+.title-link:hover {
+  /* text-decoration: underline; Subraya el texto cuando se pasa el ratón sobre él */
+  color: #4A4A4A; /* Cambia el color del texto del enlace cuando se pasa el ratón sobre él (opcional) */
+}
+
+/* Estilo para la tarjeta de contenido */
+.card {
+  border: 1px solid #cccccc; /* Quitar el borde predeterminado de la tarjeta */
+  border-radius: 0.5rem; /* Bordes redondeados */
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1); /* Sombra de la tarjeta */
+  background-color: #fff; /* Fondo blanco para la tarjeta */
+}
+
+.card-body {
+  padding: 1.5rem; /* Espacio dentro de la tarjeta */      
+  margin-top: 0.1rem;
+  /* color: var(--primary-text-color); Color del texto en la tarjeta */
+}

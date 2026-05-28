@@ -1,0 +1,79 @@
+<div class="title-container">
+  <a href="/users" class="title-link">
+    <svg viewBox="0 0 16 16">
+      <use xlink:href="./assets/icons/bootstrap-icons.svg#people-fill" />
+    </svg>
+    /users
+  </a>
+</div>
+<div class="card shadow m-3">
+  <div class="card-body">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Id</th>
+          <th scope="col">User Name</th>
+          <th scope="col">Password</th>
+          <th scope="col">State</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of users; track user.id) {
+        <tr>
+          <th scope="row">
+            <span class="badge bg-info">
+              {{ user.id }}
+            </span>
+          </th>
+          <td>{{ user.strusername }}</td>
+          <td>{{ user.strpassword }}</td>
+          <td>
+            <b
+              [ngClass]="{
+                'text-danger': user.strstatus === 'Inactive',
+                'text-success': user.strstatus === 'Active'
+              }"
+            >
+              <svg fill="currentColor" viewBox="0 0 16 16" class="status-icon">
+                <use
+                  [attr.xlink:href]="
+                    './assets/icons/bootstrap-icons.svg#' +
+                    (user.strstatus === 'Active'
+                      ? 'emoji-smile'
+                      : 'emoji-frown')
+                  "
+                ></use>
+              </svg>
+              {{ user.strstatus }}
+            </b>
+          </td>
+          <td>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Small button group">
+              <a href="#" class="text-danger">
+                <svg fill="currentColor" viewBox="0 0 16 16" class="status-icon">
+                  <use
+                    [attr.xlink:href]="
+                      './assets/icons/bootstrap-icons.svg#trash3'
+                    "
+                  ></use>
+                </svg>
+              </a>              
+              <a href="#" class="text-primary">
+                <svg fill="currentColor" viewBox="0 0 16 16" class="status-icon">
+                  <use
+                    [attr.xlink:href]="
+                      './assets/icons/bootstrap-icons.svg#pencil'
+                    "
+                  ></use>
+                </svg>
+              </a>
+            </div>
+          </td>
+        </tr>
+
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
