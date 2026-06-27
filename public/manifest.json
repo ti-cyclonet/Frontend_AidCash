@@ -1,0 +1,45 @@
+{
+  "name": "Kiri Finance",
+  "short_name": "Kiri",
+  "description": "Gestiona tus finanzas personales. Tu jardín financiero crece con tus buenos hábitos.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1B4332",
+  "theme_color": "#2D6A4F",
+  "categories": ["finance", "productivity"],
+  "lang": "es",
+  "icons": [
+    { "src": "/icons/icon-72x72.svg",   "sizes": "72x72",   "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-96x96.svg",   "sizes": "96x96",   "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-128x128.svg", "sizes": "128x128", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-144x144.svg", "sizes": "144x144", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-152x152.svg", "sizes": "152x152", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-192x192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-384x384.svg", "sizes": "384x384", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/icon-512x512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Gestión",
+      "short_name": "Gestión",
+      "description": "Registrar ingreso del periodo",
+      "url": "/gestion",
+      "icons": [{ "src": "/icons/icon-96x96.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Obligaciones",
+      "short_name": "Deudas",
+      "description": "Ver y pagar deudas",
+      "url": "/obligaciones",
+      "icons": [{ "src": "/icons/icon-96x96.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Ahorro",
+      "short_name": "Ahorro",
+      "description": "Registrar ahorro del periodo",
+      "url": "/ahorro",
+      "icons": [{ "src": "/icons/icon-96x96.svg", "sizes": "96x96" }]
+    }
+  ]
+}
