@@ -5,117 +5,107 @@
  * de los últimos 3 meses, y genera consejos proactivos basados en patrones
  * detectados. Permite interacción conversacional.
  *
- * NO usar 'use server' — se invoca desde una API Route.
+ * NO usar 'use server' — se invoca desde una API Route de Next.js.
  */
 
-import { ai } from '@/ai/genkit'
+import { ai, GENKIT_MODEL } from '@/ai/genkit'
 import { z } from 'genkit'
 
 // ─── Esquemas ─────────────────────────────────────────────────────────────────
 
 const ResumenMensualSchema = z.object({
-  mes:                z.string().describe('Nombre del mes (ej: "mayo 2026")'),
-  ingresoTotal:       z.number().describe('Ingreso total de ese mes'),
-  totalObligaciones:  z.number().describe('Total en deudas + gastos fijos'),
-  totalAhorro:        z.number().describe('Monto ahorrado ese mes'),
-  gastoLibre:         z.number().describe('Monto gastado en libre consumo'),
-  deudasActivas:      z.number().describe('Número de deudas activas ese mes'),
+  mes:               z.string(),
+  ingresoTotal:      z.number(),
+  totalObligaciones: z.number(),
+  totalAhorro:       z.number(),
+  gastoLibre:        z.number(),
+  deudasActivas:     z.number(),
 })
 
 const DeudaActivaSchema = z.object({
-  nombre:            z.string(),
-  montoTotal:        z.number().describe('Saldo total restante'),
-  cuotaPeriodo:      z.number().describe('Cuota que paga por periodo'),
-  mesesRestantes:    z.number().describe('Meses estimados para liquidar'),
+  nombre:         z.string(),
+  montoTotal:     z.number(),
+  cuotaPeriodo:   z.number(),
+  mesesRestantes: z.number(),
 })
 
 const ProactiveCoachInputSchema = z.object({
-  // Contexto actual
-  nombreUsuario:      z.string().describe('Nombre del usuario para personalizar'),
-  ingresoActual:      z.number().describe('Ingreso del periodo actual'),
-  frecuencia:         z.string().describe('quincenal o mensual'),
-  obligacionesPct:    z.number().describe('Porcentaje de ingreso en obligaciones'),
-  ahorroPct:          z.number().describe('Porcentaje de ingreso en ahorro'),
-  capacidadLibre:     z.number().describe('Capacidad de endeudamiento disponible'),
-  metaAhorro:         z.number().describe('Meta de ahorro total del usuario'),
-  ahorroAcumulado:    z.number().describe('Total ahorrado hasta hoy'),
-  streakSemanas:      z.number().describe('Racha actual en semanas'),
-
-  // Historial de meses
-  historial:          z.array(ResumenMensualSchema).describe('Resumen financiero de los últimos 3 meses'),
-
-  // Deudas activas
-  deudasActivas:      z.array(DeudaActivaSchema).describe('Lista de deudas activas actuales'),
-
-  // Mensaje del usuario (para modo conversacional)
-  mensajeUsuario:     z.string().optional().describe('Pregunta o comentario del usuario al coach'),
-
-  // Historial de conversación (últimos mensajes para contexto)
-  historialChat:      z.array(z.object({
-    rol:      z.enum(['usuario', 'coach']),
-    mensaje:  z.string(),
-  })).optional().describe('Últimos mensajes de la conversación para mantener contexto'),
+  nombreUsuario:   z.string(),
+  ingresoActual:   z.number(),
+  frecuencia:      z.string(),
+  obligacionesPct: z.number(),
+  ahorroPct:       z.number(),
+  capacidadLibre:  z.number(),
+  metaAhorro:      z.number(),
+  ahorroAcumulado: z.number(),
+  streakSemanas:   z.number(),
+  historial:       z.array(ResumenMensualSchema),
+  deudasActivas:   z.array(DeudaActivaSchema),
+  mensajeUsuario:  z.string().optional(),
+  historialChat:   z.array(z.object({
+    rol:     z.enum(['usuario', 'coach']),
+    mensaje: z.string(),
+  })).optional(),
 })
 
-export type ProactiveCoachInput = z.infer<typeof ProactiveCoachInputSchema>
+export type ProactiveCoachInput  = z.infer<typeof ProactiveCoachInputSchema>
 
 const ProactiveCoachOutputSchema = z.object({
-  respuesta:          z.string().describe('Respuesta del coach al usuario. Consejo proactivo o respuesta conversacional.'),
-  patronDetectado:    z.string().optional().describe('Patrón identificado en el historial (si aplica)'),
-  accionSugerida:     z.string().optional().describe('Acción concreta que el usuario puede tomar hoy'),
-  impactoEstimado:    z.string().optional().describe('Impacto estimado si sigue el consejo (ej: "pagas 3 meses antes")'),
+  respuesta:       z.string(),
+  patronDetectado: z.string().optional(),
+  accionSugerida:  z.string().optional(),
+  impactoEstimado: z.string().optional(),
 })
 
 export type ProactiveCoachOutput = z.infer<typeof ProactiveCoachOutputSchema>
 
-// ─── Función pública ──────────────────────────────────────────────────────────
+// ─── Construcción del prompt ──────────────────────────────────────────────────
 
-export async function proactiveCoach(
-  input: ProactiveCoachInput
-): Promise<ProactiveCoachOutput> {
-  return proactiveCoachFlow(input)
-}
+function buildPrompt(input: ProactiveCoachInput): string {
+  const historialLines = input.historial
+    .map(h =>
+      `• ${h.mes}: Ingreso ${h.ingresoTotal} | Obligaciones ${h.totalObligaciones} | ` +
+      `Ahorro ${h.totalAhorro} | Libre ${h.gastoLibre} | ${h.deudasActivas} deudas`
+    )
+    .join('\n')
 
-// ─── Prompt ───────────────────────────────────────────────────────────────────
+  const deudasLines = input.deudasActivas.length > 0
+    ? input.deudasActivas
+        .map(d =>
+          `• ${d.nombre}: Saldo ${d.montoTotal} | Cuota ${d.cuotaPeriodo}/periodo | ~${d.mesesRestantes} meses restantes`
+        )
+        .join('\n')
+    : '• Sin deudas activas'
 
-const prompt = ai.definePrompt({
-  name: 'kiri_coach_proactivo',
-  input:  { schema: ProactiveCoachInputSchema },
-  output: { schema: ProactiveCoachOutputSchema },
-  prompt: `Eres el Coach Financiero Proactivo de Kiri Finance. Tu nombre es Kiri.
+  const historialChatLines = input.historialChat && input.historialChat.length > 0
+    ? `\n═══ CONVERSACIÓN PREVIA ═══\n` +
+      input.historialChat.map(m => `[${m.rol}]: ${m.mensaje}`).join('\n')
+    : ''
+
+  const mensajeSection = input.mensajeUsuario
+    ? `\n═══ MENSAJE ACTUAL DEL USUARIO ═══\n👤 ${input.mensajeUsuario}`
+    : ''
+
+  return `Eres el Coach Financiero Proactivo de Kiri Finance. Tu nombre es Kiri.
 Eres cálido, directo y motivacional. Hablas en español latinoamericano, tuteas al usuario.
 Tu misión es analizar patrones en el historial financiero y dar consejos accionables que generen impacto real.
 
 ═══ PERFIL DEL USUARIO ═══
-Nombre: {{nombreUsuario}}
-Ingreso actual: {{ingresoActual}} ({{frecuencia}})
-Obligaciones: {{obligacionesPct}}% del ingreso
-Ahorro: {{ahorroPct}}% del ingreso
-Capacidad libre: {{capacidadLibre}}
-Meta de ahorro: {{metaAhorro}} (acumulado: {{ahorroAcumulado}})
-Racha actual: {{streakSemanas}} semanas
+Nombre: ${input.nombreUsuario}
+Ingreso actual: ${input.ingresoActual} (${input.frecuencia})
+Obligaciones: ${input.obligacionesPct}% del ingreso
+Ahorro: ${input.ahorroPct}% del ingreso
+Capacidad libre: ${input.capacidadLibre}
+Meta de ahorro: ${input.metaAhorro} (acumulado: ${input.ahorroAcumulado})
+Racha actual: ${input.streakSemanas} semanas
 
 ═══ HISTORIAL DE 3 MESES ═══
-{{#each historial}}
-• {{mes}}: Ingreso {{ingresoTotal}} | Obligaciones {{totalObligaciones}} | Ahorro {{totalAhorro}} | Libre {{gastoLibre}} | {{deudasActivas}} deudas
-{{/each}}
+${historialLines}
 
 ═══ DEUDAS ACTIVAS ═══
-{{#each deudasActivas}}
-• {{nombre}}: Saldo {{montoTotal}} | Cuota {{cuotaPeriodo}}/periodo | ~{{mesesRestantes}} meses restantes
-{{/each}}
-
-{{#if historialChat}}
-═══ CONVERSACIÓN PREVIA ═══
-{{#each historialChat}}
-[{{rol}}]: {{mensaje}}
-{{/each}}
-{{/if}}
-
-{{#if mensajeUsuario}}
-═══ MENSAJE ACTUAL DEL USUARIO ═══
-👤 {{mensajeUsuario}}
-{{/if}}
+${deudasLines}
+${historialChatLines}
+${mensajeSection}
 
 ═══ TUS INSTRUCCIONES ═══
 1. Si el usuario envió un mensaje, respóndelo directamente con base en su contexto financiero.
@@ -128,19 +118,31 @@ Racha actual: {{streakSemanas}} semanas
 5. Si la racha es alta (4+), felicítalo brevemente.
 6. Siempre cierra con una pregunta que invite a la acción o al diálogo.
 
-Responde en formato JSON con los campos: respuesta, patronDetectado (opcional), accionSugerida (opcional), impactoEstimado (opcional).`,
-})
+Responde ÚNICAMENTE con un JSON válido con estos campos:
+{
+  "respuesta": "texto de la respuesta principal (requerido)",
+  "patronDetectado": "patrón identificado (opcional, omitir si no aplica)",
+  "accionSugerida": "acción concreta sugerida (opcional)",
+  "impactoEstimado": "impacto estimado de la acción (opcional)"
+}`
+}
 
-// ─── Flow ─────────────────────────────────────────────────────────────────────
+// ─── Función pública ──────────────────────────────────────────────────────────
 
-const proactiveCoachFlow = ai.defineFlow(
-  {
-    name: 'proactiveCoachFlow',
-    inputSchema: ProactiveCoachInputSchema,
-    outputSchema: ProactiveCoachOutputSchema,
-  },
-  async (input) => {
-    const { output } = await prompt(input)
-    return output!
+export async function proactiveCoach(
+  input: ProactiveCoachInput
+): Promise<ProactiveCoachOutput> {
+  const promptText = buildPrompt(input)
+
+  const { output } = await ai.generate({
+    model:  GENKIT_MODEL,
+    prompt: promptText,
+    output: { schema: ProactiveCoachOutputSchema },
+  })
+
+  if (!output) {
+    throw new Error('El modelo no devolvió una respuesta válida')
   }
-)
+
+  return output
+}

@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useCelebration } from "@/hooks/use-celebration"
-import type { ReceiptScannerOutput } from "@/ai/flows/receipt-scanner-flow"
+import type { ReceiptScannerOutput } from "@/ai/types"
 
 type ScanState = 'idle' | 'scanning' | 'result' | 'error'
 

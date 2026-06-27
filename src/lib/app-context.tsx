@@ -199,7 +199,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // En localStorage solo se guarda nombre y correo, nunca el avatar
     localStorage.setItem(LS.user, JSON.stringify({ ...rest, avatarUrl: "" }))
     if (isAuthenticated()) {
-      userApi.updateProfile({ nombre: u.nombre })
+      // Persistir nombre Y correo al backend
+      const patch: Record<string, unknown> = { nombre: u.nombre }
+      if (u.correo) patch.correo = u.correo
+      userApi.updateProfile(patch)
     }
   }, [])
 

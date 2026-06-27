@@ -14,7 +14,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData, SavingsEntry } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
-import type { ProactiveCoachInput, ProactiveCoachOutput } from "@/ai/flows/proactive-coach-flow"
+import type { ProactiveCoachInput, ProactiveCoachOutput } from "@/ai/types"
 
 // ─── Tipos del chat ───────────────────────────────────────────────────────────
 

@@ -14,11 +14,19 @@ export async function POST(req: NextRequest) {
 
     const result = await scanReceipt(body)
     return NextResponse.json(result)
-  } catch (error) {
-    console.error('[AI Receipt Scanner]', error)
-    return NextResponse.json(
-      { error: 'No se pudo procesar el recibo. Intenta con una imagen más clara.' },
-      { status: 500 }
-    )
+  } catch (error: unknown) {
+    const err = error as { status?: string; code?: number; message?: string }
+    console.error('[AI Receipt Scanner] Error:', err?.message ?? error)
+
+    const isQuotaExhausted =
+      err?.status === 'RESOURCE_EXHAUSTED' ||
+      err?.code === 429 ||
+      String(err?.message).includes('quota')
+
+    const message = isQuotaExhausted
+      ? 'El escáner alcanzó su límite de uso por hoy. Vuelve mañana o actualiza tu plan de Google AI.'
+      : 'No se pudo procesar el recibo. Intenta con una imagen más clara.'
+
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

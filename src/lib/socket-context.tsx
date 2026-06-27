@@ -84,6 +84,7 @@ const NOTIFICATION_EVENTS: SocketEvent[] = [
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { user: authUser } = useAuth()
   const socketRef = useRef<Socket | null>(null)
+  const [socket, setSocket] = useState<Socket | null>(null)
   const [connected, setConnected] = useState(false)
   const [notifications, setNotifications] = useState<KiriNotification[]>([])
 
@@ -92,6 +93,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     if (!authUser) {
       socketRef.current?.disconnect()
       socketRef.current = null
+      setSocket(null)
       setConnected(false)
       return
     }
@@ -99,28 +101,28 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const token = getAccessToken()
     if (!token) return
 
-    const socket = io(SOCKET_URL, {
+    const sock = io(SOCKET_URL, {
       auth:       { token },
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
       reconnectionDelay:    2000,
     })
 
-    socket.on("connect", () => {
+    sock.on("connect", () => {
       setConnected(true)
     })
 
-    socket.on("disconnect", () => {
+    sock.on("disconnect", () => {
       setConnected(false)
     })
 
-    socket.on("connect_error", (err) => {
+    sock.on("connect_error", (err) => {
       console.warn("[Socket] Error de conexión:", err.message)
     })
 
     // Registrar listeners para todos los eventos de notificación
     NOTIFICATION_EVENTS.forEach((event) => {
-      socket.on(event, (data: Record<string, unknown>) => {
+      sock.on(event, (data: Record<string, unknown>) => {
         const notif: KiriNotification = {
           id:        `${Date.now()}-${Math.random()}`,
           event,
@@ -132,11 +134,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       })
     })
 
-    socketRef.current = socket
+    socketRef.current = sock
+    setSocket(sock)
 
     return () => {
-      socket.disconnect()
+      sock.disconnect()
       socketRef.current = null
+      setSocket(null)
       setConnected(false)
     }
   }, [authUser])
@@ -153,7 +157,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   return (
     <SocketContext.Provider value={{
-      socket:   socketRef.current,
+      socket,
       connected,
       notifications,
       unreadCount,
