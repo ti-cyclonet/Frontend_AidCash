@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } fro
 import {
   Wallet, ReceiptText, PiggyBank, ChevronRight,
   TrendingUp, AlertCircle, Sparkles, Eye, Flame,
-  FileText, FileSpreadsheet, TreePine,
+  FileText, FileSpreadsheet, TreePine, Users, Heart, Handshake,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -18,8 +18,10 @@ import { useStreaks } from "@/hooks/use-streaks"
 import { useRouter } from "next/navigation"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
 import { getPeriodData } from "@/lib/period-filter"
+import { analyzeFinances } from "@/lib/recommendations"
 import { ExportButtons } from "@/components/balance/ExportButtons"
-import { userApi, reportsApi, WalletState } from "@/lib/api-client"
+import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
+import { userApi, reportsApi, connectionsApi, sharedPocketsApi, loansApi, WalletState } from "@/lib/api-client"
 import type { BalanceReport } from "@/lib/api-client"
 
 export default function DashboardPage() {
@@ -30,10 +32,27 @@ export default function DashboardPage() {
 
   const [report, setReport] = useState<BalanceReport | null>(null)
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
+  const [socialData, setSocialData] = useState<{ amigos: number; pocketsCount: number; loanAvailable: number; loanTotal: number }>({ amigos: 0, pocketsCount: 0, loanAvailable: 0, loanTotal: 0 })
 
   useEffect(() => {
     reportsApi.getBalance("month").then(({ data }) => { if (data) setReport(data) })
     userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
+    // Social data
+    connectionsApi.list().then(({ data }) => {
+      if (data) setSocialData(prev => ({ ...prev, amigos: data.accepted.length }))
+    })
+    sharedPocketsApi.list().then(({ data }) => {
+      if (data) setSocialData(prev => ({ ...prev, pocketsCount: (data.pockets as unknown[]).length }))
+    })
+    loansApi.list().then(({ data }) => {
+      if (data) {
+        const loans = data.loans as { amount: number; remainingAmount: number; status: string }[]
+        const active = loans.filter(l => l.status === "ACTIVE")
+        const totalLent = active.reduce((a, l) => a + l.amount, 0)
+        const totalRemaining = active.reduce((a, l) => a + l.remainingAmount, 0)
+        setSocialData(prev => ({ ...prev, loanAvailable: totalRemaining, loanTotal: totalLent }))
+      }
+    })
   }, [])
 
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
@@ -44,6 +63,12 @@ export default function DashboardPage() {
   const allocation = useMemo(
     () => totalIncome > 0 ? calculateBudgetAllocation(totalIncome, totalObligations) : null,
     [totalIncome, totalObligations]
+  )
+
+  // Recomendaciones y estrategias de deuda
+  const recommendations = useMemo(
+    () => allocation ? analyzeFinances(allocation, periodDebts, incomeFrequency) : null,
+    [allocation, periodDebts, incomeFrequency]
   )
 
   const pendingDebts = periodDebts.filter(d => !d.pagadoEstePeriodo)
@@ -167,16 +192,45 @@ export default function DashboardPage() {
               </div>
 
               {/* Mensaje de estado */}
-              <div className="mt-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl p-3 flex items-center gap-2">
-                <span className="text-lg">🌱</span>
-                <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
-                  {allocation?.isOverloaded
-                    ? "⚠️ Tus obligaciones superan tu ingreso. Revisa tu presupuesto."
-                    : allocation?.isTight
-                      ? "Tu presupuesto está ajustado. Revisa si puedes reducir alguna obligación."
-                      : "¡Vas por buen camino! 🌿 Estás distribuyendo tu dinero de forma inteligente."
-                  }
-                </p>
+              <div className={cn(
+                "mt-4 rounded-2xl p-3 flex items-start gap-2",
+                allocation?.isOverloaded
+                  ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40"
+                  : allocation?.isTight
+                    ? "bg-amber-50 dark:bg-amber-950/20"
+                    : "bg-emerald-50 dark:bg-emerald-950/20"
+              )}>
+                <span className="text-lg shrink-0">{allocation?.isOverloaded ? "⊘" : allocation?.isTight ? "⚠️" : "🌱"}</span>
+                <div>
+                  <p className={cn(
+                    "text-[11px] font-bold",
+                    allocation?.isOverloaded
+                      ? "text-red-700 dark:text-red-300"
+                      : allocation?.isTight
+                        ? "text-amber-700 dark:text-amber-300"
+                        : "text-emerald-700 dark:text-emerald-300"
+                  )}>
+                    {allocation?.isOverloaded
+                      ? "Un desvío en la ruta — ajustemos juntos"
+                      : allocation?.isTight
+                        ? "Presupuesto ajustado — hay poco margen"
+                        : "¡Vas por buen camino! 🌿"
+                    }
+                  </p>
+                  <p className={cn(
+                    "text-[10px] mt-0.5",
+                    allocation?.isOverloaded
+                      ? "text-red-600/80 dark:text-red-400/80"
+                      : "text-muted-foreground"
+                  )}>
+                    {allocation?.isOverloaded
+                      ? `Tus compromisos actuales superan tu ingreso en un ${Math.round(allocation.obligationsPct)}%. Es un momento para replantear prioridades. Vamos a buscar qué deudas atacar primero para liberar oxígeno.`
+                      : allocation?.isTight
+                        ? "Tus obligaciones consumen la mayor parte del ingreso. Revisa si puedes renegociar alguna cuota o eliminar un gasto fijo."
+                        : "Estás distribuyendo tu dinero de forma inteligente."
+                    }
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -236,6 +290,36 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Estrategias para salir de deudas */}
+          {recommendations?.strategies && debts.length > 0 && (
+            <div className="space-y-3">
+              {/* Sugerencia directa cuando está sobrecargado */}
+              {allocation?.isOverloaded && recommendations.strategies && (
+                <Card className="border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-bold text-red-700 dark:text-red-300 flex items-center gap-2">
+                      🎯 Estrategia sugerida: {recommendations.strategies.avalancheWins ? "Avalancha" : "Bola de Nieve"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {recommendations.strategies.avalancheWins
+                        ? `Ataca primero "${recommendations.strategies.avalanche.pasos[0]?.nombre ?? "tu deuda más pesada"}" — es la que más presión ejerce sobre tu presupuesto. Al liquidarla liberas ${formatAmount(recommendations.strategies.avalanche.pasos[0]?.cuotaLiberada ?? 0)}/periodo que puedes redirigir a la siguiente.`
+                        : `Empieza por "${recommendations.strategies.snowball.pasos[0]?.nombre ?? "tu deuda más pequeña"}" — la liquidas en ${recommendations.strategies.snowball.pasos[0]?.liquidaEnPeriodo ?? "pocos"} periodos y liberas ${formatAmount(recommendations.strategies.snowball.pasos[0]?.cuotaLiberada ?? 0)}/periodo. Las victorias rápidas mantienen la motivación.`
+                      }
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      📅 Libre de deudas en: <span className="font-bold">{recommendations.strategies.avalancheWins ? recommendations.strategies.avalanche.fechaLibre : recommendations.strategies.snowball.fechaLibre}</span>
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+              <DebtStrategyPanel
+                snowball={recommendations.strategies.snowball}
+                avalanche={recommendations.strategies.avalanche}
+                avalancheWins={recommendations.strategies.avalancheWins}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── COLUMNA DERECHA: Acciones + Detalles (2/5) ── */}
@@ -300,6 +384,70 @@ export default function DashboardPage() {
                   <span className="text-sm font-black text-cyclon-periwinkle">{formatAmount(totalPending)}</span>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Resumen Social */}
+          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
+            <CardContent className="p-5 space-y-3">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Users className="h-4 w-4 text-kiri-emerald" />
+                Social
+              </h3>
+              <p className="text-[11px] text-muted-foreground -mt-1">Conéctate, comparte y crece juntos.</p>
+
+              {/* Amigos */}
+              <Link href="/social" className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div className="h-8 w-8 rounded-lg bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald shrink-0">
+                  <Users className="h-4 w-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-bold">Amigos</p>
+                  <p className="text-[10px] text-muted-foreground">Personas conectadas contigo</p>
+                </div>
+                <span className="text-sm font-black text-kiri-emerald">{socialData.amigos}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </Link>
+
+              {/* Pareja / Bolsillos compartidos */}
+              <Link href="/social" className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div className="h-8 w-8 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-500 shrink-0">
+                  <Heart className="h-4 w-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-bold">Pareja</p>
+                  <p className="text-[10px] text-muted-foreground">Finanzas en equipo</p>
+                </div>
+                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", socialData.pocketsCount > 0 ? "bg-kiri-emerald/10 text-kiri-emerald" : "bg-muted text-muted-foreground")}>
+                  {socialData.pocketsCount > 0 ? "Activo" : "—"}
+                </span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </Link>
+
+              {/* Disponible para prestar */}
+              <Link href="/social" className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/10 flex items-center justify-center text-cyclon-lavender shrink-0">
+                  <Handshake className="h-4 w-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-bold">Préstamos</p>
+                  <p className="text-[10px] text-muted-foreground">Ayuda a quien lo necesita</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-cyclon-lavender">{formatAmount(socialData.loanAvailable)}</p>
+                  {socialData.loanTotal > 0 && <p className="text-[9px] text-muted-foreground">de {formatAmount(socialData.loanTotal)}</p>}
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </Link>
+
+              {/* Mensaje motivacional */}
+              <div className="bg-kiri-emerald/5 rounded-2xl p-3 flex items-center gap-3 mt-1">
+                <span className="text-2xl">🌱</span>
+                <div>
+                  <p className="text-[11px] font-bold text-kiri-emerald">¡Tu red te hace más fuerte! 💚</p>
+                  <p className="text-[10px] text-muted-foreground">Comparte, apoya y alcanza tus metas financieras en comunidad.</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

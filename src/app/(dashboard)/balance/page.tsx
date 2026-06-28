@@ -68,7 +68,6 @@ export default function BalancePage() {
           </h1>
           <p className="text-muted-foreground text-sm">Tu libro mayor financiero en tiempo real.</p>
         </div>
-        <ExportButtons report={report} />
       </header>
 
       {/* Filtro de tiempo */}
@@ -179,9 +178,12 @@ export default function BalancePage() {
           {/* ═══ HISTORIAL DETALLADO ═══ */}
           {report && (
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-                Historial detallado
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                  Historial detallado
+                </h3>
+                <ExportButtons report={report} />
+              </div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {HISTORY_TABS.map(tab => (
                   <button key={tab.value} onClick={() => setHistoryTab(tab.value)} className={cn(

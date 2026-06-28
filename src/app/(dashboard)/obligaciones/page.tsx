@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
   Plus, CheckCircle2, Calendar, Info, Pencil, Trash2,
-  AlertTriangle, Coffee, ShoppingBag,
+  AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff,
 } from "lucide-react"
 import { Debt, FixedExpense, ImpulseCategory } from "@/lib/types"
 import {
@@ -23,7 +23,6 @@ import { useAppContext } from "@/lib/app-context"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
 import { getPeriodData } from "@/lib/period-filter"
 import { useMemo } from "react"
-import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
 import Link from "next/link"
@@ -76,6 +75,14 @@ export default function ObligacionesPage() {
 
   // ── Tab activa ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>("gastos_fijos")
+
+  // ── Items ocultos (ojo) ────────────────────────────────────────────────────
+  const [hiddenItems, setHiddenItems] = useState<Set<string>>(new Set())
+  const toggleItemHidden = (id: string) => setHiddenItems(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   // ── Asignación de presupuesto para gastos hormiga ──────────────────────────
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
@@ -307,15 +314,6 @@ export default function ObligacionesPage() {
         )}
       </header>
 
-      {/* ── Estrategias de Deuda ── */}
-      {recommendations?.strategies && debts.length > 0 && (
-        <DebtStrategyPanel
-          snowball={recommendations.strategies.snowball}
-          avalanche={recommendations.strategies.avalanche}
-          avalancheWins={recommendations.strategies.avalancheWins}
-        />
-      )}
-
       {/* ── Simulador de Escenarios ── */}
       {allocation && (
         <DebtSimulator
@@ -370,6 +368,8 @@ export default function ObligacionesPage() {
                   onEdit={() => openEditFixed(fe)}
                   onDelete={() => setDeleteTarget({ type: "fixed", id: fe.id, nombre: fe.nombre })}
                   onTogglePaid={() => markFixedPaid(fe.id, !fe.pagadoEstePeriodo)}
+                  hidden={hiddenItems.has(fe.id)}
+                  onToggleHidden={() => toggleItemHidden(fe.id)}
                 />
               ))}
             </>
@@ -404,6 +404,8 @@ export default function ObligacionesPage() {
                   onPay={() => openPay(debt)}
                   onEdit={() => openEditDebt(debt)}
                   onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
+                  hidden={hiddenItems.has(debt.id)}
+                  onToggleHidden={() => toggleItemHidden(debt.id)}
                 />
               ))}
             </>
@@ -774,9 +776,10 @@ function getDueStatus(dateStr: string) {
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete }: {
+function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggleHidden }: {
   debt: Debt; formatAmount: (n: number) => string
   onPay: () => void; onEdit: () => void; onDelete: () => void
+  hidden: boolean; onToggleHidden: () => void
 }) {
   const status = getDueStatus(debt.fechaVencimiento)
   return (
@@ -792,29 +795,35 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start">
-            <h3 className="font-bold text-sm truncate">{debt.nombre}</h3>
+            <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
             <Badge variant={debt.pagadoEstePeriodo ? "secondary" : "default"} className={cn("text-[10px] font-bold rounded-lg ml-2 shrink-0", !debt.pagadoEstePeriodo && "bg-cyclon-pink text-white border-none")}>
               {debt.pagadoEstePeriodo ? "PAGADO" : "PENDIENTE"}
             </Badge>
           </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
-            <span className={cn("text-xs font-medium", debt.pagadoEstePeriodo ? "text-muted-foreground" : status.color)}>
-              {debt.fechaVencimiento}
-            </span>
-            {!debt.pagadoEstePeriodo && (
-              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", status.bgColor, status.color)}>
-                {status.label}
-              </span>
-            )}
-          </div>
-          <div className="mt-1.5 flex justify-between items-end">
-            <div>
-              <span className="text-base font-bold">{formatAmount(debt.cuotaPeriodo)}</span>
-              <span className="text-[10px] text-muted-foreground ml-1">/ cuota</span>
-            </div>
-            <span className="text-[10px] text-muted-foreground">Total: {formatAmount(debt.montoTotal)}</span>
-          </div>
+          {hidden ? (
+            <p className="text-base font-black text-muted-foreground mt-1">••••••</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className={cn("text-xs font-medium", debt.pagadoEstePeriodo ? "text-muted-foreground" : status.color)}>
+                  {debt.fechaVencimiento}
+                </span>
+                {!debt.pagadoEstePeriodo && (
+                  <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", status.bgColor, status.color)}>
+                    {status.label}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 flex justify-between items-end">
+                <div>
+                  <span className="text-base font-bold">{formatAmount(debt.cuotaPeriodo)}</span>
+                  <span className="text-[10px] text-muted-foreground ml-1">/ cuota</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">Total: {formatAmount(debt.montoTotal)}</span>
+              </div>
+            </>
+          )}
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           {!debt.pagadoEstePeriodo && (
@@ -823,6 +832,9 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete }: {
             </Button>
           )}
           <div className="flex gap-1">
+            <button onClick={onToggleHidden} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
             <button onClick={onEdit} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
@@ -837,9 +849,10 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete }: {
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid }: {
+function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden }: {
   item: FixedExpense; formatAmount: (n: number) => string
   onEdit: () => void; onDelete: () => void; onTogglePaid: () => void
+  hidden: boolean; onToggleHidden: () => void
 }) {
   const status = getDueStatus(item.fechaCorte)
   return (
@@ -855,23 +868,29 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start">
-            <h3 className="font-bold text-sm truncate">{item.nombre}</h3>
+            <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
             <Badge variant={item.pagadoEstePeriodo ? "secondary" : "default"} className={cn("text-[10px] font-bold rounded-lg ml-2 shrink-0", !item.pagadoEstePeriodo && "bg-cyclon-sky text-white border-none")}>
               {item.pagadoEstePeriodo ? "PAGADO" : "PENDIENTE"}
             </Badge>
           </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
-            <span className={cn("text-xs font-medium", item.pagadoEstePeriodo ? "text-muted-foreground" : status.color)}>
-              {item.fechaCorte}
-            </span>
-            {!item.pagadoEstePeriodo && (
-              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", status.bgColor, status.color)}>
-                {status.label}
-              </span>
-            )}
-          </div>
-          <span className="text-base font-bold mt-1 block">{formatAmount(item.monto)}</span>
+          {hidden ? (
+            <p className="text-base font-black text-muted-foreground mt-1">••••••</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className={cn("text-xs font-medium", item.pagadoEstePeriodo ? "text-muted-foreground" : status.color)}>
+                  {item.fechaCorte}
+                </span>
+                {!item.pagadoEstePeriodo && (
+                  <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", status.bgColor, status.color)}>
+                    {status.label}
+                  </span>
+                )}
+              </div>
+              <span className="text-base font-bold mt-1 block">{formatAmount(item.monto)}</span>
+            </>
+          )}
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           {!item.pagadoEstePeriodo
@@ -879,6 +898,9 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid }: {
             : <Button onClick={onTogglePaid} size="sm" variant="ghost" className="rounded-xl h-8 px-3 text-xs text-muted-foreground">Deshacer</Button>
           }
           <div className="flex gap-1">
+            <button onClick={onToggleHidden} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
             <button onClick={onEdit} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
