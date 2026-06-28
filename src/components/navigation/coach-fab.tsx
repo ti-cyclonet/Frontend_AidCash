@@ -102,7 +102,33 @@ export function CoachFab() {
 
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── En móviles los satélites viven en el BottomNav (+), no en el FAB ──────
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
+
+  // Escuchar eventos del BottomNav (+) para abrir modales
+  useEffect(() => {
+    const onSim = () => handleSimSatellite()
+    const onVoice = () => handleVoiceSatellite()
+    const onScan = () => handleScanSatellite()
+    window.addEventListener("kiri:open-simulator", onSim)
+    window.addEventListener("kiri:open-voice", onVoice)
+    window.addEventListener("kiri:open-scanner", onScan)
+    return () => {
+      window.removeEventListener("kiri:open-simulator", onSim)
+      window.removeEventListener("kiri:open-voice", onVoice)
+      window.removeEventListener("kiri:open-scanner", onScan)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleFabMouseEnter = () => {
+    if (isMobile) return
     hoverTimer.current = setTimeout(() => setShowSatellites(true), 300)
   }
   const handleFabMouseLeave = () => {
@@ -111,11 +137,14 @@ export function CoachFab() {
   }
 
   const handleFabTouchStart = () => {
+    // En móvil: tap simple abre el chat, no los satélites
     longPressTriggered.current = false
-    longPressTimer.current = setTimeout(() => {
-      longPressTriggered.current = true
-      setShowSatellites(true)
-    }, 400)
+    if (!isMobile) {
+      longPressTimer.current = setTimeout(() => {
+        longPressTriggered.current = true
+        setShowSatellites(true)
+      }, 400)
+    }
   }
   const handleFabTouchEnd = () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current)
@@ -293,9 +322,10 @@ export function CoachFab() {
           onMouseEnter={handleFabMouseEnter}
           onMouseLeave={handleFabMouseLeave}
         >
-          {/* ── Satélites (arriba del FAB) ── */}
+          {/* ── Satélites (arriba del FAB) — solo desktop ── */}
           <div className={cn(
             "flex flex-col items-center gap-3 transition-all duration-300 ease-out",
+            "hidden lg:flex",
             showSatellites
               ? "opacity-100 translate-y-0 pointer-events-auto"
               : "opacity-0 translate-y-4 pointer-events-none"

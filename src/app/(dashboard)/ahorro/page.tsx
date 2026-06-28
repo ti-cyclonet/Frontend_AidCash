@@ -16,7 +16,7 @@ import {
   PiggyBank, History, TrendingUp, TrendingDown,
   XCircle, CheckCircle2, Pencil, Target, ShieldCheck,
   Plus, Trash2, Star, Wallet, Plane, Home, GraduationCap,
-  Car, Heart, Sparkles, Minus,
+  Car, Heart, Sparkles, Minus, Eye, EyeOff,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -120,6 +120,18 @@ export default function AhorroPage() {
   const [txAmount, setTxAmount] = useState("")
   const [savingTx, setSavingTx] = useState(false)
 
+  // ── Ocultar bolsillos (ojo) ───────────────────────────────────────────────
+  const [hiddenPockets, setHiddenPockets] = useState<Set<string>>(new Set())
+  const toggleHidden = (id: string) => setHiddenPockets(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+
+  // ── Modal: editar bolsillo ────────────────────────────────────────────────
+  const [editPocket, setEditPocket] = useState<SavingPocket | null>(null)
+  const [editForm, setEditForm] = useState({ nombre: "", meta: "", descripcion: "" })
+
   // ── Modal: editar meta global ─────────────────────────────────────────────
   const [isMetaOpen, setIsMetaOpen] = useState(false)
   const [metaInput, setMetaInput] = useState("")
@@ -163,6 +175,17 @@ export default function AhorroPage() {
   }
 
   const handleDeletePocket = (id: string) => setPockets(p => p.filter(x => x.id !== id))
+
+  const openEditPocket = (pocket: SavingPocket) => {
+    setEditPocket(pocket)
+    setEditForm({ nombre: pocket.nombre, meta: String(pocket.meta || ""), descripcion: pocket.descripcion || "" })
+  }
+
+  const handleSaveEditPocket = () => {
+    if (!editPocket) return
+    setPockets(p => p.map(x => x.id === editPocket.id ? { ...x, nombre: editForm.nombre || x.nombre, meta: Number(editForm.meta) || x.meta, descripcion: editForm.descripcion || undefined } : x))
+    setEditPocket(null)
+  }
 
   const openTx = (pocket: SavingPocket, type: "aporte" | "retiro") => {
     setTxPocket(pocket); setTxType(type); setTxAmount(""); 
@@ -340,17 +363,31 @@ export default function AhorroPage() {
                                     <p className="text-[10px] text-muted-foreground truncate">{pocket.descripcion}</p>
                                   )}
                                 </div>
-                                <button
-                                  onClick={() => handleDeletePocket(pocket.id)}
-                                  className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                <div className="flex gap-1 shrink-0">
+                                  <button onClick={() => toggleHidden(pocket.id)}
+                                    className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors">
+                                    {hiddenPockets.has(pocket.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                  </button>
+                                  <button onClick={() => openEditPocket(pocket)}
+                                    className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button onClick={() => handleDeletePocket(pocket.id)}
+                                    className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
                               </div>
                               <div className="flex items-baseline gap-1.5 mt-1">
-                                <span className={cn("text-xl font-black", c.text)}>{formatAmount(pocket.acumulado)}</span>
-                                {pocket.meta > 0 && (
-                                  <span className="text-[10px] text-muted-foreground">de {formatAmount(pocket.meta)}</span>
+                                {hiddenPockets.has(pocket.id) ? (
+                                  <span className="text-xl font-black text-muted-foreground">••••••</span>
+                                ) : (
+                                  <>
+                                    <span className={cn("text-xl font-black", c.text)}>{formatAmount(pocket.acumulado)}</span>
+                                    {pocket.meta > 0 && (
+                                      <span className="text-[10px] text-muted-foreground">de {formatAmount(pocket.meta)}</span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -613,6 +650,36 @@ export default function AhorroPage() {
               className="bg-cyclon-mint text-cyclon-periwinkle font-bold rounded-xl px-8 hover:bg-cyclon-mint/80">
               {savingMeta ? "Guardando..." : "Guardar"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Editar bolsillo */}
+      <Dialog open={!!editPocket} onOpenChange={v => !v && setEditPocket(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-cyclon-lavender" /> Editar bolsillo
+            </DialogTitle>
+            <DialogDescription>Modifica los datos de &quot;{editPocket?.nombre}&quot;.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Nombre</Label>
+              <Input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))} className="h-10 rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Meta</Label>
+              <MoneyInput value={editForm.meta} onChange={v => setEditForm(f => ({ ...f, meta: v }))} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Descripción</Label>
+              <Input value={editForm.descripcion} onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))} className="h-10 rounded-xl" placeholder="Para qué es..." />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setEditPocket(null)}>Cancelar</Button>
+            <Button onClick={handleSaveEditPocket} disabled={!editForm.nombre} className="bg-cyclon-lavender text-white font-bold rounded-xl px-8">Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

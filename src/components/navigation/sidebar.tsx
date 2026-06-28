@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
-import { Home, Landmark, Sprout, PiggyBank, TrendingUp, LogOut, ChevronUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users } from "lucide-react"
+import { Landmark, Sprout, PiggyBank, TrendingUp, LogOut, ChevronUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users, PanelLeftClose, PanelLeftOpen, Bell } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -15,10 +15,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
-import { useSocket } from "@/lib/socket-context"
+import { useSocket, KiriNotification, SOCKET_EVENTS } from "@/lib/socket-context"
 
 const navItems = [
-  { label: "Inicio",       icon: Home,       href: "/dashboard" },
   { label: "Gestión",      icon: TrendingUp, href: "/gestion" },
   { label: "Obligaciones", icon: Landmark,   href: "/obligaciones" },
   { label: "Balance",      icon: BookOpen,   href: "/balance" },
@@ -26,12 +25,26 @@ const navItems = [
   { label: "Ahorro",       icon: PiggyBank,  href: "/ahorro" },
 ]
 
+function notifTitleSidebar(n: KiriNotification): string {
+  const d = n.data
+  switch (n.event) {
+    case SOCKET_EVENTS.NEW_INVITE: return `${(d.from as { nombre?: string })?.nombre ?? "Alguien"} te invitó`
+    case SOCKET_EVENTS.INVITE_ACCEPTED: return `Invitación aceptada`
+    case SOCKET_EVENTS.SHARED_DEPOSIT: return `Depósito en bolsillo compartido`
+    case SOCKET_EVENTS.LOAN_REQUESTED: return `Solicitud de préstamo`
+    case SOCKET_EVENTS.LOAN_APPROVED: return `Préstamo aprobado`
+    case SOCKET_EVENTS.LOAN_PAYMENT: return `Abono recibido`
+    case SOCKET_EVENTS.LOAN_PAYMENT_CONFIRMED: return `Abono confirmado`
+    default: return "Nueva notificación"
+  }
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
   const { signOut, user: authUser } = useAuth()
-  const { unreadCount } = useSocket()
+  const { unreadCount, notifications } = useSocket()
 
   const [collapsed, setCollapsed] = useState(false)
   const [dropOpen, setDropOpen] = useState(false)
@@ -89,25 +102,49 @@ export function Sidebar() {
       "hidden lg:flex flex-col h-screen bg-card border-r border-border sticky top-0 shrink-0 transition-all duration-300 z-40",
       collapsed ? "w-[68px]" : "w-[260px]"
     )}>
-      {/* Logo — clic para colapsar/expandir */}
-      <button
-        onClick={() => setCollapsed(v => !v)}
-        className={cn(
-          "flex items-center h-[72px] border-b border-border shrink-0 w-full transition-colors hover:bg-muted/50",
-          collapsed ? "justify-center" : "px-6 gap-3"
+      {/* Header */}
+      <div className={cn(
+        "flex items-center h-[72px] border-b border-border shrink-0 w-full",
+        collapsed ? "justify-center px-2" : "px-4 gap-3"
+      )}>
+        {collapsed ? (
+          /* ── Colapsada: Logo con hover que muestra botón de abrir ── */
+          <button
+            onClick={() => setCollapsed(false)}
+            className="relative h-9 w-9 rounded-xl group"
+            title="Abrir barra lateral"
+          >
+            {/* Logo — visible por defecto, se oculta en hover */}
+            <div className="absolute inset-0 flex items-center justify-center bg-kiri-emerald rounded-xl transition-opacity duration-200 group-hover:opacity-0">
+              <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
+            </div>
+            {/* Icono abrir — invisible por defecto, aparece en hover */}
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/80 text-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <PanelLeftOpen className="h-4 w-4" />
+            </div>
+          </button>
+        ) : (
+          /* ── Expandida: Logo link + nombre + botón cerrar ── */
+          <>
+            <Link href="/dashboard" className="flex items-center gap-2 min-w-0 shrink-0">
+              <div className="h-9 w-9 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
+                <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-sm font-bold text-foreground leading-tight">Kiri Finance</h1>
+                <p className="text-[9px] text-muted-foreground">Tus finanzas, en orden</p>
+              </div>
+            </Link>
+            <button
+              onClick={() => setCollapsed(true)}
+              className="ml-auto h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors shrink-0"
+              title="Cerrar barra lateral"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </>
         )}
-      >
-        <div className="h-9 w-9 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
-          <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0 text-left">
-            <h1 className="text-base font-bold text-foreground leading-tight">Kiri Finance</h1>
-            <p className="text-[10px] text-muted-foreground">Tus finanzas, en orden</p>
-          </div>
-        )}
-      </button>
-
+      </div>
       {/* Nav items */}
       <TooltipProvider delayDuration={0}>
         <nav className="flex-1 px-2 py-4 space-y-1">
@@ -155,8 +192,38 @@ export function Sidebar() {
             {dropOpen && (
               <div className={cn(
                 "absolute bottom-full mb-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50",
-                collapsed ? "left-full ml-2 w-[200px]" : "left-0 right-0"
+                collapsed ? "left-full ml-2 w-[280px]" : "left-0 right-0"
               )}>
+                {/* Notificaciones */}
+                <div className="px-4 py-2 border-b border-border">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Bell className="h-3 w-3" /> Notificaciones
+                    {unreadCount > 0 && (
+                      <span className="h-4 min-w-4 px-1 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">Sin notificaciones</p>
+                  ) : (
+                    notifications.slice(0, 5).map(n => (
+                      <button key={n.id} onClick={() => { setDropOpen(false); router.push("/social") }}
+                        className={cn("w-full flex items-start gap-2 px-4 py-2 text-left hover:bg-muted/50 transition-colors", !n.read && "bg-cyclon-lavender/5")}>
+                        <div className="h-5 w-5 rounded bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">
+                          <Bell className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-[11px] truncate", !n.read && "font-semibold")}>{notifTitleSidebar(n)}</p>
+                        </div>
+                        {!n.read && <div className="h-1.5 w-1.5 rounded-full bg-cyclon-lavender shrink-0 mt-1.5" />}
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div className="border-t border-border" />
                 <button
                   onClick={handleOpenSettings}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"

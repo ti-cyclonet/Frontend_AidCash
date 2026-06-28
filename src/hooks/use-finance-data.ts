@@ -40,9 +40,14 @@ function mapDebt(row: Record<string, unknown>): Debt {
     nombre: row.nombre as string,
     montoTotal: Number(row.montoTotal ?? row.monto_total ?? 0),
     cuotaPeriodo: Number(row.cuotaPeriodo ?? row.cuota_periodo ?? 0),
+    tasaInteres: row.tasaInteres != null ? Number(row.tasaInteres) : (row.tasa_interes != null ? Number(row.tasa_interes) : null),
     fechaVencimiento: (row.fechaVencimiento ?? row.fecha_vencimiento) as string,
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo) as boolean,
     estado: (row.estado as Debt["estado"]) ?? 'activa',
+    prioridad: (row.prioridad as Debt["prioridad"]) ?? 'media',
+    acreedor: (row.acreedor as string | null) ?? null,
+    cuotasRestantes: row.cuotasRestantes != null ? Number(row.cuotasRestantes) : (row.cuotas_restantes != null ? Number(row.cuotas_restantes) : null),
+    fechaEstimadaPago: (row.fechaEstimadaPago ?? row.fecha_estimada_pago) as string | null ?? null,
   }
 }
 
@@ -52,7 +57,11 @@ function mapFixed(row: Record<string, unknown>): FixedExpense {
     userId: (row.userId ?? row.user_id) as string,
     nombre: row.nombre as string,
     monto: Number(row.monto ?? 0),
+    categoria: ((row.categoria as FixedExpense['categoria']) ?? 'otro'),
     fechaCorte: (row.fechaCorte ?? row.fecha_corte) as string,
+    frecuencia: ((row.frecuencia as FixedExpense['frecuencia']) ?? 'mensual'),
+    metodoPago: (row.metodoPago ?? row.metodo_pago) as string | null ?? null,
+    renovacionAuto: (row.renovacionAuto ?? row.renovacion_auto ?? false) as boolean,
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
   }
 }
@@ -171,13 +180,18 @@ export function useFinanceData() {
 
   // ─── Deudas ─────────────────────────────────────────────────────────────────
 
-  const addDebt = async (data: Omit<Debt, "id" | "userId" | "pagadoEstePeriodo" | "estado">) => {
+  const addDebt = async (data: Omit<Debt, "id" | "userId" | "pagadoEstePeriodo" | "estado" | "prioridad" | "acreedor" | "cuotasRestantes" | "fechaEstimadaPago" | "tasaInteres"> & { tasaInteres?: number; prioridad?: string; acreedor?: string; cuotasRestantes?: number; fechaEstimadaPago?: string }) => {
     if (!userId) return
     await debtsApi.create({
       nombre: data.nombre,
       montoTotal: data.montoTotal,
       cuotaPeriodo: data.cuotaPeriodo,
       fechaVencimiento: data.fechaVencimiento,
+      tasaInteres: data.tasaInteres,
+      prioridad: data.prioridad as 'alta' | 'media' | 'baja' | undefined,
+      acreedor: data.acreedor,
+      cuotasRestantes: data.cuotasRestantes,
+      fechaEstimadaPago: data.fechaEstimadaPago,
     })
     await fetchAll()
   }
@@ -209,12 +223,16 @@ export function useFinanceData() {
 
   // ─── Gastos fijos ────────────────────────────────────────────────────────────
 
-  const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo">) => {
+  const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo" | "renovacionAuto" | "frecuencia" | "categoria" | "metodoPago"> & { categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean }) => {
     if (!userId) return
     await fixedExpensesApi.create({
       nombre: data.nombre,
       monto: data.monto,
       fechaCorte: data.fechaCorte,
+      categoria: data.categoria as 'vivienda' | 'servicios' | 'internet' | 'transporte' | 'educacion' | 'salud' | 'suscripciones' | 'otro' | undefined,
+      frecuencia: data.frecuencia as 'mensual' | 'quincenal' | 'semanal' | 'anual' | undefined,
+      metodoPago: data.metodoPago,
+      renovacionAuto: data.renovacionAuto,
     })
     await fetchAll()
   }
