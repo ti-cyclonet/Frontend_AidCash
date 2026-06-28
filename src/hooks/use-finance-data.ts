@@ -196,7 +196,12 @@ export function useFinanceData() {
   }
 
   const markPaid = async (debtId: string, newTotal: number, paid: boolean) => {
+    const debt = debts.find(d => d.id === debtId)
     await debtsApi.pay(debtId, newTotal, paid)
+    // Si se marca como pagada, deducir del bolsillo de obligaciones
+    if (paid && debt) {
+      await userApi.walletDeduct(debt.cuotaPeriodo, 'obligaciones')
+    }
     setDebts(prev => prev.map(d =>
       d.id === debtId ? { ...d, montoTotal: newTotal, pagadoEstePeriodo: paid } : d
     ))
@@ -228,7 +233,12 @@ export function useFinanceData() {
   }
 
   const markFixedPaid = async (id: string, paid: boolean) => {
+    const fe = fixedExpenses.find(f => f.id === id)
     await fixedExpensesApi.update(id, { pagadoEstePeriodo: paid })
+    // Si se marca como pagada, deducir del bolsillo de obligaciones
+    if (paid && fe) {
+      await userApi.walletDeduct(fe.monto, 'obligaciones')
+    }
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: paid } : f))
   }
 
@@ -263,6 +273,10 @@ export function useFinanceData() {
   const addSavingsEntry = async (monto: number, tipo: SavingsEntry['tipo']) => {
     if (!userId) return
     await savingsApi.create(monto, tipo)
+    // Si es ahorro real, deducir del bolsillo "ahorro"
+    if (tipo === 'ahorro' && monto > 0) {
+      await userApi.walletDeduct(monto, 'ahorro')
+    }
     await fetchAll()
   }
 
@@ -278,6 +292,8 @@ export function useFinanceData() {
     if (result?.expense) {
       const mapped = mapImpulse(result.expense)
       setImpulseExpenses(prev => [mapped, ...prev])
+      // Deducir del bolsillo "libre"
+      await userApi.walletDeduct(data.monto, 'libre')
       return mapped
     }
     return null

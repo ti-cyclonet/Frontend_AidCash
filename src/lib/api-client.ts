@@ -260,6 +260,40 @@ export const userApi = {
       impulseExpenses: Record<string, unknown>[]
     }>('/users/dashboard-summary')
   },
+
+  // ─── Wallet API ─────────────────────────────────────────────────────────────
+
+  async getWallet() {
+    return api<{ wallet: WalletState }>('/users/wallet')
+  },
+
+  async walletIncome(monto: number, tipo: 'salario' | 'extra') {
+    return api<{ record: Record<string, unknown>; wallet: WalletState }>('/users/wallet/income', {
+      method: 'POST',
+      body: { monto, tipo },
+    })
+  },
+
+  async walletDeduct(monto: number, bolsillo: 'obligaciones' | 'libre' | 'ahorro') {
+    return api<{ wallet: WalletState }>('/users/wallet/deduct', {
+      method: 'POST',
+      body: { monto, bolsillo },
+    })
+  },
+
+  async walletReset() {
+    return api<{ wallet: WalletState }>('/users/wallet/reset', {
+      method: 'POST',
+    })
+  },
+}
+
+export interface WalletState {
+  cashBalance: number
+  ahorro: number
+  obligaciones: number
+  libre: number
+  endeudamiento: number
 }
 
 // ─── Debts API ────────────────────────────────────────────────────────────────
@@ -434,6 +468,8 @@ export interface BalanceReport {
     totalIngreso: number
     totalEgreso: number
     ingresoBase: number
+    totalIngresosHistorico: number
+    totalEgresosHistorico: number
     totalExtra: number
     totalDebts: number
     totalFixed: number
