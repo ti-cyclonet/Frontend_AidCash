@@ -88,6 +88,7 @@ export function BilleteraTab() {
   }
 
   // ── Proyección: calcula los % ideales basados en el sueldo fijo (la RUTA) ──
+  // Usa getPeriodData para filtrar obligaciones del periodo actual
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
   const { effectiveIncome, totalObligations, periodDebts } = useMemo(
     () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
@@ -98,13 +99,14 @@ export function BilleteraTab() {
     [effectiveIncome, totalObligations]
   )
 
-  // Porcentajes del embudo (proyección)
-  const projectedPcts: Record<string, number> = allocation ? {
-    ahorro: Math.round(allocation.savingsPct),
-    obligaciones: Math.round(allocation.obligationsPct),
-    libre: Math.round(allocation.dailyFreePct),
-    endeudamiento: Math.round(allocation.debtCapacityPct),
-  } : { ahorro: 20, obligaciones: 50, libre: 15, endeudamiento: 15 }
+  // Porcentajes REALES del wallet (basados en lo que realmente tiene en cada bolsillo)
+  // Esto es lo que muestra la Billetera: dinero real distribuido
+  const realPcts: Record<string, number> = {
+    ahorro: total > 0 ? Math.round((wallet.ahorro / total) * 100) : 0,
+    obligaciones: total > 0 ? Math.round((wallet.obligaciones / total) * 100) : 0,
+    libre: total > 0 ? Math.round((wallet.libre / total) * 100) : 0,
+    endeudamiento: total > 0 ? Math.round((wallet.endeudamiento / total) * 100) : 0,
+  }
 
   // Recomendaciones unificadas
   const recommendations = useMemo(
@@ -149,14 +151,14 @@ export function BilleteraTab() {
         <h2 className="text-base font-bold flex items-center gap-2">Tu presupuesto 💰</h2>
       </div>
 
-      {/* Grid 4 tarjetas — porcentaje es de la PROYECCIÓN */}
+      {/* Grid 4 tarjetas — montos y porcentajes REALES del wallet */}
       <div className="grid grid-cols-2 gap-3">
         {POCKETS.map(pocket => (
           <PocketCard
             key={pocket.key}
             pocket={pocket}
             amount={pocketValues[pocket.key]}
-            pct={projectedPcts[pocket.key]}
+            pct={realPcts[pocket.key]}
             formatAmount={formatAmount}
           />
         ))}

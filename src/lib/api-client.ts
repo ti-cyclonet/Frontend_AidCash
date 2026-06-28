@@ -303,7 +303,7 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; cuotaPeriodo: number; fechaVencimiento: string }) {
+  async create(data: { nombre: string; montoTotal: number; cuotaPeriodo: number; fechaVencimiento: string; tasaInteres?: number; prioridad?: string; acreedor?: string; cuotasRestantes?: number; fechaEstimadaPago?: string }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,
@@ -336,7 +336,7 @@ export const fixedExpensesApi = {
     return api<{ fixedExpenses: Record<string, unknown>[] }>('/fixed-expenses')
   },
 
-  async create(data: { nombre: string; monto: number; fechaCorte: string }) {
+  async create(data: { nombre: string; monto: number; fechaCorte: string; categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean }) {
     return api<{ fixedExpense: Record<string, unknown> }>('/fixed-expenses', {
       method: 'POST',
       body: data,

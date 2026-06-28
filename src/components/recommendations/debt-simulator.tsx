@@ -91,6 +91,11 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
         fechaVencimiento: '',
         pagadoEstePeriodo: false,
         estado: 'activa',
+        prioridad: 'media',
+        acreedor: null,
+        cuotasRestantes: null,
+        fechaEstimadaPago: null,
+        tasaInteres: null,
       },
     ]
 

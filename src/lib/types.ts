@@ -97,15 +97,25 @@ export interface ExtraIncome {
   mesesRestantes: number | null; // null = indefinido o una_vez ya registrado
 }
 
+export type DebtPriority = 'alta' | 'media' | 'baja';
+export type DebtStatus = 'activa' | 'saldada' | 'vencida';
+export type FixedExpenseCategory = 'vivienda' | 'servicios' | 'internet' | 'transporte' | 'educacion' | 'salud' | 'suscripciones' | 'otro';
+export type FixedExpenseFrequency = 'mensual' | 'quincenal' | 'semanal' | 'anual';
+
 export interface Debt {
   id: string;
   userId: string;
   nombre: string;
   montoTotal: number;
   cuotaPeriodo: number;
+  tasaInteres?: number | null;
   fechaVencimiento: string;
   pagadoEstePeriodo: boolean;
-  estado: 'activa' | 'saldada';
+  estado: DebtStatus;
+  prioridad: DebtPriority;
+  acreedor?: string | null;
+  cuotasRestantes?: number | null;
+  fechaEstimadaPago?: string | null;
 }
 
 export interface FixedExpense {
@@ -113,7 +123,11 @@ export interface FixedExpense {
   userId: string;
   nombre: string;
   monto: number;
+  categoria: FixedExpenseCategory;
   fechaCorte: string;
+  frecuencia: FixedExpenseFrequency;
+  metodoPago?: string | null;
+  renovacionAuto: boolean;
   pagadoEstePeriodo: boolean;
 }
 
