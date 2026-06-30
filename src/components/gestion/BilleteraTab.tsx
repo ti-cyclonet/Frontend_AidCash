@@ -87,26 +87,40 @@ export function BilleteraTab() {
     libre: wallet.libre, endeudamiento: wallet.endeudamiento,
   }
 
-  // ── Proyección: calcula los % ideales basados en el sueldo fijo (la RUTA) ──
-  // Usa getPeriodData para filtrar obligaciones del periodo actual
+  // ── Distribución inteligente de la Billetera ──
+  // SEPARADA de Proyecciones: aquí el denominador es el presupuesto total acumulado
+  // (cashBalance = lo que está en la billetera), NO el ingreso mensual.
+  // Así la distribución refleja cómo se reparte el dinero REAL disponible.
+  const totalObligationsMonthly = useMemo(
+    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
+    [debts, fixedExpenses]
+  )
+
+  // El presupuesto total (cashBalance) es la base para la distribución de la billetera
+  const walletBudgetTotal = wallet.cashBalance
+
+  const allocation = useMemo(
+    () => walletBudgetTotal > 0 ? calculateBudgetAllocation(walletBudgetTotal, totalObligationsMonthly) : null,
+    [walletBudgetTotal, totalObligationsMonthly]
+  )
+
+  // Para recomendaciones necesitamos las deudas del periodo (filtradas)
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
-  const { effectiveIncome, totalObligations, periodDebts } = useMemo(
+  const { periodDebts } = useMemo(
     () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
     [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency]
   )
-  const allocation = useMemo(
-    () => effectiveIncome > 0 ? calculateBudgetAllocation(effectiveIncome, totalObligations) : null,
-    [effectiveIncome, totalObligations]
-  )
 
-  // Porcentajes REALES del wallet (basados en lo que realmente tiene en cada bolsillo)
-  // Esto es lo que muestra la Billetera: dinero real distribuido
-  const realPcts: Record<string, number> = {
-    ahorro: total > 0 ? Math.round((wallet.ahorro / total) * 100) : 0,
-    obligaciones: total > 0 ? Math.round((wallet.obligaciones / total) * 100) : 0,
-    libre: total > 0 ? Math.round((wallet.libre / total) * 100) : 0,
-    endeudamiento: total > 0 ? Math.round((wallet.endeudamiento / total) * 100) : 0,
-  }
+  // Los porcentajes de las tarjetas son del EMBUDO basado en el presupuesto total acumulado
+  // Separado de Proyecciones: Billetera usa cashBalance, Proyecciones usa ingreso mensual
+  // Si no hay allocation (presupuesto=0), mostrar 0%
+  // Si isOverloaded: obligaciones = 100%, el resto = 0% (cap visual)
+  const pocketPcts: Record<string, number> = allocation ? {
+    ahorro: Math.round(allocation.savingsPct),
+    obligaciones: Math.min(100, Math.round(allocation.obligationsPct)),
+    libre: Math.round(allocation.dailyFreePct),
+    endeudamiento: Math.round(allocation.debtCapacityPct),
+  } : { ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 }
 
   // Recomendaciones unificadas
   const recommendations = useMemo(
@@ -151,14 +165,14 @@ export function BilleteraTab() {
         <h2 className="text-base font-bold flex items-center gap-2">Tu presupuesto 💰</h2>
       </div>
 
-      {/* Grid 4 tarjetas — montos y porcentajes REALES del wallet */}
+      {/* Grid 4 tarjetas — montos reales + porcentajes del embudo */}
       <div className="grid grid-cols-2 gap-3">
         {POCKETS.map(pocket => (
           <PocketCard
             key={pocket.key}
             pocket={pocket}
             amount={pocketValues[pocket.key]}
-            pct={realPcts[pocket.key]}
+            pct={pocketPcts[pocket.key]}
             formatAmount={formatAmount}
           />
         ))}

@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Users, PiggyBank, Coins, Wifi, WifiOff } from "lucide-react"
+import { Users, PiggyBank, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket } from "@/lib/socket-context"
 import { connectionsApi } from "@/lib/api-client"
-import { NotificationsPanel } from "@/components/social/notifications-panel"
 import { ConnectionsTab } from "@/components/social/connections-tab"
 import { SharedPocketsTab } from "@/components/social/shared-pockets-tab"
 import { LoansTab } from "@/components/social/loans-tab"
@@ -52,30 +51,11 @@ export default function SocialPage() {
     <div className="space-y-6 pb-8">
 
       {/* ── Header ── */}
-      <header className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-black text-cyclon-lavender">Social</h1>
-          <p className="text-muted-foreground text-sm font-medium">
-            Finanzas compartidas con las personas que importan.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Indicador de conexión Socket */}
-          <div
-            title={connected ? "Tiempo real activo" : "Sin conexión en tiempo real"}
-            className={cn(
-              "h-8 w-8 rounded-xl flex items-center justify-center",
-              connected ? "bg-kiri-mint/30 text-kiri-emerald" : "bg-muted text-muted-foreground"
-            )}
-          >
-            {connected
-              ? <Wifi className="h-4 w-4" />
-              : <WifiOff className="h-4 w-4" />
-            }
-          </div>
-          {/* Panel de notificaciones */}
-          <NotificationsPanel />
-        </div>
+      <header>
+        <h1 className="text-3xl font-black text-cyclon-lavender">Social</h1>
+        <p className="text-muted-foreground text-sm font-medium">
+          Finanzas compartidas con las personas que importan.
+        </p>
       </header>
 
       {/* ── Tabs ── */}

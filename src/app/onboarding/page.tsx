@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { VoiceExtractOutput } from "@/app/api/ai/voice-extract/route"
 
-interface DebtDraft  { nombre: string; montoTotal: string; cuotaPeriodo: string; fechaVencimiento: string }
+interface DebtDraft  { nombre: string; montoTotal: string; cuotaPeriodo: string; diasPago: string }
 interface FixedDraft { nombre: string; monto: string; fechaCorte: string }
 
 const STEPS = ["Bienvenida", "Ingresos", "Deudas", "Gastos Fijos"]
@@ -70,7 +70,7 @@ export default function OnboardingPage() {
           setDebts(data.deudas.map(d => ({
             nombre: d.nombre, montoTotal: String(d.monto),
             cuotaPeriodo: String(d.cuota ?? d.monto),
-            fechaVencimiento: d.fechaVencimiento ?? "",
+            diasPago: String(d.diaCorte ?? '1'),
           })))
         }
         if (data.gastosFijos.length > 0) {
@@ -91,7 +91,7 @@ export default function OnboardingPage() {
 
   // Step 2 — deudas
   const [debts, setDebts] = useState<DebtDraft[]>([
-    { nombre: "", montoTotal: "", cuotaPeriodo: "", fechaVencimiento: "" },
+    { nombre: "", montoTotal: "", cuotaPeriodo: "", diasPago: "" },
   ])
 
   // Step 3 — gastos fijos
@@ -148,7 +148,7 @@ export default function OnboardingPage() {
           nombre:           d.nombre,
           montoTotal:       Number(d.montoTotal),
           cuotaPeriodo:     Number(d.cuotaPeriodo) || 0,
-          fechaVencimiento: d.fechaVencimiento || new Date().toISOString().split('T')[0],
+          diasPago:         d.diasPago || '1',
         })
       }
 
@@ -171,7 +171,7 @@ export default function OnboardingPage() {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const addDebtRow    = () => setDebts(p => [...p, { nombre: "", montoTotal: "", cuotaPeriodo: "", fechaVencimiento: "" }])
+  const addDebtRow    = () => setDebts(p => [...p, { nombre: "", montoTotal: "", cuotaPeriodo: "", diasPago: "" }])
   const removeDebtRow = (i: number) => setDebts(p => p.filter((_, idx) => idx !== i))
   const updateDebtRow = (i: number, field: keyof DebtDraft, val: string) =>
     setDebts(p => p.map((d, idx) => idx === i ? { ...d, [field]: val } : d))
@@ -360,7 +360,7 @@ export default function OnboardingPage() {
                       <Input type="number" placeholder="Monto total" value={d.montoTotal} onChange={e => updateDebtRow(i, "montoTotal", e.target.value)} className="h-9 rounded-xl text-sm" />
                       <Input type="number" placeholder="Cuota/periodo" value={d.cuotaPeriodo} onChange={e => updateDebtRow(i, "cuotaPeriodo", e.target.value)} className="h-9 rounded-xl text-sm" />
                     </div>
-                    <Input type="date" value={d.fechaVencimiento} onChange={e => updateDebtRow(i, "fechaVencimiento", e.target.value)} className="h-9 rounded-xl text-sm" />
+                    <Input type="date" value={d.diasPago} onChange={e => updateDebtRow(i, "diasPago", e.target.value)} className="h-9 rounded-xl text-sm" />
                   </CardContent>
                 </Card>
               ))}

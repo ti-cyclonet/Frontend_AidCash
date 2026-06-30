@@ -56,13 +56,24 @@ export default function DashboardPage() {
   }, [])
 
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
-  const { effectiveIncome: totalIncome, totalObligations, periodDebts } = useMemo(
+
+  // ═══ FUENTE ÚNICA DE VERDAD: totales mensuales completos (sin filtro de quincena) ═══
+  // Esto garantiza que Dashboard, Billetera y Proyecciones muestren los mismos %
+  const totalObligationsMonthly = useMemo(
+    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
+    [debts, fixedExpenses]
+  )
+  const totalIncomeMonthly = income + totalExtraIncome
+
+  const allocation = useMemo(
+    () => totalIncomeMonthly > 0 ? calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly) : null,
+    [totalIncomeMonthly, totalObligationsMonthly]
+  )
+
+  // Para recomendaciones y listados de pendientes, usamos periodDebts (filtro de quincena)
+  const { periodDebts } = useMemo(
     () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
     [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency]
-  )
-  const allocation = useMemo(
-    () => totalIncome > 0 ? calculateBudgetAllocation(totalIncome, totalObligations) : null,
-    [totalIncome, totalObligations]
   )
 
   // Recomendaciones y estrategias de deuda
@@ -80,17 +91,19 @@ export default function DashboardPage() {
   // Saldo total real
   const saldoTotal = wallet.cashBalance
 
-  // Donut data
+  // Donut data — SIEMPRE derivada del cálculo real del embudo
+  // Si allocation es null (ingreso=0), mostramos 0% en todo en vez de constantes falsas
+  // Si isOverloaded: cap obligaciones a 100% para la visualización
   const pieData = allocation ? [
     { name: "Ahorro", value: Math.round(allocation.savingsPct), color: "#B9FBC0", amount: allocation.savingsAmount },
-    { name: "Obligaciones", value: Math.round(allocation.obligationsPct), color: "#8096E6", amount: allocation.obligationsAmount },
+    { name: "Obligaciones", value: Math.min(100, Math.round(allocation.obligationsPct)), color: "#8096E6", amount: allocation.obligationsAmount },
     { name: "Gasto libre", value: Math.round(allocation.dailyFreePct), color: "#A2D2FF", amount: allocation.dailyFreeAmount },
     { name: "Endeudamiento", value: Math.round(allocation.debtCapacityPct), color: "#C4B5FD", amount: allocation.debtCapacityAmount },
   ] : [
-    { name: "Ahorro", value: 20, color: "#B9FBC0", amount: 0 },
-    { name: "Obligaciones", value: 50, color: "#8096E6", amount: 0 },
-    { name: "Gasto libre", value: 15, color: "#A2D2FF", amount: 0 },
-    { name: "Endeudamiento", value: 15, color: "#C4B5FD", amount: 0 },
+    { name: "Ahorro", value: 0, color: "#B9FBC0", amount: 0 },
+    { name: "Obligaciones", value: 0, color: "#8096E6", amount: 0 },
+    { name: "Gasto libre", value: 0, color: "#A2D2FF", amount: 0 },
+    { name: "Endeudamiento", value: 0, color: "#C4B5FD", amount: 0 },
   ]
 
   // Nivel del árbol (basado en streak)
@@ -115,7 +128,7 @@ export default function DashboardPage() {
                 Saldo total <Eye className="h-3 w-3" />
               </span>
               <p className="text-xl sm:text-2xl font-black text-foreground">
-                {saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncome)}
+                {saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncomeMonthly)}
               </p>
               <span className="text-[9px] text-muted-foreground">Actualizado hoy</span>
             </div>
@@ -170,7 +183,7 @@ export default function DashboardPage() {
                   {/* Centro del donut */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[9px] text-muted-foreground font-medium">Total</span>
-                    <span className="text-sm font-black">{saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncome)}</span>
+                    <span className="text-sm font-black">{saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncomeMonthly)}</span>
                   </div>
                 </div>
 
@@ -191,16 +204,16 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Mensaje de estado */}
+              {/* Mensaje de estado — sincronizado con el motor de recomendaciones */}
               <div className={cn(
                 "mt-4 rounded-2xl p-3 flex items-start gap-2",
                 allocation?.isOverloaded
                   ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40"
                   : allocation?.isTight
-                    ? "bg-amber-50 dark:bg-amber-950/20"
+                    ? "bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40"
                     : "bg-emerald-50 dark:bg-emerald-950/20"
               )}>
-                <span className="text-lg shrink-0">{allocation?.isOverloaded ? "⊘" : allocation?.isTight ? "⚠️" : "🌱"}</span>
+                <span className="text-lg shrink-0">{allocation?.isOverloaded ? "🚨" : allocation?.isTight ? "⚠️" : "🌱"}</span>
                 <div>
                   <p className={cn(
                     "text-[11px] font-bold",
@@ -211,9 +224,9 @@ export default function DashboardPage() {
                         : "text-emerald-700 dark:text-emerald-300"
                   )}>
                     {allocation?.isOverloaded
-                      ? "Un desvío en la ruta — ajustemos juntos"
+                      ? "Alerta: Tus obligaciones superan tus ingresos"
                       : allocation?.isTight
-                        ? "Presupuesto ajustado — hay poco margen"
+                        ? "Navegando con poco margen"
                         : "¡Vas por buen camino! 🌿"
                     }
                   </p>
@@ -224,9 +237,9 @@ export default function DashboardPage() {
                       : "text-muted-foreground"
                   )}>
                     {allocation?.isOverloaded
-                      ? `Tus compromisos actuales superan tu ingreso en un ${Math.round(allocation.obligationsPct)}%. Es un momento para replantear prioridades. Vamos a buscar qué deudas atacar primero para liberar oxígeno.`
+                      ? `Tus compromisos actuales superan tu ingreso (${Math.round(allocation.obligationsPct)}% de carga). No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Revisa qué obligaciones reducir primero.`
                       : allocation?.isTight
-                        ? "Tus obligaciones consumen la mayor parte del ingreso. Revisa si puedes renegociar alguna cuota o eliminar un gasto fijo."
+                        ? `El ${Math.round(allocation.obligationsPct)}% de tu ingreso va a obligaciones. Estás en control, pero con poco colchón. Cada deuda que liquides te devuelve libertad.`
                         : "Estás distribuyendo tu dinero de forma inteligente."
                     }
                   </p>
@@ -347,7 +360,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold truncate">{d.nombre}</p>
-                        <p className="text-[10px] text-muted-foreground">Vence {d.fechaVencimiento}</p>
+                        <p className="text-[10px] text-muted-foreground">Vence {d.diasPago}</p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-black">{formatAmount(d.cuotaPeriodo)}</p>

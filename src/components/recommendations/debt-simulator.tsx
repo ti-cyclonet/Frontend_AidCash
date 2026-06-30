@@ -87,15 +87,15 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
         userId: '',
         nombre: productName || 'Nueva compra',
         montoTotal: Number(amount),
+        saldoRestante: Number(amount),
         cuotaPeriodo: opt.quota,
-        fechaVencimiento: '',
+        tasaInteres: null,
+        acreedor: '',
+        frecuenciaPago: 'mensual',
+        diasPago: '1',
         pagadoEstePeriodo: false,
         estado: 'activa',
         prioridad: 'media',
-        acreedor: null,
-        cuotasRestantes: null,
-        fechaEstimadaPago: null,
-        tasaInteres: null,
       },
     ]
 
@@ -128,7 +128,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
       nombre: productName || 'Nueva compra',
       montoTotal: Number(amount),
       cuotaPeriodo: opt.quota,
-      fechaVencimiento: new Date(
+      diasPago: new Date(
         Date.now() + opt.months * 30 * 24 * 60 * 60 * 1000
       ).toISOString().split('T')[0],
     })

@@ -25,21 +25,30 @@ function getDayOfMonth(dateStr: string): number {
 
 /**
  * Filtra obligaciones según la quincena actual.
- * Una obligación pertenece a la quincena si su día de vencimiento/corte
- * cae dentro del rango:
- *   - Q1: días 1-15
- *   - Q2: días 16-31
+ * Para deudas: usa diasPago (string con días separados por coma).
+ * Para gastos fijos: usa fechaCorte.
  */
-export function filterByCurrentQuincena<T extends { fechaVencimiento?: string; fechaCorte?: string }>(
+export function filterByCurrentQuincena<T extends { diasPago?: string; fechaCorte?: string }>(
   items: T[]
 ): T[] {
   const q = getCurrentQuincena()
   return items.filter(item => {
-    const dateStr = (item as { fechaVencimiento?: string }).fechaVencimiento
-      || (item as { fechaCorte?: string }).fechaCorte
-      || ''
-    const day = getDayOfMonth(dateStr)
-    return q === 1 ? day <= 15 : day >= 16
+    let days: number[] = []
+
+    if ('diasPago' in item && item.diasPago) {
+      // Debt: diasPago es "15" o "15,30"
+      days = (item.diasPago as string).split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d))
+    } else if ('fechaCorte' in item && item.fechaCorte) {
+      // FixedExpense: fechaCorte es una fecha
+      const dateStr = item.fechaCorte as string
+      const day = getDayOfMonth(dateStr)
+      days = [day]
+    }
+
+    if (days.length === 0) return true // Si no hay día definido, incluir siempre
+
+    // Si cualquiera de los días cae en la quincena actual, incluir
+    return days.some(day => q === 1 ? day <= 15 : day >= 16)
   })
 }
 
@@ -74,7 +83,7 @@ export function getPeriodData(
     }
   }
 
-  // Quincenal: dividir ingreso, filtrar obligaciones
+  // Quincenal: dividir ingreso, filtrar obligaciones por quincena actual
   const quincena = getCurrentQuincena()
   const periodDebts = filterByCurrentQuincena(debts)
   const periodFixed = filterByCurrentQuincena(fixedExpenses)

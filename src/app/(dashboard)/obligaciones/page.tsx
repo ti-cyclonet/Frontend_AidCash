@@ -3,10 +3,9 @@
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
-  Plus, CheckCircle2, Calendar, Info, Pencil, Trash2,
+  Plus, CheckCircle2, Pencil, Trash2,
   AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff,
 } from "lucide-react"
 import { Debt, FixedExpense, ImpulseCategory } from "@/lib/types"
@@ -21,7 +20,6 @@ import { cn } from "@/lib/utils"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
-import { getPeriodData } from "@/lib/period-filter"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
@@ -36,21 +34,21 @@ interface DebtForm {
   nombre: string
   montoTotal: string
   cuotaPeriodo: string
-  fechaVencimiento: string
+  diasPago: string
   diaCorte: string
   frecuencia: "mensual" | "quincenal"
   tipoPago: "unica" | "varias"
   fechaFinalProyectada: string
   numCuotas: string
 }
-interface FixedForm { nombre: string; monto: string; fechaCorte: string }
+interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string }
 
 const emptyDebtForm: DebtForm = {
-  nombre: "", montoTotal: "", cuotaPeriodo: "", fechaVencimiento: "",
+  nombre: "", montoTotal: "", cuotaPeriodo: "", diasPago: "",
   diaCorte: "", frecuencia: "mensual", tipoPago: "unica",
   fechaFinalProyectada: "", numCuotas: "",
 }
-const emptyFixedForm: FixedForm = { nombre: "", monto: "", fechaCorte: "" }
+const emptyFixedForm: FixedForm = { nombre: "", monto: "", frecuencia: "mensual", diasPago: "" }
 
 const CATEGORIES: { value: ImpulseCategory; label: string; emoji: string }[] = [
   { value: "cafe",       label: "Café",       emoji: "☕" },
@@ -84,15 +82,16 @@ export default function ObligacionesPage() {
     return next
   })
 
-  // ── Asignación de presupuesto para gastos hormiga ──────────────────────────
+  // ── Asignación de presupuesto — fuente única de verdad: totales mensuales ──
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
-  const { effectiveIncome, totalObligations } = useMemo(
-    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
-    [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency]
+  const totalObligationsMonthly = useMemo(
+    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
+    [debts, fixedExpenses]
   )
+  const totalIncomeMonthly = income + totalExtraIncome
   const allocation = useMemo(
-    () => effectiveIncome > 0 ? calculateBudgetAllocation(effectiveIncome, totalObligations) : null,
-    [effectiveIncome, totalObligations]
+    () => totalIncomeMonthly > 0 ? calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly) : null,
+    [totalIncomeMonthly, totalObligationsMonthly]
   )
   const dailyFreeAmount = allocation?.dailyFreeAmount ?? 0
 
@@ -157,19 +156,19 @@ export default function ObligacionesPage() {
   const handleAdd = async () => {
     setSaving(true)
     if (addType === "deuda") {
-      if (!addDebtForm.nombre || !addDebtForm.montoTotal || !addDebtForm.fechaVencimiento) { setSaving(false); return }
+      if (!addDebtForm.nombre || !addDebtForm.montoTotal || !addDebtForm.diasPago) { setSaving(false); return }
       // Si varias cuotas y se usó calculadora, la cuota ya está en addDebtForm.cuotaPeriodo
       const cuota = addDebtForm.cuotaPeriodo ? Number(addDebtForm.cuotaPeriodo) : 0
       await addDebt({
         nombre: addDebtForm.nombre,
         montoTotal: Number(addDebtForm.montoTotal),
         cuotaPeriodo: cuota,
-        fechaVencimiento: addDebtForm.fechaVencimiento,
+        diasPago: addDebtForm.diasPago,
       })
       setAddDebtForm(emptyDebtForm)
     } else {
-      if (!addFixedForm.nombre || !addFixedForm.monto || !addFixedForm.fechaCorte) { setSaving(false); return }
-      await addFixedExpense({ nombre: addFixedForm.nombre, monto: Number(addFixedForm.monto), fechaCorte: addFixedForm.fechaCorte })
+      if (!addFixedForm.nombre || !addFixedForm.monto || !addFixedForm.diasPago) { setSaving(false); return }
+      await addFixedExpense({ nombre: addFixedForm.nombre, monto: Number(addFixedForm.monto), fechaCorte: addFixedForm.diasPago, frecuencia: addFixedForm.frecuencia })
       setAddFixedForm(emptyFixedForm)
     }
     setSaving(false)
@@ -183,7 +182,7 @@ export default function ObligacionesPage() {
       nombre: debt.nombre,
       montoTotal: String(debt.montoTotal),
       cuotaPeriodo: String(debt.cuotaPeriodo),
-      fechaVencimiento: debt.fechaVencimiento,
+      diasPago: debt.diasPago ?? '1',
       diaCorte: "",
       frecuencia: "mensual",
       tipoPago: "unica",
@@ -205,10 +204,10 @@ export default function ObligacionesPage() {
   const applyDebtEdit = async (scope: EditScope) => {
     if (!editDebt) return
     setSavingEdit(true)
-    const patch: Partial<Pick<Debt, "nombre" | "montoTotal" | "cuotaPeriodo" | "fechaVencimiento">> = {
+    const patch: Partial<Pick<Debt, "nombre" | "montoTotal" | "cuotaPeriodo" | "diasPago">> = {
       nombre: editDebtForm.nombre,
       montoTotal: Number(editDebtForm.montoTotal),
-      fechaVencimiento: editDebtForm.fechaVencimiento,
+      diasPago: editDebtForm.diasPago,
     }
     if (scope === "permanente") patch.cuotaPeriodo = Number(editDebtForm.cuotaPeriodo)
     await updateDebt(editDebt.id, patch)
@@ -220,7 +219,7 @@ export default function ObligacionesPage() {
   // ── Handlers Edit Fixed ───────────────────────────────────────────────────
   const openEditFixed = (fe: FixedExpense) => {
     setEditFixed(fe)
-    setEditFixedForm({ nombre: fe.nombre, monto: String(fe.monto), fechaCorte: fe.fechaCorte })
+    setEditFixedForm({ nombre: fe.nombre, monto: String(fe.monto), frecuencia: (fe.frecuencia as "mensual" | "quincenal") ?? "mensual", diasPago: fe.fechaCorte })
   }
 
   const handleEditFixed = async () => {
@@ -229,7 +228,8 @@ export default function ObligacionesPage() {
     await updateFixedExpense(editFixed.id, {
       nombre: editFixedForm.nombre,
       monto: Number(editFixedForm.monto),
-      fechaCorte: editFixedForm.fechaCorte,
+      fechaCorte: editFixedForm.diasPago,
+      frecuencia: editFixedForm.frecuencia,
     })
     setSavingFixed(false)
     setEditFixed(null)
@@ -360,7 +360,10 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {fixedExpenses.map(fe => (
+              {[...fixedExpenses].sort((a, b) => {
+                if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                return 0
+              }).map(fe => (
                 <FixedCard
                   key={fe.id}
                   item={fe}
@@ -396,7 +399,11 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {debts.map(debt => (
+              {[...debts].sort((a, b) => {
+                // Pendientes primero, pagados al final
+                if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                return 0
+              }).map(debt => (
                 <DebtCard
                   key={debt.id}
                   debt={debt}
@@ -559,11 +566,7 @@ export default function ObligacionesPage() {
             {addType === "deuda" ? (
               <DebtFormFields form={addDebtForm} onChange={setAddDebtForm} />
             ) : (
-              <>
-                <FieldInput label="Nombre" placeholder="Ej: Netflix" value={addFixedForm.nombre} onChange={v => setAddFixedForm(f => ({ ...f, nombre: v }))} />
-                <FieldInput label="Monto mensual" type="number" placeholder="0.00" value={addFixedForm.monto} onChange={v => setAddFixedForm(f => ({ ...f, monto: v }))} />
-                <FieldInput label="Fecha de corte" type="date" value={addFixedForm.fechaCorte} onChange={v => setAddFixedForm(f => ({ ...f, fechaCorte: v }))} />
-              </>
+              <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} />
             )}
           </div>
           <DialogFooter className="gap-2 pt-2">
@@ -623,9 +626,7 @@ export default function ObligacionesPage() {
             <DialogDescription>Modifica <strong>{editFixed?.nombre}</strong>.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <FieldInput label="Nombre" value={editFixedForm.nombre} onChange={v => setEditFixedForm(f => ({ ...f, nombre: v }))} />
-            <FieldInput label="Monto mensual" type="number" value={editFixedForm.monto} onChange={v => setEditFixedForm(f => ({ ...f, monto: v }))} />
-            <FieldInput label="Fecha de corte" type="date" value={editFixedForm.fechaCorte} onChange={v => setEditFixedForm(f => ({ ...f, fechaCorte: v }))} />
+            <FixedFormFields form={editFixedForm} onChange={setEditFixedForm} />
           </div>
           <DialogFooter className="gap-2 pt-2">
             <Button variant="ghost" onClick={() => setEditFixed(null)}>Cancelar</Button>
@@ -762,17 +763,38 @@ export default function ObligacionesPage() {
   )
 }
 
-// ─── Helper: días restantes ───────────────────────────────────────────────────
-function getDueStatus(dateStr: string) {
-  if (!dateStr) return { label: "Sin fecha", days: 999, color: "text-muted-foreground", bgColor: "bg-muted/50" }
+// ─── Helper: próxima fecha de pago inteligente ────────────────────────────────
+function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
+  nextDate: string; daysUntil: number
+  status: 'pagado' | 'proximo' | 'pendiente' | 'vencido'
+  statusLabel: string; statusColor: string; cardRing: string
+} {
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const due = new Date(dateStr + "T00:00:00")
-  const diffMs = due.getTime() - today.getTime()
-  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-  if (days < 0) return { label: `Vencido (${Math.abs(days)}d)`, days, color: "text-red-500", bgColor: "bg-red-500/10" }
-  if (days <= 3) return { label: days === 0 ? "Vence hoy" : `${days}d restantes`, days, color: "text-yellow-600", bgColor: "bg-yellow-500/10" }
-  return { label: `${days}d restantes`, days, color: "text-muted-foreground", bgColor: "bg-muted/50" }
+  const currentMonth = today.getMonth()
+  const currentYear = today.getFullYear()
+  const days = diasPago.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d) && d >= 1 && d <= 31)
+  if (days.length === 0) days.push(1)
+
+  if (pagadoEstePeriodo) {
+    const nextDate = new Date(currentYear, currentMonth + 1, days[0])
+    const label = nextDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+    return { nextDate: label, daysUntil: 999, status: 'pagado', statusLabel: 'Pagado ✓', statusColor: 'text-emerald-600', cardRing: '' }
+  }
+
+  let closest: Date | null = null
+  for (const day of days) {
+    const thisMonth = new Date(currentYear, currentMonth, day)
+    if (thisMonth >= today && (!closest || thisMonth < closest)) closest = thisMonth
+  }
+  if (!closest) closest = new Date(currentYear, currentMonth + 1, days[0])
+
+  const diffMs = closest.getTime() - today.getTime()
+  const daysUntil = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  const label = closest.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+
+  if (daysUntil < 0) return { nextDate: label, daysUntil, status: 'vencido', statusLabel: `Vencido (${Math.abs(daysUntil)}d)`, statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
+  if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? 'Vence hoy' : `Vence en ${daysUntil}d`, statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
+  return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
@@ -781,68 +803,81 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggl
   onPay: () => void; onEdit: () => void; onDelete: () => void
   hidden: boolean; onToggleHidden: () => void
 }) {
-  const status = getDueStatus(debt.fechaVencimiento)
+  const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
+  const progreso = debt.montoTotal > 0 ? Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100) : 0
+  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo)
+
   return (
-    <Card className={cn(
-      "border-none shadow-sm transition-all bg-card",
-      debt.pagadoEstePeriodo && "opacity-60",
-      !debt.pagadoEstePeriodo && status.days < 0 && "ring-1 ring-red-500/30",
-      !debt.pagadoEstePeriodo && status.days >= 0 && status.days <= 3 && "ring-1 ring-yellow-500/30"
-    )}>
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={cn("h-11 w-11 rounded-2xl flex items-center justify-center shrink-0", debt.pagadoEstePeriodo ? "bg-cyclon-mint/20 text-cyclon-mint" : "bg-cyclon-pink/20 text-cyclon-pink")}>
-          {debt.pagadoEstePeriodo ? <CheckCircle2 className="h-5 w-5" /> : <Info className="h-5 w-5" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-start">
-            <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
-            <Badge variant={debt.pagadoEstePeriodo ? "secondary" : "default"} className={cn("text-[10px] font-bold rounded-lg ml-2 shrink-0", !debt.pagadoEstePeriodo && "bg-cyclon-pink text-white border-none")}>
-              {debt.pagadoEstePeriodo ? "PAGADO" : "PENDIENTE"}
-            </Badge>
+    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, debt.estado === 'saldada' && "opacity-40")}>
+      <CardContent className="p-4 space-y-3">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
+              <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
+                payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                "bg-muted text-muted-foreground"
+              )}>{payInfo.statusLabel}</span>
+            </div>
+            {!hidden && debt.acreedor && <p className="text-[10px] text-muted-foreground truncate">{debt.acreedor}</p>}
+            {!hidden && (
+              <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
+                {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
+                {" · "}{debt.frecuenciaPago === 'quincenal' ? 'Quincenal' : 'Mensual'}
+              </p>
+            )}
           </div>
-          {hidden ? (
-            <p className="text-base font-black text-muted-foreground mt-1">••••••</p>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
-                <span className={cn("text-xs font-medium", debt.pagadoEstePeriodo ? "text-muted-foreground" : status.color)}>
-                  {debt.fechaVencimiento}
-                </span>
-                {!debt.pagadoEstePeriodo && (
-                  <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", status.bgColor, status.color)}>
-                    {status.label}
-                  </span>
-                )}
-              </div>
-              <div className="mt-1.5 flex justify-between items-end">
-                <div>
-                  <span className="text-base font-bold">{formatAmount(debt.cuotaPeriodo)}</span>
-                  <span className="text-[10px] text-muted-foreground ml-1">/ cuota</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground">Total: {formatAmount(debt.montoTotal)}</span>
-              </div>
-            </>
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5 shrink-0">
-          {!debt.pagadoEstePeriodo && (
-            <Button onClick={onPay} size="sm" className="bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-8 px-3 font-bold text-xs">
-              Pagar
-            </Button>
-          )}
-          <div className="flex gap-1">
-            <button onClick={onToggleHidden} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <div className="flex gap-1 shrink-0">
+            <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
-            <button onClick={onEdit} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
+            <button onClick={onEdit} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
-            <button onClick={onDelete} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+            <button onClick={onDelete} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
+
+        {/* Montos */}
+        {!hidden ? (
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Saldo restante</p>
+              <p className="text-xl font-black">{formatAmount(debt.saldoRestante)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-muted-foreground">Cuota</p>
+              <p className="text-sm font-bold">{formatAmount(debt.cuotaPeriodo)}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xl font-black text-muted-foreground">••••••</p>
+        )}
+
+        {/* Barra de progreso + cuotas restantes */}
+        {!hidden && (
+          <div className="space-y-1.5">
+            <Progress value={progreso} className="h-1.5" indicatorClassName="bg-cyclon-periwinkle" />
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-muted-foreground">{progreso}% pagado</span>
+              <span className="text-[10px] font-bold bg-cyclon-periwinkle/10 text-cyclon-periwinkle px-2 py-0.5 rounded-full">
+                {cuotasRestantes} cuotas restantes
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Botón de pagar */}
+        {!debt.pagadoEstePeriodo && debt.estado === 'activa' && (
+          <Button onClick={onPay} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+            Registrar pago de cuota
+          </Button>
+        )}
       </CardContent>
     </Card>
   )
@@ -854,67 +889,52 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
   onEdit: () => void; onDelete: () => void; onTogglePaid: () => void
   hidden: boolean; onToggleHidden: () => void
 }) {
-  const status = getDueStatus(item.fechaCorte)
+  const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo)
+
   return (
-    <Card className={cn(
-      "border-none shadow-sm transition-all bg-card",
-      item.pagadoEstePeriodo && "opacity-60",
-      !item.pagadoEstePeriodo && status.days < 0 && "ring-1 ring-red-500/30",
-      !item.pagadoEstePeriodo && status.days >= 0 && status.days <= 3 && "ring-1 ring-yellow-500/30"
-    )}>
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={cn("h-11 w-11 rounded-2xl flex items-center justify-center shrink-0", item.pagadoEstePeriodo ? "bg-cyclon-mint/20 text-cyclon-mint" : "bg-cyclon-sky/20 text-cyclon-sky")}>
-          {item.pagadoEstePeriodo ? <CheckCircle2 className="h-5 w-5" /> : <Calendar className="h-5 w-5" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-start">
-            <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
-            <Badge variant={item.pagadoEstePeriodo ? "secondary" : "default"} className={cn("text-[10px] font-bold rounded-lg ml-2 shrink-0", !item.pagadoEstePeriodo && "bg-cyclon-sky text-white border-none")}>
-              {item.pagadoEstePeriodo ? "PAGADO" : "PENDIENTE"}
-            </Badge>
+    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing)}>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
+              <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
+                payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                "bg-muted text-muted-foreground"
+              )}>{payInfo.statusLabel}</span>
+            </div>
+            {!hidden && (
+              <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
+                {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
+                {" · "}{item.frecuencia === 'quincenal' ? 'Quincenal' : 'Mensual'}
+              </p>
+            )}
           </div>
-          {hidden ? (
-            <p className="text-base font-black text-muted-foreground mt-1">••••••</p>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
-                <span className={cn("text-xs font-medium", item.pagadoEstePeriodo ? "text-muted-foreground" : status.color)}>
-                  {item.fechaCorte}
-                </span>
-                {!item.pagadoEstePeriodo && (
-                  <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", status.bgColor, status.color)}>
-                    {status.label}
-                  </span>
-                )}
-              </div>
-              <span className="text-base font-bold mt-1 block">{formatAmount(item.monto)}</span>
-            </>
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5 shrink-0">
-          {!item.pagadoEstePeriodo
-            ? <Button onClick={onTogglePaid} size="sm" className="bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-8 px-3 font-bold text-xs">Pagar</Button>
-            : <Button onClick={onTogglePaid} size="sm" variant="ghost" className="rounded-xl h-8 px-3 text-xs text-muted-foreground">Deshacer</Button>
-          }
-          <div className="flex gap-1">
-            <button onClick={onToggleHidden} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <div className="flex gap-1 shrink-0">
+            <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
-            <button onClick={onEdit} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
+            <button onClick={onEdit} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
-            <button onClick={onDelete} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+            <button onClick={onDelete} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
+        {!hidden ? <p className="text-xl font-black">{formatAmount(item.monto)}</p> : <p className="text-xl font-black text-muted-foreground">••••••</p>}
+        {!item.pagadoEstePeriodo
+          ? <Button onClick={onTogglePaid} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">Registrar pago</Button>
+          : <Button onClick={onTogglePaid} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">Deshacer pago</Button>
+        }
       </CardContent>
     </Card>
   )
 }
 
-// ─── DebtFormFields — formulario enriquecido de deuda ────────────────────────
+// ─── DebtFormFields — formulario inteligente de deuda ────────────────────────
 function DebtFormFields({
   form,
   onChange,
@@ -924,210 +944,170 @@ function DebtFormFields({
   onChange: (f: DebtForm) => void
   isEdit?: boolean
 }) {
-  // ── Calculadora de cuotas ─────────────────────────────────────────────────
-  const cuotaSugerida = (() => {
-    if (
-      form.tipoPago === "varias" &&
-      !form.cuotaPeriodo &&
-      form.montoTotal &&
-      form.fechaFinalProyectada
-    ) {
-      const hoy = new Date()
-      const fin = new Date(form.fechaFinalProyectada + "T00:00:00")
-      if (fin <= hoy) return null
-      const diffMs = fin.getTime() - hoy.getTime()
-      const meses = Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30))
-      const periodos = form.frecuencia === "quincenal" ? meses * 2 : meses
-      if (periodos <= 0) return null
-      const cuota = Math.ceil(Number(form.montoTotal) / periodos)
-      return { cuota, periodos, meses }
-    }
-    return null
-  })()
-
-  // Fechas de pago sugeridas
-  const fechasSugeridas = (() => {
-    if (!cuotaSugerida || !form.diaCorte) return []
-    const dia = parseInt(form.diaCorte)
-    if (isNaN(dia) || dia < 1 || dia > 31) return []
-    const fechas: string[] = []
-    const hoy = new Date()
-    for (let i = 0; i < Math.min(cuotaSugerida.periodos, 4); i++) {
-      const d = new Date(hoy.getFullYear(), hoy.getMonth() + (form.frecuencia === "quincenal" ? Math.floor(i / 2) : i), dia)
-      if (form.frecuencia === "quincenal" && i % 2 === 1) d.setDate(d.getDate() + 15)
-      fechas.push(d.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }))
-    }
-    return fechas
-  })()
-
   const set = (patch: Partial<DebtForm>) => onChange({ ...form, ...patch })
+
+  // Cálculo reactivo: cuotas restantes
+  const cuotasEstimadas = (() => {
+    const total = Number(form.montoTotal)
+    const cuota = Number(form.cuotaPeriodo)
+    if (!total || !cuota || cuota <= 0) return null
+    return Math.ceil(total / cuota)
+  })()
+
+  return (
+    <div className="space-y-4">
+      {/* Acreedor */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-bold">Acreedor</Label>
+        <Input placeholder="Ej: Banco Falabella" value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
+      </div>
+
+      {/* Monto total de la deuda */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-bold">Monto total de la deuda</Label>
+        <MoneyInput value={form.montoTotal} onChange={v => set({ montoTotal: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+      </div>
+
+      {/* Cuota por periodo */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-bold">Cuota por periodo</Label>
+        <MoneyInput value={form.cuotaPeriodo} onChange={v => set({ cuotaPeriodo: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+      </div>
+
+      {/* Frecuencia de pago */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-bold">Frecuencia de pago</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {(["mensual", "quincenal"] as const).map(f => (
+            <button key={f} type="button" onClick={() => set({ frecuencia: f })} className={cn(
+              "h-10 rounded-xl text-sm font-bold border-2 transition-colors capitalize",
+              form.frecuencia === f ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
+            )}>{f}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Días de pago */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-bold">
+          {form.frecuencia === "quincenal" ? "Días de pago (quincenal)" : "Día de pago"}
+        </Label>
+        {form.frecuencia === "quincenal" ? (
+          <div className="flex items-center gap-2">
+            <Input type="number" min={1} max={15} placeholder="15"
+              value={form.diasPago.split(',')[0] || ''}
+              onChange={e => {
+                const d2 = form.diasPago.split(',')[1] || '30'
+                set({ diasPago: `${e.target.value},${d2}` })
+              }}
+              className="h-11 rounded-xl w-20 text-center font-bold" />
+            <span className="text-muted-foreground font-bold">y</span>
+            <Input type="number" min={16} max={31} placeholder="30"
+              value={form.diasPago.split(',')[1] || ''}
+              onChange={e => {
+                const d1 = form.diasPago.split(',')[0] || '15'
+                set({ diasPago: `${d1},${e.target.value}` })
+              }}
+              className="h-11 rounded-xl w-20 text-center font-bold" />
+          </div>
+        ) : (
+          <Input type="number" min={1} max={31} placeholder="Ej: 15"
+            value={form.diasPago}
+            onChange={e => set({ diasPago: e.target.value })}
+            className="h-11 rounded-xl w-24 text-center font-bold text-lg" />
+        )}
+        <p className="text-[9px] text-muted-foreground">
+          {form.frecuencia === "quincenal" ? "Ej: 1 y 15 ó 15 y 30" : "Día del mes en que se paga"}
+        </p>
+      </div>
+
+      {/* Cálculo reactivo */}
+      {cuotasEstimadas && cuotasEstimadas > 0 && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-2xl p-3 flex items-center gap-3">
+          <span className="text-lg">✅</span>
+          <div>
+            <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+              Pagarás esta deuda en aproximadamente {cuotasEstimadas} cuotas
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Cálculo: {form.montoTotal ? `$${Number(form.montoTotal).toLocaleString()}` : '?'} / {form.cuotaPeriodo ? `$${Number(form.cuotaPeriodo).toLocaleString()}` : '?'} = {cuotasEstimadas}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── FixedFormFields — formulario de gasto fijo ─────────────────────────────
+function FixedFormFields({
+  form,
+  onChange,
+}: {
+  form: FixedForm
+  onChange: (f: FixedForm) => void
+}) {
+  const set = (patch: Partial<FixedForm>) => onChange({ ...form, ...patch })
 
   return (
     <div className="space-y-4">
       {/* Nombre */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">Nombre</Label>
-        <Input placeholder="Ej: TC Visa" value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
+        <Input placeholder="Ej: Netflix, Arriendo, Luz" value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
       </div>
 
-      {/* Monto total */}
+      {/* Monto */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Monto total</Label>
-        <MoneyInput value={form.montoTotal} onChange={v => set({ montoTotal: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+        <Label className="text-xs font-bold">Monto</Label>
+        <MoneyInput value={form.monto} onChange={v => set({ monto: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
       </div>
 
-      {/* Frecuencia */}
+      {/* Frecuencia de pago */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">Frecuencia de pago</Label>
         <div className="grid grid-cols-2 gap-2">
           {(["mensual", "quincenal"] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => set({ frecuencia: f })}
-              className={cn(
-                "h-10 rounded-xl text-sm font-bold border-2 transition-colors capitalize",
-                form.frecuencia === f
-                  ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle"
-                  : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
-              )}
-            >
-              {f}
-            </button>
+            <button key={f} type="button" onClick={() => set({ frecuencia: f })} className={cn(
+              "h-10 rounded-xl text-sm font-bold border-2 transition-colors capitalize",
+              form.frecuencia === f ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
+            )}>{f}</button>
           ))}
         </div>
       </div>
 
-      {/* Tipo de pago */}
+      {/* Días de pago */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Tipo de pago</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => set({ tipoPago: "unica" })}
-            className={cn(
-              "h-10 rounded-xl text-sm font-bold border-2 transition-colors",
-              form.tipoPago === "unica"
-                ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle"
-                : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
-            )}
-          >
-            Cuota única
-          </button>
-          <button
-            onClick={() => set({ tipoPago: "varias" })}
-            className={cn(
-              "h-10 rounded-xl text-sm font-bold border-2 transition-colors",
-              form.tipoPago === "varias"
-                ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle"
-                : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
-            )}
-          >
-            Varias cuotas
-          </button>
-        </div>
-      </div>
-
-      {/* Día de corte */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Día de corte / pago</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            min={1} max={31}
-            placeholder="Ej: 09"
-            value={form.diaCorte}
-            onChange={e => set({ diaCorte: e.target.value })}
-            className="h-11 rounded-xl w-24 text-center font-bold text-lg"
-          />
-          <span className="text-xs text-muted-foreground">de cada {form.frecuencia === "quincenal" ? "quincena" : "mes"}</span>
-        </div>
-      </div>
-
-      {/* Cuota — si sabe el valor */}
-      {form.tipoPago === "unica" && (
-        <div className="space-y-1.5">
-          <Label className="text-xs font-bold">Cuota por periodo</Label>
-          <MoneyInput value={form.cuotaPeriodo} onChange={v => set({ cuotaPeriodo: v })} className="h-11 rounded-xl font-bold" placeholder="0" />
-        </div>
-      )}
-
-      {/* Varias cuotas — ¿sabe el valor? */}
-      {form.tipoPago === "varias" && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold">
-              Cuota por periodo{" "}
-              <span className="text-muted-foreground font-normal">(deja vacío si no sabes)</span>
-            </Label>
-            <MoneyInput
-              value={form.cuotaPeriodo}
-              onChange={v => set({ cuotaPeriodo: v, fechaFinalProyectada: v ? "" : form.fechaFinalProyectada })}
-              className="h-11 rounded-xl font-bold"
-              placeholder="0"
-            />
+        <Label className="text-xs font-bold">
+          {form.frecuencia === "quincenal" ? "Días de pago (quincenal)" : "Día de pago"}
+        </Label>
+        {form.frecuencia === "quincenal" ? (
+          <div className="flex items-center gap-2">
+            <Input type="number" min={1} max={15} placeholder="15"
+              value={form.diasPago.split(',')[0] || ''}
+              onChange={e => {
+                const d2 = form.diasPago.split(',')[1] || '30'
+                set({ diasPago: `${e.target.value},${d2}` })
+              }}
+              className="h-11 rounded-xl w-20 text-center font-bold" />
+            <span className="text-muted-foreground font-bold">y</span>
+            <Input type="number" min={16} max={31} placeholder="30"
+              value={form.diasPago.split(',')[1] || ''}
+              onChange={e => {
+                const d1 = form.diasPago.split(',')[0] || '15'
+                set({ diasPago: `${d1},${e.target.value}` })
+              }}
+              className="h-11 rounded-xl w-20 text-center font-bold" />
           </div>
-
-          {/* Calculadora: si no sabe la cuota */}
-          {!form.cuotaPeriodo && (
-            <div className="bg-cyclon-lavender/5 rounded-2xl p-3 space-y-3 border border-cyclon-lavender/20">
-              <p className="text-[10px] font-bold text-cyclon-lavender uppercase tracking-wider">
-                🔢 Calculadora de cuotas
-              </p>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Fecha final proyectada</Label>
-                <Input
-                  type="date"
-                  value={form.fechaFinalProyectada}
-                  onChange={e => set({ fechaFinalProyectada: e.target.value })}
-                  className="h-10 rounded-xl"
-                />
-              </div>
-              {cuotaSugerida && (
-                <div className="bg-card rounded-xl p-3 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">Cuota sugerida</span>
-                    <span className="text-sm font-black text-cyclon-lavender">${cuotaSugerida.cuota.toLocaleString("es-ES")}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">Total de periodos</span>
-                    <span className="text-xs font-bold">{cuotaSugerida.periodos} {form.frecuencia === "quincenal" ? "quincenas" : "meses"}</span>
-                  </div>
-                  {fechasSugeridas.length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">Próximas fechas de pago:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {fechasSugeridas.map(f => (
-                          <span key={f} className="text-[9px] font-bold bg-cyclon-lavender/10 text-cyclon-lavender px-2 py-0.5 rounded-full">
-                            {f}
-                          </span>
-                        ))}
-                        {cuotaSugerida.periodos > 4 && (
-                          <span className="text-[9px] text-muted-foreground px-1">+{cuotaSugerida.periodos - 4} más...</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => set({ cuotaPeriodo: String(cuotaSugerida.cuota), numCuotas: String(cuotaSugerida.periodos) })}
-                    className="w-full h-9 rounded-xl bg-cyclon-lavender text-white text-xs font-bold hover:bg-cyclon-lavender/90 transition-colors"
-                  >
-                    Usar esta cuota (${cuotaSugerida.cuota.toLocaleString("es-ES")})
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Fecha de vencimiento */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Fecha de vencimiento</Label>
-        <Input
-          type="date"
-          value={form.fechaVencimiento}
-          onChange={e => set({ fechaVencimiento: e.target.value })}
-          className="h-11 rounded-xl"
-        />
+        ) : (
+          <Input type="number" min={1} max={31} placeholder="Ej: 15"
+            value={form.diasPago}
+            onChange={e => set({ diasPago: e.target.value })}
+            className="h-11 rounded-xl w-24 text-center font-bold text-lg" />
+        )}
+        <p className="text-[9px] text-muted-foreground">
+          {form.frecuencia === "quincenal" ? "Ej: 1 y 15 ó 15 y 30" : "Día del mes en que se cobra"}
+        </p>
       </div>
     </div>
   )

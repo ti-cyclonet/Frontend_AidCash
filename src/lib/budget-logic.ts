@@ -1,18 +1,23 @@
 import { BudgetAllocation } from './types';
 
 /**
- * Distribución inteligente Kiri
+ * Distribución inteligente Kiri — "El Embudo"
  *
- * Prioridad del embudo:
+ * Lógica estricta de prioridad:
  *   1. Obligaciones (deudas + gastos fijos) — siempre primero, monto real
- *   2. Ahorro — mínimo 10%, ideal 20%, se reduce si hay presión
- *   3. Gasto Libre (blindado) — mínimo vital para el día a día, nunca cero
- *   4. Capacidad de Endeudamiento — el remanente real disponible
+ *   2. Remanente = max(0, Ingreso - Obligaciones)
+ *   3. Si Obligaciones >= Ingreso → isOverloaded = true, todo lo demás = 0
+ *   4. Ahorro — se calcula sobre el REMANENTE disponible, nunca sobre ingreso total
+ *   5. Gasto Libre — del remanente tras ahorro, con un tope del 15% del ingreso total
+ *   6. Capacidad de Endeudamiento — lo que quede tras Ahorro y Gasto Libre
+ *
+ * Los porcentajes SIEMPRE se calculan respecto al ingreso total (para que sumen ~100%),
+ * pero los MONTOS se derivan del remanente real disponible.
  *
  * Estados:
- *   - Normal   : obligaciones ≤ 60% del ingreso
- *   - Ajustado : obligaciones entre 60% y 85%
- *   - Crítico  : obligaciones > 85% (isOverloaded)
+ *   - Normal    : obligaciones ≤ 60% del ingreso
+ *   - Ajustado  : obligaciones entre 60% y 99%
+ *   - Crítico   : obligaciones >= 100% (isOverloaded)
  */
 export function calculateBudgetAllocation(
   totalIncome: number,
@@ -23,12 +28,14 @@ export function calculateBudgetAllocation(
     return zeroAllocation(totalIncome)
   }
 
+  // ── Bloque 1: Obligaciones — siempre primero ──────────────────────────────
   const obligationsPct = (totalObligations / totalIncome) * 100
-  const isOverloaded = obligationsPct >= 100
+  const remanente = Math.max(0, totalIncome - totalObligations)
+  const isOverloaded = totalObligations >= totalIncome
   const isTight = obligationsPct >= 70
 
+  // ── Estado Crítico: no hay nada que distribuir ─────────────────────────────
   if (isOverloaded) {
-    // Ingreso no cubre obligaciones — estado crítico
     return {
       obligationsAmount: totalObligations,
       obligationsPct,
@@ -46,43 +53,50 @@ export function calculateBudgetAllocation(
     }
   }
 
-  const remaining = totalIncome - totalObligations
-  const remainingPct = 100 - obligationsPct
+  // ── Bloque 2: Ahorro — se calcula sobre el remanente real ─────────────────
+  // El ahorro NUNCA puede exceder lo que realmente queda disponible.
+  // Escala del ahorro basada en qué tan apretado está el presupuesto:
+  //   - Remanente >= 40% del ingreso → ahorro ideal (20% del ingreso)
+  //   - Remanente >= 25% → ahorro reducido (15% del ingreso)
+  //   - Remanente >= 15% → ahorro mínimo (10% del ingreso)
+  //   - Remanente < 15%  → ahorro simbólico (5% del ingreso)
+  const remanentePct = (remanente / totalIncome) * 100
 
-  // ── Bloque 2: Ahorro ──────────────────────────────────────────────────────
-  // Ideal 20%, mínimo 5% si hay presión, 0 solo en crítico
-  let savingsPct: number
-  if (remainingPct >= 40) {
-    savingsPct = 20                          // holgado: ahorro completo
-  } else if (remainingPct >= 25) {
-    savingsPct = 15                          // ajustado: ahorro reducido
-  } else if (remainingPct >= 15) {
-    savingsPct = 10                          // presionado: ahorro mínimo
+  let targetSavingsPct: number
+  if (remanentePct >= 40) {
+    targetSavingsPct = 20
+  } else if (remanentePct >= 25) {
+    targetSavingsPct = 15
+  } else if (remanentePct >= 15) {
+    targetSavingsPct = 10
   } else {
-    savingsPct = 5                           // crítico suave: ahorro simbólico
+    targetSavingsPct = 5
   }
-  const savingsAmount = (savingsPct / 100) * totalIncome
 
-  // ── Bloque 3: Libre Inversión ─────────────────────────────────────────────
-  const freeInvestmentAmount = remaining - savingsAmount
+  // El ahorro NO puede superar el remanente real
+  const targetSavingsAmount = (targetSavingsPct / 100) * totalIncome
+  const savingsAmount = Math.min(targetSavingsAmount, remanente)
+  const savingsPct = (savingsAmount / totalIncome) * 100
+
+  // ── Bloque 3: Lo que queda tras ahorro ────────────────────────────────────
+  const afterSavings = remanente - savingsAmount
+  const freeInvestmentAmount = afterSavings
   const freeInvestmentPct = (freeInvestmentAmount / totalIncome) * 100
 
-  // ── Bloque 3a: Gasto Libre (blindado) ────────────────────────────────────
-  // Mínimo vital: 15% del ingreso total, nunca menos de eso
-  // Si el remanente libre no alcanza el 15%, todo va a gasto libre (debtCapacity = 0)
-  const minDailyFreePct = 15
-  const minDailyFreeAmount = (minDailyFreePct / 100) * totalIncome
-
+  // ── Bloque 3a: Gasto Libre (blindado) ─────────────────────────────────────
+  // Tope: 15% del ingreso total, pero SOLO si hay suficiente remanente.
+  // Si afterSavings es menor al tope, todo va a gasto libre (debtCapacity = 0).
+  const maxDailyFreeAmount = (15 / 100) * totalIncome
   let dailyFreeAmount: number
   let debtCapacityAmount: number
 
-  if (freeInvestmentAmount <= minDailyFreeAmount) {
-    // Todo el remanente es gasto libre, no hay capacidad de endeudamiento
-    dailyFreeAmount = freeInvestmentAmount
+  if (afterSavings <= maxDailyFreeAmount) {
+    // No alcanza para cubrir el tope → todo a gasto libre, nada a endeudamiento
+    dailyFreeAmount = afterSavings
     debtCapacityAmount = 0
   } else {
-    dailyFreeAmount = minDailyFreeAmount
-    debtCapacityAmount = freeInvestmentAmount - minDailyFreeAmount
+    dailyFreeAmount = maxDailyFreeAmount
+    debtCapacityAmount = afterSavings - maxDailyFreeAmount
   }
 
   const dailyFreePct = (dailyFreeAmount / totalIncome) * 100
