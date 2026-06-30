@@ -39,15 +39,15 @@ function mapDebt(row: Record<string, unknown>): Debt {
     userId: (row.userId ?? row.user_id) as string,
     nombre: row.nombre as string,
     montoTotal: Number(row.montoTotal ?? row.monto_total ?? 0),
+    saldoRestante: Number(row.saldoRestante ?? row.saldo_restante ?? row.montoTotal ?? 0),
     cuotaPeriodo: Number(row.cuotaPeriodo ?? row.cuota_periodo ?? 0),
     tasaInteres: row.tasaInteres != null ? Number(row.tasaInteres) : (row.tasa_interes != null ? Number(row.tasa_interes) : null),
-    fechaVencimiento: (row.fechaVencimiento ?? row.fecha_vencimiento) as string,
-    pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo) as boolean,
+    acreedor: (row.acreedor as string) ?? '',
+    frecuenciaPago: ((row.frecuenciaPago ?? row.frecuencia_pago) as Debt["frecuenciaPago"]) ?? 'mensual',
+    diasPago: (row.diasPago ?? row.dias_pago ?? '1') as string,
+    pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
     estado: (row.estado as Debt["estado"]) ?? 'activa',
     prioridad: (row.prioridad as Debt["prioridad"]) ?? 'media',
-    acreedor: (row.acreedor as string | null) ?? null,
-    cuotasRestantes: row.cuotasRestantes != null ? Number(row.cuotasRestantes) : (row.cuotas_restantes != null ? Number(row.cuotas_restantes) : null),
-    fechaEstimadaPago: (row.fechaEstimadaPago ?? row.fecha_estimada_pago) as string | null ?? null,
   }
 }
 
@@ -180,25 +180,24 @@ export function useFinanceData() {
 
   // ─── Deudas ─────────────────────────────────────────────────────────────────
 
-  const addDebt = async (data: Omit<Debt, "id" | "userId" | "pagadoEstePeriodo" | "estado" | "prioridad" | "acreedor" | "cuotasRestantes" | "fechaEstimadaPago" | "tasaInteres"> & { tasaInteres?: number; prioridad?: string; acreedor?: string; cuotasRestantes?: number; fechaEstimadaPago?: string }) => {
+  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) => {
     if (!userId) return
     await debtsApi.create({
       nombre: data.nombre,
       montoTotal: data.montoTotal,
       cuotaPeriodo: data.cuotaPeriodo,
-      fechaVencimiento: data.fechaVencimiento,
+      acreedor: data.acreedor,
+      frecuenciaPago: data.frecuenciaPago as 'mensual' | 'quincenal' | undefined,
+      diasPago: data.diasPago,
       tasaInteres: data.tasaInteres,
       prioridad: data.prioridad as 'alta' | 'media' | 'baja' | undefined,
-      acreedor: data.acreedor,
-      cuotasRestantes: data.cuotasRestantes,
-      fechaEstimadaPago: data.fechaEstimadaPago,
     })
     await fetchAll()
   }
 
   const updateDebt = async (
     debtId: string,
-    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'cuotaPeriodo' | 'fechaVencimiento'>>
+    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'cuotaPeriodo' | 'diasPago'>>
   ) => {
     await debtsApi.update(debtId, data)
     setDebts(prev => prev.map(d => d.id === debtId ? { ...d, ...data } : d))
@@ -239,7 +238,7 @@ export function useFinanceData() {
 
   const updateFixedExpense = async (
     id: string,
-    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte'>>
+    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto'>>
   ) => {
     await fixedExpensesApi.update(id, data)
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, ...data } : f))

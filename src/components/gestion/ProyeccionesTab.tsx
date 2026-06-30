@@ -69,7 +69,7 @@ export function ProyeccionesTab() {
           pctLibreAjustado: Math.round(allocation.freeInvestmentPct),
           pctAhorroAjustado: Math.round(allocation.savingsPct),
           totalObligaciones: totalObligationsMonthly,
-          detalleDeudas: debts.map(d => ({ nombre: d.nombre, monto: d.cuotaPeriodo, fechaVencimiento: d.fechaVencimiento })),
+          detalleDeudas: debts.map(d => ({ nombre: d.nombre, monto: d.cuotaPeriodo, diasPago: d.diasPago ?? '1' })),
           detalleGastosFijos: fixedExpenses.map(f => ({ nombre: f.nombre, monto: f.monto, fechaCorte: f.fechaCorte })),
         }),
       })

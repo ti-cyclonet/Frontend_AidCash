@@ -11,7 +11,7 @@ import { z } from 'genkit'
 const DetalleDeudaSchema = z.object({
   nombre:           z.string(),
   monto:            z.number(),
-  fechaVencimiento: z.string(),
+  diasPago: z.string(),
 })
 
 const DetalleGastoFijoSchema = z.object({
@@ -48,7 +48,7 @@ export async function budgetAdjustmentExplanation(
   input: BudgetAdjustmentExplanationInput
 ): Promise<BudgetAdjustmentExplanationOutput> {
   const deudasLines = input.detalleDeudas?.length
-    ? input.detalleDeudas.map(d => `- ${d.nombre}: ${d.monto} (vence ${d.fechaVencimiento})`).join('\n')
+    ? input.detalleDeudas.map(d => `- ${d.nombre}: ${d.monto} (vence ${d.diasPago})`).join('\n')
     : '(ninguna)'
 
   const fijosLines = input.detalleGastosFijos?.length

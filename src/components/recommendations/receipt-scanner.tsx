@@ -105,7 +105,7 @@ export function ReceiptScanner() {
           nombre: result.establecimiento,
           montoTotal: result.montoTotal,
           cuotaPeriodo: result.montoTotal,
-          fechaVencimiento: result.fecha,
+          diasPago: '1',
         })
       } else {
         // gasto_libre, ahorro, otro → guardar como gasto fijo genérico

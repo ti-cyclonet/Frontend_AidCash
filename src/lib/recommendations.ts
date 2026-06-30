@@ -174,7 +174,21 @@ export function analyzeFinances(
   const alerts: FinancialAlert[] = []
   const activeDebts = debts.filter(d => d.estado === 'activa')
 
-  // ── Alerta 1: Sin capacidad de endeudamiento ──────────────────────────────
+  // ── Alerta CRÍTICA: Sobrecarga (obligaciones >= ingreso) ────────────────
+  // Esta alerta va PRIMERO para que sea la de mayor prioridad en la UI
+  if (allocation.isOverloaded) {
+    const exceso = Math.round(allocation.obligationsPct - 100)
+    alerts.push({
+      id: 'overloaded',
+      level: 'critical',
+      title: 'Alerta: Tus obligaciones superan tus ingresos',
+      message: exceso > 0
+        ? `Tus compromisos actuales superan tu ingreso en un ${exceso}%. No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Es urgente replantear prioridades y buscar qué obligaciones reducir primero.`
+        : 'Tus obligaciones actuales consumen el 100% de tu ingreso. No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Revisa qué deudas puedes atacar primero para liberar oxígeno.',
+    })
+  }
+
+  // ── Alerta: Sin capacidad de endeudamiento (pero no sobrecargado) ─────────
   if (allocation.debtCapacityAmount <= 0 && !allocation.isOverloaded) {
     alerts.push({
       id: 'no_debt_capacity',
@@ -184,17 +198,7 @@ export function analyzeFinances(
     })
   }
 
-  // ── Alerta 2: Sobrecarga crítica ──────────────────────────────────────────
-  if (allocation.isOverloaded) {
-    alerts.push({
-      id: 'overloaded',
-      level: 'critical',
-      title: 'Un desvío en la ruta — ajustemos juntos',
-      message: `Tus compromisos actuales superan tu ingreso en un ${Math.abs(Math.round(allocation.obligationsPct - 100))}%. Es un momento para replantear prioridades. Vamos a buscar qué deudas atacar primero para liberar oxígeno.`,
-    })
-  }
-
-  // ── Alerta 3: Presupuesto ajustado ────────────────────────────────────────
+  // ── Alerta: Presupuesto ajustado ──────────────────────────────────────────
   if (allocation.isTight && !allocation.isOverloaded) {
     alerts.push({
       id: 'tight_budget',
@@ -204,7 +208,8 @@ export function analyzeFinances(
     })
   }
 
-  // ── Alerta positiva cuando todo está en orden ─────────────────────────────
+  // ── Alerta positiva SOLO cuando realmente todo está en orden ──────────────
+  // NO se emite si isOverloaded o isTight
   if (!allocation.isOverloaded && !allocation.isTight && allocation.debtCapacityAmount > 0) {
     alerts.push({
       id: 'all_good',

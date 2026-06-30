@@ -235,7 +235,7 @@ export function CoachFab() {
     try {
       if (extractResult.ingreso.monto) setIncome(extractResult.ingreso.monto)
       for (const d of extractResult.deudas)
-        await addDebt({ nombre: d.nombre, montoTotal: d.monto, cuotaPeriodo: d.cuota ?? d.monto, fechaVencimiento: d.fechaVencimiento ?? new Date().toISOString().split("T")[0] })
+        await addDebt({ nombre: d.nombre, montoTotal: d.monto, cuotaPeriodo: d.cuota ?? d.monto, diasPago: String(d.diaCorte ?? '1') })
       for (const g of extractResult.gastosFijos)
         await addFixedExpense({ nombre: g.nombre, monto: g.monto, fechaCorte: g.fechaCorte ?? new Date().toISOString().split("T")[0] })
       for (const h of extractResult.gastosHormiga)
@@ -283,7 +283,7 @@ export function CoachFab() {
     setSavingScan(true)
     try {
       if (scanResult.categoria === "gasto_fijo") await addFixedExpense({ nombre: scanResult.establecimiento, monto: scanResult.montoTotal, fechaCorte: scanResult.fecha })
-      else if (scanResult.categoria === "deuda") await addDebt({ nombre: scanResult.establecimiento, montoTotal: scanResult.montoTotal, cuotaPeriodo: scanResult.montoTotal, fechaVencimiento: scanResult.fecha })
+      else if (scanResult.categoria === "deuda") await addDebt({ nombre: scanResult.establecimiento, montoTotal: scanResult.montoTotal, cuotaPeriodo: scanResult.montoTotal, diasPago: '1' })
       else await addFixedExpense({ nombre: `${scanResult.establecimiento} (${scanResult.fecha})`, monto: scanResult.montoTotal, fechaCorte: scanResult.fecha })
       setScanModalOpen(false); resetScan()
     } catch { setScanError("No se pudo guardar. Intenta de nuevo.") }

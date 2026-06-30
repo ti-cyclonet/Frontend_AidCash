@@ -219,7 +219,7 @@ export default function BalancePage() {
                 <HistoryList items={report.debts} emptyMsg="Sin deudas registradas" renderRow={(d) => ({
                   icon: (d.pagadoEstePeriodo as boolean) ? "✅" : "🔴",
                   title: d.nombre as string,
-                  subtitle: `Vence: ${d.fechaVencimiento as string} · Total: ${formatAmount(d.montoTotal as number)}`,
+                  subtitle: `Vence: ${d.diasPago as string} · Total: ${formatAmount(d.montoTotal as number)}`,
                   amount: -(d.cuotaPeriodo as number), formatAmount,
                   faded: !(d.pagadoEstePeriodo as boolean),
                 })} />
