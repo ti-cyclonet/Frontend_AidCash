@@ -322,8 +322,9 @@ export function useFinanceData() {
   }
 
   // Total de gastos hormiga del periodo actual
-  const currentPeriodo = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-  const impulseThisPeriod = impulseExpenses.filter(e => e.periodo === currentPeriodo)
+  // El backend ya filtra por el periodo actual (quincena o mes según frecuencia del usuario).
+  // impulseExpenses contiene SOLO los del periodo vigente.
+  const impulseThisPeriod = impulseExpenses
   const totalImpulseThisPeriod = impulseThisPeriod.reduce((acc, e) => acc + e.monto, 0)
 
   // ─── Derivados ───────────────────────────────────────────────────────────────

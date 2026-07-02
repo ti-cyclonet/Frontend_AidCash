@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
@@ -74,6 +74,9 @@ export default function ObligacionesPage() {
   // ── Tab activa ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>("gastos_fijos")
 
+  // ── Filtro de estado (Todas / Pendientes / Pagadas) ────────────────────────
+  const [statusFilter, setStatusFilter] = useState<"todas" | "pendientes" | "pagadas">("todas")
+
   // ── Items ocultos (ojo) ────────────────────────────────────────────────────
   const [hiddenItems, setHiddenItems] = useState<Set<string>>(new Set())
   const toggleItemHidden = (id: string) => setHiddenItems(prev => {
@@ -82,18 +85,17 @@ export default function ObligacionesPage() {
     return next
   })
 
-  // ── Asignación de presupuesto — fuente única de verdad: totales mensuales ──
-  const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
-  const totalObligationsMonthly = useMemo(
-    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
-    [debts, fixedExpenses]
-  )
-  const totalIncomeMonthly = income + totalExtraIncome
-  const allocation = useMemo(
-    () => totalIncomeMonthly > 0 ? calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly) : null,
-    [totalIncomeMonthly, totalObligationsMonthly]
-  )
+  // ── Asignación de presupuesto — distribución dinámica del periodo actual ──
+  const { allocation, periodData } = usePeriodBudget()
   const dailyFreeAmount = allocation?.dailyFreeAmount ?? 0
+
+  // IDs de obligaciones que son PRIORIDAD del periodo actual (para resaltar en amarillo)
+  const periodPriorityIds = useMemo(() => {
+    const ids = new Set<string>()
+    periodData.periodDebts.forEach(d => ids.add(d.id))
+    periodData.periodFixed.forEach(f => ids.add(f.id))
+    return ids
+  }, [periodData.periodDebts, periodData.periodFixed])
 
   // Estrategias de deuda
   const recommendations = useMemo(
@@ -105,6 +107,11 @@ export default function ObligacionesPage() {
   const [payDebt, setPayDebt] = useState<Debt | null>(null)
   const [isPartialMode, setIsPartialMode] = useState(false)
   const [partialAmount, setPartialAmount] = useState("")
+
+  // ── Pay modal (gastos fijos) ───────────────────────────────────────────────
+  const [payFixed, setPayFixed] = useState<FixedExpense | null>(null)
+  const [isFixedPartialMode, setIsFixedPartialMode] = useState(false)
+  const [fixedPartialAmount, setFixedPartialAmount] = useState("")
 
   // ── Add modal ──────────────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -150,6 +157,22 @@ export default function ObligacionesPage() {
     const amt = Number(partialAmount)
     await markPaid(payDebt.id, payDebt.montoTotal - amt, amt >= payDebt.cuotaPeriodo)
     setPayDebt(null)
+  }
+
+  // ── Handlers Pay Fixed ────────────────────────────────────────────────────
+  const openPayFixed = (fe: FixedExpense) => { setPayFixed(fe); setIsFixedPartialMode(false); setFixedPartialAmount("") }
+
+  const confirmFullPayFixed = async () => {
+    if (!payFixed) return
+    await markFixedPaid(payFixed.id, true)
+    setPayFixed(null)
+  }
+
+  const confirmPartialPayFixed = async () => {
+    if (!payFixed || !fixedPartialAmount) return
+    // Registrar el pago real (aunque difiera del monto esperado)
+    await markFixedPaid(payFixed.id, true)
+    setPayFixed(null)
   }
 
   // ── Handlers Add ──────────────────────────────────────────────────────────
@@ -349,6 +372,16 @@ export default function ObligacionesPage() {
       ════════════════════════════════════════════════════════════ */}
       {activeTab === "gastos_fijos" && (
         <div className="space-y-3">
+          {/* Filtros */}
+          <div className="flex gap-2">
+            {(["todas", "pendientes", "pagadas"] as const).map(f => (
+              <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
+                statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
+                {f === "todas" ? "Todas" : f === "pendientes" ? "Pendientes" : "Pagadas"}
+              </button>
+            ))}
+          </div>
+
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Cargando...</p>
           ) : fixedExpenses.length === 0 ? (
@@ -360,19 +393,22 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {[...fixedExpenses].sort((a, b) => {
-                if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                return 0
-              }).map(fe => (
+              {[...fixedExpenses]
+                .filter(fe => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !fe.pagadoEstePeriodo : fe.pagadoEstePeriodo)
+                .sort((a, b) => {
+                  if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                  return 0
+                }).map(fe => (
                 <FixedCard
                   key={fe.id}
                   item={fe}
                   formatAmount={formatAmount}
                   onEdit={() => openEditFixed(fe)}
                   onDelete={() => setDeleteTarget({ type: "fixed", id: fe.id, nombre: fe.nombre })}
-                  onTogglePaid={() => markFixedPaid(fe.id, !fe.pagadoEstePeriodo)}
+                  onTogglePaid={() => openPayFixed(fe)}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
+                  isPeriodPriority={periodPriorityIds.has(fe.id)}
                 />
               ))}
             </>
@@ -388,6 +424,16 @@ export default function ObligacionesPage() {
       ════════════════════════════════════════════════════════════ */}
       {activeTab === "deudas" && (
         <div className="space-y-3">
+          {/* Filtros */}
+          <div className="flex gap-2">
+            {(["todas", "pendientes", "pagadas"] as const).map(f => (
+              <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
+                statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
+                {f === "todas" ? "Todas" : f === "pendientes" ? "Pendientes" : "Pagadas"}
+              </button>
+            ))}
+          </div>
+
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Cargando...</p>
           ) : debts.length === 0 ? (
@@ -399,11 +445,12 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {[...debts].sort((a, b) => {
-                // Pendientes primero, pagados al final
-                if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                return 0
-              }).map(debt => (
+              {[...debts]
+                .filter(d => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !d.pagadoEstePeriodo : d.pagadoEstePeriodo)
+                .sort((a, b) => {
+                  if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                  return 0
+                }).map(debt => (
                 <DebtCard
                   key={debt.id}
                   debt={debt}
@@ -413,6 +460,7 @@ export default function ObligacionesPage() {
                   onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
                   hidden={hiddenItems.has(debt.id)}
                   onToggleHidden={() => toggleItemHidden(debt.id)}
+                  isPeriodPriority={periodPriorityIds.has(debt.id)}
                 />
               ))}
             </>
@@ -541,6 +589,37 @@ export default function ObligacionesPage() {
                 </div>
                 <Button onClick={confirmPartialPay} disabled={!partialAmount || Number(partialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">
                   Confirmar abono
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pay Fixed Modal */}
+      <Dialog open={!!payFixed} onOpenChange={v => !v && setPayFixed(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Ya pagaste?</DialogTitle>
+            <DialogDescription>Gasto fijo: <strong>{payFixed?.nombre}</strong></DialogDescription>
+          </DialogHeader>
+          <div className="py-3 flex flex-col gap-3">
+            <Button onClick={confirmFullPayFixed} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Pagado ({formatAmount(payFixed?.monto ?? 0)})
+            </Button>
+            <Button variant="outline" onClick={() => setIsFixedPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
+              ¿Pagaste otro valor?
+            </Button>
+            <div className={cn("overflow-hidden transition-all duration-300", isFixedPartialMode ? "max-h-40 opacity-100" : "max-h-0 opacity-0")}>
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold">Monto real pagado</Label>
+                  <MoneyInput value={fixedPartialAmount} onChange={v => setFixedPartialAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus={isFixedPartialMode} />
+                  <p className="text-[10px] text-muted-foreground">Si pagaste más o menos del valor esperado ({formatAmount(payFixed?.monto ?? 0)}), registra el monto real aquí.</p>
+                </div>
+                <Button onClick={confirmPartialPayFixed} disabled={!fixedPartialAmount || Number(fixedPartialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">
+                  Confirmar pago
                 </Button>
               </div>
             </div>
@@ -798,17 +877,20 @@ function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggleHidden }: {
+function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority }: {
   debt: Debt; formatAmount: (n: number) => string
   onPay: () => void; onEdit: () => void; onDelete: () => void
-  hidden: boolean; onToggleHidden: () => void
+  hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
 }) {
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
   const progreso = debt.montoTotal > 0 ? Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100) : 0
   const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo)
 
+  // Yellow highlight for period priority (pending in current period)
+  const priorityRing = isPeriodPriority && !debt.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
+
   return (
-    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, debt.estado === 'saldada' && "opacity-40")}>
+    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, priorityRing, debt.estado === 'saldada' && "opacity-40")}>
       <CardContent className="p-4 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -884,15 +966,18 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggl
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden }: {
+function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden, isPeriodPriority }: {
   item: FixedExpense; formatAmount: (n: number) => string
   onEdit: () => void; onDelete: () => void; onTogglePaid: () => void
-  hidden: boolean; onToggleHidden: () => void
+  hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
 }) {
   const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo)
 
+  // Yellow highlight for period priority
+  const priorityRing = isPeriodPriority && !item.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
+
   return (
-    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing)}>
+    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, priorityRing)}>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">

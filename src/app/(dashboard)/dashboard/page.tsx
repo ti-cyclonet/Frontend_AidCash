@@ -16,8 +16,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
 import { useRouter } from "next/navigation"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
-import { getPeriodData } from "@/lib/period-filter"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { analyzeFinances } from "@/lib/recommendations"
 import { ExportButtons } from "@/components/balance/ExportButtons"
 import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
@@ -55,26 +54,17 @@ export default function DashboardPage() {
     })
   }, [])
 
+  // ═══ FUENTE ÚNICA DE VERDAD: distribución DINÁMICA del periodo actual ═══
+  // usePeriodBudget() hace:
+  //   1. Filtra obligaciones según quincena/mes + excluye pagadas
+  //   2. Calcula allocation con ingreso y obligaciones del periodo
+  //   3. Cuando el usuario marca algo como pagado → % baja en tiempo real
+  const { allocation, periodData } = usePeriodBudget()
+
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
 
-  // ═══ FUENTE ÚNICA DE VERDAD: totales mensuales completos (sin filtro de quincena) ═══
-  // Esto garantiza que Dashboard, Billetera y Proyecciones muestren los mismos %
-  const totalObligationsMonthly = useMemo(
-    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
-    [debts, fixedExpenses]
-  )
-  const totalIncomeMonthly = income + totalExtraIncome
-
-  const allocation = useMemo(
-    () => totalIncomeMonthly > 0 ? calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly) : null,
-    [totalIncomeMonthly, totalObligationsMonthly]
-  )
-
-  // Para recomendaciones y listados de pendientes, usamos periodDebts (filtro de quincena)
-  const { periodDebts } = useMemo(
-    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
-    [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency]
-  )
+  // Para recomendaciones y listados de pendientes
+  const { periodDebts } = periodData
 
   // Recomendaciones y estrategias de deuda
   const recommendations = useMemo(
@@ -128,7 +118,7 @@ export default function DashboardPage() {
                 Saldo total <Eye className="h-3 w-3" />
               </span>
               <p className="text-xl sm:text-2xl font-black text-foreground">
-                {saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncomeMonthly)}
+                {saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(periodData.effectiveIncome)}
               </p>
               <span className="text-[9px] text-muted-foreground">Actualizado hoy</span>
             </div>
@@ -183,7 +173,7 @@ export default function DashboardPage() {
                   {/* Centro del donut */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[9px] text-muted-foreground font-medium">Total</span>
-                    <span className="text-sm font-black">{saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncomeMonthly)}</span>
+                    <span className="text-sm font-black">{saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(periodData.effectiveIncome)}</span>
                   </div>
                 </div>
 
@@ -351,35 +341,31 @@ export default function DashboardPage() {
                   ✅ No tienes obligaciones pendientes este periodo.
                 </p>
               ) : (
-                <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                <div className="space-y-2 max-h-[280px] overflow-y-auto">
                   {/* Deudas pendientes */}
-                  {pendingDebts.slice(0, 3).map(d => (
-                    <div key={d.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/30">
-                      <div className="h-8 w-8 rounded-lg bg-cyclon-periwinkle/10 flex items-center justify-center text-cyclon-periwinkle shrink-0">
-                        <ReceiptText className="h-3.5 w-3.5" />
+                  {pendingDebts.slice(0, 4).map(d => (
+                    <div key={d.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+                      <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                        <ReceiptText className="h-4 w-4 text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">{d.nombre}</p>
+                        <p className="text-sm font-bold truncate">{d.nombre}</p>
                         <p className="text-[10px] text-muted-foreground">Vence {d.diasPago}</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-black">{formatAmount(d.cuotaPeriodo)}</p>
-                      </div>
+                      <p className="text-sm font-black shrink-0">{formatAmount(d.cuotaPeriodo)}</p>
                     </div>
                   ))}
                   {/* Gastos fijos pendientes */}
-                  {pendingFixed.slice(0, 2).map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/30">
-                      <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
-                        <Wallet className="h-3.5 w-3.5" />
+                  {pendingFixed.slice(0, 3).map(f => (
+                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+                      <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                        <Wallet className="h-4 w-4 text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">{f.nombre}</p>
+                        <p className="text-sm font-bold truncate">{f.nombre}</p>
                         <p className="text-[10px] text-muted-foreground">Corte {f.fechaCorte}</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-black">{formatAmount(f.monto)}</p>
-                      </div>
+                      <p className="text-sm font-black shrink-0">{formatAmount(f.monto)}</p>
                     </div>
                   ))}
                 </div>
@@ -393,8 +379,8 @@ export default function DashboardPage() {
 
               {totalPending > 0 && (
                 <div className="flex items-center justify-between pt-2 border-t border-dashed border-border">
-                  <span className="text-[10px] text-muted-foreground font-medium">Total pendiente</span>
-                  <span className="text-sm font-black text-cyclon-periwinkle">{formatAmount(totalPending)}</span>
+                  <span className="text-xs text-muted-foreground font-medium">Total pendiente</span>
+                  <span className="text-sm font-black text-kiri-forest">{formatAmount(totalPending)}</span>
                 </div>
               )}
             </CardContent>

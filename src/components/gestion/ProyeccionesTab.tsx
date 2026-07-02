@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
@@ -9,10 +9,10 @@ import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Sparkles, TrendingUp, Wallet, Plus, Trash2, Repeat, Clock, Zap, Pencil, ReceiptText, PiggyBank, ShieldCheck, Banknote } from "lucide-react"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
-import { BudgetAllocation, ExtraIncome, ExtraIncomeTemporality } from "@/lib/types"
+import { ExtraIncome, ExtraIncomeTemporality } from "@/lib/types"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext, IncomeFrequency } from "@/lib/app-context"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { cn } from "@/lib/utils"
 
 const TEMPORALITY_OPTIONS: { value: ExtraIncomeTemporality; label: string; icon: React.ReactNode }[] = [
@@ -23,39 +23,24 @@ const TEMPORALITY_OPTIONS: { value: ExtraIncomeTemporality; label: string; icon:
 const emptyExtraForm = { nombre: "", monto: "", temporalidad: "una_vez" as ExtraIncomeTemporality, meses: "" }
 
 export function ProyeccionesTab() {
-  const [allocation, setAllocation] = useState<BudgetAllocation | null>(null)
   const [aiExplanation, setAiExplanation] = useState("")
   const [loadingAi, setLoadingAi] = useState(false)
   const { debts, fixedExpenses, extraIncomes, totalExtraIncome, totalImpulseThisPeriod, addExtraIncome, updateExtraIncome, removeExtraIncome } = useFinanceData()
   const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency } = useAppContext()
+  const { allocation, periodData } = usePeriodBudget()
 
   const [isExtraModalOpen, setIsExtraModalOpen] = useState(false)
   const [editingExtraId, setEditingExtraId] = useState<string | null>(null)
   const [extraForm, setExtraForm] = useState(emptyExtraForm)
   const [savingExtra, setSavingExtra] = useState(false)
 
-  // ═══ ÚNICA FUENTE DE VERDAD: siempre mensual ═══
-  // income = sueldo mensual total (NUNCA se modifica por el toggle)
-  // totalObligationsMonthly = suma real de cuotas + gastos fijos (mensual)
-  const totalObligationsMonthly = useMemo(
-    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
-    [debts, fixedExpenses]
-  )
-  const totalIncomeMonthly = income + totalExtraIncome
+  // ═══ Distribución DINÁMICA: viene del hook usePeriodBudget ═══
+  // allocation ya refleja el periodo actual y se recalcula al pagar obligaciones.
+  // effectiveIncome y totalObligations son los del periodo (no totales mensuales).
 
-  // ═══ EJECUTAR ALGORITMO: siempre con totales mensuales ═══
-  useEffect(() => {
-    if (totalIncomeMonthly > 0) {
-      setAllocation(calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly))
-    } else {
-      setAllocation(null)
-    }
-  }, [totalIncomeMonthly, totalObligationsMonthly])
-
-  // ═══ FILTRO DE PRESENTACIÓN: toggle solo afecta la UI ═══
-  // Si quincenal: montos se dividen entre 2 para mostrar. Porcentajes NO cambian.
-  const displayDivisor = incomeFrequency === "quincenal" ? 2 : 1
-  const displayIncome = Math.round(income / displayDivisor)
+  // ═══ PRESENTACIÓN: toggle de frecuencia ya está incorporado en el cálculo ═══
+  // El ingreso mostrado es el efectivo del periodo (ya dividido si es quincenal).
+  const displayIncome = periodData.effectiveIncome
 
   const handleGetAiInsight = async () => {
     if (!allocation) return
@@ -64,11 +49,11 @@ export function ProyeccionesTab() {
       const res = await fetch('/api/ai/budget-insight', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ingresoTotal: totalIncomeMonthly, pctObligacionesOriginal: 50, pctLibreOriginal: 30, pctAhorroOriginal: 20,
+          ingresoTotal: periodData.effectiveIncome, pctObligacionesOriginal: 50, pctLibreOriginal: 30, pctAhorroOriginal: 20,
           pctObligacionesAjustado: Math.round(allocation.obligationsPct),
           pctLibreAjustado: Math.round(allocation.freeInvestmentPct),
           pctAhorroAjustado: Math.round(allocation.savingsPct),
-          totalObligaciones: totalObligationsMonthly,
+          totalObligaciones: periodData.totalObligations,
           detalleDeudas: debts.map(d => ({ nombre: d.nombre, monto: d.cuotaPeriodo, diasPago: d.diasPago ?? '1' })),
           detalleGastosFijos: fixedExpenses.map(f => ({ nombre: f.nombre, monto: f.monto, fechaCorte: f.fechaCorte })),
         }),
@@ -168,7 +153,7 @@ export function ProyeccionesTab() {
             <span className="text-muted-foreground text-lg font-black">+</span>
             <div><p className="text-xs text-muted-foreground">Extra</p><p className="font-bold text-cyclon-lavender">{formatAmount(totalExtraIncome)}</p></div>
             <span className="text-muted-foreground text-lg font-black">=</span>
-            <div className="text-right"><p className="text-xs text-muted-foreground">Total mensual</p><p className="font-black text-lg text-cyclon-lavender">{formatAmount(totalIncomeMonthly)}</p></div>
+            <div className="text-right"><p className="text-xs text-muted-foreground">Total periodo</p><p className="font-black text-lg text-cyclon-lavender">{formatAmount(periodData.effectiveIncome)}</p></div>
           </CardContent></Card>
         )}
       </div>
@@ -184,10 +169,10 @@ export function ProyeccionesTab() {
             </CardContent></Card>
           )}
           <div className="grid gap-3">
-            <AllocBlock label="Obligaciones" sublabel="Deudas + Gastos Fijos" pct={allocation.obligationsPct} amount={Math.round(allocation.obligationsAmount / displayDivisor)} color="bg-cyclon-periwinkle" icon={<ReceiptText className="h-4 w-4" />} alert={allocation.isTight} formatAmount={formatAmount} />
-            <AllocBlock label="Ahorro" sublabel="Págate a ti mismo" pct={allocation.savingsPct} amount={Math.round(allocation.savingsAmount / displayDivisor)} color="bg-cyclon-mint" icon={<PiggyBank className="h-4 w-4" />} formatAmount={formatAmount} />
-            <AllocBlock label="Gastos Libres" sublabel="Blindado — día a día" pct={allocation.dailyFreePct} amount={Math.round(allocation.dailyFreeAmount / displayDivisor)} color="bg-cyclon-sky" icon={<ShieldCheck className="h-4 w-4" />} formatAmount={formatAmount} />
-            <AllocBlock label="Endeudamiento" sublabel="Capacidad para nuevas deudas" pct={allocation.debtCapacityPct} amount={Math.round(allocation.debtCapacityAmount / displayDivisor)} color="bg-cyclon-lavender" icon={<Banknote className="h-4 w-4" />} formatAmount={formatAmount} />
+            <AllocBlock label="Obligaciones" sublabel="Deudas + Gastos Fijos" pct={allocation.obligationsPct} amount={Math.round(allocation.obligationsAmount)} color="bg-cyclon-periwinkle" icon={<ReceiptText className="h-4 w-4" />} alert={allocation.isTight} formatAmount={formatAmount} />
+            <AllocBlock label="Ahorro" sublabel="Págate a ti mismo" pct={allocation.savingsPct} amount={Math.round(allocation.savingsAmount)} color="bg-cyclon-mint" icon={<PiggyBank className="h-4 w-4" />} formatAmount={formatAmount} />
+            <AllocBlock label="Gastos Libres" sublabel="Blindado — día a día" pct={allocation.dailyFreePct} amount={Math.round(allocation.dailyFreeAmount)} color="bg-cyclon-sky" icon={<ShieldCheck className="h-4 w-4" />} formatAmount={formatAmount} />
+            <AllocBlock label="Endeudamiento" sublabel="Capacidad para nuevas deudas" pct={allocation.debtCapacityPct} amount={Math.round(allocation.debtCapacityAmount)} color="bg-cyclon-lavender" icon={<Banknote className="h-4 w-4" />} formatAmount={formatAmount} />
           </div>
           {/* AI Insight */}
           <Card className="border-none bg-gradient-to-br from-cyclon-lavender/5 to-cyclon-pink/5 rounded-2xl"><CardContent className="p-5 space-y-3">

@@ -1,43 +1,57 @@
 import { BudgetAllocation } from './types';
 
 /**
- * Distribución inteligente Kiri — "El Embudo"
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Distribución Inteligente Kiri — "El Cerebro"
+ * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Lógica estricta de prioridad:
- *   1. Obligaciones (deudas + gastos fijos) — siempre primero, monto real
- *   2. Remanente = max(0, Ingreso - Obligaciones)
- *   3. Si Obligaciones >= Ingreso → isOverloaded = true, todo lo demás = 0
- *   4. Ahorro — se calcula sobre el REMANENTE disponible, nunca sobre ingreso total
- *   5. Gasto Libre — del remanente tras ahorro, con un tope del 15% del ingreso total
- *   6. Capacidad de Endeudamiento — lo que quede tras Ahorro y Gasto Libre
+ * Función PURA de cálculo presupuestal. Recibe los datos DINÁMICOS del periodo
+ * actual y devuelve la distribución ("foto viva").
  *
- * Los porcentajes SIEMPRE se calculan respecto al ingreso total (para que sumen ~100%),
- * pero los MONTOS se derivan del remanente real disponible.
+ * IMPORTANTE: Los llamadores deben pasarle:
+ *   - ingresoDelPeriodo: ingreso efectivo del periodo actual
+ *     (quincenal = ingreso/2 + extras, mensual = ingreso total + extras)
+ *   - obligacionesPendientesDelPeriodo: suma de cuotas/montos de obligaciones
+ *     que AÚN NO se han pagado en el periodo (output de PeriodManager)
+ *
+ * Reglas del Embudo:
+ *   1. Bloque Obligaciones = obligaciones pendientes (monto exacto)
+ *      Porcentaje = (obligacionesPendientes / ingreso) * 100
+ *      → A medida que el usuario paga, este % BAJA automáticamente.
+ *
+ *   2. Remanente = ingreso - obligaciones pendientes
+ *      → Crece conforme se pagan obligaciones.
+ *
+ *   3. Remanente se distribuye con prioridad:
+ *      a) Ahorro — escala según salud financiera del periodo
+ *      b) Gasto Libre — tope 15% del ingreso del periodo
+ *      c) Capacidad de Endeudamiento — el residual
  *
  * Estados:
- *   - Normal    : obligaciones ≤ 60% del ingreso
- *   - Ajustado  : obligaciones entre 60% y 99%
- *   - Crítico   : obligaciones >= 100% (isOverloaded)
+ *   - Normal    : obligaciones < 60%
+ *   - Ajustado  : 60% - 99%
+ *   - Crítico   : >= 100% (isOverloaded)
  */
 export function calculateBudgetAllocation(
-  totalIncome: number,
-  totalObligations: number
+  ingresoDelPeriodo: number,
+  obligacionesPendientesDelPeriodo: number
 ): BudgetAllocation {
 
-  if (totalIncome <= 0) {
-    return zeroAllocation(totalIncome)
+  if (ingresoDelPeriodo <= 0) {
+    return zeroAllocation(ingresoDelPeriodo)
   }
 
-  // ── Bloque 1: Obligaciones — siempre primero ──────────────────────────────
-  const obligationsPct = (totalObligations / totalIncome) * 100
-  const remanente = Math.max(0, totalIncome - totalObligations)
-  const isOverloaded = totalObligations >= totalIncome
+  // ── Bloque 1: Obligaciones — porcentaje DINÁMICO ──────────────────────────
+  // Baja automáticamente cada vez que el usuario paga una obligación.
+  const obligationsPct = (obligacionesPendientesDelPeriodo / ingresoDelPeriodo) * 100
+  const remanente = Math.max(0, ingresoDelPeriodo - obligacionesPendientesDelPeriodo)
+  const isOverloaded = obligacionesPendientesDelPeriodo >= ingresoDelPeriodo
   const isTight = obligationsPct >= 70
 
-  // ── Estado Crítico: no hay nada que distribuir ─────────────────────────────
+  // ── Estado Crítico: no hay remanente para distribuir ───────────────────────
   if (isOverloaded) {
     return {
-      obligationsAmount: totalObligations,
+      obligationsAmount: obligacionesPendientesDelPeriodo,
       obligationsPct,
       savingsAmount: 0,
       savingsPct: 0,
@@ -47,20 +61,15 @@ export function calculateBudgetAllocation(
       dailyFreePct: 0,
       debtCapacityAmount: 0,
       debtCapacityPct: 0,
-      totalIncome,
+      totalIncome: ingresoDelPeriodo,
       isOverloaded: true,
       isTight: true,
     }
   }
 
-  // ── Bloque 2: Ahorro — se calcula sobre el remanente real ─────────────────
-  // El ahorro NUNCA puede exceder lo que realmente queda disponible.
-  // Escala del ahorro basada en qué tan apretado está el presupuesto:
-  //   - Remanente >= 40% del ingreso → ahorro ideal (20% del ingreso)
-  //   - Remanente >= 25% → ahorro reducido (15% del ingreso)
-  //   - Remanente >= 15% → ahorro mínimo (10% del ingreso)
-  //   - Remanente < 15%  → ahorro simbólico (5% del ingreso)
-  const remanentePct = (remanente / totalIncome) * 100
+  // ── Bloque 2: Ahorro — escala según salud financiera ──────────────────────
+  // Cuanto más remanente hay (porque se pagaron obligaciones), más ahorro.
+  const remanentePct = (remanente / ingresoDelPeriodo) * 100
 
   let targetSavingsPct: number
   if (remanentePct >= 40) {
@@ -74,24 +83,22 @@ export function calculateBudgetAllocation(
   }
 
   // El ahorro NO puede superar el remanente real
-  const targetSavingsAmount = (targetSavingsPct / 100) * totalIncome
+  const targetSavingsAmount = (targetSavingsPct / 100) * ingresoDelPeriodo
   const savingsAmount = Math.min(targetSavingsAmount, remanente)
-  const savingsPct = (savingsAmount / totalIncome) * 100
+  const savingsPct = (savingsAmount / ingresoDelPeriodo) * 100
 
-  // ── Bloque 3: Lo que queda tras ahorro ────────────────────────────────────
+  // ── Bloque 3: Libre Inversión (tras obligaciones + ahorro) ────────────────
   const afterSavings = remanente - savingsAmount
   const freeInvestmentAmount = afterSavings
-  const freeInvestmentPct = (freeInvestmentAmount / totalIncome) * 100
+  const freeInvestmentPct = (freeInvestmentAmount / ingresoDelPeriodo) * 100
 
   // ── Bloque 3a: Gasto Libre (blindado) ─────────────────────────────────────
-  // Tope: 15% del ingreso total, pero SOLO si hay suficiente remanente.
-  // Si afterSavings es menor al tope, todo va a gasto libre (debtCapacity = 0).
-  const maxDailyFreeAmount = (15 / 100) * totalIncome
+  // Tope: 15% del ingreso del periodo.
+  const maxDailyFreeAmount = (15 / 100) * ingresoDelPeriodo
   let dailyFreeAmount: number
   let debtCapacityAmount: number
 
   if (afterSavings <= maxDailyFreeAmount) {
-    // No alcanza para cubrir el tope → todo a gasto libre, nada a endeudamiento
     dailyFreeAmount = afterSavings
     debtCapacityAmount = 0
   } else {
@@ -99,11 +106,11 @@ export function calculateBudgetAllocation(
     debtCapacityAmount = afterSavings - maxDailyFreeAmount
   }
 
-  const dailyFreePct = (dailyFreeAmount / totalIncome) * 100
-  const debtCapacityPct = (debtCapacityAmount / totalIncome) * 100
+  const dailyFreePct = (dailyFreeAmount / ingresoDelPeriodo) * 100
+  const debtCapacityPct = (debtCapacityAmount / ingresoDelPeriodo) * 100
 
   return {
-    obligationsAmount: totalObligations,
+    obligationsAmount: obligacionesPendientesDelPeriodo,
     obligationsPct,
     savingsAmount,
     savingsPct,
@@ -113,7 +120,7 @@ export function calculateBudgetAllocation(
     dailyFreePct,
     debtCapacityAmount,
     debtCapacityPct,
-    totalIncome,
+    totalIncome: ingresoDelPeriodo,
     isOverloaded: false,
     isTight,
   }

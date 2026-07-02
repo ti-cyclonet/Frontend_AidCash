@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { EmergencyFundSection } from "@/components/recommendations/emergency-fund"
-import { emergencyFundApi } from "@/lib/api-client"
+import { emergencyFundApi, userApi } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
@@ -191,10 +191,19 @@ export default function AhorroPage() {
     setTxPocket(pocket); setTxType(type); setTxAmount(""); 
   }
 
-  const handleTx = () => {
+  const handleTx = async () => {
     if (!txPocket || !txAmount || Number(txAmount) <= 0) return
     setSavingTx(true)
     const amt = Number(txAmount)
+
+    if (txType === "aporte") {
+      // Aportar al bolsillo de ahorro → descontar del sueldo real (cashBalance)
+      await userApi.walletDeduct(amt, 'ahorro')
+    } else {
+      // Retirar del bolsillo de ahorro → sumar al sueldo real (cashBalance)
+      await userApi.walletWithdraw(amt, 'ahorro')
+    }
+
     setPockets(p => p.map(x => {
       if (x.id !== txPocket.id) return x
       const nuevo = txType === "aporte" ? x.acumulado + amt : Math.max(0, x.acumulado - amt)

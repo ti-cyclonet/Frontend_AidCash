@@ -17,9 +17,12 @@ export const metadata: Metadata = {
   },
   formatDetection: { telephone: false },
   icons: {
-    icon: '/icons/icon-192x192.svg',
-    shortcut: '/icons/icon-96x96.svg',
-    apple: '/icons/icon-152x152.svg',
+    icon: [
+      { url: '/icons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: '/icons/favicon-32x32.png',
+    apple: '/icons/apple-touch-icon.png',
   },
 }
 

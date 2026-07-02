@@ -9,7 +9,8 @@ import { calculateBudgetAllocation } from "@/lib/budget-logic"
 import { userApi, isAuthenticated, getUserId } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { saveAvatar, loadAvatar } from "@/lib/avatar-storage"
-export type { IncomeFrequency }
+import { InactivityTimeout } from "@/hooks/use-inactivity-timeout"
+export type { IncomeFrequency, InactivityTimeout }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ interface AppContextValue {
   setIncome: (v: number) => void
   incomeFrequency: IncomeFrequency
   setIncomeFrequency: (v: IncomeFrequency) => void
+  diasCobro: string
+  setDiasCobro: (v: string) => void
   onboardingDone: boolean
   setOnboardingDone: (v: boolean) => void
   metaAhorro: number
@@ -46,6 +49,8 @@ interface AppContextValue {
   savingsAmount: number
   formatAmount: (amount: number) => string
   profileLoading: boolean
+  inactivityTimeout: InactivityTimeout
+  setInactivityTimeout: (v: InactivityTimeout) => void
 }
 
 // ─── Keys de localStorage ─────────────────────────────────────────────────────
@@ -55,9 +60,11 @@ const LS = {
   dark:        "kiri_dark",
   income:      "kiri_income",
   frequency:   "kiri_frequency",
+  diasCobro:   "kiri_dias_cobro",
   onboarding:  "kiri_onboarding_done",
   metaAhorro:  "kiri_meta_ahorro",
   cachedUserId: "kiri_cached_uid",
+  inactivityTimeout: "kiri_inactivity_timeout",
 } as const
 
 const defaultUser: UserProfile = { nombre: "", correo: "", avatarUrl: "" }
@@ -73,8 +80,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isDarkMode, setDarkModeState] = useState(false)
   const [income, setIncomeState] = useState(0)
   const [incomeFrequency, setIncomeFrequencyState] = useState<IncomeFrequency>("mensual")
+  const [diasCobro, setDiasCobroState] = useState("1,16")
   const [onboardingDone, setOnboardingDoneState] = useState(false)
   const [metaAhorro, setMetaAhorroState] = useState(5000)
+  const [inactivityTimeout, setInactivityTimeoutState] = useState<InactivityTimeout>("never")
   const [mounted, setMounted] = useState(false)
   const [profileLoading, setProfileLoading] = useState(true)
 
@@ -84,9 +93,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const storedCurrency = localStorage.getItem(LS.currency)
     const storedDark     = localStorage.getItem(LS.dark)
+    const storedTimeout  = localStorage.getItem(LS.inactivityTimeout)
 
     if (storedCurrency) setCurrencyState(storedCurrency as Currency)
     if (storedDark)     setDarkModeState(storedDark === "true")
+    if (storedTimeout)  setInactivityTimeoutState(storedTimeout as InactivityTimeout)
 
     setMounted(true)
 
@@ -120,6 +131,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (cachedFrequency)  setIncomeFrequencyState(cachedFrequency as IncomeFrequency)
       if (cachedOnboarding) setOnboardingDoneState(cachedOnboarding === "true")
       if (cachedMeta)       setMetaAhorroState(Number(cachedMeta))
+      const cachedDiasCobro = localStorage.getItem(LS.diasCobro)
+      if (cachedDiasCobro)  setDiasCobroState(cachedDiasCobro)
     } else {
       localStorage.removeItem(LS.user)
       localStorage.removeItem(LS.income)
@@ -144,10 +157,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const frecuencia   = (u.frecuenciaIngreso as IncomeFrequency) ?? "mensual"
       const onboarding   = (u.onboardingDone as boolean) ?? false
       const meta         = Number(u.metaAhorroGlobal ?? 5000)
+      const dias_cobro   = (u.diasCobro as string) ?? "1,16"
 
       setUserState(prev => ({ ...prev, nombre, correo }))
       setIncomeState(ingreso_base)
       setIncomeFrequencyState(frecuencia)
+      setDiasCobroState(dias_cobro)
       setOnboardingDoneState(onboarding)
       setMetaAhorroState(meta)
 
@@ -155,6 +170,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (userId) localStorage.setItem(LS.cachedUserId, userId)
       localStorage.setItem(LS.income,     String(ingreso_base))
       localStorage.setItem(LS.frequency,  frecuencia)
+      localStorage.setItem(LS.diasCobro,  dias_cobro)
       localStorage.setItem(LS.onboarding, String(onboarding))
       localStorage.setItem(LS.metaAhorro, String(meta))
       localStorage.setItem(LS.user, JSON.stringify({ nombre, correo, avatarUrl: "" }))
@@ -175,6 +191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (field: string, value: unknown) => {
       const lsKey = field === "ingresoBase"         ? LS.income
                   : field === "frecuenciaIngreso"    ? LS.frequency
+                  : field === "diasCobro"            ? LS.diasCobro
                   : field === "metaAhorroGlobal"     ? LS.metaAhorro
                   : LS.onboarding
       localStorage.setItem(lsKey, String(value))
@@ -216,6 +233,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     persistProfileField("frecuenciaIngreso", v)
   }, [persistProfileField])
 
+  const setDiasCobro = useCallback((v: string) => {
+    setDiasCobroState(v)
+    persistProfileField("diasCobro", v)
+  }, [persistProfileField])
+
   const setOnboardingDone = useCallback((v: boolean) => {
     setOnboardingDoneState(v)
     persistProfileField("onboardingDone", v)
@@ -236,8 +258,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LS.dark, String(v))
   }, [])
 
-  // ── Derivados ──────────────────────────────────────────────────────────────
+  const setInactivityTimeout = useCallback((v: InactivityTimeout) => {
+    setInactivityTimeoutState(v)
+    localStorage.setItem(LS.inactivityTimeout, v)
+  }, [])
 
+  // ── Derivados ──────────────────────────────────────────────────────────────
+  // savingsAmount como referencia: basado en ingreso sin obligaciones (caso ideal)
+  // Los componentes usan usePeriodBudget() para cálculos dinámicos reales.
   const savingsAmount = income > 0
     ? calculateBudgetAllocation(income, 0).savingsAmount
     : 0
@@ -260,10 +288,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       formatAmount,
       income, setIncome,
       incomeFrequency, setIncomeFrequency,
+      diasCobro, setDiasCobro,
       savingsAmount,
       onboardingDone, setOnboardingDone,
       metaAhorro, setMetaAhorro,
       profileLoading,
+      inactivityTimeout, setInactivityTimeout,
     }}>
       {children}
     </AppContext.Provider>

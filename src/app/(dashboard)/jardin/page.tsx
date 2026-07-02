@@ -1,11 +1,10 @@
 "use client"
 
-import { useMemo } from "react"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
 import { GamifiedGarden } from "@/components/ui/gamified-garden"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { Card, CardContent } from "@/components/ui/card"
 import { Sprout, Trophy, Flame, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -14,14 +13,7 @@ export default function JardinPage() {
   const { income, incomeFrequency } = useAppContext()
   const { debts, fixedExpenses, totalAhorrado, totalImpulseThisPeriod } = useFinanceData()
   const { streakActual, streakMejor, badgesDesbloqueados, loading: streakLoading } = useStreaks(incomeFrequency)
-
-  const totalObligations = debts.reduce((a, d) => a + d.cuotaPeriodo, 0) +
-    fixedExpenses.reduce((a, f) => a + f.monto, 0)
-
-  const allocation = useMemo(
-    () => income > 0 ? calculateBudgetAllocation(income, totalObligations) : null,
-    [income, totalObligations]
-  )
+  const { allocation } = usePeriodBudget()
 
   const growthLevel = debts.length === 0 && totalAhorrado > 0 ? 4
     : totalAhorrado > 0 ? 3
