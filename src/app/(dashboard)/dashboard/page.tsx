@@ -8,7 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } fro
 import {
   Wallet, ReceiptText, PiggyBank, ChevronRight,
   TrendingUp, AlertCircle, Sparkles, Eye, Flame,
-  FileText, FileSpreadsheet, TreePine, Users, Heart, Handshake,
+  FileText, FileSpreadsheet, TreePine, Users, Heart, Handshake, CalendarDays,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -16,8 +16,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
 import { useRouter } from "next/navigation"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
-import { getPeriodData } from "@/lib/period-filter"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { analyzeFinances } from "@/lib/recommendations"
 import { ExportButtons } from "@/components/balance/ExportButtons"
 import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
@@ -25,7 +24,7 @@ import { userApi, reportsApi, connectionsApi, sharedPocketsApi, loansApi, Wallet
 import type { BalanceReport } from "@/lib/api-client"
 
 export default function DashboardPage() {
-  const { formatAmount, income, incomeFrequency, onboardingDone, user, metaAhorro } = useAppContext()
+  const { formatAmount, income, incomeFrequency, diasCobro, onboardingDone, user, metaAhorro } = useAppContext()
   const { debts, fixedExpenses, extraIncomes, totalAhorrado, savingsHistory } = useFinanceData()
   const { streakActual } = useStreaks(incomeFrequency)
   const router = useRouter()
@@ -55,26 +54,17 @@ export default function DashboardPage() {
     })
   }, [])
 
+  // ═══ FUENTE ÚNICA DE VERDAD: distribución DINÁMICA del periodo actual ═══
+  // usePeriodBudget() hace:
+  //   1. Filtra obligaciones según quincena/mes + excluye pagadas
+  //   2. Calcula allocation con ingreso y obligaciones del periodo
+  //   3. Cuando el usuario marca algo como pagado → % baja en tiempo real
+  const { allocation, periodData } = usePeriodBudget()
+
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
 
-  // ═══ FUENTE ÚNICA DE VERDAD: totales mensuales completos (sin filtro de quincena) ═══
-  // Esto garantiza que Dashboard, Billetera y Proyecciones muestren los mismos %
-  const totalObligationsMonthly = useMemo(
-    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
-    [debts, fixedExpenses]
-  )
-  const totalIncomeMonthly = income + totalExtraIncome
-
-  const allocation = useMemo(
-    () => totalIncomeMonthly > 0 ? calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly) : null,
-    [totalIncomeMonthly, totalObligationsMonthly]
-  )
-
-  // Para recomendaciones y listados de pendientes, usamos periodDebts (filtro de quincena)
-  const { periodDebts } = useMemo(
-    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
-    [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency]
-  )
+  // Para recomendaciones y listados de pendientes
+  const { periodDebts } = periodData
 
   // Recomendaciones y estrategias de deuda
   const recommendations = useMemo(
@@ -85,25 +75,70 @@ export default function DashboardPage() {
   const pendingDebts = periodDebts.filter(d => !d.pagadoEstePeriodo)
   const pendingFixed = fixedExpenses.filter(f => !f.pagadoEstePeriodo)
   const totalPending = pendingDebts.reduce((a, d) => a + d.cuotaPeriodo, 0) + pendingFixed.reduce((a, f) => a + f.monto, 0)
-  const savingsGoal = metaAhorro || 5000
-  const savingsProgress = savingsGoal > 0 ? Math.min((totalAhorrado / savingsGoal) * 100, 100) : 0
+
+  // Ahorro REAL: bolsillos de ahorro (localStorage) + fondo de emergencia (DB)
+  const [realSavingsTotal, setRealSavingsTotal] = useState(0)
+  const [realSavingsGoal, setRealSavingsGoal] = useState(0)
+  useEffect(() => {
+    // Leer bolsillos de localStorage
+    let pocketsTotal = 0
+    let pocketsMeta = 0
+    try {
+      const raw = localStorage.getItem("kiri_saving_pockets")
+      if (raw) {
+        const pockets = JSON.parse(raw) as { acumulado: number; meta: number }[]
+        pocketsTotal = pockets.reduce((a, p) => a + (p.acumulado || 0), 0)
+        pocketsMeta = pockets.reduce((a, p) => a + (p.meta || 0), 0)
+      }
+    } catch {}
+    // Leer fondo de emergencia del backend
+    import("@/lib/api-client").then(({ emergencyFundApi }) => {
+      emergencyFundApi.get().then(({ data }) => {
+        const fondoActual = data?.fondoActual ?? 0
+        setRealSavingsTotal(pocketsTotal + fondoActual)
+        setRealSavingsGoal(pocketsMeta)
+      }).catch(() => {
+        setRealSavingsTotal(pocketsTotal)
+        setRealSavingsGoal(pocketsMeta)
+      })
+    })
+  }, [])
+
+  const savingsGoal = realSavingsGoal > 0 ? realSavingsGoal : (metaAhorro || 5000)
+  const savingsProgress = savingsGoal > 0 ? Math.min((realSavingsTotal / savingsGoal) * 100, 100) : 0
 
   // Saldo total real
   const saldoTotal = wallet.cashBalance
 
-  // Donut data — SIEMPRE derivada del cálculo real del embudo
-  // Si allocation es null (ingreso=0), mostramos 0% en todo en vez de constantes falsas
-  // Si isOverloaded: cap obligaciones a 100% para la visualización
-  const pieData = allocation ? [
-    { name: "Ahorro", value: Math.round(allocation.savingsPct), color: "#B9FBC0", amount: allocation.savingsAmount },
-    { name: "Obligaciones", value: Math.min(100, Math.round(allocation.obligationsPct)), color: "#8096E6", amount: allocation.obligationsAmount },
-    { name: "Gasto libre", value: Math.round(allocation.dailyFreePct), color: "#A2D2FF", amount: allocation.dailyFreeAmount },
-    { name: "Endeudamiento", value: Math.round(allocation.debtCapacityPct), color: "#C4B5FD", amount: allocation.debtCapacityAmount },
-  ] : [
-    { name: "Ahorro", value: 0, color: "#B9FBC0", amount: 0 },
-    { name: "Obligaciones", value: 0, color: "#8096E6", amount: 0 },
-    { name: "Gasto libre", value: 0, color: "#A2D2FF", amount: 0 },
-    { name: "Endeudamiento", value: 0, color: "#C4B5FD", amount: 0 },
+  // ═══ DISTRIBUCIÓN REAL basada en Sueldo Real (cashBalance) vs Obligaciones del periodo ═══
+  // Si cashBalance es 0, no hay nada que distribuir. Solo se muestran obligaciones pendientes.
+  const realIncome = saldoTotal
+  const realObligations = totalPending
+
+  const realAlloc = useMemo(() => {
+    if (realIncome <= 0) return { obligPct: 0, savPct: 0, freePct: 0, debtPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtAmt: 0 }
+    const obligPct = Math.min(100, (realObligations / realIncome) * 100)
+    const isOverloaded = realObligations >= realIncome
+    const remanente = Math.max(0, realIncome - realObligations)
+    if (isOverloaded) return { obligPct, savPct: 0, freePct: 0, debtPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtAmt: 0 }
+    const remPct = (remanente / realIncome) * 100
+    const tgtSav = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
+    const savAmt = Math.min((tgtSav / 100) * realIncome, remanente)
+    const savPct = (savAmt / realIncome) * 100
+    const afterSav = remanente - savAmt
+    const maxFree = (15 / 100) * realIncome
+    const freeAmt = Math.min(afterSav, maxFree)
+    const freePct = (freeAmt / realIncome) * 100
+    const debtAmt = afterSav - freeAmt
+    const debtPct = (debtAmt / realIncome) * 100
+    return { obligPct, savPct, freePct, debtPct, obligAmt: realObligations, savAmt, freeAmt, debtAmt }
+  }, [realIncome, realObligations])
+
+  const pieData = [
+    { name: "Ahorro", value: Math.round(realAlloc.savPct), color: "#B9FBC0", amount: Math.round(realAlloc.savAmt) },
+    { name: "Obligaciones", value: Math.min(100, Math.round(realAlloc.obligPct)), color: "#8096E6", amount: Math.round(realAlloc.obligAmt) },
+    { name: "Gasto libre", value: Math.round(realAlloc.freePct), color: "#A2D2FF", amount: Math.round(realAlloc.freeAmt) },
+    { name: "Endeudamiento", value: Math.round(realAlloc.debtPct), color: "#C4B5FD", amount: Math.round(realAlloc.debtAmt) },
   ]
 
   // Nivel del árbol (basado en streak)
@@ -128,7 +163,7 @@ export default function DashboardPage() {
                 Saldo total <Eye className="h-3 w-3" />
               </span>
               <p className="text-xl sm:text-2xl font-black text-foreground">
-                {saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncomeMonthly)}
+                {formatAmount(saldoTotal)}
               </p>
               <span className="text-[9px] text-muted-foreground">Actualizado hoy</span>
             </div>
@@ -160,6 +195,53 @@ export default function DashboardPage() {
         {/* ── COLUMNA IZQUIERDA: Donut + Árbol Kiri (3/5) ── */}
         <div className="lg:col-span-3 space-y-5">
 
+          {/* Periodo actual */}
+          <Card className="border-none bg-gradient-to-r from-kiri-forest to-kiri-emerald rounded-2xl overflow-hidden">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  Periodo actual: {incomeFrequency === "quincenal" ? `Quincena ${(() => {
+                    const days = diasCobro.split(",").map((d: string) => parseInt(d.trim(), 10)).filter((d: number) => !isNaN(d)).sort((a: number, b: number) => a - b)
+                    if (days.length < 2) return 1
+                    return new Date().getDate() >= days[0] && new Date().getDate() < days[1] ? 1 : 2
+                  })()}` : "Mensual"}
+                </span>
+                <span className="text-white/80 text-xs flex items-center gap-1">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {(() => {
+                    const days = diasCobro.split(",").map((d: string) => parseInt(d.trim(), 10)).filter((d: number) => !isNaN(d)).sort((a: number, b: number) => a - b)
+                    const now = new Date(); const day = now.getDate()
+                    const monthName = now.toLocaleString("es", { month: "long" })
+                    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                    if (incomeFrequency === "mensual" || days.length < 2) return `1 - ${lastDay} de ${monthName}`
+                    const [d1, d2] = days
+                    if (day >= d1 && day < d2) return `${d1} - ${d2 - 1} de ${monthName}`
+                    return `${d2} - ${lastDay} de ${monthName}`
+                  })()}
+                </span>
+              </div>
+              {(() => {
+                const now = new Date(); const day = now.getDate()
+                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                const days = diasCobro.split(",").map((d: string) => parseInt(d.trim(), 10)).filter((d: number) => !isNaN(d)).sort((a: number, b: number) => a - b)
+                let daysLeft = lastDay - day
+                if (incomeFrequency === "quincenal" && days.length >= 2) {
+                  const [d1, d2] = days
+                  daysLeft = (day >= d1 && day < d2) ? d2 - day - 1 : lastDay - day + d1 - 1
+                }
+                const total = incomeFrequency === "quincenal" ? 15 : 30
+                const pct = Math.min(100, Math.round(((total - daysLeft) / total) * 100))
+                return (
+                  <>
+                    <p className="text-white/70 text-[11px]">Día actual: {day} de {now.toLocaleString("es", { month: "long" })}</p>
+                    <Progress value={pct} className="h-2 bg-white/20 [&>div]:bg-white" />
+                    <p className="text-white/60 text-[10px]">Faltan <span className="text-white font-bold">{daysLeft} días</span> para terminar el periodo</p>
+                  </>
+                )
+              })()}
+            </CardContent>
+          </Card>
+
           {/* Distribución de presupuesto (Donut) */}
           <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
             <CardContent className="p-5">
@@ -183,7 +265,7 @@ export default function DashboardPage() {
                   {/* Centro del donut */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[9px] text-muted-foreground font-medium">Total</span>
-                    <span className="text-sm font-black">{saldoTotal > 0 ? formatAmount(saldoTotal) : formatAmount(totalIncomeMonthly)}</span>
+                    <span className="text-sm font-black">{formatAmount(saldoTotal)}</span>
                   </div>
                 </div>
 
@@ -207,39 +289,39 @@ export default function DashboardPage() {
               {/* Mensaje de estado — sincronizado con el motor de recomendaciones */}
               <div className={cn(
                 "mt-4 rounded-2xl p-3 flex items-start gap-2",
-                allocation?.isOverloaded
+                realAlloc.obligPct >= 100
                   ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40"
-                  : allocation?.isTight
+                  : realAlloc.obligPct >= 70
                     ? "bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40"
                     : "bg-emerald-50 dark:bg-emerald-950/20"
               )}>
-                <span className="text-lg shrink-0">{allocation?.isOverloaded ? "🚨" : allocation?.isTight ? "⚠️" : "🌱"}</span>
+                <span className="text-lg shrink-0">{realAlloc.obligPct >= 100 ? "🚨" : realAlloc.obligPct >= 70 ? "⚠️" : "🌱"}</span>
                 <div>
                   <p className={cn(
                     "text-[11px] font-bold",
-                    allocation?.isOverloaded
+                    realAlloc.obligPct >= 100
                       ? "text-red-700 dark:text-red-300"
-                      : allocation?.isTight
+                      : realAlloc.obligPct >= 70
                         ? "text-amber-700 dark:text-amber-300"
                         : "text-emerald-700 dark:text-emerald-300"
                   )}>
-                    {allocation?.isOverloaded
+                    {realAlloc.obligPct >= 100
                       ? "Alerta: Tus obligaciones superan tus ingresos"
-                      : allocation?.isTight
+                      : realAlloc.obligPct >= 70
                         ? "Navegando con poco margen"
                         : "¡Vas por buen camino! 🌿"
                     }
                   </p>
                   <p className={cn(
                     "text-[10px] mt-0.5",
-                    allocation?.isOverloaded
+                    realAlloc.obligPct >= 100
                       ? "text-red-600/80 dark:text-red-400/80"
                       : "text-muted-foreground"
                   )}>
-                    {allocation?.isOverloaded
-                      ? `Tus compromisos actuales superan tu ingreso (${Math.round(allocation.obligationsPct)}% de carga). No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Revisa qué obligaciones reducir primero.`
-                      : allocation?.isTight
-                        ? `El ${Math.round(allocation.obligationsPct)}% de tu ingreso va a obligaciones. Estás en control, pero con poco colchón. Cada deuda que liquides te devuelve libertad.`
+                    {realAlloc.obligPct >= 100
+                      ? `Tus compromisos superan tu saldo (${Math.round(realAlloc.obligPct)}% de carga). Revisa qué obligaciones reducir.`
+                      : realAlloc.obligPct >= 70
+                        ? `El ${Math.round(realAlloc.obligPct)}% va a obligaciones. Cada deuda que liquides te devuelve libertad.`
                         : "Estás distribuyendo tu dinero de forma inteligente."
                     }
                   </p>
@@ -304,11 +386,36 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
+          {/* Progreso de ahorro (debajo del árbol) */}
+          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
+            <CardContent className="p-5 space-y-3">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <PiggyBank className="h-4 w-4 text-cyclon-mint" />
+                Progreso de ahorro
+              </h3>
+              <div className="flex items-center gap-4">
+                <div className="text-4xl select-none">🐷</div>
+                <div className="flex-1 space-y-1.5">
+                  <p className="text-[10px] text-muted-foreground">Meta: {formatAmount(savingsGoal)} ✨</p>
+                  <p className="text-xl font-black">{formatAmount(realSavingsTotal)}</p>
+                  <p className="text-[10px] text-muted-foreground">de {formatAmount(savingsGoal)}</p>
+                  <div className="flex items-center gap-2">
+                    <Progress value={savingsProgress} className="h-2 flex-1" indicatorClassName="bg-cyclon-mint" />
+                    <span className="text-[10px] font-black text-cyclon-mint">{Math.round(savingsProgress)}%</span>
+                  </div>
+                </div>
+              </div>
+              <Link href="/ahorro" className="flex items-center justify-center gap-1 text-[11px] font-bold text-cyclon-lavender hover:text-cyclon-lavender/80 transition-colors pt-1">
+                Ver todas mis metas <ChevronRight className="h-3 w-3" />
+              </Link>
+            </CardContent>
+          </Card>
+
           {/* Estrategias para salir de deudas */}
           {recommendations?.strategies && debts.length > 0 && (
             <div className="space-y-3">
               {/* Sugerencia directa cuando está sobrecargado */}
-              {allocation?.isOverloaded && recommendations.strategies && (
+              {realAlloc.obligPct >= 100 && recommendations.strategies && (
                 <Card className="border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
                   <CardContent className="p-4 space-y-2">
                     <p className="text-xs font-bold text-red-700 dark:text-red-300 flex items-center gap-2">
@@ -351,35 +458,31 @@ export default function DashboardPage() {
                   ✅ No tienes obligaciones pendientes este periodo.
                 </p>
               ) : (
-                <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                <div className="space-y-2 max-h-[280px] overflow-y-auto">
                   {/* Deudas pendientes */}
-                  {pendingDebts.slice(0, 3).map(d => (
-                    <div key={d.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/30">
-                      <div className="h-8 w-8 rounded-lg bg-cyclon-periwinkle/10 flex items-center justify-center text-cyclon-periwinkle shrink-0">
-                        <ReceiptText className="h-3.5 w-3.5" />
+                  {pendingDebts.slice(0, 4).map(d => (
+                    <div key={d.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+                      <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                        <ReceiptText className="h-4 w-4 text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">{d.nombre}</p>
+                        <p className="text-sm font-bold truncate">{d.nombre}</p>
                         <p className="text-[10px] text-muted-foreground">Vence {d.diasPago}</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-black">{formatAmount(d.cuotaPeriodo)}</p>
-                      </div>
+                      <p className="text-sm font-black shrink-0">{formatAmount(d.cuotaPeriodo)}</p>
                     </div>
                   ))}
                   {/* Gastos fijos pendientes */}
-                  {pendingFixed.slice(0, 2).map(f => (
-                    <div key={f.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/30">
-                      <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
-                        <Wallet className="h-3.5 w-3.5" />
+                  {pendingFixed.slice(0, 3).map(f => (
+                    <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+                      <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                        <Wallet className="h-4 w-4 text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">{f.nombre}</p>
+                        <p className="text-sm font-bold truncate">{f.nombre}</p>
                         <p className="text-[10px] text-muted-foreground">Corte {f.fechaCorte}</p>
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-black">{formatAmount(f.monto)}</p>
-                      </div>
+                      <p className="text-sm font-black shrink-0">{formatAmount(f.monto)}</p>
                     </div>
                   ))}
                 </div>
@@ -393,8 +496,8 @@ export default function DashboardPage() {
 
               {totalPending > 0 && (
                 <div className="flex items-center justify-between pt-2 border-t border-dashed border-border">
-                  <span className="text-[10px] text-muted-foreground font-medium">Total pendiente</span>
-                  <span className="text-sm font-black text-cyclon-periwinkle">{formatAmount(totalPending)}</span>
+                  <span className="text-xs text-muted-foreground font-medium">Total pendiente</span>
+                  <span className="text-sm font-black text-kiri-forest">{formatAmount(totalPending)}</span>
                 </div>
               )}
             </CardContent>
@@ -461,33 +564,6 @@ export default function DashboardPage() {
                   <p className="text-[10px] text-muted-foreground">Comparte, apoya y alcanza tus metas financieras en comunidad.</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Progreso de ahorro */}
-          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
-            <CardContent className="p-5 space-y-3">
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <PiggyBank className="h-4 w-4 text-cyclon-mint" />
-                Progreso de ahorro
-              </h3>
-
-              <div className="flex items-center gap-4">
-                <div className="text-4xl select-none">🐷</div>
-                <div className="flex-1 space-y-1.5">
-                  <p className="text-[10px] text-muted-foreground">Meta: {formatAmount(savingsGoal)} ✨</p>
-                  <p className="text-xl font-black">{formatAmount(totalAhorrado)}</p>
-                  <p className="text-[10px] text-muted-foreground">de {formatAmount(savingsGoal)}</p>
-                  <div className="flex items-center gap-2">
-                    <Progress value={savingsProgress} className="h-2 flex-1" indicatorClassName="bg-cyclon-mint" />
-                    <span className="text-[10px] font-black text-cyclon-mint">{Math.round(savingsProgress)}%</span>
-                  </div>
-                </div>
-              </div>
-
-              <Link href="/ahorro" className="flex items-center justify-center gap-1 text-[11px] font-bold text-cyclon-lavender hover:text-cyclon-lavender/80 transition-colors pt-1">
-                Ver todas mis metas <ChevronRight className="h-3 w-3" />
-              </Link>
             </CardContent>
           </Card>
 

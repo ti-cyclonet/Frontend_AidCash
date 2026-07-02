@@ -13,14 +13,14 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe } from "lucide-react"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 
 export default function PerfilPage() {
   const router = useRouter()
-  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
+  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout } = useAppContext()
   const { signOut, user: authUser } = useAuth()
   const displayEmail = authUser?.correo ?? user.correo
 
@@ -94,6 +94,26 @@ export default function PerfilPage() {
                 <Label htmlFor="dark-mode" className="font-medium">Modo Oscuro</Label>
               </div>
               <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={setIsDarkMode} />
+            </div>
+
+            <div className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-cyclon-pink/10 flex items-center justify-center text-cyclon-pink">
+                  <Timer className="h-4 w-4" />
+                </div>
+                <Label className="font-medium">Tiempo de inactividad</Label>
+              </div>
+              <Select value={inactivityTimeout} onValueChange={(v) => setInactivityTimeout(v as "2" | "5" | "10" | "never")}>
+                <SelectTrigger className="w-[110px] h-9 border-none bg-muted/50 font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 min</SelectItem>
+                  <SelectItem value="5">5 min</SelectItem>
+                  <SelectItem value="10">10 min</SelectItem>
+                  <SelectItem value="never">Nunca</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between p-4">

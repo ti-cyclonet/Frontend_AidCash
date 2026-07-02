@@ -211,9 +211,12 @@ export function useFinanceData() {
   const markPaid = async (debtId: string, newTotal: number, paid: boolean) => {
     const debt = debts.find(d => d.id === debtId)
     await debtsApi.pay(debtId, newTotal, paid)
-    // Si se marca como pagada, deducir del bolsillo de obligaciones
     if (paid && debt) {
+      // Pagar: deducir del bolsillo de obligaciones
       await userApi.walletDeduct(debt.cuotaPeriodo, 'obligaciones')
+    } else if (!paid && debt) {
+      // Deshacer pago: devolver la cuota al sueldo real (cashBalance)
+      await userApi.walletWithdraw(debt.cuotaPeriodo, 'obligaciones')
     }
     setDebts(prev => prev.map(d =>
       d.id === debtId ? { ...d, montoTotal: newTotal, pagadoEstePeriodo: paid } : d
@@ -252,9 +255,12 @@ export function useFinanceData() {
   const markFixedPaid = async (id: string, paid: boolean) => {
     const fe = fixedExpenses.find(f => f.id === id)
     await fixedExpensesApi.update(id, { pagadoEstePeriodo: paid })
-    // Si se marca como pagada, deducir del bolsillo de obligaciones
     if (paid && fe) {
+      // Pagar: deducir del bolsillo de obligaciones
       await userApi.walletDeduct(fe.monto, 'obligaciones')
+    } else if (!paid && fe) {
+      // Deshacer pago: devolver el monto al sueldo real (cashBalance)
+      await userApi.walletWithdraw(fe.monto, 'obligaciones')
     }
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: paid } : f))
   }
@@ -322,8 +328,9 @@ export function useFinanceData() {
   }
 
   // Total de gastos hormiga del periodo actual
-  const currentPeriodo = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
-  const impulseThisPeriod = impulseExpenses.filter(e => e.periodo === currentPeriodo)
+  // El backend ya filtra por el periodo actual (quincena o mes según frecuencia del usuario).
+  // impulseExpenses contiene SOLO los del periodo vigente.
+  const impulseThisPeriod = impulseExpenses
   const totalImpulseThisPeriod = impulseThisPeriod.reduce((acc, e) => acc + e.monto, 0)
 
   // ─── Derivados ───────────────────────────────────────────────────────────────

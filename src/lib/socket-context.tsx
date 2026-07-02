@@ -29,6 +29,10 @@ export const SOCKET_EVENTS = {
   LOAN_PAYMENT:            "loan:payment_submitted",
   LOAN_PAYMENT_CONFIRMED:  "loan:payment_confirmed",
   LOAN_PAYMENT_REJECTED:   "loan:payment_rejected",
+  // Alertas inteligentes (locales, no vienen del socket)
+  ALERT_PAYMENT_PROXIMITY: "alert:payment_proximity",
+  ALERT_INCOME_REMINDER:   "alert:income_reminder",
+  ALERT_PERIOD_ASSIGNED:   "alert:period_assigned",
 } as const
 
 export type SocketEvent = typeof SOCKET_EVENTS[keyof typeof SOCKET_EVENTS]
@@ -52,6 +56,7 @@ interface SocketContextValue {
   unreadCount:   number
   markAllRead:   () => void
   clearNotifications: () => void
+  addNotification: (event: SocketEvent, data: Record<string, unknown>) => void
 }
 
 const SocketContext = createContext<SocketContextValue>({
@@ -61,6 +66,7 @@ const SocketContext = createContext<SocketContextValue>({
   unreadCount:   0,
   markAllRead:   () => {},
   clearNotifications: () => {},
+  addNotification: () => {},
 })
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -153,6 +159,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setNotifications([])
   }, [])
 
+  const addNotification = useCallback((event: SocketEvent, data: Record<string, unknown>) => {
+    const notif: KiriNotification = {
+      id: `local-${Date.now()}-${Math.random()}`,
+      event,
+      data,
+      read: false,
+      createdAt: new Date(),
+    }
+    setNotifications(prev => [notif, ...prev].slice(0, 50))
+  }, [])
+
   const unreadCount = notifications.filter(n => !n.read).length
 
   return (
@@ -163,6 +180,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       unreadCount,
       markAllRead,
       clearNotifications,
+      addNotification,
     }}>
       {children}
     </SocketContext.Provider>

@@ -9,10 +9,11 @@ import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Sparkles, TrendingUp, Wallet, Plus, Trash2, Repeat, Clock, Zap, Pencil, ReceiptText, PiggyBank, ShieldCheck, Banknote } from "lucide-react"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
-import { BudgetAllocation, ExtraIncome, ExtraIncomeTemporality } from "@/lib/types"
+import { ExtraIncome, ExtraIncomeTemporality } from "@/lib/types"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { useAppContext, IncomeFrequency } from "@/lib/app-context"
+import { useAppContext } from "@/lib/app-context"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
+import { userApi, WalletState } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
 const TEMPORALITY_OPTIONS: { value: ExtraIncomeTemporality; label: string; icon: React.ReactNode }[] = [
@@ -23,39 +24,49 @@ const TEMPORALITY_OPTIONS: { value: ExtraIncomeTemporality; label: string; icon:
 const emptyExtraForm = { nombre: "", monto: "", temporalidad: "una_vez" as ExtraIncomeTemporality, meses: "" }
 
 export function ProyeccionesTab() {
-  const [allocation, setAllocation] = useState<BudgetAllocation | null>(null)
   const [aiExplanation, setAiExplanation] = useState("")
   const [loadingAi, setLoadingAi] = useState(false)
   const { debts, fixedExpenses, extraIncomes, totalExtraIncome, totalImpulseThisPeriod, addExtraIncome, updateExtraIncome, removeExtraIncome } = useFinanceData()
-  const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency } = useAppContext()
+  const { formatAmount, income, setIncome, incomeFrequency } = useAppContext()
+  const { allocation, periodData } = usePeriodBudget()
 
   const [isExtraModalOpen, setIsExtraModalOpen] = useState(false)
   const [editingExtraId, setEditingExtraId] = useState<string | null>(null)
   const [extraForm, setExtraForm] = useState(emptyExtraForm)
   const [savingExtra, setSavingExtra] = useState(false)
 
-  // ═══ ÚNICA FUENTE DE VERDAD: siempre mensual ═══
-  // income = sueldo mensual total (NUNCA se modifica por el toggle)
-  // totalObligationsMonthly = suma real de cuotas + gastos fijos (mensual)
-  const totalObligationsMonthly = useMemo(
-    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
-    [debts, fixedExpenses]
-  )
-  const totalIncomeMonthly = income + totalExtraIncome
+  // ═══ Distribución basada en SUELDO REAL (cashBalance) ═══
+  const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
+  useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
 
-  // ═══ EJECUTAR ALGORITMO: siempre con totales mensuales ═══
-  useEffect(() => {
-    if (totalIncomeMonthly > 0) {
-      setAllocation(calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly))
-    } else {
-      setAllocation(null)
-    }
-  }, [totalIncomeMonthly, totalObligationsMonthly])
+  const realIncome = wallet.cashBalance > 0 ? wallet.cashBalance : periodData.effectiveIncome
+  const realObligations = periodData.totalObligations
 
-  // ═══ FILTRO DE PRESENTACIÓN: toggle solo afecta la UI ═══
-  // Si quincenal: montos se dividen entre 2 para mostrar. Porcentajes NO cambian.
-  const displayDivisor = incomeFrequency === "quincenal" ? 2 : 1
-  const displayIncome = Math.round(income / displayDivisor)
+  const realAlloc = useMemo(() => {
+    if (realIncome <= 0) return { obligPct: 0, savPct: 0, freePct: 0, debtCapPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtCapAmt: 0, isOverloaded: realObligations > 0 }
+    const obligPct = Math.min(100, (realObligations / realIncome) * 100)
+    if (realObligations >= realIncome) return { obligPct, savPct: 0, freePct: 0, debtCapPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtCapAmt: 0, isOverloaded: true }
+    const rem = Math.max(0, realIncome - realObligations)
+    const remPct = (rem / realIncome) * 100
+    const tgtSav = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
+    const savAmt = Math.min((tgtSav / 100) * realIncome, rem)
+    const savPct = (savAmt / realIncome) * 100
+    const afterSav = rem - savAmt
+    const maxFree = (15 / 100) * realIncome
+    const freeAmt = Math.min(afterSav, maxFree)
+    const freePct = (freeAmt / realIncome) * 100
+    const debtCapAmt = afterSav - freeAmt
+    const debtCapPct = (debtCapAmt / realIncome) * 100
+    return { obligPct, savPct, freePct, debtCapPct, obligAmt: realObligations, savAmt, freeAmt, debtCapAmt, isOverloaded: false }
+  }, [realIncome, realObligations])
+
+  // ═══ Distribución DINÁMICA: viene del hook usePeriodBudget ═══
+  // allocation ya refleja el periodo actual y se recalcula al pagar obligaciones.
+  // effectiveIncome y totalObligations son los del periodo (no totales mensuales).
+
+  // ═══ PRESENTACIÓN: toggle de frecuencia ya está incorporado en el cálculo ═══
+  // El ingreso mostrado es el efectivo del periodo (ya dividido si es quincenal).
+  const displayIncome = periodData.effectiveIncome
 
   const handleGetAiInsight = async () => {
     if (!allocation) return
@@ -64,11 +75,11 @@ export function ProyeccionesTab() {
       const res = await fetch('/api/ai/budget-insight', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ingresoTotal: totalIncomeMonthly, pctObligacionesOriginal: 50, pctLibreOriginal: 30, pctAhorroOriginal: 20,
+          ingresoTotal: periodData.effectiveIncome, pctObligacionesOriginal: 50, pctLibreOriginal: 30, pctAhorroOriginal: 20,
           pctObligacionesAjustado: Math.round(allocation.obligationsPct),
           pctLibreAjustado: Math.round(allocation.freeInvestmentPct),
           pctAhorroAjustado: Math.round(allocation.savingsPct),
-          totalObligaciones: totalObligationsMonthly,
+          totalObligaciones: periodData.totalObligations,
           detalleDeudas: debts.map(d => ({ nombre: d.nombre, monto: d.cuotaPeriodo, diasPago: d.diasPago ?? '1' })),
           detalleGastosFijos: fixedExpenses.map(f => ({ nombre: f.nombre, monto: f.monto, fechaCorte: f.fechaCorte })),
         }),
@@ -116,15 +127,6 @@ export function ProyeccionesTab() {
               </p>
             </div>
           )}
-          {/* Toggle frecuencia */}
-          <div className="grid grid-cols-2 gap-2">
-            {(["quincenal", "mensual"] as IncomeFrequency[]).map(f => (
-              <button key={f} onClick={() => setIncomeFrequency(f)} className={cn(
-                "h-9 rounded-xl text-sm font-bold border-2 transition-colors capitalize",
-                incomeFrequency === f ? "bg-cyclon-lavender text-white border-cyclon-lavender" : "border-muted text-muted-foreground hover:border-cyclon-lavender/40"
-              )}>{f}</button>
-            ))}
-          </div>
           <div className="space-y-1">
             <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
               Sueldo base mensual (total del mes)
@@ -168,7 +170,7 @@ export function ProyeccionesTab() {
             <span className="text-muted-foreground text-lg font-black">+</span>
             <div><p className="text-xs text-muted-foreground">Extra</p><p className="font-bold text-cyclon-lavender">{formatAmount(totalExtraIncome)}</p></div>
             <span className="text-muted-foreground text-lg font-black">=</span>
-            <div className="text-right"><p className="text-xs text-muted-foreground">Total mensual</p><p className="font-black text-lg text-cyclon-lavender">{formatAmount(totalIncomeMonthly)}</p></div>
+            <div className="text-right"><p className="text-xs text-muted-foreground">Total periodo</p><p className="font-black text-lg text-cyclon-lavender">{formatAmount(periodData.effectiveIncome)}</p></div>
           </CardContent></Card>
         )}
       </div>
@@ -177,17 +179,17 @@ export function ProyeccionesTab() {
       {allocation && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyclon-periwinkle" /> Distribución Inteligente</h2>
-          {allocation.isOverloaded && (
+          {realAlloc.isOverloaded && (
             <Card className="border-none bg-destructive/10 rounded-2xl"><CardContent className="p-4 flex gap-3 items-start">
               <div className="h-8 w-8 bg-destructive/20 rounded-xl flex items-center justify-center shrink-0 text-destructive"><ReceiptText className="h-4 w-4" /></div>
               <div><p className="font-bold text-destructive text-sm">Tus obligaciones superan tu ingreso</p><p className="text-xs text-muted-foreground mt-0.5">Revisa tus deudas y gastos fijos.</p></div>
             </CardContent></Card>
           )}
           <div className="grid gap-3">
-            <AllocBlock label="Obligaciones" sublabel="Deudas + Gastos Fijos" pct={allocation.obligationsPct} amount={Math.round(allocation.obligationsAmount / displayDivisor)} color="bg-cyclon-periwinkle" icon={<ReceiptText className="h-4 w-4" />} alert={allocation.isTight} formatAmount={formatAmount} />
-            <AllocBlock label="Ahorro" sublabel="Págate a ti mismo" pct={allocation.savingsPct} amount={Math.round(allocation.savingsAmount / displayDivisor)} color="bg-cyclon-mint" icon={<PiggyBank className="h-4 w-4" />} formatAmount={formatAmount} />
-            <AllocBlock label="Gastos Libres" sublabel="Blindado — día a día" pct={allocation.dailyFreePct} amount={Math.round(allocation.dailyFreeAmount / displayDivisor)} color="bg-cyclon-sky" icon={<ShieldCheck className="h-4 w-4" />} formatAmount={formatAmount} />
-            <AllocBlock label="Endeudamiento" sublabel="Capacidad para nuevas deudas" pct={allocation.debtCapacityPct} amount={Math.round(allocation.debtCapacityAmount / displayDivisor)} color="bg-cyclon-lavender" icon={<Banknote className="h-4 w-4" />} formatAmount={formatAmount} />
+            <AllocBlock label="Obligaciones" sublabel="Deudas + Gastos Fijos" pct={realAlloc.obligPct} amount={Math.round(realAlloc.obligAmt)} color="bg-cyclon-periwinkle" icon={<ReceiptText className="h-4 w-4" />} alert={realAlloc.obligPct >= 70} formatAmount={formatAmount} />
+            <AllocBlock label="Ahorro" sublabel="Págate a ti mismo" pct={realAlloc.savPct} amount={Math.round(realAlloc.savAmt)} color="bg-cyclon-mint" icon={<PiggyBank className="h-4 w-4" />} formatAmount={formatAmount} />
+            <AllocBlock label="Gastos Libres" sublabel="Blindado — día a día" pct={realAlloc.freePct} amount={Math.round(realAlloc.freeAmt)} color="bg-cyclon-sky" icon={<ShieldCheck className="h-4 w-4" />} formatAmount={formatAmount} />
+            <AllocBlock label="Endeudamiento" sublabel="Capacidad para nuevas deudas" pct={realAlloc.debtCapPct} amount={Math.round(realAlloc.debtCapAmt)} color="bg-cyclon-lavender" icon={<Banknote className="h-4 w-4" />} formatAmount={formatAmount} />
           </div>
           {/* AI Insight */}
           <Card className="border-none bg-gradient-to-br from-cyclon-lavender/5 to-cyclon-pink/5 rounded-2xl"><CardContent className="p-5 space-y-3">

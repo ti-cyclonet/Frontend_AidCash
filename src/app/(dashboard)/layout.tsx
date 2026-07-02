@@ -2,6 +2,8 @@ import { BottomNav } from "@/components/navigation/bottom-nav"
 import { Sidebar } from "@/components/navigation/sidebar"
 import { TopBar } from "@/components/navigation/top-bar"
 import { CoachFab } from "@/components/navigation/coach-fab"
+import { InactivityGuard } from "@/components/auth/InactivityGuard"
+import { SmartAlertsProvider } from "@/components/providers/smart-alerts-provider"
 
 export default function DashboardLayout({
   children,
@@ -30,6 +32,8 @@ export default function DashboardLayout({
       </div>
 
       <CoachFab />
+      <InactivityGuard />
+      <SmartAlertsProvider />
     </div>
   )
 }

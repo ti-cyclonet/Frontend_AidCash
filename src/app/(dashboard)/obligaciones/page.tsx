@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
   Plus, CheckCircle2, Pencil, Trash2,
-  AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff,
+  AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign,
 } from "lucide-react"
 import { Debt, FixedExpense, ImpulseCategory } from "@/lib/types"
 import {
@@ -19,10 +19,11 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
-import { calculateBudgetAllocation } from "@/lib/budget-logic"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
+import { userApi, WalletState } from "@/lib/api-client"
 import Link from "next/link"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -74,6 +75,9 @@ export default function ObligacionesPage() {
   // ── Tab activa ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>("gastos_fijos")
 
+  // ── Filtro de estado (Todas / Pendientes / Pagadas) ────────────────────────
+  const [statusFilter, setStatusFilter] = useState<"todas" | "pendientes" | "pagadas">("todas")
+
   // ── Items ocultos (ojo) ────────────────────────────────────────────────────
   const [hiddenItems, setHiddenItems] = useState<Set<string>>(new Set())
   const toggleItemHidden = (id: string) => setHiddenItems(prev => {
@@ -82,18 +86,17 @@ export default function ObligacionesPage() {
     return next
   })
 
-  // ── Asignación de presupuesto — fuente única de verdad: totales mensuales ──
-  const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
-  const totalObligationsMonthly = useMemo(
-    () => debts.reduce((a, d) => a + d.cuotaPeriodo, 0) + fixedExpenses.reduce((a, f) => a + f.monto, 0),
-    [debts, fixedExpenses]
-  )
-  const totalIncomeMonthly = income + totalExtraIncome
-  const allocation = useMemo(
-    () => totalIncomeMonthly > 0 ? calculateBudgetAllocation(totalIncomeMonthly, totalObligationsMonthly) : null,
-    [totalIncomeMonthly, totalObligationsMonthly]
-  )
+  // ── Asignación de presupuesto — distribución dinámica del periodo actual ──
+  const { allocation, periodData } = usePeriodBudget()
   const dailyFreeAmount = allocation?.dailyFreeAmount ?? 0
+
+  // IDs de obligaciones que son PRIORIDAD del periodo actual (para resaltar en amarillo)
+  const periodPriorityIds = useMemo(() => {
+    const ids = new Set<string>()
+    periodData.periodDebts.forEach(d => ids.add(d.id))
+    periodData.periodFixed.forEach(f => ids.add(f.id))
+    return ids
+  }, [periodData.periodDebts, periodData.periodFixed])
 
   // Estrategias de deuda
   const recommendations = useMemo(
@@ -105,6 +108,34 @@ export default function ObligacionesPage() {
   const [payDebt, setPayDebt] = useState<Debt | null>(null)
   const [isPartialMode, setIsPartialMode] = useState(false)
   const [partialAmount, setPartialAmount] = useState("")
+
+  // ── Pay modal (gastos fijos) ───────────────────────────────────────────────
+  const [payFixed, setPayFixed] = useState<FixedExpense | null>(null)
+  const [isFixedPartialMode, setIsFixedPartialMode] = useState(false)
+  const [fixedPartialAmount, setFixedPartialAmount] = useState("")
+
+  // ── Saldo insuficiente modal ───────────────────────────────────────────────
+  const [insufficientOpen, setInsufficientOpen] = useState(false)
+  const [insufficientTarget, setInsufficientTarget] = useState<{ type: "debt" | "fixed"; id: string; nombre: string; monto: number } | null>(null)
+  const [quickIncomeOpen, setQuickIncomeOpen] = useState(false)
+  const [quickIncomeMonto, setQuickIncomeMonto] = useState("")
+  const [savingsSourceOpen, setSavingsSourceOpen] = useState(false)
+  const [savingsPockets, setSavingsPockets] = useState<{ id: string; nombre: string; acumulado: number }[]>([])
+  const [fondoEmergencia, setFondoEmergencia] = useState(0)
+
+  // ── Wallet state ───────────────────────────────────────────────────────────
+  const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
+  useEffect(() => {
+    userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
+    // Cargar bolsillos de ahorro y fondo de emergencia
+    try {
+      const raw = localStorage.getItem("kiri_saving_pockets")
+      if (raw) setSavingsPockets(JSON.parse(raw))
+    } catch {}
+    import("@/lib/api-client").then(({ emergencyFundApi }) => {
+      emergencyFundApi.get().then(({ data }) => { if (data?.fondoActual != null) setFondoEmergencia(data.fondoActual) })
+    })
+  }, [])
 
   // ── Add modal ──────────────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -137,11 +168,22 @@ export default function ObligacionesPage() {
   const [lastAddedImpulseId, setLastAddedImpulseId] = useState<string | null>(null)
 
   // ── Handlers Pay ──────────────────────────────────────────────────────────
-  const openPay = (debt: Debt) => { setPayDebt(debt); setIsPartialMode(false); setPartialAmount("") }
+  const openPay = (debt: Debt) => {
+    // Interceptar si no hay saldo suficiente
+    if (wallet.cashBalance < debt.cuotaPeriodo) {
+      setInsufficientTarget({ type: "debt", id: debt.id, nombre: debt.nombre, monto: debt.cuotaPeriodo })
+      setInsufficientOpen(true)
+      return
+    }
+    setPayDebt(debt); setIsPartialMode(false); setPartialAmount("")
+  }
 
   const confirmFullPay = async () => {
     if (!payDebt) return
     await markPaid(payDebt.id, payDebt.montoTotal - payDebt.cuotaPeriodo, true)
+    // Refresh wallet
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
     setPayDebt(null)
   }
 
@@ -149,7 +191,116 @@ export default function ObligacionesPage() {
     if (!payDebt || !partialAmount) return
     const amt = Number(partialAmount)
     await markPaid(payDebt.id, payDebt.montoTotal - amt, amt >= payDebt.cuotaPeriodo)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
     setPayDebt(null)
+  }
+
+  // ── Handlers Pay Fixed ────────────────────────────────────────────────────
+  const openPayFixed = (fe: FixedExpense) => {
+    if (wallet.cashBalance < fe.monto) {
+      setInsufficientTarget({ type: "fixed", id: fe.id, nombre: fe.nombre, monto: fe.monto })
+      setInsufficientOpen(true)
+      return
+    }
+    setPayFixed(fe); setIsFixedPartialMode(false); setFixedPartialAmount("")
+  }
+
+  const confirmFullPayFixed = async () => {
+    if (!payFixed) return
+    await markFixedPaid(payFixed.id, true)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setPayFixed(null)
+  }
+
+  const confirmPartialPayFixed = async () => {
+    if (!payFixed || !fixedPartialAmount) return
+    await markFixedPaid(payFixed.id, true)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setPayFixed(null)
+  }
+
+  // ── Handlers Saldo Insuficiente ───────────────────────────────────────────
+  const handleInsufficientPartial = async () => {
+    if (!insufficientTarget) return
+    const amt = wallet.cashBalance
+    if (insufficientTarget.type === "debt") {
+      const debt = debts.find(d => d.id === insufficientTarget.id)
+      if (debt) await markPaid(debt.id, debt.montoTotal - amt, false)
+    } else {
+      await markFixedPaid(insufficientTarget.id, true)
+    }
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setInsufficientOpen(false); setInsufficientTarget(null)
+  }
+
+  const handleInsufficientFromSavings = async () => {
+    // Abrir selector de fuente (bolsillos de ahorro o fondo de emergencia)
+    setSavingsSourceOpen(true)
+  }
+
+  const handleWithdrawFromPocket = async (pocketId: string) => {
+    if (!insufficientTarget) return
+    const needed = insufficientTarget.monto - wallet.cashBalance
+    const pocket = savingsPockets.find(p => p.id === pocketId)
+    if (!pocket || pocket.acumulado < needed) return
+
+    // Retirar del bolsillo local
+    const updated = savingsPockets.map(p => p.id === pocketId ? { ...p, acumulado: p.acumulado - needed } : p)
+    setSavingsPockets(updated)
+    localStorage.setItem("kiri_saving_pockets", JSON.stringify(updated))
+
+    // Retirar del wallet → suma a cashBalance
+    await userApi.walletWithdraw(needed, 'ahorro')
+
+    // Ahora pagar la obligación
+    if (insufficientTarget.type === "debt") {
+      const debt = debts.find(d => d.id === insufficientTarget.id)
+      if (debt) await markPaid(debt.id, debt.montoTotal - debt.cuotaPeriodo, true)
+    } else {
+      await markFixedPaid(insufficientTarget.id, true)
+    }
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setSavingsSourceOpen(false); setInsufficientOpen(false); setInsufficientTarget(null)
+  }
+
+  const handleWithdrawFromEmergency = async () => {
+    if (!insufficientTarget) return
+    const needed = insufficientTarget.monto - wallet.cashBalance
+    if (fondoEmergencia < needed) return
+
+    // Retirar del fondo de emergencia
+    const { emergencyFundApi } = await import("@/lib/api-client")
+    const { data: fundData } = await emergencyFundApi.transaction(needed, "retiro")
+    if (fundData) setFondoEmergencia(fundData.fondoActual)
+
+    // Sumar al cashBalance
+    await userApi.walletWithdraw(needed, 'ahorro')
+
+    // Pagar la obligación
+    if (insufficientTarget.type === "debt") {
+      const debt = debts.find(d => d.id === insufficientTarget.id)
+      if (debt) await markPaid(debt.id, debt.montoTotal - debt.cuotaPeriodo, true)
+    } else {
+      await markFixedPaid(insufficientTarget.id, true)
+    }
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setSavingsSourceOpen(false); setInsufficientOpen(false); setInsufficientTarget(null)
+  }
+
+  const handleQuickIncome = async () => {
+    const amt = Number(quickIncomeMonto)
+    if (amt <= 0) return
+    await userApi.walletIncome(amt, 'extra')
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setQuickIncomeOpen(false); setQuickIncomeMonto("")
+    setInsufficientOpen(false); setInsufficientTarget(null)
   }
 
   // ── Handlers Add ──────────────────────────────────────────────────────────
@@ -317,7 +468,16 @@ export default function ObligacionesPage() {
       {/* ── Simulador de Escenarios ── */}
       {allocation && (
         <DebtSimulator
-          debtCapacity={allocation.debtCapacityAmount}
+          debtCapacity={wallet.cashBalance > 0 ? Math.max(0, (() => {
+            const obligTotal = periodData.periodDebts.reduce((a, d) => a + d.cuotaPeriodo, 0) + periodData.periodFixed.reduce((a, f) => a + f.monto, 0)
+            const rem = Math.max(0, wallet.cashBalance - obligTotal)
+            const remPct = wallet.cashBalance > 0 ? (rem / wallet.cashBalance) * 100 : 0
+            const savPct = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
+            const savAmt = Math.min((savPct / 100) * wallet.cashBalance, rem)
+            const afterSav = rem - savAmt
+            const maxFree = (15 / 100) * wallet.cashBalance
+            return afterSav - Math.min(afterSav, maxFree)
+          })()) : 0}
           incomeFrequency={incomeFrequency}
         />
       )}
@@ -349,6 +509,16 @@ export default function ObligacionesPage() {
       ════════════════════════════════════════════════════════════ */}
       {activeTab === "gastos_fijos" && (
         <div className="space-y-3">
+          {/* Filtros */}
+          <div className="flex gap-2">
+            {(["todas", "pendientes", "pagadas"] as const).map(f => (
+              <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
+                statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
+                {f === "todas" ? "Todas" : f === "pendientes" ? "Pendientes" : "Pagadas"}
+              </button>
+            ))}
+          </div>
+
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Cargando...</p>
           ) : fixedExpenses.length === 0 ? (
@@ -360,19 +530,22 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {[...fixedExpenses].sort((a, b) => {
-                if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                return 0
-              }).map(fe => (
+              {[...fixedExpenses]
+                .filter(fe => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !fe.pagadoEstePeriodo : fe.pagadoEstePeriodo)
+                .sort((a, b) => {
+                  if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                  return 0
+                }).map(fe => (
                 <FixedCard
                   key={fe.id}
                   item={fe}
                   formatAmount={formatAmount}
                   onEdit={() => openEditFixed(fe)}
                   onDelete={() => setDeleteTarget({ type: "fixed", id: fe.id, nombre: fe.nombre })}
-                  onTogglePaid={() => markFixedPaid(fe.id, !fe.pagadoEstePeriodo)}
+                  onTogglePaid={() => fe.pagadoEstePeriodo ? markFixedPaid(fe.id, false) : openPayFixed(fe)}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
+                  isPeriodPriority={periodPriorityIds.has(fe.id)}
                 />
               ))}
             </>
@@ -388,6 +561,16 @@ export default function ObligacionesPage() {
       ════════════════════════════════════════════════════════════ */}
       {activeTab === "deudas" && (
         <div className="space-y-3">
+          {/* Filtros */}
+          <div className="flex gap-2">
+            {(["todas", "pendientes", "pagadas"] as const).map(f => (
+              <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
+                statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
+                {f === "todas" ? "Todas" : f === "pendientes" ? "Pendientes" : "Pagadas"}
+              </button>
+            ))}
+          </div>
+
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Cargando...</p>
           ) : debts.length === 0 ? (
@@ -399,11 +582,12 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {[...debts].sort((a, b) => {
-                // Pendientes primero, pagados al final
-                if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                return 0
-              }).map(debt => (
+              {[...debts]
+                .filter(d => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !d.pagadoEstePeriodo : d.pagadoEstePeriodo)
+                .sort((a, b) => {
+                  if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                  return 0
+                }).map(debt => (
                 <DebtCard
                   key={debt.id}
                   debt={debt}
@@ -413,6 +597,7 @@ export default function ObligacionesPage() {
                   onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
                   hidden={hiddenItems.has(debt.id)}
                   onToggleHidden={() => toggleItemHidden(debt.id)}
+                  isPeriodPriority={periodPriorityIds.has(debt.id)}
                 />
               ))}
             </>
@@ -545,6 +730,171 @@ export default function ObligacionesPage() {
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pay Fixed Modal */}
+      <Dialog open={!!payFixed} onOpenChange={v => !v && setPayFixed(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Ya pagaste?</DialogTitle>
+            <DialogDescription>Gasto fijo: <strong>{payFixed?.nombre}</strong></DialogDescription>
+          </DialogHeader>
+          <div className="py-3 flex flex-col gap-3">
+            <Button onClick={confirmFullPayFixed} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Pagado ({formatAmount(payFixed?.monto ?? 0)})
+            </Button>
+            <Button variant="outline" onClick={() => setIsFixedPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
+              ¿Pagaste otro valor?
+            </Button>
+            <div className={cn("overflow-hidden transition-all duration-300", isFixedPartialMode ? "max-h-40 opacity-100" : "max-h-0 opacity-0")}>
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold">Monto real pagado</Label>
+                  <MoneyInput value={fixedPartialAmount} onChange={v => setFixedPartialAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus={isFixedPartialMode} />
+                  <p className="text-[10px] text-muted-foreground">Si pagaste más o menos del valor esperado ({formatAmount(payFixed?.monto ?? 0)}), registra el monto real aquí.</p>
+                </div>
+                <Button onClick={confirmPartialPayFixed} disabled={!fixedPartialAmount || Number(fixedPartialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">
+                  Confirmar pago
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Saldo Insuficiente Modal */}
+      <Dialog open={insufficientOpen} onOpenChange={v => { if (!v) { setInsufficientOpen(false); setInsufficientTarget(null) } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" /> Saldo insuficiente
+            </DialogTitle>
+            <DialogDescription>
+              Tu sueldo disponible actual ({formatAmount(wallet.cashBalance)}) no es suficiente para cubrir esta cuota de <strong>{formatAmount(insufficientTarget?.monto ?? 0)}</strong> de <strong>{insufficientTarget?.nombre}</strong>. ¿Cómo te gustaría proceder?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 flex flex-col gap-2.5">
+            {/* Opción 1: Abono parcial */}
+            <button onClick={handleInsufficientPartial}
+              disabled={wallet.cashBalance <= 0}
+              className={cn("w-full text-left p-4 rounded-2xl border-2 border-cyclon-sky/40 bg-cyclon-sky/5 hover:border-cyclon-sky transition-colors space-y-0.5", wallet.cashBalance <= 0 && "opacity-40 cursor-not-allowed hover:border-cyclon-sky/40")}>
+              <div className="flex items-center gap-2">
+                <CircleDollarSign className="h-4 w-4 text-cyclon-sky" />
+                <p className="font-bold text-sm">Abono parcial</p>
+              </div>
+              <p className="text-xs text-muted-foreground pl-6">
+                {wallet.cashBalance > 0 ? `Abonar mis ${formatAmount(wallet.cashBalance)} disponibles` : "No tienes saldo disponible"}
+              </p>
+            </button>
+
+            {/* Opción 2: Usar ahorros (solo si hay fondos) */}
+            {(savingsPockets.reduce((a, p) => a + p.acumulado, 0) + fondoEmergencia) > 0 && (
+              <button onClick={handleInsufficientFromSavings}
+                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-400/40 bg-emerald-50/50 dark:bg-emerald-950/10 hover:border-emerald-400 transition-colors space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <PiggyBank className="h-4 w-4 text-emerald-600" />
+                  <p className="font-bold text-sm">Usar Ahorros</p>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Completar usando mis ahorros ({formatAmount(savingsPockets.reduce((a, p) => a + p.acumulado, 0) + fondoEmergencia)} disponibles)
+                </p>
+              </button>
+            )}
+
+            {/* Opción 3: Registrar ingreso rápido */}
+            <button onClick={() => { setQuickIncomeOpen(true) }} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
+              <div className="flex items-center gap-2">
+                <WalletIcon className="h-4 w-4 text-cyclon-lavender" />
+                <p className="font-bold text-sm">Registrar nuevo ingreso</p>
+              </div>
+              <p className="text-xs text-muted-foreground pl-6">Agregar dinero extra para cubrir la cuota</p>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setInsufficientOpen(false); setInsufficientTarget(null) }}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Income Modal (dentro del flujo de saldo insuficiente) */}
+      <Dialog open={quickIncomeOpen} onOpenChange={v => { if (!v) setQuickIncomeOpen(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><WalletIcon className="h-5 w-5 text-cyclon-lavender" /> Agregar dinero extra</DialogTitle>
+            <DialogDescription>Inyecta liquidez a tu sueldo real para cubrir la cuota.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto</Label>
+              <MoneyInput value={quickIncomeMonto} onChange={setQuickIncomeMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
+              {insufficientTarget && (
+                <p className="text-[10px] text-muted-foreground">
+                  Te faltan al menos {formatAmount(Math.max(0, (insufficientTarget.monto) - wallet.cashBalance))} para cubrir la cuota
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setQuickIncomeOpen(false)}>Cancelar</Button>
+            <Button onClick={handleQuickIncome} disabled={!quickIncomeMonto || Number(quickIncomeMonto) <= 0}
+              className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">Registrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Savings Source Selector (elegir de dónde sacar) */}
+      <Dialog open={savingsSourceOpen} onOpenChange={v => { if (!v) setSavingsSourceOpen(false) }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><PiggyBank className="h-5 w-5 text-emerald-600" /> ¿De dónde sacar?</DialogTitle>
+            <DialogDescription>
+              Necesitas {formatAmount(Math.max(0, (insufficientTarget?.monto ?? 0) - wallet.cashBalance))} adicionales. Elige de dónde tomar los fondos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-2.5 max-h-[300px] overflow-y-auto">
+            {/* Fondo de emergencia */}
+            {fondoEmergencia > 0 && (
+              <button onClick={handleWithdrawFromEmergency}
+                disabled={fondoEmergencia < ((insufficientTarget?.monto ?? 0) - wallet.cashBalance)}
+                className="w-full text-left p-4 rounded-2xl border-2 border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/10 hover:border-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🛡️</span>
+                    <div>
+                      <p className="font-bold text-sm">Fondo de Emergencia</p>
+                      <p className="text-[10px] text-muted-foreground">Disponible: {formatAmount(fondoEmergencia)}</p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* Bolsillos de ahorro */}
+            {savingsPockets.filter(p => p.acumulado > 0).map(pocket => (
+              <button key={pocket.id} onClick={() => handleWithdrawFromPocket(pocket.id)}
+                disabled={pocket.acumulado < ((insufficientTarget?.monto ?? 0) - wallet.cashBalance)}
+                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-400/40 bg-emerald-50/50 dark:bg-emerald-950/10 hover:border-emerald-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🐷</span>
+                    <div>
+                      <p className="font-bold text-sm">{pocket.nombre}</p>
+                      <p className="text-[10px] text-muted-foreground">Disponible: {formatAmount(pocket.acumulado)}</p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+
+            {savingsPockets.filter(p => p.acumulado > 0).length === 0 && fondoEmergencia === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">No tienes fondos de ahorro disponibles.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSavingsSourceOpen(false)}>Cancelar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -798,17 +1148,20 @@ function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggleHidden }: {
+function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority }: {
   debt: Debt; formatAmount: (n: number) => string
   onPay: () => void; onEdit: () => void; onDelete: () => void
-  hidden: boolean; onToggleHidden: () => void
+  hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
 }) {
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
   const progreso = debt.montoTotal > 0 ? Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100) : 0
   const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo)
 
+  // Yellow highlight for period priority (pending in current period)
+  const priorityRing = isPeriodPriority && !debt.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
+
   return (
-    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, debt.estado === 'saldada' && "opacity-40")}>
+    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, priorityRing, debt.estado === 'saldada' && "opacity-40")}>
       <CardContent className="p-4 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -884,15 +1237,18 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggl
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden }: {
+function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden, isPeriodPriority }: {
   item: FixedExpense; formatAmount: (n: number) => string
   onEdit: () => void; onDelete: () => void; onTogglePaid: () => void
-  hidden: boolean; onToggleHidden: () => void
+  hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
 }) {
   const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo)
 
+  // Yellow highlight for period priority
+  const priorityRing = isPeriodPriority && !item.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
+
   return (
-    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing)}>
+    <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, priorityRing)}>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">

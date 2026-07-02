@@ -281,6 +281,13 @@ export const userApi = {
     })
   },
 
+  async walletWithdraw(monto: number, bolsillo: 'obligaciones' | 'libre' | 'ahorro' | 'endeudamiento') {
+    return api<{ withdrawn: number; wallet: WalletState }>('/users/wallet/withdraw', {
+      method: 'POST',
+      body: { monto, bolsillo },
+    })
+  },
+
   async walletReset() {
     return api<{ wallet: WalletState }>('/users/wallet/reset', {
       method: 'POST',

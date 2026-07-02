@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { X, Bell, Sprout, Users, CheckCheck, Trash2, UserPlus, UserCheck, UserX, Coins, Check, XCircle } from "lucide-react"
+import { X, Bell, Sprout, Users, CheckCheck, Trash2, UserPlus, UserCheck, UserX, Coins, Check, XCircle, CalendarClock, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSocket, SOCKET_EVENTS, KiriNotification } from "@/lib/socket-context"
 import { useAppContext } from "@/lib/app-context"
@@ -20,6 +20,10 @@ function notifIcon(event: KiriNotification["event"]) {
     case SOCKET_EVENTS.LOAN_REQUESTED:    return <Coins className="h-3.5 w-3.5 text-cyclon-sky" />
     case SOCKET_EVENTS.LOAN_APPROVED:     return <Check className="h-3.5 w-3.5 text-kiri-emerald" />
     case SOCKET_EVENTS.LOAN_REJECTED:     return <XCircle className="h-3.5 w-3.5 text-destructive" />
+    // Alertas inteligentes
+    case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY: return <CalendarClock className="h-3.5 w-3.5 text-amber-500" />
+    case SOCKET_EVENTS.ALERT_INCOME_REMINDER:   return <Wallet className="h-3.5 w-3.5 text-kiri-emerald" />
+    case SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED:   return <CalendarClock className="h-3.5 w-3.5 text-cyclon-sky" />
     default: return <Bell className="h-3.5 w-3.5 text-muted-foreground" />
   }
 }
@@ -37,12 +41,21 @@ function notifTitle(n: KiriNotification): string {
     case SOCKET_EVENTS.LOAN_PAYMENT: return "Abono recibido"
     case SOCKET_EVENTS.LOAN_PAYMENT_CONFIRMED: return "Tu abono fue confirmado"
     case SOCKET_EVENTS.LOAN_PAYMENT_REJECTED: return "Tu abono fue rechazado"
+    // Alertas inteligentes
+    case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY: return (d.message as string) ?? "Se acerca tu fecha de pago"
+    case SOCKET_EVENTS.ALERT_INCOME_REMINDER: return (d.message as string) ?? "¿Ya registraste tu ingreso?"
+    case SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED: return (d.message as string) ?? "Ingreso asignado al periodo"
     default: return "Nueva notificación"
   }
 }
 
 function notifRoute(n: KiriNotification): string {
-  // Todas las notificaciones actuales dirigen a /social
+  const d = n.data
+  // Si la notificación trae una ruta específica, usarla
+  if (d.route && typeof d.route === 'string') return d.route
+  // Las alertas inteligentes van a la billetera
+  if (n.event.startsWith("alert:")) return "/gestion?tab=billetera"
+  // Social notifications
   return "/social"
 }
 
