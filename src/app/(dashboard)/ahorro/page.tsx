@@ -183,7 +183,7 @@ export default function AhorroPage() {
 
   const handleSaveEditPocket = () => {
     if (!editPocket) return
-    setPockets(p => p.map(x => x.id === editPocket.id ? { ...x, nombre: editForm.nombre || x.nombre, meta: Number(editForm.meta) || x.meta, descripcion: editForm.descripcion || undefined } : x))
+    setPockets(p => p.map(x => x.id === editPocket.id ? { ...x, nombre: editForm.nombre || x.nombre, meta: editForm.meta === "" ? 0 : Number(editForm.meta), descripcion: editForm.descripcion || undefined } : x))
     setEditPocket(null)
   }
 

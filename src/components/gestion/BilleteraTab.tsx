@@ -7,10 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
 import {
   Plus, RefreshCw, Wallet, Zap, AlertTriangle, XCircle,
-  CalendarDays, Lock, CheckCircle2, Pencil, ChevronDown, ChevronUp,
+  Lock, CheckCircle2, Pencil, ChevronDown, ChevronUp,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -128,13 +127,14 @@ const POCKETS = [
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function BilleteraTab() {
-  const { formatAmount, income, setIncome, incomeFrequency, diasCobro } = useAppContext()
+  const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency, diasCobro } = useAppContext()
   const { debts, fixedExpenses } = useFinanceData()
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [incomeOpen, setIncomeOpen] = useState(false)
   const [editIncomeOpen, setEditIncomeOpen] = useState(false)
   const [editIncomeValue, setEditIncomeValue] = useState("")
   const [obligationsExpanded, setObligationsExpanded] = useState(false)
+  const [frequencyExpanded, setFrequencyExpanded] = useState(false)
   const [monto, setMonto] = useState("")
   const [tipo, setTipo] = useState<"salario" | "extra">("salario")
   const [extraDesc, setExtraDesc] = useState("")
@@ -151,10 +151,7 @@ export function BilleteraTab() {
 
   const periodNum = getCurrentPeriodNumber(diasCobro, incomeFrequency)
   const periodRange = getPeriodRangeLabel(diasCobro, incomeFrequency)
-  const daysLeft = getDaysRemaining(diasCobro, incomeFrequency)
   const nextPeriodLabel = getNextPeriodLabel(diasCobro, incomeFrequency)
-  const periodDayCount = incomeFrequency === "quincenal" ? 15 : 30
-  const progressPct = Math.min(100, Math.round(((periodDayCount - daysLeft) / periodDayCount) * 100))
 
   // Obligaciones con monto ajustado por frecuencia (quincenal = /2)
   const displayObligationsTotal = useMemo(() => {
@@ -200,16 +197,15 @@ export function BilleteraTab() {
   const total = wallet.cashBalance
 
   // ═══ DISTRIBUCIÓN INTELIGENTE BASADA EN SUELDO REAL ═══
-  // Usa el cashBalance (sueldo real disponible) como base para determinar:
-  // 1. ¿Alcanza para cubrir las obligaciones del periodo?
-  // 2. ¿Queda algo para ahorro?
-  // 3. ¿Queda algo para gastos libres?
-  const realIncome = total > 0 ? total : periodData.effectiveIncome
+  // Si cashBalance es 0, NO hay dinero para distribuir.
+  // Solo se muestra el monto de obligaciones pendientes (lo que debes).
+  const realIncome = total
   const realObligations = displayObligationsTotal
 
   // Calcular distribución real basada en lo que HAY disponible
   const realAllocation = useMemo(() => {
-    if (realIncome <= 0) return { obligationsPct: 0, savingsPct: 0, freePct: 0, debtCapPct: 0, obligationsAmount: 0, savingsAmount: 0, freeAmount: 0, debtCapAmount: 0, isOverloaded: false, isTight: false }
+    // Sin saldo real → todo en 0, solo obligaciones muestra lo pendiente
+    if (realIncome <= 0) return { obligationsPct: 0, savingsPct: 0, freePct: 0, debtCapPct: 0, obligationsAmount: realObligations, savingsAmount: 0, freeAmount: 0, debtCapAmount: 0, isOverloaded: realObligations > 0, isTight: false }
 
     const obligPct = Math.min(100, (realObligations / realIncome) * 100)
     const isOverloaded = realObligations >= realIncome
@@ -255,23 +251,6 @@ export function BilleteraTab() {
 
   return (
     <div className="space-y-5">
-      {/* ═══ PERIODO ACTUAL ═══ */}
-      <Card className="border-none bg-gradient-to-r from-kiri-forest to-kiri-emerald rounded-2xl overflow-hidden">
-        <CardContent className="p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full">
-              Periodo actual: {incomeFrequency === "quincenal" ? `Quincena ${periodNum}` : "Mensual"}
-            </span>
-            <span className="text-white/80 text-xs flex items-center gap-1">
-              <CalendarDays className="h-3.5 w-3.5" /> {periodRange}
-            </span>
-          </div>
-          <p className="text-white/70 text-[11px]">Día actual: {new Date().getDate()} de {new Date().toLocaleString("es", { month: "long" })}</p>
-          <Progress value={progressPct} className="h-2 bg-white/20 [&>div]:bg-white" />
-          <p className="text-white/60 text-[10px]">Faltan <span className="text-white font-bold">{daysLeft} días</span> para terminar el periodo</p>
-        </CardContent>
-      </Card>
-
       {/* ═══ SUELDO REAL (centro, grande) ═══ */}
       <Card className="border-none bg-gradient-to-br from-emerald-600 to-kiri-emerald rounded-2xl overflow-hidden shadow-lg">
         <CardContent className="p-6 text-center space-y-2">
@@ -293,17 +272,26 @@ export function BilleteraTab() {
 
       {/* ═══ SUELDO BASE + BALANCE OBLIGACIONES (lado a lado) ═══ */}
       <div className="grid grid-cols-2 gap-3">
-        {/* Sueldo Base — con botón editar */}
+        {/* Sueldo Base — con botón editar + flecha para frecuencia */}
         <Card className="border-none bg-gray-900 dark:bg-gray-800 rounded-2xl">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <p className="text-white/50 text-[9px] font-bold uppercase tracking-wider">Sueldo Base del periodo</p>
-              <button onClick={() => { setEditIncomeOpen(true); setEditIncomeValue(String(income)) }}
-                className="text-white/30 hover:text-white/70 transition-colors">
-                <Pencil className="h-3 w-3" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => { setEditIncomeOpen(true); setEditIncomeValue(String(income)) }}
+                  className="text-white/30 hover:text-white/70 transition-colors">
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button onClick={() => setFrequencyExpanded(v => !v)}
+                  className="text-white/30 hover:text-white/70 transition-colors">
+                  {frequencyExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+              </div>
             </div>
             <AnimatedAmount value={periodData.effectiveIncome} formatAmount={formatAmount} className="text-xl font-black text-white block mt-1" />
+            <p className="text-white/40 text-[8px] mt-0.5">
+              {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
+            </p>
           </CardContent>
         </Card>
 
@@ -321,7 +309,30 @@ export function BilleteraTab() {
         </Card>
       </div>
 
-      {/* ═══ OBLIGACIONES (desplegable, conectado al botón de balance) ═══ */}
+      {/* ═══ FRECUENCIA (desplegable, conectado al Sueldo Base) ═══ */}
+      {frequencyExpanded && (
+        <Card className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
+          <CardContent className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setIncomeFrequency("quincenal")}
+                className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
+                  incomeFrequency === "quincenal" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
+                Quincenal
+              </button>
+              <button onClick={() => setIncomeFrequency("mensual")}
+                className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
+                  incomeFrequency === "mensual" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
+                Mensual
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ═══ OBLIGACIONES (desplegable, conectado al Balance) ═══ */}
       {obligationsExpanded && (
         <Card className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 space-y-3">

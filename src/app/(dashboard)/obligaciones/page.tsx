@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
   Plus, CheckCircle2, Pencil, Trash2,
-  AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff,
+  AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign,
 } from "lucide-react"
 import { Debt, FixedExpense, ImpulseCategory } from "@/lib/types"
 import {
@@ -23,6 +23,7 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
+import { userApi, WalletState } from "@/lib/api-client"
 import Link from "next/link"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -113,6 +114,29 @@ export default function ObligacionesPage() {
   const [isFixedPartialMode, setIsFixedPartialMode] = useState(false)
   const [fixedPartialAmount, setFixedPartialAmount] = useState("")
 
+  // ── Saldo insuficiente modal ───────────────────────────────────────────────
+  const [insufficientOpen, setInsufficientOpen] = useState(false)
+  const [insufficientTarget, setInsufficientTarget] = useState<{ type: "debt" | "fixed"; id: string; nombre: string; monto: number } | null>(null)
+  const [quickIncomeOpen, setQuickIncomeOpen] = useState(false)
+  const [quickIncomeMonto, setQuickIncomeMonto] = useState("")
+  const [savingsSourceOpen, setSavingsSourceOpen] = useState(false)
+  const [savingsPockets, setSavingsPockets] = useState<{ id: string; nombre: string; acumulado: number }[]>([])
+  const [fondoEmergencia, setFondoEmergencia] = useState(0)
+
+  // ── Wallet state ───────────────────────────────────────────────────────────
+  const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
+  useEffect(() => {
+    userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
+    // Cargar bolsillos de ahorro y fondo de emergencia
+    try {
+      const raw = localStorage.getItem("kiri_saving_pockets")
+      if (raw) setSavingsPockets(JSON.parse(raw))
+    } catch {}
+    import("@/lib/api-client").then(({ emergencyFundApi }) => {
+      emergencyFundApi.get().then(({ data }) => { if (data?.fondoActual != null) setFondoEmergencia(data.fondoActual) })
+    })
+  }, [])
+
   // ── Add modal ──────────────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [addType, setAddType] = useState<ItemType>("deuda")
@@ -144,11 +168,22 @@ export default function ObligacionesPage() {
   const [lastAddedImpulseId, setLastAddedImpulseId] = useState<string | null>(null)
 
   // ── Handlers Pay ──────────────────────────────────────────────────────────
-  const openPay = (debt: Debt) => { setPayDebt(debt); setIsPartialMode(false); setPartialAmount("") }
+  const openPay = (debt: Debt) => {
+    // Interceptar si no hay saldo suficiente
+    if (wallet.cashBalance < debt.cuotaPeriodo) {
+      setInsufficientTarget({ type: "debt", id: debt.id, nombre: debt.nombre, monto: debt.cuotaPeriodo })
+      setInsufficientOpen(true)
+      return
+    }
+    setPayDebt(debt); setIsPartialMode(false); setPartialAmount("")
+  }
 
   const confirmFullPay = async () => {
     if (!payDebt) return
     await markPaid(payDebt.id, payDebt.montoTotal - payDebt.cuotaPeriodo, true)
+    // Refresh wallet
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
     setPayDebt(null)
   }
 
@@ -156,23 +191,116 @@ export default function ObligacionesPage() {
     if (!payDebt || !partialAmount) return
     const amt = Number(partialAmount)
     await markPaid(payDebt.id, payDebt.montoTotal - amt, amt >= payDebt.cuotaPeriodo)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
     setPayDebt(null)
   }
 
   // ── Handlers Pay Fixed ────────────────────────────────────────────────────
-  const openPayFixed = (fe: FixedExpense) => { setPayFixed(fe); setIsFixedPartialMode(false); setFixedPartialAmount("") }
+  const openPayFixed = (fe: FixedExpense) => {
+    if (wallet.cashBalance < fe.monto) {
+      setInsufficientTarget({ type: "fixed", id: fe.id, nombre: fe.nombre, monto: fe.monto })
+      setInsufficientOpen(true)
+      return
+    }
+    setPayFixed(fe); setIsFixedPartialMode(false); setFixedPartialAmount("")
+  }
 
   const confirmFullPayFixed = async () => {
     if (!payFixed) return
     await markFixedPaid(payFixed.id, true)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
     setPayFixed(null)
   }
 
   const confirmPartialPayFixed = async () => {
     if (!payFixed || !fixedPartialAmount) return
-    // Registrar el pago real (aunque difiera del monto esperado)
     await markFixedPaid(payFixed.id, true)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
     setPayFixed(null)
+  }
+
+  // ── Handlers Saldo Insuficiente ───────────────────────────────────────────
+  const handleInsufficientPartial = async () => {
+    if (!insufficientTarget) return
+    const amt = wallet.cashBalance
+    if (insufficientTarget.type === "debt") {
+      const debt = debts.find(d => d.id === insufficientTarget.id)
+      if (debt) await markPaid(debt.id, debt.montoTotal - amt, false)
+    } else {
+      await markFixedPaid(insufficientTarget.id, true)
+    }
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setInsufficientOpen(false); setInsufficientTarget(null)
+  }
+
+  const handleInsufficientFromSavings = async () => {
+    // Abrir selector de fuente (bolsillos de ahorro o fondo de emergencia)
+    setSavingsSourceOpen(true)
+  }
+
+  const handleWithdrawFromPocket = async (pocketId: string) => {
+    if (!insufficientTarget) return
+    const needed = insufficientTarget.monto - wallet.cashBalance
+    const pocket = savingsPockets.find(p => p.id === pocketId)
+    if (!pocket || pocket.acumulado < needed) return
+
+    // Retirar del bolsillo local
+    const updated = savingsPockets.map(p => p.id === pocketId ? { ...p, acumulado: p.acumulado - needed } : p)
+    setSavingsPockets(updated)
+    localStorage.setItem("kiri_saving_pockets", JSON.stringify(updated))
+
+    // Retirar del wallet → suma a cashBalance
+    await userApi.walletWithdraw(needed, 'ahorro')
+
+    // Ahora pagar la obligación
+    if (insufficientTarget.type === "debt") {
+      const debt = debts.find(d => d.id === insufficientTarget.id)
+      if (debt) await markPaid(debt.id, debt.montoTotal - debt.cuotaPeriodo, true)
+    } else {
+      await markFixedPaid(insufficientTarget.id, true)
+    }
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setSavingsSourceOpen(false); setInsufficientOpen(false); setInsufficientTarget(null)
+  }
+
+  const handleWithdrawFromEmergency = async () => {
+    if (!insufficientTarget) return
+    const needed = insufficientTarget.monto - wallet.cashBalance
+    if (fondoEmergencia < needed) return
+
+    // Retirar del fondo de emergencia
+    const { emergencyFundApi } = await import("@/lib/api-client")
+    const { data: fundData } = await emergencyFundApi.transaction(needed, "retiro")
+    if (fundData) setFondoEmergencia(fundData.fondoActual)
+
+    // Sumar al cashBalance
+    await userApi.walletWithdraw(needed, 'ahorro')
+
+    // Pagar la obligación
+    if (insufficientTarget.type === "debt") {
+      const debt = debts.find(d => d.id === insufficientTarget.id)
+      if (debt) await markPaid(debt.id, debt.montoTotal - debt.cuotaPeriodo, true)
+    } else {
+      await markFixedPaid(insufficientTarget.id, true)
+    }
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setSavingsSourceOpen(false); setInsufficientOpen(false); setInsufficientTarget(null)
+  }
+
+  const handleQuickIncome = async () => {
+    const amt = Number(quickIncomeMonto)
+    if (amt <= 0) return
+    await userApi.walletIncome(amt, 'extra')
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setQuickIncomeOpen(false); setQuickIncomeMonto("")
+    setInsufficientOpen(false); setInsufficientTarget(null)
   }
 
   // ── Handlers Add ──────────────────────────────────────────────────────────
@@ -340,7 +468,16 @@ export default function ObligacionesPage() {
       {/* ── Simulador de Escenarios ── */}
       {allocation && (
         <DebtSimulator
-          debtCapacity={allocation.debtCapacityAmount}
+          debtCapacity={wallet.cashBalance > 0 ? Math.max(0, (() => {
+            const obligTotal = periodData.periodDebts.reduce((a, d) => a + d.cuotaPeriodo, 0) + periodData.periodFixed.reduce((a, f) => a + f.monto, 0)
+            const rem = Math.max(0, wallet.cashBalance - obligTotal)
+            const remPct = wallet.cashBalance > 0 ? (rem / wallet.cashBalance) * 100 : 0
+            const savPct = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
+            const savAmt = Math.min((savPct / 100) * wallet.cashBalance, rem)
+            const afterSav = rem - savAmt
+            const maxFree = (15 / 100) * wallet.cashBalance
+            return afterSav - Math.min(afterSav, maxFree)
+          })()) : 0}
           incomeFrequency={incomeFrequency}
         />
       )}
@@ -405,7 +542,7 @@ export default function ObligacionesPage() {
                   formatAmount={formatAmount}
                   onEdit={() => openEditFixed(fe)}
                   onDelete={() => setDeleteTarget({ type: "fixed", id: fe.id, nombre: fe.nombre })}
-                  onTogglePaid={() => openPayFixed(fe)}
+                  onTogglePaid={() => fe.pagadoEstePeriodo ? markFixedPaid(fe.id, false) : openPayFixed(fe)}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
                   isPeriodPriority={periodPriorityIds.has(fe.id)}
@@ -624,6 +761,140 @@ export default function ObligacionesPage() {
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Saldo Insuficiente Modal */}
+      <Dialog open={insufficientOpen} onOpenChange={v => { if (!v) { setInsufficientOpen(false); setInsufficientTarget(null) } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" /> Saldo insuficiente
+            </DialogTitle>
+            <DialogDescription>
+              Tu sueldo disponible actual ({formatAmount(wallet.cashBalance)}) no es suficiente para cubrir esta cuota de <strong>{formatAmount(insufficientTarget?.monto ?? 0)}</strong> de <strong>{insufficientTarget?.nombre}</strong>. ¿Cómo te gustaría proceder?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 flex flex-col gap-2.5">
+            {/* Opción 1: Abono parcial */}
+            <button onClick={handleInsufficientPartial}
+              disabled={wallet.cashBalance <= 0}
+              className={cn("w-full text-left p-4 rounded-2xl border-2 border-cyclon-sky/40 bg-cyclon-sky/5 hover:border-cyclon-sky transition-colors space-y-0.5", wallet.cashBalance <= 0 && "opacity-40 cursor-not-allowed hover:border-cyclon-sky/40")}>
+              <div className="flex items-center gap-2">
+                <CircleDollarSign className="h-4 w-4 text-cyclon-sky" />
+                <p className="font-bold text-sm">Abono parcial</p>
+              </div>
+              <p className="text-xs text-muted-foreground pl-6">
+                {wallet.cashBalance > 0 ? `Abonar mis ${formatAmount(wallet.cashBalance)} disponibles` : "No tienes saldo disponible"}
+              </p>
+            </button>
+
+            {/* Opción 2: Usar ahorros (solo si hay fondos) */}
+            {(savingsPockets.reduce((a, p) => a + p.acumulado, 0) + fondoEmergencia) > 0 && (
+              <button onClick={handleInsufficientFromSavings}
+                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-400/40 bg-emerald-50/50 dark:bg-emerald-950/10 hover:border-emerald-400 transition-colors space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <PiggyBank className="h-4 w-4 text-emerald-600" />
+                  <p className="font-bold text-sm">Usar Ahorros</p>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Completar usando mis ahorros ({formatAmount(savingsPockets.reduce((a, p) => a + p.acumulado, 0) + fondoEmergencia)} disponibles)
+                </p>
+              </button>
+            )}
+
+            {/* Opción 3: Registrar ingreso rápido */}
+            <button onClick={() => { setQuickIncomeOpen(true) }} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
+              <div className="flex items-center gap-2">
+                <WalletIcon className="h-4 w-4 text-cyclon-lavender" />
+                <p className="font-bold text-sm">Registrar nuevo ingreso</p>
+              </div>
+              <p className="text-xs text-muted-foreground pl-6">Agregar dinero extra para cubrir la cuota</p>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setInsufficientOpen(false); setInsufficientTarget(null) }}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Income Modal (dentro del flujo de saldo insuficiente) */}
+      <Dialog open={quickIncomeOpen} onOpenChange={v => { if (!v) setQuickIncomeOpen(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><WalletIcon className="h-5 w-5 text-cyclon-lavender" /> Agregar dinero extra</DialogTitle>
+            <DialogDescription>Inyecta liquidez a tu sueldo real para cubrir la cuota.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto</Label>
+              <MoneyInput value={quickIncomeMonto} onChange={setQuickIncomeMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
+              {insufficientTarget && (
+                <p className="text-[10px] text-muted-foreground">
+                  Te faltan al menos {formatAmount(Math.max(0, (insufficientTarget.monto) - wallet.cashBalance))} para cubrir la cuota
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setQuickIncomeOpen(false)}>Cancelar</Button>
+            <Button onClick={handleQuickIncome} disabled={!quickIncomeMonto || Number(quickIncomeMonto) <= 0}
+              className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">Registrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Savings Source Selector (elegir de dónde sacar) */}
+      <Dialog open={savingsSourceOpen} onOpenChange={v => { if (!v) setSavingsSourceOpen(false) }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><PiggyBank className="h-5 w-5 text-emerald-600" /> ¿De dónde sacar?</DialogTitle>
+            <DialogDescription>
+              Necesitas {formatAmount(Math.max(0, (insufficientTarget?.monto ?? 0) - wallet.cashBalance))} adicionales. Elige de dónde tomar los fondos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-2.5 max-h-[300px] overflow-y-auto">
+            {/* Fondo de emergencia */}
+            {fondoEmergencia > 0 && (
+              <button onClick={handleWithdrawFromEmergency}
+                disabled={fondoEmergencia < ((insufficientTarget?.monto ?? 0) - wallet.cashBalance)}
+                className="w-full text-left p-4 rounded-2xl border-2 border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/10 hover:border-amber-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🛡️</span>
+                    <div>
+                      <p className="font-bold text-sm">Fondo de Emergencia</p>
+                      <p className="text-[10px] text-muted-foreground">Disponible: {formatAmount(fondoEmergencia)}</p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            )}
+
+            {/* Bolsillos de ahorro */}
+            {savingsPockets.filter(p => p.acumulado > 0).map(pocket => (
+              <button key={pocket.id} onClick={() => handleWithdrawFromPocket(pocket.id)}
+                disabled={pocket.acumulado < ((insufficientTarget?.monto ?? 0) - wallet.cashBalance)}
+                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-400/40 bg-emerald-50/50 dark:bg-emerald-950/10 hover:border-emerald-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🐷</span>
+                    <div>
+                      <p className="font-bold text-sm">{pocket.nombre}</p>
+                      <p className="text-[10px] text-muted-foreground">Disponible: {formatAmount(pocket.acumulado)}</p>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+
+            {savingsPockets.filter(p => p.acumulado > 0).length === 0 && fondoEmergencia === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">No tienes fondos de ahorro disponibles.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSavingsSourceOpen(false)}>Cancelar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
