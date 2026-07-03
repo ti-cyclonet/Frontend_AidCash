@@ -41,6 +41,7 @@ function mapDebt(row: Record<string, unknown>): Debt {
     montoTotal: Number(row.montoTotal ?? row.monto_total ?? 0),
     saldoRestante: Number(row.saldoRestante ?? row.saldo_restante ?? row.montoTotal ?? 0),
     cuotaPeriodo: Number(row.cuotaPeriodo ?? row.cuota_periodo ?? 0),
+    montoPagadoEstePeriodo: row.montoPagadoEstePeriodo != null ? Number(row.montoPagadoEstePeriodo) : (row.monto_pagado_este_periodo != null ? Number(row.monto_pagado_este_periodo) : null),
     tasaInteres: row.tasaInteres != null ? Number(row.tasaInteres) : (row.tasa_interes != null ? Number(row.tasa_interes) : null),
     acreedor: (row.acreedor as string) ?? '',
     frecuenciaPago: ((row.frecuenciaPago ?? row.frecuencia_pago) as Debt["frecuenciaPago"]) ?? 'mensual',
@@ -208,19 +209,48 @@ export function useFinanceData() {
     setDebts(prev => prev.filter(d => d.id !== debtId))
   }
 
-  const markPaid = async (debtId: string, newTotal: number, paid: boolean) => {
+  const markPaid = async (debtId: string, montoPagado?: number) => {
     const debt = debts.find(d => d.id === debtId)
-    await debtsApi.pay(debtId, newTotal, paid)
-    if (paid && debt) {
-      // Pagar: deducir del bolsillo de obligaciones
-      await userApi.walletDeduct(debt.cuotaPeriodo, 'obligaciones')
-    } else if (!paid && debt) {
-      // Deshacer pago: devolver la cuota al sueldo real (cashBalance)
-      await userApi.walletWithdraw(debt.cuotaPeriodo, 'obligaciones')
-    }
+    if (!debt) return
+
+    // montoPagado: si no se especifica, se paga la cuota completa
+    const realPaid = montoPagado ?? debt.cuotaPeriodo
+
+    // Llamar al backend que resta del saldoRestante y guarda montoPagadoEstePeriodo
+    const { data } = await debtsApi.pay(debtId, realPaid)
+    if (!data) return
+
+    // Deducir del sueldo real (cashBalance) el monto REAL pagado
+    await userApi.walletDeduct(realPaid, 'obligaciones')
+
+    // Actualizar estado local con datos del backend
+    const nuevoSaldo = data.saldoNuevo ?? Math.max(0, debt.saldoRestante - realPaid)
+    const liquidada = data.liquidada ?? nuevoSaldo <= 0
+
     setDebts(prev => prev.map(d =>
-      d.id === debtId ? { ...d, montoTotal: newTotal, pagadoEstePeriodo: paid } : d
+      d.id === debtId ? {
+        ...d,
+        saldoRestante: nuevoSaldo,
+        pagadoEstePeriodo: true,
+        montoPagadoEstePeriodo: realPaid,
+        estado: liquidada ? 'saldada' : 'activa',
+      } : d
     ))
+  }
+
+  const undoPayDebt = async (debtId: string) => {
+    const { data } = await debtsApi.undoPay(debtId)
+    if (!data) return
+    // Actualizar estado local con los datos que devolvió el backend
+    setDebts(prev => prev.map(d =>
+      d.id === debtId ? {
+        ...d,
+        saldoRestante: Number((data.debt as Record<string, unknown>).saldoRestante ?? d.saldoRestante),
+        pagadoEstePeriodo: false,
+        estado: 'activa' as const,
+      } : d
+    ))
+    return data.wallet
   }
 
   // ─── Gastos fijos ────────────────────────────────────────────────────────────
@@ -252,17 +282,24 @@ export function useFinanceData() {
     setFixedExpenses(prev => prev.filter(f => f.id !== id))
   }
 
-  const markFixedPaid = async (id: string, paid: boolean) => {
+  const markFixedPaid = async (id: string, montoPagado?: number) => {
     const fe = fixedExpenses.find(f => f.id === id)
-    await fixedExpensesApi.update(id, { pagadoEstePeriodo: paid })
-    if (paid && fe) {
-      // Pagar: deducir del bolsillo de obligaciones
-      await userApi.walletDeduct(fe.monto, 'obligaciones')
-    } else if (!paid && fe) {
-      // Deshacer pago: devolver el monto al sueldo real (cashBalance)
-      await userApi.walletWithdraw(fe.monto, 'obligaciones')
-    }
-    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: paid } : f))
+    if (!fe) return
+
+    const realPaid = montoPagado ?? fe.monto
+
+    await fixedExpensesApi.update(id, { pagadoEstePeriodo: true })
+    // Deducir del sueldo real el monto REAL pagado
+    await userApi.walletDeduct(realPaid, 'obligaciones')
+
+    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: true, _montoPagado: realPaid } as FixedExpense & { _montoPagado?: number } : f))
+  }
+
+  const undoPayFixed = async (id: string) => {
+    const { data } = await fixedExpensesApi.undoPay(id)
+    if (!data) return
+    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: false } : f))
+    return data.wallet
   }
 
   // ─── Ingresos extra ──────────────────────────────────────────────────────────
@@ -352,9 +389,9 @@ export function useFinanceData() {
     fetchUserProfile,
     updateUserProfile,
 
-    addDebt, updateDebt, deleteDebt, markPaid,
+    addDebt, updateDebt, deleteDebt, markPaid, undoPayDebt,
 
-    addFixedExpense, updateFixedExpense, deleteFixedExpense, markFixedPaid,
+    addFixedExpense, updateFixedExpense, deleteFixedExpense, markFixedPaid, undoPayFixed,
 
     addExtraIncome, updateExtraIncome, removeExtraIncome,
 

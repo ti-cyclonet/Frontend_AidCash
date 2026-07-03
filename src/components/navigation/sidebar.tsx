@@ -44,10 +44,11 @@ export function Sidebar() {
   const router = useRouter()
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
   const { signOut, user: authUser } = useAuth()
-  const { unreadCount, notifications } = useSocket()
+  const { unreadCount, notifications, markAllRead, clearNotifications } = useSocket()
 
   const [collapsed, setCollapsed] = useState(false)
   const [dropOpen, setDropOpen] = useState(false)
+  const [notifsOpen, setNotifsOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
 
   // ── Configuración ─────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ export function Sidebar() {
             </div>
           </button>
         ) : (
-          /* ── Expandida: Logo link + nombre + botón cerrar ── */
+          /* ── Expandida: Logo link + nombre + campana + botón cerrar ── */
           <>
             <Link href="/dashboard" className="flex items-center gap-2 min-w-0 shrink-0">
               <div className="h-9 w-9 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
@@ -135,13 +136,62 @@ export function Sidebar() {
                 <p className="text-[9px] text-muted-foreground">Tus finanzas, en orden</p>
               </div>
             </Link>
-            <button
-              onClick={() => setCollapsed(true)}
-              className="ml-auto h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors shrink-0"
-              title="Cerrar barra lateral"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
+            <div className="ml-auto flex items-center gap-1">
+              {/* Campana de notificaciones */}
+              <div className="relative">
+                <button onClick={() => { setNotifsOpen(v => !v); markAllRead() }}
+                  className="relative h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
+                  <Bell className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 h-3.5 min-w-3.5 px-0.5 bg-cyclon-pink rounded-full flex items-center justify-center text-[7px] font-black text-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+                {/* Panel de notificaciones */}
+                {notifsOpen && (
+                  <div className="fixed top-[80px] left-[270px] w-[320px] bg-card border border-border rounded-2xl shadow-2xl overflow-hidden z-[100]">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                      <p className="text-xs font-bold flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> Notificaciones</p>
+                      <div className="flex items-center gap-2">
+                        {notifications.length > 0 && (
+                          <button onClick={clearNotifications} className="text-[9px] text-muted-foreground hover:text-destructive">Limpiar</button>
+                        )}
+                        <button onClick={() => setNotifsOpen(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+                      </div>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="py-8 flex flex-col items-center gap-2 text-muted-foreground">
+                          <Bell className="h-7 w-7 opacity-30" />
+                          <p className="text-xs">Sin notificaciones</p>
+                        </div>
+                      ) : (
+                        notifications.slice(0, 10).map(n => (
+                          <button key={n.id} onClick={() => { setNotifsOpen(false); router.push((n.data.route as string) || "/social") }}
+                            className={cn("w-full flex items-start gap-2.5 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0", !n.read && "bg-cyclon-lavender/5")}>
+                            <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">
+                              <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn("text-xs leading-snug", !n.read && "font-semibold")}>{notifTitleSidebar(n)}</p>
+                            </div>
+                            {!n.read && <div className="h-2 w-2 rounded-full bg-cyclon-lavender shrink-0 mt-1.5" />}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setCollapsed(true)}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors shrink-0"
+                title="Cerrar barra lateral"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -194,38 +244,8 @@ export function Sidebar() {
                 "absolute bottom-full mb-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50",
                 collapsed ? "left-full ml-2 w-[280px]" : "left-0 right-0"
               )}>
-                {/* Notificaciones */}
-                <div className="px-4 py-2 border-b border-border">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <Bell className="h-3 w-3" /> Notificaciones
-                    {unreadCount > 0 && (
-                      <span className="h-4 min-w-4 px-1 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div className="max-h-[200px] overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-4">Sin notificaciones</p>
-                  ) : (
-                    notifications.slice(0, 5).map(n => (
-                      <button key={n.id} onClick={() => { setDropOpen(false); router.push("/social") }}
-                        className={cn("w-full flex items-start gap-2 px-4 py-2 text-left hover:bg-muted/50 transition-colors", !n.read && "bg-cyclon-lavender/5")}>
-                        <div className="h-5 w-5 rounded bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">
-                          <Bell className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn("text-[11px] truncate", !n.read && "font-semibold")}>{notifTitleSidebar(n)}</p>
-                        </div>
-                        {!n.read && <div className="h-1.5 w-1.5 rounded-full bg-cyclon-lavender shrink-0 mt-1.5" />}
-                      </button>
-                    ))
-                  )}
-                </div>
-                <div className="border-t border-border" />
                 <button
-                  onClick={handleOpenSettings}
+                  onClick={() => { setDropOpen(false); router.push("/perfil") }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
                 >
                   <Settings className="h-4 w-4 text-muted-foreground shrink-0" />

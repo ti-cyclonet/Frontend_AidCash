@@ -65,7 +65,7 @@ export default function ObligacionesPage() {
     debts, fixedExpenses, loading,
     addDebt, updateDebt, deleteDebt,
     addFixedExpense, updateFixedExpense, deleteFixedExpense,
-    markPaid, markFixedPaid,
+    markPaid, undoPayDebt, markFixedPaid, undoPayFixed,
     impulseExpenses, impulseThisPeriod, totalImpulseThisPeriod,
     addImpulseExpense, removeImpulseExpense,
     extraIncomes,
@@ -180,8 +180,7 @@ export default function ObligacionesPage() {
 
   const confirmFullPay = async () => {
     if (!payDebt) return
-    await markPaid(payDebt.id, payDebt.montoTotal - payDebt.cuotaPeriodo, true)
-    // Refresh wallet
+    await markPaid(payDebt.id)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayDebt(null)
@@ -190,7 +189,7 @@ export default function ObligacionesPage() {
   const confirmPartialPay = async () => {
     if (!payDebt || !partialAmount) return
     const amt = Number(partialAmount)
-    await markPaid(payDebt.id, payDebt.montoTotal - amt, amt >= payDebt.cuotaPeriodo)
+    await markPaid(payDebt.id, amt)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayDebt(null)
@@ -208,7 +207,7 @@ export default function ObligacionesPage() {
 
   const confirmFullPayFixed = async () => {
     if (!payFixed) return
-    await markFixedPaid(payFixed.id, true)
+    await markFixedPaid(payFixed.id)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayFixed(null)
@@ -216,7 +215,7 @@ export default function ObligacionesPage() {
 
   const confirmPartialPayFixed = async () => {
     if (!payFixed || !fixedPartialAmount) return
-    await markFixedPaid(payFixed.id, true)
+    await markFixedPaid(payFixed.id, Number(fixedPartialAmount))
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayFixed(null)
@@ -227,10 +226,9 @@ export default function ObligacionesPage() {
     if (!insufficientTarget) return
     const amt = wallet.cashBalance
     if (insufficientTarget.type === "debt") {
-      const debt = debts.find(d => d.id === insufficientTarget.id)
-      if (debt) await markPaid(debt.id, debt.montoTotal - amt, false)
+      await markPaid(insufficientTarget.id, amt)
     } else {
-      await markFixedPaid(insufficientTarget.id, true)
+      await markFixedPaid(insufficientTarget.id, amt)
     }
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
@@ -258,10 +256,9 @@ export default function ObligacionesPage() {
 
     // Ahora pagar la obligación
     if (insufficientTarget.type === "debt") {
-      const debt = debts.find(d => d.id === insufficientTarget.id)
-      if (debt) await markPaid(debt.id, debt.montoTotal - debt.cuotaPeriodo, true)
+      await markPaid(insufficientTarget.id)
     } else {
-      await markFixedPaid(insufficientTarget.id, true)
+      await markFixedPaid(insufficientTarget.id)
     }
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
@@ -283,10 +280,9 @@ export default function ObligacionesPage() {
 
     // Pagar la obligación
     if (insufficientTarget.type === "debt") {
-      const debt = debts.find(d => d.id === insufficientTarget.id)
-      if (debt) await markPaid(debt.id, debt.montoTotal - debt.cuotaPeriodo, true)
+      await markPaid(insufficientTarget.id)
     } else {
-      await markFixedPaid(insufficientTarget.id, true)
+      await markFixedPaid(insufficientTarget.id)
     }
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
@@ -542,7 +538,14 @@ export default function ObligacionesPage() {
                   formatAmount={formatAmount}
                   onEdit={() => openEditFixed(fe)}
                   onDelete={() => setDeleteTarget({ type: "fixed", id: fe.id, nombre: fe.nombre })}
-                  onTogglePaid={() => fe.pagadoEstePeriodo ? markFixedPaid(fe.id, false) : openPayFixed(fe)}
+                  onTogglePaid={async () => {
+                    if (fe.pagadoEstePeriodo) {
+                      const walletData = await undoPayFixed(fe.id)
+                      if (walletData) setWallet(walletData)
+                    } else {
+                      openPayFixed(fe)
+                    }
+                  }}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
                   isPeriodPriority={periodPriorityIds.has(fe.id)}
@@ -593,6 +596,7 @@ export default function ObligacionesPage() {
                   debt={debt}
                   formatAmount={formatAmount}
                   onPay={() => openPay(debt)}
+                  onUndoPay={async () => { const w = await undoPayDebt(debt.id); if (w) setWallet(w) }}
                   onEdit={() => openEditDebt(debt)}
                   onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
                   hidden={hiddenItems.has(debt.id)}
@@ -713,7 +717,7 @@ export default function ObligacionesPage() {
           <div className="py-3 flex flex-col gap-3">
             <Button onClick={confirmFullPay} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
               <CheckCircle2 className="h-5 w-5" />
-              Pagada ({formatAmount(payDebt?.cuotaPeriodo ?? 0)})
+              Pagar ({formatAmount(payDebt?.cuotaPeriodo ?? 0)})
             </Button>
             <Button variant="outline" onClick={() => setIsPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
               ¿Pagaste otro valor?
@@ -743,7 +747,7 @@ export default function ObligacionesPage() {
           <div className="py-3 flex flex-col gap-3">
             <Button onClick={confirmFullPayFixed} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
               <CheckCircle2 className="h-5 w-5" />
-              Pagado ({formatAmount(payFixed?.monto ?? 0)})
+              Pagar ({formatAmount(payFixed?.monto ?? 0)})
             </Button>
             <Button variant="outline" onClick={() => setIsFixedPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
               ¿Pagaste otro valor?
@@ -1148,9 +1152,9 @@ function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority }: {
+function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority }: {
   debt: Debt; formatAmount: (n: number) => string
-  onPay: () => void; onEdit: () => void; onDelete: () => void
+  onPay: () => void; onUndoPay: () => void; onEdit: () => void; onDelete: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
 }) {
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
@@ -1204,8 +1208,14 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggl
               <p className="text-xl font-black">{formatAmount(debt.saldoRestante)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-muted-foreground">Cuota</p>
-              <p className="text-sm font-bold">{formatAmount(debt.cuotaPeriodo)}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {debt.pagadoEstePeriodo && debt.montoPagadoEstePeriodo ? "Pagado" : "Cuota"}
+              </p>
+              <p className="text-sm font-bold">
+                {debt.pagadoEstePeriodo && debt.montoPagadoEstePeriodo
+                  ? formatAmount(debt.montoPagadoEstePeriodo)
+                  : formatAmount(debt.cuotaPeriodo)}
+              </p>
             </div>
           </div>
         ) : (
@@ -1229,6 +1239,11 @@ function DebtCard({ debt, formatAmount, onPay, onEdit, onDelete, hidden, onToggl
         {!debt.pagadoEstePeriodo && debt.estado === 'activa' && (
           <Button onClick={onPay} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
             Registrar pago de cuota
+          </Button>
+        )}
+        {debt.pagadoEstePeriodo && (
+          <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
+            Deshacer pago
           </Button>
         )}
       </CardContent>

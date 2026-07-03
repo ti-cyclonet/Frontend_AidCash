@@ -249,47 +249,8 @@ export default function OnboardingPage() {
                 <Wallet className="h-5 w-5" />
               </div>
               <h2 className="text-xl font-black">¿Cuánto ganas?</h2>
-              <p className="text-muted-foreground text-sm">Ingresa tu sueldo o díselo a Kiri por voz.</p>
+              <p className="text-muted-foreground text-sm">Ingresa tu sueldo.</p>
             </div>
-
-            {/* ── Dos opciones: voz o manual ── */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={startVoiceOnboarding}
-                disabled={isListening || voiceExtracting}
-                className={cn(
-                  "flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-colors",
-                  isListening
-                    ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald animate-pulse"
-                    : "border-cyclon-lavender/40 bg-cyclon-lavender/5 text-cyclon-lavender hover:border-cyclon-lavender"
-                )}
-              >
-                {voiceExtracting ? <Loader2 className="h-6 w-6 animate-spin" /> :
-                  isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                <span className="text-xs font-bold">
-                  {voiceExtracting ? "Procesando..." : isListening ? "Escuchando..." : "Dictar por voz"}
-                </span>
-                <span className="text-[9px] text-muted-foreground text-center">
-                  "Gano 2000 al mes y pago 500 en luz el 15"
-                </span>
-              </button>
-              <button
-                onClick={() => setIncomeLocked(false)}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-muted bg-muted/20 text-muted-foreground hover:border-cyclon-lavender/40 hover:text-cyclon-lavender transition-colors"
-              >
-                <Pencil className="h-6 w-6" />
-                <span className="text-xs font-bold">Escribir manualmente</span>
-                <span className="text-[9px] text-center">Ingresa los datos uno por uno</span>
-              </button>
-            </div>
-
-            {/* Resultado de voz */}
-            {voiceResult && (
-              <div className="bg-kiri-emerald/5 rounded-2xl p-3 border border-kiri-emerald/20 space-y-1.5">
-                <p className="text-xs font-bold text-kiri-emerald">✅ Kiri entendió:</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{voiceResult.resumenKiri}</p>
-              </div>
-            )}
 
             {/* Input manual */}
             <div className="space-y-2">
@@ -341,8 +302,47 @@ export default function OnboardingPage() {
                 <ReceiptText className="h-5 w-5" />
               </div>
               <h2 className="text-xl font-black">¿Tienes deudas?</h2>
-              <p className="text-muted-foreground text-sm">Agrega tus compromisos. Puedes omitir.</p>
+              <p className="text-muted-foreground text-sm">Agrega tus compromisos por voz o manualmente. Puedes omitir.</p>
             </div>
+
+            {/* ── Dos opciones: voz o manual ── */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={startVoiceOnboarding}
+                disabled={isListening || voiceExtracting}
+                className={cn(
+                  "flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-colors",
+                  isListening
+                    ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald animate-pulse"
+                    : "border-cyclon-lavender/40 bg-cyclon-lavender/5 text-cyclon-lavender hover:border-cyclon-lavender"
+                )}
+              >
+                {voiceExtracting ? <Loader2 className="h-6 w-6 animate-spin" /> :
+                  isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                <span className="text-xs font-bold">
+                  {voiceExtracting ? "Procesando..." : isListening ? "Escuchando..." : "Dictar por voz"}
+                </span>
+                <span className="text-[9px] text-muted-foreground text-center">
+                  "Debo 5000 en Visa, pago 500 el 15"
+                </span>
+              </button>
+              <button
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-muted bg-muted/20 text-muted-foreground hover:border-cyclon-lavender/40 hover:text-cyclon-lavender transition-colors"
+              >
+                <Pencil className="h-6 w-6" />
+                <span className="text-xs font-bold">Escribir manualmente</span>
+                <span className="text-[9px] text-center">Ingresa los datos uno por uno</span>
+              </button>
+            </div>
+
+            {/* Resultado de voz */}
+            {voiceResult && (
+              <div className="bg-kiri-emerald/5 rounded-2xl p-3 border border-kiri-emerald/20 space-y-1.5">
+                <p className="text-xs font-bold text-kiri-emerald">✅ Kiri entendió:</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{voiceResult.resumenKiri}</p>
+              </div>
+            )}
+
             <div className="space-y-3">
               {debts.map((d, i) => (
                 <Card key={i} className="border-none bg-muted/30 rounded-2xl">

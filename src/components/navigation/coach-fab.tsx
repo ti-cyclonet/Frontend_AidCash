@@ -16,6 +16,7 @@ import { useFinanceData } from "@/hooks/use-finance-data"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { getPeriodData } from "@/lib/period-filter"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
+import { userApi } from "@/lib/api-client"
 import type { VoiceExtractOutput } from "@/app/api/ai/voice-extract/route"
 import type { ReceiptScannerOutput } from "@/ai/flows/receipt-scanner-flow"
 
@@ -27,11 +28,12 @@ interface Message {
 
 // ─── Confirm panel para extracción de voz ────────────────────────────────────
 function VoiceExtractConfirm({
-  result, onConfirm, onCancel, formatAmount,
+  result, onConfirm, onCancel, onDictateMore, formatAmount,
 }: {
   result: VoiceExtractOutput
   onConfirm: () => void
   onCancel: () => void
+  onDictateMore: () => void
   formatAmount: (n: number) => string
 }) {
   return (
@@ -54,13 +56,20 @@ function VoiceExtractConfirm({
         {result.ingreso.monto && <ExtractItem icon="💰" label="Ingreso" value={`${formatAmount(result.ingreso.monto)} / ${result.ingreso.frecuencia ?? "mensual"}`} color="text-kiri-emerald" />}
         {result.deudas.map((d, i) => <ExtractItem key={i} icon="💳" label={`Deuda: ${d.nombre}`} value={`${formatAmount(d.monto)}${d.cuota ? ` · Cuota: ${formatAmount(d.cuota)}` : ""}${d.diaCorte ? ` · Día ${d.diaCorte}` : ""}`} color="text-cyclon-pink" />)}
         {result.gastosFijos.map((g, i) => <ExtractItem key={i} icon="📅" label={`Gasto fijo: ${g.nombre}`} value={`${formatAmount(g.monto)}${g.diaCorte ? ` · Día ${g.diaCorte}` : ""}`} color="text-cyclon-sky" />)}
+        {(result.ahorro ?? []).map((a, i) => <ExtractItem key={i} icon="🐷" label={`Ahorro: ${a.nombre}`} value={formatAmount(a.monto)} color="text-cyclon-lavender" />)}
         {result.gastosHormiga.map((h, i) => <ExtractItem key={i} icon="🐜" label={h.nombre} value={formatAmount(h.monto)} color="text-cyclon-pink" />)}
       </div>
-      <div className="border-t border-border px-4 py-3 flex gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 rounded-xl h-10 text-xs font-bold">Cancelar</Button>
-        <Button size="sm" onClick={onConfirm} className="flex-1 rounded-xl h-10 bg-kiri-emerald text-white font-bold text-xs gap-1.5">
-          <CheckCircle2 className="h-3.5 w-3.5" /> Guardar todo
+      <div className="border-t border-border px-4 py-3 space-y-2">
+        {/* Botón para dictar más */}
+        <Button variant="outline" size="sm" onClick={onDictateMore} className="w-full rounded-xl h-9 text-xs font-bold gap-1.5 border-dashed">
+          <Mic className="h-3.5 w-3.5" /> Dictar algo más
         </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 rounded-xl h-10 text-xs font-bold">Cancelar</Button>
+          <Button size="sm" onClick={onConfirm} className="flex-1 rounded-xl h-10 bg-kiri-emerald text-white font-bold text-xs gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Guardar todo
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -233,14 +242,34 @@ export function CoachFab() {
   const handleConfirmExtract = async () => {
     if (!extractResult) return
     try {
-      if (extractResult.ingreso.monto) setIncome(extractResult.ingreso.monto)
+      // Ingreso → actualizar ingreso base + registrar en wallet (sueldo real)
+      if (extractResult.ingreso.monto) {
+        setIncome(extractResult.ingreso.monto)
+        await userApi.walletIncome(extractResult.ingreso.monto, 'salario')
+      }
+      // Deudas → registrar como deuda
       for (const d of extractResult.deudas)
         await addDebt({ nombre: d.nombre, montoTotal: d.monto, cuotaPeriodo: d.cuota ?? d.monto, diasPago: String(d.diaCorte ?? '1') })
+      // Gastos Fijos → registrar como gasto fijo
       for (const g of extractResult.gastosFijos)
         await addFixedExpense({ nombre: g.nombre, monto: g.monto, fechaCorte: g.fechaCorte ?? new Date().toISOString().split("T")[0] })
+      // Ahorro → crear bolsillo de ahorro en localStorage
+      if (extractResult.ahorro?.length) {
+        try {
+          const raw = localStorage.getItem("kiri_saving_pockets")
+          const pockets = raw ? JSON.parse(raw) : []
+          for (const a of extractResult.ahorro) {
+            pockets.push({ id: String(Date.now()) + Math.random(), nombre: a.nombre, meta: a.monto, acumulado: 0, icono: "piggybank", color: "mint", createdAt: new Date().toISOString() })
+          }
+          localStorage.setItem("kiri_saving_pockets", JSON.stringify(pockets))
+        } catch {}
+      }
+      // Gastos Hormiga → registrar como gasto hormiga
       for (const h of extractResult.gastosHormiga)
         await addImpulseExpense({ nombre: h.nombre, monto: h.monto, categoria: h.categoria })
       refetch()
+      // Disparar evento para que la billetera refresque el wallet
+      window.dispatchEvent(new Event("kiri:wallet-updated"))
       setVoiceModalOpen(false); setExtractResult(null); setVoiceTranscript("")
     } catch { /* silent */ }
   }
@@ -447,7 +476,7 @@ export function CoachFab() {
       <Dialog open={voiceModalOpen} onOpenChange={v => { if (!v) { setVoiceModalOpen(false); setExtractResult(null); setVoiceTranscript("") } }}>
         <DialogContent>
           {extractResult ? (
-            <VoiceExtractConfirm result={extractResult} formatAmount={formatAmount} onConfirm={handleConfirmExtract} onCancel={() => { setVoiceModalOpen(false); setExtractResult(null) }} />
+            <VoiceExtractConfirm result={extractResult} formatAmount={formatAmount} onConfirm={handleConfirmExtract} onDictateMore={() => { setExtractResult(null); handleVoiceSatellite() }} onCancel={() => { setVoiceModalOpen(false); setExtractResult(null) }} />
           ) : (
             <>
               <DialogHeader>

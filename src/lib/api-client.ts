@@ -324,15 +324,21 @@ export const debtsApi = {
     })
   },
 
-  async pay(id: string, montoTotal: number, pagadoEstePeriodo: boolean) {
-    return api<{ debt: Record<string, unknown> }>(`/debts/${id}/pay`, {
+  async pay(id: string, monto?: number) {
+    return api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean }>(`/debts/${id}/pay`, {
       method: 'POST',
-      body: { montoTotal, pagadoEstePeriodo },
+      body: monto ? { monto } : {},
     })
   },
 
   async delete(id: string) {
     return api(`/debts/${id}`, { method: 'DELETE' })
+  },
+
+  async undoPay(id: string) {
+    return api<{ debt: Record<string, unknown>; montoDevuelto: number; wallet: WalletState }>(`/debts/${id}/undo-pay`, {
+      method: 'POST',
+    })
   },
 }
 
@@ -359,6 +365,12 @@ export const fixedExpensesApi = {
 
   async delete(id: string) {
     return api(`/fixed-expenses/${id}`, { method: 'DELETE' })
+  },
+
+  async undoPay(id: string) {
+    return api<{ fixedExpense: Record<string, unknown>; montoDevuelto: number; wallet: WalletState }>(`/fixed-expenses/${id}/undo-pay`, {
+      method: 'POST',
+    })
   },
 }
 
@@ -492,11 +504,20 @@ export interface BalanceReport {
   extraIncomes: Record<string, unknown>[]
   debts: Record<string, unknown>[]
   fixedExpenses: Record<string, unknown>[]
+  incomeRecords: Record<string, unknown>[]
 }
 
 export const reportsApi = {
   async getBalance(timeframe: Timeframe = 'month') {
     return api<BalanceReport>(`/reports/balance?timeframe=${timeframe}`)
+  },
+
+  async deleteIncomeRecord(id: string) {
+    return api(`/reports/income-records/${id}`, { method: 'DELETE' })
+  },
+
+  async deleteSavingsRecord(id: string) {
+    return api(`/savings/${id}`, { method: 'DELETE' })
   },
 }
 
