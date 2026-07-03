@@ -199,6 +199,8 @@ export default function AhorroPage() {
     if (txType === "aporte") {
       // Aportar al bolsillo de ahorro → descontar del sueldo real (cashBalance)
       await userApi.walletDeduct(amt, 'ahorro')
+      // Registrar en historial de ahorro para que aparezca en Balance
+      await addSavingsEntry(amt, "ahorro")
     } else {
       // Retirar del bolsillo de ahorro → sumar al sueldo real (cashBalance)
       await userApi.walletWithdraw(amt, 'ahorro')

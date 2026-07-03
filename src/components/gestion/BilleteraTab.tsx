@@ -8,7 +8,7 @@ import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import {
-  Plus, RefreshCw, Wallet, Zap, AlertTriangle, XCircle,
+  Plus, RefreshCw, Wallet, Zap,
   Lock, CheckCircle2, Pencil, ChevronDown, ChevronUp,
 } from "lucide-react"
 import Link from "next/link"
@@ -19,7 +19,6 @@ import { userApi, WalletState } from "@/lib/api-client"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
-import { analyzeFinances } from "@/lib/recommendations"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
 import { Debt, FixedExpense } from "@/lib/types"
 
@@ -41,6 +40,57 @@ function AnimatedAmount({ value, formatAmount, className }: { value: number; for
       flash === "up" && "animate-pulse text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.6)]",
       flash === "down" && "animate-pulse text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]",
       className)}>{formatAmount(value)}</span>
+  )
+}
+
+// ─── Counting Animation (números que suben/bajan como odómetro) ───────────────
+
+function CountingAmount({ value, formatAmount, className, duration = 1600 }: {
+  value: number; formatAmount: (n: number) => string; className?: string; duration?: number
+}) {
+  const [display, setDisplay] = useState(value)
+  const prevRef = useRef(value)
+  const frameRef = useRef<number>(0)
+  const [flash, setFlash] = useState<"up" | "down" | null>(null)
+
+  useEffect(() => {
+    const from = prevRef.current
+    const to = value
+    if (from === to) return
+
+    setFlash(to > from ? "up" : "down")
+    const startTime = performance.now()
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // Ease in-out sine para un efecto suave y agradable
+      const eased = -(Math.cos(Math.PI * progress) - 1) / 2
+      const current = Math.round(from + (to - from) * eased)
+      setDisplay(current)
+
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate)
+      } else {
+        setDisplay(to)
+        prevRef.current = to
+        setTimeout(() => setFlash(null), 800)
+      }
+    }
+
+    frameRef.current = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(frameRef.current)
+  }, [value, duration])
+
+  return (
+    <span className={cn(
+      "inline-block transition-all duration-500",
+      flash === "up" && "text-emerald-300 drop-shadow-[0_0_12px_rgba(16,185,129,0.6)]",
+      flash === "down" && "text-red-300 drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]",
+      className
+    )}>
+      {formatAmount(display)}
+    </span>
   )
 }
 
@@ -145,6 +195,13 @@ export function BilleteraTab() {
 
   useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
 
+  // Refrescar wallet cuando el coach u otro componente registra un ingreso/pago
+  useEffect(() => {
+    const refresh = () => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }
+    window.addEventListener("kiri:wallet-updated", refresh)
+    return () => window.removeEventListener("kiri:wallet-updated", refresh)
+  }, [])
+
   const { allocation, periodData, pendingObligations } = usePeriodBudget()
   const { periodDebts, periodFixed } = periodData
   const { addNotification } = useSocket()
@@ -245,17 +302,13 @@ export function BilleteraTab() {
     endeudamiento: Math.round(realAllocation.debtCapPct),
   }
 
-  const recommendations = useMemo(() => allocation ? analyzeFinances(allocation, periodDebts, incomeFrequency) : null, [allocation, periodDebts, incomeFrequency])
-  const topAlert = recommendations?.alerts?.[0] ?? null
-  const isHealthy = !topAlert && !realAllocation.isOverloaded && !realAllocation.isTight
-
   return (
     <div className="space-y-5">
       {/* ═══ SUELDO REAL (centro, grande) ═══ */}
       <Card className="border-none bg-gradient-to-br from-emerald-600 to-kiri-emerald rounded-2xl overflow-hidden shadow-lg">
         <CardContent className="p-6 text-center space-y-2">
           <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Sueldo Real (disponible)</p>
-          <AnimatedAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
+          <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
           <div className="flex items-center justify-center gap-3 pt-2">
             <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(periodData.effectiveIncome)) }} size="sm"
@@ -393,20 +446,49 @@ export function BilleteraTab() {
         {POCKETS.map(pocket => <PocketCard key={pocket.key} pocket={pocket} amount={pocketValues[pocket.key]} pct={pocketPcts[pocket.key]} formatAmount={formatAmount} />)}
       </div>
 
-      {/* ── Estado/recomendaciones ── */}
+      {/* ── Análisis inteligente del presupuesto ── */}
       <Card className={cn("border-none rounded-2xl",
-        isHealthy ? "bg-emerald-50 dark:bg-emerald-950/20" : topAlert?.level === "critical" ? "bg-red-50 dark:bg-red-950/20" : "bg-amber-50 dark:bg-amber-950/20"
+        realAllocation.isOverloaded ? "bg-red-50 dark:bg-red-950/20"
+          : realAllocation.isTight ? "bg-amber-50 dark:bg-amber-950/20"
+          : total <= 0 && displayObligationsTotal > 0 ? "bg-amber-50 dark:bg-amber-950/20"
+          : "bg-emerald-50 dark:bg-emerald-950/20"
       )}>
-        <CardContent className="p-4 flex items-start gap-3">
-          {isHealthy ? (
-            <><span className="text-2xl">🌱</span><div><p className="font-bold text-sm text-emerald-700 dark:text-emerald-300">¡Vas por buen camino!</p><p className="text-[11px] text-muted-foreground">Tu presupuesto está equilibrado.</p></div></>
-          ) : topAlert ? (
-            <><div className={cn("shrink-0", topAlert.level === "critical" ? "text-red-500" : "text-amber-600")}>
-              {topAlert.level === "critical" ? <XCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-            </div><div><p className={cn("font-bold text-sm", topAlert.level === "critical" ? "text-red-700" : "text-amber-700")}>{topAlert.title}</p><p className="text-[11px] text-muted-foreground">{topAlert.message}</p></div></>
-          ) : (
-            <><span className="text-2xl">🌱</span><div><p className="font-bold text-sm text-emerald-700">Tu billetera está lista</p><p className="text-[11px] text-muted-foreground">Registra un ingreso para empezar.</p></div></>
-          )}
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl shrink-0">
+              {realAllocation.isOverloaded ? "🚨" : realAllocation.isTight ? "⚠️" : total <= 0 && displayObligationsTotal > 0 ? "💡" : "🌱"}
+            </span>
+            <div className="flex-1">
+              <p className={cn("font-bold text-sm",
+                realAllocation.isOverloaded ? "text-red-700 dark:text-red-300"
+                  : realAllocation.isTight ? "text-amber-700 dark:text-amber-300"
+                  : "text-emerald-700 dark:text-emerald-300"
+              )}>
+                {realAllocation.isOverloaded
+                  ? "Tus obligaciones superan tu saldo disponible"
+                  : realAllocation.isTight
+                    ? "Tu presupuesto está ajustado"
+                    : total <= 0 && displayObligationsTotal > 0
+                      ? "Registra tu ingreso para distribuir tu presupuesto"
+                      : total > 0 && displayObligationsTotal === 0
+                        ? "¡Todas tus obligaciones están al día! 🎉"
+                        : "¡Tu presupuesto está equilibrado!"
+                }
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {realAllocation.isOverloaded
+                  ? `Tienes ${formatAmount(displayObligationsTotal)} en obligaciones pero solo ${formatAmount(total)} disponibles. Considera usar la estrategia Bola de Nieve o renegociar tus deudas.`
+                  : realAllocation.isTight
+                    ? `El ${Math.round(realAllocation.obligationsPct)}% de tu saldo va a obligaciones. Intenta reducir gastos fijos o generar un ingreso extra para tener más margen.`
+                    : total <= 0 && displayObligationsTotal > 0
+                      ? `Tienes ${formatAmount(displayObligationsTotal)} en obligaciones pendientes. Registra tu ingreso para ver cómo se distribuye tu dinero.`
+                      : total > 0 && realAllocation.savingsAmount > 0
+                        ? `Puedes destinar ${formatAmount(Math.round(realAllocation.savingsAmount))} al ahorro (${Math.round(realAllocation.savingsPct)}%) y ${formatAmount(Math.round(realAllocation.freeAmount))} a gastos libres este periodo.`
+                        : "Estás distribuyendo tu dinero de forma inteligente."
+                }
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

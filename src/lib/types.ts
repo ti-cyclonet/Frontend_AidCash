@@ -110,6 +110,7 @@ export interface Debt {
   montoTotal: number;
   saldoRestante: number;
   cuotaPeriodo: number;
+  montoPagadoEstePeriodo?: number | null; // Monto REAL pagado (puede diferir de cuotaPeriodo)
   tasaInteres?: number | null;
   acreedor: string;
   frecuenciaPago: DebtFrequency;

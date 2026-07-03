@@ -1,257 +1,305 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { MoneyInput } from "@/components/ui/money-input"
-import { Label } from "@/components/ui/label"
+import { useState, useMemo, useEffect } from "react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Sparkles, TrendingUp, Wallet, Plus, Trash2, Repeat, Clock, Zap, Pencil, ReceiptText, PiggyBank, ShieldCheck, Banknote } from "lucide-react"
-import { ExtraIncome, ExtraIncomeTemporality } from "@/lib/types"
-import { useFinanceData } from "@/hooks/use-finance-data"
-import { useAppContext } from "@/lib/app-context"
-import { usePeriodBudget } from "@/hooks/use-period-budget"
-import { userApi, WalletState } from "@/lib/api-client"
+import {
+  TrendingUp, TrendingDown, Target, Sparkles, ChevronRight,
+  Calendar, RefreshCw, Zap, Shield, PiggyBank, AlertTriangle,
+} from "lucide-react"
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { cn } from "@/lib/utils"
-
-const TEMPORALITY_OPTIONS: { value: ExtraIncomeTemporality; label: string; icon: React.ReactNode }[] = [
-  { value: "una_vez", label: "Una sola vez", icon: <Zap className="h-4 w-4" /> },
-  { value: "definido", label: "Tiempo definido", icon: <Clock className="h-4 w-4" /> },
-  { value: "indefinido", label: "Indefinido", icon: <Repeat className="h-4 w-4" /> },
-]
-const emptyExtraForm = { nombre: "", monto: "", temporalidad: "una_vez" as ExtraIncomeTemporality, meses: "" }
+import { useAppContext } from "@/lib/app-context"
+import { useFinanceData } from "@/hooks/use-finance-data"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
+import { calculateProjections, type ProjectionResult, type ProjectionHito } from "@/lib/projections-logic"
+import Link from "next/link"
 
 export function ProyeccionesTab() {
-  const [aiExplanation, setAiExplanation] = useState("")
-  const [loadingAi, setLoadingAi] = useState(false)
-  const { debts, fixedExpenses, extraIncomes, totalExtraIncome, totalImpulseThisPeriod, addExtraIncome, updateExtraIncome, removeExtraIncome } = useFinanceData()
-  const { formatAmount, income, setIncome, incomeFrequency } = useAppContext()
-  const { allocation, periodData } = usePeriodBudget()
+  const { formatAmount, income, incomeFrequency } = useAppContext()
+  const { debts, fixedExpenses, totalAhorrado } = useFinanceData()
+  const { periodData } = usePeriodBudget()
 
-  const [isExtraModalOpen, setIsExtraModalOpen] = useState(false)
-  const [editingExtraId, setEditingExtraId] = useState<string | null>(null)
-  const [extraForm, setExtraForm] = useState(emptyExtraForm)
-  const [savingExtra, setSavingExtra] = useState(false)
+  const [activeRoute, setActiveRoute] = useState<"kiri" | "actual">("kiri")
+  const [meses, setMeses] = useState(6)
 
-  // ═══ Distribución basada en SUELDO REAL (cashBalance) ═══
-  const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
-  useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
+  // Calcular proyecciones
+  const projection = useMemo((): ProjectionResult | null => {
+    if (income <= 0) return null
+    const debtInputs = debts.filter(d => d.estado === "activa").map(d => ({
+      id: d.id, nombre: d.nombre, saldoRestante: d.saldoRestante,
+      cuotaPeriodo: d.cuotaPeriodo, tasaInteres: d.tasaInteres,
+    }))
+    const gastosFijos = fixedExpenses.reduce((a, f) => a + f.monto, 0)
+    return calculateProjections(income, debtInputs, totalAhorrado, gastosFijos, incomeFrequency, meses)
+  }, [income, debts, fixedExpenses, totalAhorrado, incomeFrequency, meses])
 
-  const realIncome = wallet.cashBalance > 0 ? wallet.cashBalance : periodData.effectiveIncome
-  const realObligations = periodData.totalObligations
-
-  const realAlloc = useMemo(() => {
-    if (realIncome <= 0) return { obligPct: 0, savPct: 0, freePct: 0, debtCapPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtCapAmt: 0, isOverloaded: realObligations > 0 }
-    const obligPct = Math.min(100, (realObligations / realIncome) * 100)
-    if (realObligations >= realIncome) return { obligPct, savPct: 0, freePct: 0, debtCapPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtCapAmt: 0, isOverloaded: true }
-    const rem = Math.max(0, realIncome - realObligations)
-    const remPct = (rem / realIncome) * 100
-    const tgtSav = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
-    const savAmt = Math.min((tgtSav / 100) * realIncome, rem)
-    const savPct = (savAmt / realIncome) * 100
-    const afterSav = rem - savAmt
-    const maxFree = (15 / 100) * realIncome
-    const freeAmt = Math.min(afterSav, maxFree)
-    const freePct = (freeAmt / realIncome) * 100
-    const debtCapAmt = afterSav - freeAmt
-    const debtCapPct = (debtCapAmt / realIncome) * 100
-    return { obligPct, savPct, freePct, debtCapPct, obligAmt: realObligations, savAmt, freeAmt, debtCapAmt, isOverloaded: false }
-  }, [realIncome, realObligations])
-
-  // ═══ Distribución DINÁMICA: viene del hook usePeriodBudget ═══
-  // allocation ya refleja el periodo actual y se recalcula al pagar obligaciones.
-  // effectiveIncome y totalObligations son los del periodo (no totales mensuales).
-
-  // ═══ PRESENTACIÓN: toggle de frecuencia ya está incorporado en el cálculo ═══
-  // El ingreso mostrado es el efectivo del periodo (ya dividido si es quincenal).
-  const displayIncome = periodData.effectiveIncome
-
-  const handleGetAiInsight = async () => {
-    if (!allocation) return
-    setLoadingAi(true); setAiExplanation("")
-    try {
-      const res = await fetch('/api/ai/budget-insight', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ingresoTotal: periodData.effectiveIncome, pctObligacionesOriginal: 50, pctLibreOriginal: 30, pctAhorroOriginal: 20,
-          pctObligacionesAjustado: Math.round(allocation.obligationsPct),
-          pctLibreAjustado: Math.round(allocation.freeInvestmentPct),
-          pctAhorroAjustado: Math.round(allocation.savingsPct),
-          totalObligaciones: periodData.totalObligations,
-          detalleDeudas: debts.map(d => ({ nombre: d.nombre, monto: d.cuotaPeriodo, diasPago: d.diasPago ?? '1' })),
-          detalleGastosFijos: fixedExpenses.map(f => ({ nombre: f.nombre, monto: f.monto, fechaCorte: f.fechaCorte })),
-        }),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setAiExplanation(data.explicacion ?? data.error ?? 'Sin respuesta.')
-    } catch { setAiExplanation('No se pudo conectar con la IA.') }
-    finally { setLoadingAi(false) }
+  if (!projection) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 space-y-4">
+        <TrendingUp className="h-12 w-12 text-muted-foreground/30" />
+        <p className="text-sm text-muted-foreground text-center">Configura tu ingreso y obligaciones<br />para ver tus proyecciones financieras.</p>
+      </div>
+    )
   }
 
-  const openAddExtra = () => { setEditingExtraId(null); setExtraForm(emptyExtraForm); setIsExtraModalOpen(true) }
-  const openEditExtra = (e: ExtraIncome) => { setEditingExtraId(e.id); setExtraForm({ nombre: e.nombre, monto: String(e.monto), temporalidad: e.temporalidad, meses: String(e.mesesRestantes ?? "") }); setIsExtraModalOpen(true) }
-  const handleSaveExtra = async () => {
-    if (!extraForm.nombre || !extraForm.monto) return
-    setSavingExtra(true)
-    const data = { nombre: extraForm.nombre, monto: Number(extraForm.monto), temporalidad: extraForm.temporalidad, mesesRestantes: extraForm.temporalidad === "definido" ? Number(extraForm.meses) || null : null }
-    if (editingExtraId) await updateExtraIncome(editingExtraId, data)
-    else await addExtraIncome(data)
-    setSavingExtra(false); setIsExtraModalOpen(false)
-  }
-  const temporalityBadge = (t: ExtraIncomeTemporality, meses: number | null) => {
-    if (t === "una_vez") return { label: "Una vez", color: "bg-cyclon-pink/20 text-cyclon-pink" }
-    if (t === "indefinido") return { label: "Indefinido", color: "bg-cyclon-mint/20 text-cyclon-periwinkle" }
-    return { label: `${meses ?? "?"} meses`, color: "bg-cyclon-sky/30 text-cyclon-periwinkle" }
-  }
+  const deudaTotal = debts.filter(d => d.estado === "activa").reduce((a, d) => a + d.saldoRestante, 0)
+  const patrimonioActual = totalAhorrado - deudaTotal
+  const now = new Date()
+  const rangeStart = now.toLocaleDateString("es-ES", { month: "short", year: "numeric" })
+  const rangeEnd = new Date(now.getFullYear(), now.getMonth() + meses, 1).toLocaleDateString("es-ES", { month: "short", year: "numeric" })
 
   return (
-    <div className="space-y-6">
-      {/* Ingreso Fijo Base (destacado arriba de frecuencia) */}
-      <Card className="border-none shadow-sm bg-card overflow-hidden">
-        <CardHeader className="bg-cyclon-lavender/5 pb-3 pt-4 px-5">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-cyclon-lavender" /> Ingreso Fijo Base
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4 px-5 pb-5 space-y-4">
-          {/* Cuadro destacado con monto por periodo */}
-          {income > 0 && (
-            <div className="bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-2xl p-4 text-center">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase">Tu ingreso fijo por periodo</p>
-              <p className="text-3xl font-black text-cyclon-lavender mt-1">{formatAmount(displayIncome)}</p>
-              <p className="text-[10px] text-muted-foreground capitalize">
-                {incomeFrequency === "quincenal" ? "Quincenal (de $" + formatAmount(income) + " al mes)" : "Mensual"}
-              </p>
+    <div className="space-y-5">
+      {/* ═══ HEADER ═══ */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-black flex items-center gap-2"><TrendingUp className="h-5 w-5" /> Proyecciones</h1>
+          <p className="text-xs text-muted-foreground">Visualiza tu futuro financiero y toma mejores decisiones hoy.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Selector de meses */}
+          <div className="flex bg-muted/30 rounded-xl p-1">
+            {[3, 6, 12, 24].map(m => (
+              <button key={m} onClick={() => setMeses(m)} className={cn(
+                "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
+                meses === m ? "bg-kiri-emerald text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}>{m} meses</button>
+            ))}
+          </div>
+          <span className="text-[10px] text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg flex items-center gap-1">
+            <Calendar className="h-3 w-3" /> {rangeStart} – {rangeEnd}
+          </span>
+        </div>
+      </div>
+
+      {/* ═══ RESUMEN: Patrimonio actual vs proyectado ═══ */}
+      <Card className="border-none bg-card shadow-sm rounded-2xl">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-4">
+            <div className="h-10 w-10 rounded-xl bg-kiri-emerald/10 flex items-center justify-center shrink-0">
+              <Target className="h-5 w-5 text-kiri-emerald" />
             </div>
-          )}
-          <div className="space-y-1">
-            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              Sueldo base mensual (total del mes)
-            </Label>
-            <MoneyInput value={String(income || "")} onChange={v => setIncome(Number(v))} className="h-16 text-3xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm">Tu futuro financiero en {meses} meses</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Proyecciones según tu comportamiento actual vs. el plan optimizado de Kiri.</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-[9px] text-muted-foreground">Patrimonio neto actual</p>
+              <p className={cn("text-lg font-black", patrimonioActual >= 0 ? "text-emerald-500" : "text-red-500")}>
+                {patrimonioActual >= 0 ? "+" : ""}{formatAmount(patrimonioActual)}
+              </p>
+              <p className="text-[8px] text-muted-foreground">{patrimonioActual < 0 ? "(Deudas > Ahorros)" : ""}</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-[9px] text-muted-foreground">Patrimonio proyectado (Kiri)</p>
+              <p className={cn("text-lg font-black", projection.kiriFinal.patrimonio >= 0 ? "text-emerald-500" : "text-red-500")}>
+                {projection.kiriFinal.patrimonio >= 0 ? "+" : ""}{formatAmount(projection.kiriFinal.patrimonio)}
+              </p>
+              <p className="text-[8px] text-muted-foreground">En {meses} meses</p>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Ingresos Extra */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Ingresos Extra</h2>
-          <Button size="sm" onClick={openAddExtra} className="h-8 rounded-xl bg-cyclon-lavender/10 text-cyclon-lavender hover:bg-cyclon-lavender/20 border-none font-bold gap-1 px-3">
-            <Plus className="h-3.5 w-3.5" /> Agregar
-          </Button>
-        </div>
-        {extraIncomes.length === 0 ? (
-          <button onClick={openAddExtra} className="w-full border-2 border-dashed border-muted rounded-2xl p-4 text-sm text-muted-foreground hover:border-cyclon-lavender/40 hover:text-cyclon-lavender transition-colors flex items-center justify-center gap-2">
-            <Plus className="h-4 w-4" /> Agregar ingreso extra
-          </button>
-        ) : (
-          <div className="space-y-2">
-            {extraIncomes.map(e => { const badge = temporalityBadge(e.temporalidad, e.mesesRestantes); return (
-              <Card key={e.id} className="border-none shadow-sm bg-card"><CardContent className="p-4 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2"><span className="font-bold text-sm truncate">{e.nombre}</span><span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0", badge.color)}>{badge.label}</span></div>
-                  <span className="text-lg font-black text-cyclon-lavender">{formatAmount(e.monto)}</span>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <button onClick={() => openEditExtra(e)} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-cyclon-lavender"><Pencil className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => removeExtraIncome(e.id)} className="h-8 w-8 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
-              </CardContent></Card>
-            )})}
-          </div>
-        )}
-        {totalExtraIncome > 0 && (
-          <Card className="border-none bg-cyclon-lavender/5 rounded-2xl"><CardContent className="p-4 flex justify-between items-center">
-            <div><p className="text-xs text-muted-foreground">Fijo</p><p className="font-bold">{formatAmount(income)}</p></div>
-            <span className="text-muted-foreground text-lg font-black">+</span>
-            <div><p className="text-xs text-muted-foreground">Extra</p><p className="font-bold text-cyclon-lavender">{formatAmount(totalExtraIncome)}</p></div>
-            <span className="text-muted-foreground text-lg font-black">=</span>
-            <div className="text-right"><p className="text-xs text-muted-foreground">Total periodo</p><p className="font-black text-lg text-cyclon-lavender">{formatAmount(periodData.effectiveIncome)}</p></div>
-          </CardContent></Card>
-        )}
+      {/* ═══ GRÁFICA + HITOS ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Gráfica */}
+        <Card className="lg:col-span-2 border-none bg-card shadow-sm rounded-2xl overflow-hidden">
+          <CardContent className="p-4">
+            {/* Toggle Ruta */}
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => setActiveRoute("actual")} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors",
+                activeRoute === "actual" ? "bg-red-500/10 text-red-500" : "bg-muted/30 text-muted-foreground")}>
+                <TrendingDown className="h-3 w-3" /> Ruta actual
+              </button>
+              <button onClick={() => setActiveRoute("kiri")} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors",
+                activeRoute === "kiri" ? "bg-emerald-500/10 text-emerald-500" : "bg-muted/30 text-muted-foreground")}>
+                <TrendingUp className="h-3 w-3" /> Ruta Kiri (optimizado)
+              </button>
+            </div>
+
+            {/* Leyenda */}
+            <div className="flex gap-4 mb-3 text-[9px]">
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Ahorro acumulado</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Deuda total</span>
+              <span className="flex items-center gap-1 text-muted-foreground">--- Patrimonio neto</span>
+            </div>
+
+            <div className="h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={projection.months} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="ahorroGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="deudaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted/20" />
+                  <XAxis dataKey="mesLabel" tick={{ fontSize: 9 }} className="text-muted-foreground" />
+                  <YAxis tick={{ fontSize: 9 }} className="text-muted-foreground" tickFormatter={v => `$${(v / 1000000).toFixed(1)}M`} />
+                  <Tooltip content={<ProjectionTooltip formatAmount={formatAmount} />} />
+                  <Area type="monotone" dataKey={activeRoute === "kiri" ? "ahorroKiri" : "ahorroActual"} stroke="#10b981" strokeWidth={2} fill="url(#ahorroGrad)" name="Ahorro" />
+                  <Area type="monotone" dataKey={activeRoute === "kiri" ? "deudaKiri" : "deudaActual"} stroke="#ef4444" strokeWidth={2} fill="url(#deudaGrad)" name="Deuda" />
+                  <Area type="monotone" dataKey={activeRoute === "kiri" ? "patrimonioKiri" : "patrimonioActual"} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="5 3" fill="none" name="Patrimonio" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Hitos */}
+        <Card className="border-none bg-card shadow-sm rounded-2xl">
+          <CardContent className="p-4 space-y-3">
+            <h3 className="font-bold text-sm">Hitos importantes <span className="text-muted-foreground font-normal">(Plan Kiri)</span></h3>
+            <div className="space-y-3">
+              {projection.hitos.slice(0, 4).map((h, i) => (
+                <HitoItem key={i} hito={h} />
+              ))}
+            </div>
+            {projection.hitos.length > 4 && (
+              <p className="text-[10px] text-muted-foreground text-center pt-1">Ver todos los hitos</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Distribución Inteligente */}
-      {allocation && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyclon-periwinkle" /> Distribución Inteligente</h2>
-          {realAlloc.isOverloaded && (
-            <Card className="border-none bg-destructive/10 rounded-2xl"><CardContent className="p-4 flex gap-3 items-start">
-              <div className="h-8 w-8 bg-destructive/20 rounded-xl flex items-center justify-center shrink-0 text-destructive"><ReceiptText className="h-4 w-4" /></div>
-              <div><p className="font-bold text-destructive text-sm">Tus obligaciones superan tu ingreso</p><p className="text-xs text-muted-foreground mt-0.5">Revisa tus deudas y gastos fijos.</p></div>
-            </CardContent></Card>
-          )}
-          <div className="grid gap-3">
-            <AllocBlock label="Obligaciones" sublabel="Deudas + Gastos Fijos" pct={realAlloc.obligPct} amount={Math.round(realAlloc.obligAmt)} color="bg-cyclon-periwinkle" icon={<ReceiptText className="h-4 w-4" />} alert={realAlloc.obligPct >= 70} formatAmount={formatAmount} />
-            <AllocBlock label="Ahorro" sublabel="Págate a ti mismo" pct={realAlloc.savPct} amount={Math.round(realAlloc.savAmt)} color="bg-cyclon-mint" icon={<PiggyBank className="h-4 w-4" />} formatAmount={formatAmount} />
-            <AllocBlock label="Gastos Libres" sublabel="Blindado — día a día" pct={realAlloc.freePct} amount={Math.round(realAlloc.freeAmt)} color="bg-cyclon-sky" icon={<ShieldCheck className="h-4 w-4" />} formatAmount={formatAmount} />
-            <AllocBlock label="Endeudamiento" sublabel="Capacidad para nuevas deudas" pct={realAlloc.debtCapPct} amount={Math.round(realAlloc.debtCapAmt)} color="bg-cyclon-lavender" icon={<Banknote className="h-4 w-4" />} formatAmount={formatAmount} />
-          </div>
-          {/* AI Insight */}
-          <Card className="border-none bg-gradient-to-br from-cyclon-lavender/5 to-cyclon-pink/5 rounded-2xl"><CardContent className="p-5 space-y-3">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-sm text-cyclon-lavender flex items-center gap-2"><Sparkles className="h-4 w-4" /> Kiri Insight</h3>
-              <Button onClick={handleGetAiInsight} disabled={loadingAi} size="sm" className="bg-cyclon-lavender hover:bg-cyclon-lavender/90 text-white rounded-full px-4 text-xs font-bold gap-1.5">
-                {loadingAi ? <><div className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />Analizando</> : aiExplanation ? "Actualizar" : "Analizar con IA"}
-              </Button>
-            </div>
-            {loadingAi && <div className="space-y-2 animate-pulse"><div className="h-3 bg-cyclon-lavender/10 rounded-full w-full" /><div className="h-3 bg-cyclon-lavender/10 rounded-full w-[80%]" /><div className="h-3 bg-cyclon-lavender/10 rounded-full w-[60%]" /></div>}
-            {!loadingAi && aiExplanation && <div className="bg-card/50 rounded-xl p-4 border border-cyclon-lavender/10"><p className="text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap">{aiExplanation}</p></div>}
-            {!loadingAi && !aiExplanation && <p className="text-xs text-muted-foreground">Analiza tu distribución con IA.</p>}
-          </CardContent></Card>
-        </div>
-      )}
-
-      {/* Modal Extra Income */}
-      <Dialog open={isExtraModalOpen} onOpenChange={v => !v && setIsExtraModalOpen(false)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editingExtraId ? "Editar Ingreso Extra" : "Agregar Ingreso Extra"}</DialogTitle><DialogDescription>Freelance, bono, venta, etc.</DialogDescription></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2"><Label>Descripción</Label><Input placeholder="Ej: Proyecto freelance" value={extraForm.nombre} onChange={e => setExtraForm(f => ({ ...f, nombre: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Monto</Label><MoneyInput value={extraForm.monto} onChange={v => setExtraForm(f => ({ ...f, monto: v }))} className="h-12 text-xl font-bold" placeholder="0" /></div>
-            <div className="space-y-2"><Label>Frecuencia</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {TEMPORALITY_OPTIONS.map(opt => (
-                  <button key={opt.value} onClick={() => setExtraForm(f => ({ ...f, temporalidad: opt.value }))} className={cn("flex flex-col items-center gap-1 p-3 rounded-2xl border-2 transition-colors text-center", extraForm.temporalidad === opt.value ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>
-                    {opt.icon}<span className="text-[10px] font-bold leading-tight">{opt.label}</span>
-                  </button>
-                ))}
+      {/* ═══ COMPARACIÓN DE RESULTADOS ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Comparación VS */}
+        <Card className="border-none bg-card shadow-sm rounded-2xl">
+          <CardContent className="p-4 space-y-4">
+            <h3 className="font-bold text-sm">Comparación de resultados en {meses} meses</h3>
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+              {/* Ruta actual */}
+              <div className="bg-muted/30 rounded-xl p-3 space-y-2">
+                <p className="text-[9px] font-bold text-muted-foreground">Ruta actual (sin cambios)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><p className="text-[8px] text-muted-foreground">Ahorro acumulado</p><p className="text-xs font-black">{formatAmount(projection.actualFinal.ahorro)}</p></div>
+                  <div><p className="text-[8px] text-muted-foreground">Deuda total</p><p className="text-xs font-black text-red-500">-{formatAmount(projection.actualFinal.deuda)}</p></div>
+                </div>
+                <div className="pt-1 border-t border-border">
+                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", projection.actualFinal.patrimonio >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>
+                    Patrimonio neto: {formatAmount(projection.actualFinal.patrimonio)}
+                  </span>
+                </div>
+              </div>
+              {/* VS */}
+              <span className="text-xs font-black text-muted-foreground">VS</span>
+              {/* Ruta Kiri */}
+              <div className="bg-kiri-emerald/5 border border-kiri-emerald/20 rounded-xl p-3 space-y-2">
+                <p className="text-[9px] font-bold text-kiri-emerald">Ruta Kiri (plan optimizado)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><p className="text-[8px] text-muted-foreground">Ahorro acumulado</p><p className="text-xs font-black text-emerald-600">{formatAmount(projection.kiriFinal.ahorro)}</p></div>
+                  <div><p className="text-[8px] text-muted-foreground">Deuda total</p><p className="text-xs font-black text-red-500">-{formatAmount(projection.kiriFinal.deuda)}</p></div>
+                </div>
+                <div className="pt-1 border-t border-kiri-emerald/20">
+                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", projection.kiriFinal.patrimonio >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                    Patrimonio neto: +{formatAmount(projection.kiriFinal.patrimonio)}
+                  </span>
+                </div>
               </div>
             </div>
-            {extraForm.temporalidad === "definido" && (<div className="space-y-2"><Label>¿Cuántos meses?</Label><Input type="number" placeholder="3" value={extraForm.meses} onChange={e => setExtraForm(f => ({ ...f, meses: e.target.value }))} /></div>)}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setIsExtraModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSaveExtra} disabled={savingExtra || !extraForm.nombre || !extraForm.monto} className="bg-cyclon-lavender text-white font-bold rounded-xl px-8">{savingExtra ? "Guardando..." : "Guardar"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
+
+        {/* Recomendaciones Kiri Coach */}
+        <Card className="border-none bg-card shadow-sm rounded-2xl">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm">Recomendaciones de Kiri Coach</h3>
+              <span className="text-lg">🌱</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Consejos personalizados para acelerar tu progreso.</p>
+            <div className="space-y-2">
+              <RecoCard icon={<Zap className="h-3.5 w-3.5 text-amber-500" />} title="Prioridad #1" desc="Continúa usando la estrategia Bola de Nieve. Te ahorrará en intereses." />
+              <RecoCard icon={<PiggyBank className="h-3.5 w-3.5 text-emerald-500" />} title="Ahorro automático" desc="Aumenta tu ahorro al 15% de tu ingreso. Tendrás tu fondo de emergencia antes." />
+              <RecoCard icon={<Shield className="h-3.5 w-3.5 text-cyclon-lavender" />} title="Gasto hormiga" desc="Reducir gastos hormiga libera capacidad para ahorrar." />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ═══ MÉTRICAS FINALES ═══ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <MiniMetric label="Intereses que ahorrarías" value={formatAmount(projection.interesesAhorrados)} sub="Con el plan Kiri" />
+        <MiniMetric label="Tiempo para libertad financiera" value={`${projection.mesesMenosDeuda} meses menos`} sub="Que con la ruta actual" />
+        <MiniMetric label="Mejora en tu patrimonio" value={`+${formatAmount(projection.mejoraPatrimonio)}`} sub={`Diferencia en ${meses} meses`} color="text-emerald-500" />
+        <MiniMetric label="Probabilidad de éxito" value={`${projection.probabilidadExito}%`} sub="Con el plan optimizado" extra={
+          <Progress value={projection.probabilidadExito} className="h-1.5 mt-1" indicatorClassName="bg-kiri-emerald" />
+        } />
+      </div>
+
+      {/* Disclaimer */}
+      <p className="text-[9px] text-muted-foreground text-center">
+        *Las proyecciones son estimaciones basadas en tus datos actuales y pueden variar.
+      </p>
     </div>
   )
 }
 
-// Bloque de distribución reutilizable
-function AllocBlock({ label, sublabel, pct, amount, color, icon, alert, formatAmount }: {
-  label: string; sublabel: string; pct: number; amount: number; color: string; icon: React.ReactNode; alert?: boolean; formatAmount: (n: number) => string
-}) {
+// ─── Subcomponents ────────────────────────────────────────────────────────────
+
+function ProjectionTooltip({ active, payload, formatAmount }: { active?: boolean; payload?: { value: number; name: string; color: string }[]; label?: string; formatAmount: (n: number) => string }) {
+  if (!active || !payload?.length) return null
   return (
-    <Card className={cn("border-none shadow-sm bg-card", alert && "ring-1 ring-yellow-400/50")}>
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center text-white shrink-0", color)}>{icon}</div>
-        <div className="flex-1 space-y-1">
-          <div className="flex justify-between items-center">
-            <div><span className="text-sm font-bold">{label}</span><p className="text-[10px] text-muted-foreground">{sublabel}</p></div>
-            <span className="text-sm font-bold">{formatAmount(amount)}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Progress value={Math.min(pct, 100)} className="h-1.5 flex-1" indicatorClassName={color} />
-            <span className="text-[10px] font-bold text-muted-foreground w-8">{Math.round(pct)}%</span>
-          </div>
+    <div className="bg-card border border-border rounded-xl px-3 py-2 shadow-lg space-y-1">
+      {payload.map((p, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+          <span className="text-[9px] text-muted-foreground">{p.name}:</span>
+          <span className="text-[10px] font-black">{formatAmount(p.value)}</span>
         </div>
+      ))}
+    </div>
+  )
+}
+
+function HitoItem({ hito }: { hito: ProjectionHito }) {
+  const colors = { deuda: "bg-amber-500", ahorro: "bg-emerald-500", emergencia: "bg-blue-500", meta: "bg-cyclon-lavender" }
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className={cn("h-6 w-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5", colors[hito.tipo] + "/20")}>
+        {hito.tipo === "deuda" ? <AlertTriangle className="h-3 w-3 text-amber-500" /> :
+         hito.tipo === "ahorro" ? <PiggyBank className="h-3 w-3 text-emerald-500" /> :
+         hito.tipo === "emergencia" ? <Shield className="h-3 w-3 text-blue-500" /> :
+         <Target className="h-3 w-3 text-cyclon-lavender" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-muted-foreground">{hito.mesLabel}</p>
+        <p className="text-xs font-bold">{hito.titulo}</p>
+        <p className="text-[10px] text-muted-foreground">{hito.descripcion}</p>
+      </div>
+    </div>
+  )
+}
+
+function RecoCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors">
+      <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold">{title}</p>
+        <p className="text-[9px] text-muted-foreground">{desc}</p>
+      </div>
+      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
+    </div>
+  )
+}
+
+function MiniMetric({ label, value, sub, color, extra }: { label: string; value: string; sub: string; color?: string; extra?: React.ReactNode }) {
+  return (
+    <Card className="border-none bg-card shadow-sm rounded-2xl">
+      <CardContent className="p-3">
+        <p className="text-[9px] text-muted-foreground font-medium">{label}</p>
+        <p className={cn("text-sm font-black mt-0.5", color)}>{value}</p>
+        <p className="text-[8px] text-muted-foreground mt-0.5">{sub}</p>
+        {extra}
       </CardContent>
     </Card>
   )
