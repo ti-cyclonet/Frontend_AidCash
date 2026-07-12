@@ -1,7 +1,7 @@
 # Kiri Finance — Guía Completa del Proyecto
 
 > **Archivo de referencia vivo.** Actualizar cada vez que se añada o modifique una feature.
-> Última actualización: Julio 2026
+> Última actualización: 12 Julio 2026
 
 ---
 
@@ -827,3 +827,144 @@ Al intentar pagar una obligación sin saldo suficiente:
 | DELETE | `/savings/:id` | Eliminar registro de ahorro |
 | POST | `/auth/forgot-password` | Generar token de reset de contraseña |
 
+
+
+---
+
+## 19. Presupuesto por Categorías (`/gestion > Presupuesto`)
+
+### 19.1 Categorías personalizadas
+
+- Almacenadas en `localStorage` (clave `kiri_budget_categories`).
+- Cada categoría: nombre, presupuesto (límite mensual), color, ícono.
+- Sugerencias predefinidas: Vivienda, Alimentación, Transporte, Servicios, Ocio, Salud, Familia, Educación, Ahorro, Mascotas, Compras, Deporte, Viajes.
+- Auto-sugestión de ícono y color al escribir el nombre.
+- Acciones: crear, editar, eliminar categorías.
+
+### 19.2 Matching de gastos a categorías
+
+- Cada gasto hormiga (`impulse_expenses`) se vincula a la categoría de presupuesto mediante:
+  1. **Tag `[NombreCategoria]`** al inicio del nombre del gasto (asignado al registrar desde Presupuesto).
+  2. **Keywords** predefinidas por categoría (ej: "restaurante", "almuerzo" → Alimentación).
+  3. **Nombre de la categoría** como keyword implícita.
+- Hook compartido `useBudgetCategories` permite acceder a las categorías desde cualquier componente.
+- `detectBudgetCategory(description, categories)` auto-detecta la categoría al escribir la descripción.
+
+### 19.3 Registrar gasto desde Presupuesto
+
+- Botón "Registrar gasto" en el header del tab de Presupuesto.
+- Modal con: descripción, monto, selector de categorías del presupuesto del usuario.
+- Auto-detección de categoría según la descripción ingresada.
+- Warning semáforo cuando el gasto excederá el presupuesto de la categoría.
+- Si el gasto excede el disponible → modal de "Presupuesto insuficiente" con opciones: usar más del asignado, usar ahorro, registrar como deuda.
+- Botón "Registrar" también disponible dentro de la vista detalle de cada categoría.
+
+### 19.4 Análisis inteligente (Consejo Kiri)
+
+- Motor de análisis en `src/lib/budget-insights.ts`.
+- **Vista general**: un único banner clickeable debajo de las categorías con el consejo más relevante. Al tocarlo se abre modal con todas las recomendaciones.
+- **Vista por categoría**: siempre visible un consejo específico para esa categoría (función `getCategoryInsight`).
+- Colores semáforo: 🟢 verde (bueno) · 🟡 amarillo (advertencia) · 🔴 rojo (excedido).
+- Tipos de insights: alertas, recomendaciones ("Si reduces X, ahorrarás Y"), celebraciones, patrones detectados.
+
+### 19.5 Integración con Gastos Hormiga
+
+- El modal de "Gasto hormiga" en `/obligaciones` ahora muestra las categorías del presupuesto del usuario como opciones adicionales (además de las 6 genéricas).
+- Auto-detección de categoría al escribir la descripción.
+
+---
+
+## 20. Roles Sociales y Presupuesto de Pareja (Julio 2026)
+
+### 20.1 Sistema de roles en conexiones
+
+- Enum `ConnectionRole`: FRIEND | FAMILY | PARTNER.
+- Selector de rol al invitar usuario (3 botones con ícono y color).
+- Badge de rol visible en cada conexión aceptada.
+- Restricción: solo 1 conexión PARTNER activa por usuario.
+- Tabla `connections` ahora incluye campo `role`.
+
+### 20.2 Presupuesto del hogar (`calculateHomeBudget`)
+
+- Endpoint `GET /api/home-budget` — combina ingresos de ambos PARTNERS.
+- Calcula distribución unificada: Obligaciones (ambos), Ahorro, Libre, Capacidad.
+- Componente `HomeBudgetDashboard`: gráfico circular (recharts) + barra de contribución proporcional.
+- Aparece automáticamente en la tab de Conexiones cuando hay un PARTNER aceptado.
+
+### 20.3 Deudas conjuntas
+
+- Campo `co_owner_id` en tabla `debts` (opcional).
+- Permite marcar una deuda como responsabilidad compartida entre pareja/familia.
+
+### 20.4 Bolsillos compartidos multiusuario
+
+- Tabla `shared_pocket_members` (relación N:M) reemplaza las columnas `user_a_id`/`user_b_id`.
+- Soporta múltiples miembros por bolsillo (pareja, familia, amigos).
+- Cada miembro tiene un rol: `owner` | `member`.
+
+### 20.5 Split de gastos entre amigos
+
+- Endpoint `POST /api/expenses/split` — divide un gasto hormiga equitativamente.
+- Genera un `Loan` activo por cada amigo con descripción "Split: {nombre} (N personas)".
+- Los amigos reciben notificación en tiempo real.
+
+### 20.6 Auto-confirmación de pagos entre pareja
+
+- `POST /api/loans/payment` ahora verifica si el préstamo es entre PARTNERS.
+- Si lo es, el pago se confirma automáticamente (status: CONFIRMED) sin paso de PENDING_CONFIRMATION.
+- Elimina fricción en pagos internos de la pareja.
+
+### 20.7 Leaderboard de gamificación
+
+- Componente `GamificationLeaderboard` en la tab de Conexiones.
+- Ranking de rachas (streaks) e insignias entre amigos conectados.
+- No expone valores monetarios — solo hábitos financieros.
+
+---
+
+## 21. Notificaciones Push (Julio 2026)
+
+### 21.1 Fase 1: Sonido + Web Notifications
+
+- `src/lib/notifications.ts` — sistema central de notificaciones.
+- Reproduce sonido sintetizado (AudioContext) en 3 tonos: default, success, warning.
+- Web Notifications API: muestra notificación nativa del navegador cuando la app está en segundo plano.
+- Integrado en `socket-context.tsx`: cada evento socket dispara sonido + notificación.
+- Mapeo contextual de eventos a mensajes (título + body + URL + sonido).
+
+### 21.2 Fase 2: Push Notifications (web-push)
+
+- Backend: `src/lib/push.ts` — servicio web-push con VAPID keys.
+- Modelo `PushSubscription` en base de datos (endpoint + keys p256dh/auth).
+- `POST /users/push-subscription` — guarda la suscripción del navegador.
+- Service Worker `public/sw-push.js` — recibe push events y muestra notificaciones nativas del OS.
+- `NotificationInitializer` — componente invisible que solicita permisos y suscribe al usuario.
+- Helpers predefinidos: `pushSocialInvite`, `pushLoanPayment`, `pushPaymentReminder`, `pushKiriTip`, `pushSavingsDeposit`.
+- Las notificaciones llegan incluso con la app cerrada o el dispositivo bloqueado.
+
+### 21.3 Configuración VAPID
+
+```env
+# Backend (.env)
+VAPID_PUBLIC_KEY=BCUxG_0m...
+VAPID_PRIVATE_KEY=bNYCKU4...
+VAPID_EMAIL=mailto:admin@kiri.app
+
+# Frontend (.env.local)
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=BCUxG_0m...
+```
+
+Generar nuevas keys: `npx web-push generate-vapid-keys`
+
+---
+
+## 22. Seguridad y Aislamiento de Datos
+
+- Todos los endpoints REST requieren JWT válido (middleware `authMiddleware`).
+- Cada query filtra por `userId` del token — un usuario solo accede a sus propios datos.
+- Las categorías de presupuesto están en `localStorage` (aisladas por navegador/dispositivo).
+- Los endpoints de auth (login/registro) no exponen datos de otros usuarios.
+- `forgot-password` no revela si un correo existe o no.
+- Rate limiting en autenticación (15 intentos / 15 min) y wallet (30 ops / min).
+- Helmet + CORS restrictivo en producción.
+- Passwords hasheados con bcryptjs (12 rounds).

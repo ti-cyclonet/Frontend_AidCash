@@ -4,6 +4,7 @@ import { TopBar } from "@/components/navigation/top-bar"
 import { CoachFab } from "@/components/navigation/coach-fab"
 import { InactivityGuard } from "@/components/auth/InactivityGuard"
 import { SmartAlertsProvider } from "@/components/providers/smart-alerts-provider"
+import { NotificationInitializer } from "@/components/notifications/NotificationInitializer"
 
 export default function DashboardLayout({
   children,
@@ -34,6 +35,7 @@ export default function DashboardLayout({
       <CoachFab />
       <InactivityGuard />
       <SmartAlertsProvider />
+      <NotificationInitializer />
     </div>
   )
 }

@@ -85,10 +85,12 @@ export default function AhorroPage() {
   const [fondoActual, setFondoActual] = useState(0)
   const totalGastosFijos = fixedExpenses.reduce((acc, f) => acc + f.monto, 0)
   const [fondoLoaded, setFondoLoaded] = useState(false)
-  if (!fondoLoaded && authUser?.id) {
-    setFondoLoaded(true)
-    emergencyFundApi.get().then(({ data }) => { if (data?.fondoActual != null) setFondoActual(data.fondoActual) })
-  }
+  useEffect(() => {
+    if (!fondoLoaded && authUser?.id) {
+      setFondoLoaded(true)
+      emergencyFundApi.get().then(({ data }) => { if (data?.fondoActual != null) setFondoActual(data.fondoActual) })
+    }
+  }, [fondoLoaded, authUser?.id])
   const handleAporte = useCallback(async (monto: number) => {
     if (!authUser?.id) return
     const { data } = await emergencyFundApi.transaction(monto, "aporte")

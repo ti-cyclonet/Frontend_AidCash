@@ -13,7 +13,7 @@ import {
   Plus, Pencil, ArrowLeft,
   Utensils, Car, Gamepad2, Dumbbell, Heart, ShoppingBag, Wifi, GraduationCap, MoreHorizontal,
   PawPrint, Home, Baby, Plane, Gift, Wrench,
-  Lightbulb, MapPin, Receipt, AlertTriangle, PiggyBank, CircleDollarSign,
+  Lightbulb, MapPin, Receipt, AlertTriangle, PiggyBank, CircleDollarSign, Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -313,31 +313,71 @@ export function PresupuestoTab() {
           {/* Tabla */}
           <Card className="border-none bg-card shadow-sm rounded-2xl">
             <CardContent className="p-5">
-              <h3 className="text-sm font-bold mb-1">Tus categorias</h3>
-              <p className="text-[9px] text-muted-foreground mb-3">Edita los limites maximos de gasto</p>
-              <div className="space-y-2">
+              <div className="flex items-baseline justify-between mb-0.5">
+                <h3 className="text-sm font-bold">Tus categorías</h3>
+              </div>
+              <p className="text-[9px] text-muted-foreground mb-3">Edita los límites máximos de gasto por categoría.</p>
+              {/* Header de columnas */}
+              <div className="flex items-center gap-3 mb-2 px-2">
+                <div className="w-9 shrink-0" />
+                <div className="min-w-0 w-[110px] shrink-0">
+                  <span className="text-[9px] text-muted-foreground font-medium">Categoría</span>
+                </div>
+                <span className="text-[9px] text-muted-foreground font-medium w-[80px] text-right shrink-0">Presupuesto</span>
+                <span className="text-[9px] text-muted-foreground font-medium w-[80px] text-right shrink-0">Gastado</span>
+                <div className="w-7 shrink-0" />
+              </div>
+              <div className="space-y-3">
                 {catsWithSpent.map(cat => {
                   const pct = cat.budget > 0 ? Math.round((cat.spent / cat.budget) * 100) : 0
                   const over = cat.spent > cat.budget
                   return (
-                    <div key={cat.id} onClick={() => setSelectedId(cat.id)} className="flex items-center gap-2 p-2 rounded-xl hover:bg-muted/20 cursor-pointer transition-colors">
-                      <div className="h-7 w-7 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: cat.color }}>
-                        <span className="scale-[0.6]">{getIcon(cat.icon)}</span>
+                    <div key={cat.id} onClick={() => setSelectedId(cat.id)} className="group cursor-pointer transition-colors rounded-xl hover:bg-muted/10 p-2 -mx-2">
+                      <div className="flex items-center gap-3">
+                        {/* Icono */}
+                        <div className="h-9 w-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ backgroundColor: cat.color }}>
+                          <span className="scale-[0.6]">{getIcon(cat.icon)}</span>
+                        </div>
+                        {/* Nombre + % del total */}
+                        <div className="min-w-0 w-[110px] shrink-0">
+                          <p className="text-xs font-bold truncate">{cat.name}</p>
+                          <p className="text-[9px] text-muted-foreground">{totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0}% del total</p>
+                        </div>
+                        {/* Presupuesto */}
+                        <span className="text-xs font-bold shrink-0 w-[80px] text-right">{formatAmount(cat.budget)}</span>
+                        {/* Gastado */}
+                        <span className={cn("text-xs font-bold shrink-0 w-[80px] text-right", over && "text-red-500")}>{formatAmount(cat.spent)}</span>
+                        {/* Edit icon */}
+                        <button
+                          onClick={e => { e.stopPropagation(); openEdit(cat) }}
+                          className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        {/* Delete icon */}
+                        <button
+                          onClick={e => { e.stopPropagation(); persist(categories.filter(c => c.id !== cat.id)) }}
+                          className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">{cat.name}</p>
-                        <p className="text-[8px] text-muted-foreground">{totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0}% del total</p>
+                      {/* Barra de progreso + porcentaje */}
+                      <div className="flex items-center gap-2 mt-1.5 pl-12">
+                        <div className="flex-1 h-2 rounded-full bg-muted/20 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: over ? "#ef4444" : cat.color }}
+                          />
+                        </div>
+                        <span className={cn("text-[10px] font-bold w-[35px] text-right", over ? "text-red-500" : "text-muted-foreground")}>{pct}%</span>
                       </div>
-                      <span className="text-[10px] font-bold shrink-0">{formatAmount(cat.budget)}</span>
-                      <span className={cn("text-[10px] font-bold shrink-0", over && "text-red-500")}>{formatAmount(cat.spent)}</span>
-                      <div className="w-12 shrink-0"><Progress value={Math.min(pct, 100)} className="h-1.5" indicatorClassName={over ? "bg-red-500" : "bg-kiri-emerald"} /></div>
-                      <span className={cn("text-[9px] font-bold shrink-0", over ? "text-red-500" : "text-kiri-emerald")}>{over ? "Excedido" : "Dentro"}</span>
                     </div>
                   )
                 })}
               </div>
               {catsWithSpent.length > 0 && (
-                <div className="flex justify-between mt-3 pt-3 border-t border-border text-[10px]">
+                <div className="flex justify-between mt-4 pt-3 border-t border-border text-[10px]">
                   <span>Total asignado <strong>{formatAmount(totalBudget)}</strong></span>
                   <span>Total gastado <strong>{formatAmount(totalSpent)}</strong></span>
                   <span className="font-bold">{totalPct}%</span>

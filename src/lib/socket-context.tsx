@@ -137,6 +137,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           createdAt: new Date(),
         }
         setNotifications(prev => [notif, ...prev].slice(0, 50)) // máx 50
+
+        // Disparar sonido + notificación nativa del navegador
+        import("@/lib/notifications").then(({ handleSocketNotification }) => {
+          handleSocketNotification(event, data)
+        })
       })
     })
 

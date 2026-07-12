@@ -1,15 +1,17 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { UserPlus, UserCheck, UserX, Loader2, Users, Mail, Trash2, Clock } from "lucide-react"
+import { UserPlus, UserCheck, UserX, Loader2, Users, Mail, Trash2, Clock, Heart, Home, UsersRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
-import { connectionsApi } from "@/lib/api-client"
+import { connectionsApi, homeBudgetApi } from "@/lib/api-client"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { useToast } from "@/hooks/use-toast"
+import { GamificationLeaderboard, LeaderboardEntry } from "@/components/social/GamificationLeaderboard"
+import { HomeBudgetDashboard } from "@/components/social/HomeBudgetDashboard"
 import type { Connection, SocialUser } from "@/lib/types"
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -31,6 +33,24 @@ interface ConnectionsData {
   pendingSent: Connection[]
 }
 
+type ConnectionRoleType = 'FRIEND' | 'FAMILY' | 'PARTNER'
+
+const ROLE_CONFIG: { value: ConnectionRoleType; label: string; icon: React.ReactNode; color: string }[] = [
+  { value: 'FRIEND', label: 'Amigo', icon: <UsersRound className="h-4 w-4" />, color: 'text-blue-500 border-blue-500/40 bg-blue-500/5' },
+  { value: 'FAMILY', label: 'Familia', icon: <Home className="h-4 w-4" />, color: 'text-amber-500 border-amber-500/40 bg-amber-500/5' },
+  { value: 'PARTNER', label: 'Pareja', icon: <Heart className="h-4 w-4" />, color: 'text-pink-500 border-pink-500/40 bg-pink-500/5' },
+]
+
+function getRoleBadge(role: string) {
+  const r = ROLE_CONFIG.find(c => c.value === role)
+  if (!r) return null
+  return (
+    <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full border", r.color)}>
+      {r.label}
+    </span>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 interface ConnectionsTabProps {
@@ -44,8 +64,11 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
   const [data, setData] = useState<ConnectionsData>({ accepted: [], pendingReceived: [], pendingSent: [] })
   const [loading, setLoading] = useState(true)
   const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<ConnectionRoleType>("FRIEND")
   const [inviting, setInviting] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [homeBudget, setHomeBudget] = useState<{ budget: any; partnerId: string } | null>(null)
+  const [homeBudgetLoading, setHomeBudgetLoading] = useState(false)
 
   // ── Cargar conexiones ──────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -65,6 +88,18 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
 
   useEffect(() => { load() }, [load])
 
+  // Cargar presupuesto del hogar si hay conexión PARTNER
+  useEffect(() => {
+    const hasPartner = data.accepted.some((c: any) => c.role === 'PARTNER')
+    if (hasPartner) {
+      setHomeBudgetLoading(true)
+      homeBudgetApi.get().then(({ data: res }) => {
+        if (res) setHomeBudget(res as any)
+        setHomeBudgetLoading(false)
+      })
+    }
+  }, [data.accepted])
+
   // ── Recargar al recibir eventos socket ─────────────────────────────────────
   useEffect(() => {
     if (!socket) return
@@ -83,13 +118,14 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
   const handleInvite = async () => {
     if (!inviteEmail.trim()) return
     setInviting(true)
-    const { error } = await connectionsApi.invite(inviteEmail.trim())
+    const { error } = await connectionsApi.invite(inviteEmail.trim(), inviteRole)
     setInviting(false)
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: "Invitación enviada", description: `Se notificó a ${inviteEmail}` })
+      toast({ title: "Invitación enviada", description: `Se notificó a ${inviteEmail} como ${inviteRole.toLowerCase()}` })
       setInviteEmail("")
+      setInviteRole("FRIEND")
       load()
     }
   }
@@ -153,6 +189,22 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
           <p className="text-xs text-muted-foreground">
             Ingresa el correo de tu pareja, familiar o amigo en Kiri Finance.
           </p>
+          {/* Selector de rol */}
+          <div className="flex gap-2">
+            {ROLE_CONFIG.map(r => (
+              <button
+                key={r.value}
+                onClick={() => setInviteRole(r.value)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-colors",
+                  inviteRole === r.value ? r.color : "border-muted text-muted-foreground hover:border-muted-foreground/30"
+                )}
+              >
+                {r.icon}
+                {r.label}
+              </button>
+            ))}
+          </div>
           <div className="flex gap-2">
             <Input
               type="email"
@@ -270,6 +322,7 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
           data.accepted.map(conn => {
             const peer = getPeer(conn, myId)!
             const busy = actionLoading === conn.id
+            const role = (conn as any).role as string | undefined
             return (
               <Card key={conn.id} className="border-none bg-card rounded-2xl shadow-sm">
                 <CardContent className="p-4 flex items-center gap-3">
@@ -279,7 +332,10 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{peer.nombre}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm truncate">{peer.nombre}</p>
+                      {role && getRoleBadge(role)}
+                    </div>
                     <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -301,6 +357,29 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
           })
         )}
       </section>
+
+      {/* ── Presupuesto del Hogar (solo si hay PARTNER) ── */}
+      {(homeBudget || homeBudgetLoading) && (
+        <section className="space-y-2">
+          <HomeBudgetDashboard
+            budget={homeBudget?.budget ?? null}
+            partnerName={(() => {
+              const partnerConn = data.accepted.find((c: any) => c.role === 'PARTNER')
+              if (!partnerConn) return "Pareja"
+              const peer = getPeer(partnerConn, myId)
+              return peer?.nombre ?? "Pareja"
+            })()}
+            loading={homeBudgetLoading}
+          />
+        </section>
+      )}
+
+      {/* ── Ranking de hábitos (cuando hay conexiones) ── */}
+      {data.accepted.length > 0 && (
+        <section>
+          <GamificationLeaderboard entries={[]} />
+        </section>
+      )}
     </div>
   )
 }
