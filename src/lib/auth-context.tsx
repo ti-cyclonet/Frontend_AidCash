@@ -20,6 +20,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+// Limpia todas las keys de tutorial vistas para que un nuevo usuario las vea
+function clearTutorialKeys() {
+  if (typeof window === "undefined") return
+  const keys = Object.keys(localStorage).filter(k => k.startsWith("kiri_tutorial_seen_"))
+  keys.forEach(k => localStorage.removeItem(k))
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -63,6 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error }
     if (data) {
       setUser(data.user)
+      // Limpiar tutoriales para que el nuevo usuario los vea
+      clearTutorialKeys()
     }
     return { error: null }
   }
@@ -79,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("kiri_meta_ahorro")
     localStorage.removeItem("kiri_currency")
     localStorage.removeItem("kiri_dark")
+    // Limpiar tutoriales para que el próximo usuario los vea
+    clearTutorialKeys()
   }
 
   return (
