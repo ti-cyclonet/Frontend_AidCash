@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { Eye, EyeOff, AlertCircle, Sprout } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Eye, EyeOff, AlertCircle, Sprout, Mail, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 
@@ -19,6 +20,33 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState("")
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotError, setForgotError] = useState<string | null>(null)
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail) return
+    setForgotLoading(true)
+    setForgotError(null)
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo: forgotEmail }),
+      })
+      if (res.ok) {
+        setForgotSent(true)
+      } else {
+        const data = await res.json()
+        setForgotError(data.error || 'Error al enviar el correo')
+      }
+    } catch {
+      setForgotError('Error de conexión')
+    }
+    setForgotLoading(false)
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,7 +118,13 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Contraseña</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Contraseña</Label>
+                  <button type="button" onClick={() => { setForgotOpen(true); setForgotEmail(email); setForgotSent(false); setForgotError(null) }}
+                    className="text-[11px] font-medium text-kiri-emerald hover:underline">
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
                 <div className="relative">
                   <Input
                     type={showPassword ? "text" : "password"}
@@ -137,6 +171,63 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Recuperar Contraseña */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-kiri-emerald" /> Recuperar contraseña
+            </DialogTitle>
+            <DialogDescription>
+              Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
+            </DialogDescription>
+          </DialogHeader>
+
+          {forgotSent ? (
+            <div className="py-6 flex flex-col items-center gap-3 text-center">
+              <div className="h-14 w-14 bg-kiri-emerald/10 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="h-7 w-7 text-kiri-emerald" />
+              </div>
+              <p className="font-bold text-sm">¡Correo enviado!</p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Revisa tu bandeja de entrada en <strong>{forgotEmail}</strong>. Si no lo ves, revisa la carpeta de spam.
+              </p>
+              <Button onClick={() => setForgotOpen(false)} className="mt-2 rounded-xl bg-kiri-emerald text-white font-bold">
+                Entendido
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold">Correo electrónico</Label>
+                  <Input
+                    type="email"
+                    placeholder="tu@correo.com"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    className="h-11 rounded-xl"
+                    autoFocus
+                  />
+                </div>
+                {forgotError && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> {forgotError}
+                  </p>
+                )}
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" onClick={() => setForgotOpen(false)}>Cancelar</Button>
+                <Button onClick={handleForgotPassword} disabled={forgotLoading || !forgotEmail}
+                  className="bg-kiri-emerald text-white font-bold rounded-xl px-6">
+                  {forgotLoading ? "Enviando..." : "Enviar enlace"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

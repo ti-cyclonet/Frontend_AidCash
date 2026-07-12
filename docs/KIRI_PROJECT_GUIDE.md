@@ -1,7 +1,7 @@
 # Kiri Finance — Guía Completa del Proyecto
 
 > **Archivo de referencia vivo.** Actualizar cada vez que se añada o modifique una feature.
-> Última actualización: Junio 2026
+> Última actualización: Julio 2026
 
 ---
 
@@ -665,4 +665,165 @@ npm run build                # Compilar TypeScript
 - **`calculateProportionalSplit`** está exportada desde `shared-pockets.routes.ts` por si se necesita usar en otros contextos del backend.
 - Los bolsillos personales de `/ahorro` se guardan en **`localStorage`** (no en BD). Los bolsillos compartidos sí están en BD.
 - El **cashBalance** es el saldo real que el usuario tiene en mano; es independiente del presupuesto calculado. Se usa para comparación en el componente `CurrentBudgetDisplay`.
+
+---
+
+## 18. Actualizaciones Julio 2026
+
+### 18.1 PeriodManager y Filtrado Dinámico (`src/lib/period-filter.ts`)
+
+- Lógica de periodos configurables basada en `diasCobro` del usuario (ej: "5,20" para quincenas que empiezan los días 5 y 20).
+- Filtrado inteligente: obligaciones con frecuencia **quincenal** aparecen en ambas quincenas; las **mensuales** solo en su quincena correspondiente.
+- Las obligaciones vencidas de periodos anteriores se acumulan solo si estamos en Q2 (no se muestran futuras en Q1).
+- El monto de obligaciones quincenales se divide entre 2 para el periodo actual.
+
+### 18.2 Recálculo Dinámico del Presupuesto (`src/lib/budget-logic.ts`)
+
+- `calculateBudgetAllocation(ingresoDelPeriodo, obligacionesPendientesDelPeriodo)` — parámetros dinámicos.
+- Al pagar una obligación, el % de obligaciones **baja en tiempo real** y el remanente se redistribuye.
+- Hook centralizado `usePeriodBudget()` conecta PeriodManager → calculateBudgetAllocation.
+
+### 18.3 Billetera Rediseñada (`src/components/gestion/BilleteraTab.tsx`)
+
+- **Sueldo Real** con efecto de conteo animado (CountingAmount, 1.6s, ease in-out sine).
+- **Sueldo Base** con botón editar + flecha que despliega toggle quincenal/mensual.
+- **Balance Obligaciones** con flecha que despliega lista de obligaciones del periodo.
+- **Bolsillos de presupuesto** (4 cards) con distribución basada en cashBalance real.
+- **Modal Registrar Ingreso**: auto-sugiere sueldo base, diferencia botón Sueldo/Extra.
+- **Modal Editar Sueldo Base**: muestra cómo se divide en quincenas.
+- **Análisis inteligente**: mensaje contextual dinámico según estado financiero real.
+
+### 18.4 Sistema de Alertas y Notificaciones Push
+
+- Service Worker (`public/sw-push.js`) para notificaciones nativas del OS.
+- Hook `useSmartAlerts` con alertas de proximidad de pago basadas en `diasCobro`.
+- Detección de flujo: al registrar ingreso quincenal, notifica a qué quincena se asigna.
+- Campana de notificaciones en sidebar desktop (panel independiente con `fixed` positioning).
+
+### 18.5 Saldo Insuficiente — Modal de resolución
+
+Al intentar pagar una obligación sin saldo suficiente:
+- **Abono parcial**: paga con lo disponible (deshabilitado si $0).
+- **Usar Ahorros**: selector de fuente (bolsillos de ahorro o fondo de emergencia).
+- **Registrar nuevo ingreso**: formulario rápido para inyectar liquidez.
+
+### 18.6 Deshacer Pago (undo-pay)
+
+- Endpoints `POST /debts/:id/undo-pay` y `POST /fixed-expenses/:id/undo-pay`.
+- Usan `prisma.$transaction` para revertir atómicamente: saldoRestante + cashBalance.
+- Lee `montoPagadoEstePeriodo` para devolver el monto exacto pagado (no siempre la cuota base).
+- El botón "Deshacer pago" aparece en deudas y gastos fijos pagados.
+
+### 18.7 Campo `montoPagadoEstePeriodo` en Deudas
+
+- Nuevo campo `monto_pagado_este_periodo` en tabla `debts`.
+- Permite registrar pagos de valor diferente a la cuota base.
+- El Balance y la card de deuda muestran el monto real pagado.
+- Al deshacer, se devuelve exactamente lo que se pagó.
+
+### 18.8 Acumulación de Cuota con Gracia de 5 Días
+
+- Campo `vencido_desde` en deudas y gastos fijos.
+- La cuota solo se acumula si han pasado 5+ días desde el vencimiento.
+- Primera detección: marca `vencidoDesde = now` sin acumular.
+- Check posterior: si `now - vencidoDesde >= 5 días` → acumula.
+
+### 18.9 Balance Renovado (`/balance`)
+
+- 4 tarjetas métricas: Balance neto, Ingresos totales, Egresos totales, Ahorro del período.
+- Gráfica AreaChart con 3 líneas seleccionables: Balance / Ingresos / Egresos.
+- Mini stats: Promedio diario, Mayor ingreso, Mayor egreso, Meta de ahorro.
+- Banner motivacional con insights.
+- Historial con 4 tabs: Ingresos, Obligaciones, Ahorro, Hormiga.
+- Sub-filtros en Ingresos (Sueldo/Extra) y Obligaciones (Deudas/Fijos).
+- Botón eliminar en cada registro del historial.
+- Botón "Reiniciar historial" (borra income_records, savings_history, impulse_expenses sin tocar cashBalance).
+- Meta de ahorro = suma real de metas de bolsillos de ahorro.
+
+### 18.10 Proyecciones Financieras (`src/components/gestion/ProyeccionesTab.tsx`)
+
+- Simulación a N meses (selector: 3, 6, 12, 24 meses).
+- Compara **Ruta actual** (pago mínimo, 5% ahorro) vs **Ruta Kiri** (Bola de Nieve, 20% ahorro).
+- Gráfica con líneas de Ahorro, Deuda y Patrimonio neto.
+- Hitos automáticos: deuda liquidada, fondo emergencia al 50%, meta alcanzada.
+- Comparación final con VS visual.
+- Métricas: intereses ahorrados, meses menos deuda, mejora patrimonio, probabilidad de éxito.
+- Recomendaciones de Kiri Coach personalizadas.
+
+### 18.11 Presupuesto por Categoría (`/gestion` → tab Categorías)
+
+- Gráfica radial interactiva con barras que emergen del centro (Framer Motion).
+- Vista expandida fullscreen con swipe horizontal entre categorías.
+- Auto-sugerencia de ícono basada en keywords del nombre.
+- Modal crear/editar con selector de color visual.
+- Historial de cumplimiento por categoría con tendencia.
+- Contexto `FinanceProvider` para manejo de estado de categorías.
+
+### 18.12 Dictado Inteligente Mejorado
+
+- Schema de IA actualizado con categoría `ahorro` (detecta "quiero ahorrar X para Y").
+- Al confirmar: ingreso → walletIncome, deudas → addDebt, fijos → addFixedExpense, ahorro → crea bolsillo en localStorage, hormiga → addImpulseExpense.
+- Botón "Dictar algo más" en la confirmación para encadenar dictados.
+- Evento `kiri:wallet-updated` para refrescar billetera en tiempo real.
+- Prompt de IA mejorado con instrucciones claras de clasificación.
+
+### 18.13 Onboarding — Dictado en Deudas
+
+- Botones de "Dictar por voz" y "Escribir manualmente" movidos al paso de deudas (Step 2).
+- Step 1 (ingreso) simplificado con solo input manual.
+
+### 18.14 Recuperación de Contraseña
+
+- Link "¿Olvidaste tu contraseña?" en la página de login.
+- Modal con campo de email + envío de enlace.
+- Endpoint `POST /auth/forgot-password` genera token de reset (1 hora de validez).
+- Token hasheado almacenado en refresh_tokens.
+- Link de reset se loguea en consola (integrar con SendGrid/Resend para producción).
+
+### 18.15 Wallet — Retirar de Bolsillos de Ahorro
+
+- Endpoint `POST /users/wallet/withdraw` — resta de bolsillo, suma a cashBalance.
+- En `/ahorro`, "Aportar" → `walletDeduct` (resta del cashBalance).
+- "Retirar" → `walletWithdraw` (suma al cashBalance).
+- Cada aporte registra un `savingsHistory` entry para el balance.
+
+### 18.16 iOS Safe Area Fix
+
+- CSS `.safe-top { padding-top: max(0px, env(safe-area-inset-top)); }` agregado.
+- `viewportFit: 'cover'` ya configurado en el layout.
+- Botones del TopBar ya no quedan debajo del notch/Dynamic Island.
+
+### 18.17 Modales Responsivas
+
+- `DialogContent` base actualizado: `max-w-[388px]` mobile → `lg:max-w-lg` desktop.
+- Padding responsivo: `p-5` mobile → `lg:p-7` desktop.
+- Modales específicas pueden usar `sm:max-w-lg lg:max-w-xl` para más espacio.
+
+### 18.18 Filtros en Obligaciones
+
+- Botones "Todas / Pendientes / Pagadas" en tabs de Deudas y Gastos Fijos.
+- Resaltado amarillo (`ring-2 ring-amber-400`) para obligaciones prioritarias del periodo actual.
+- Modal de pago para Gastos Fijos (igual que Deudas, con opción de pagar otro valor).
+
+### 18.19 Dashboard Actualizado
+
+- Periodo actual (badge + barra progreso) arriba de la gráfica de distribución.
+- Progreso de ahorro debajo del Árbol Kiri (usa datos reales de bolsillos + emergencia).
+- Gráfica donut usa distribución basada en cashBalance real (no teórico).
+- Obligaciones pendientes con estilo mejorado (círculos ámbar, máx 4+3 items).
+- Si cashBalance = 0, muestra $0 (no fallback a ingreso teórico).
+
+---
+
+## 19. Endpoints Nuevos (Julio 2026)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/users/wallet/withdraw` | Retirar de bolsillo → suma a cashBalance |
+| POST | `/debts/:id/undo-pay` | Deshacer pago de deuda (transacción atómica) |
+| POST | `/fixed-expenses/:id/undo-pay` | Deshacer pago de gasto fijo |
+| POST | `/reports/reset-history` | Borrar historial (sin tocar wallet) |
+| DELETE | `/reports/income-records/:id` | Eliminar registro de ingreso |
+| DELETE | `/savings/:id` | Eliminar registro de ahorro |
+| POST | `/auth/forgot-password` | Generar token de reset de contraseña |
 
