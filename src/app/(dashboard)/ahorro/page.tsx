@@ -16,7 +16,7 @@ import {
   PiggyBank, History, TrendingUp, TrendingDown,
   XCircle, CheckCircle2, Pencil, Target, ShieldCheck,
   Plus, Trash2, Star, Wallet, Plane, Home, GraduationCap,
-  Car, Heart, Sparkles, Minus, Eye, EyeOff,
+  Car, Heart, Sparkles, Minus, Eye, EyeOff, AlertTriangle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -201,10 +201,18 @@ export default function AhorroPage() {
     const amt = Number(txAmount)
 
     if (txType === "aporte") {
+      // Verificar que hay saldo disponible antes de descontar
+      const { data: walletData } = await userApi.getWallet()
+      const available = walletData?.wallet?.cashBalance ?? 0
+      if (available <= 0 || amt > available) {
+        setSavingTx(false)
+        setInsufficientSavingsOpen(true)
+        return
+      }
       // Aportar al bolsillo de ahorro → descontar del sueldo real (cashBalance)
       await userApi.walletDeduct(amt, 'ahorro')
-      // Registrar en historial de ahorro para que aparezca en Balance
-      await addSavingsEntry(amt, "ahorro")
+      // Registrar en historial de ahorro (skip wallet deduct para evitar doble deducción)
+      await addSavingsEntry(amt, "ahorro", true)
     } else {
       // Retirar del bolsillo de ahorro → sumar al sueldo real (cashBalance)
       await userApi.walletWithdraw(amt, 'ahorro')
@@ -221,7 +229,16 @@ export default function AhorroPage() {
   }
 
   // ── Handlers ahorro historial ─────────────────────────────────────────────
+  const [insufficientSavingsOpen, setInsufficientSavingsOpen] = useState(false)
+
   const handleSaveAhorro = async (monto: number) => {
+    // Verificar disponible antes de ahorrar
+    const { data: walletData } = await userApi.getWallet()
+    const available = walletData?.wallet?.cashBalance ?? 0
+    if (available <= 0 || monto > available) {
+      setInsufficientSavingsOpen(true)
+      return
+    }
     setSavingAhorro(true)
     await addSavingsEntry(monto, "ahorro")
     setSavingAhorro(false)
@@ -697,6 +714,37 @@ export default function AhorroPage() {
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setEditPocket(null)}>Cancelar</Button>
             <Button onClick={handleSaveEditPocket} disabled={!editForm.nombre} className="bg-cyclon-lavender text-white font-bold rounded-xl px-8">Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Saldo insuficiente para ahorrar */}
+      <Dialog open={insufficientSavingsOpen} onOpenChange={setInsufficientSavingsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-500">
+              <AlertTriangle className="h-5 w-5" /> Saldo insuficiente
+            </DialogTitle>
+            <DialogDescription>
+              No tienes saldo disponible para registrar este ahorro. Primero registra tu sueldo real en la Billetera.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3">
+            <Card className="border-none bg-red-500/5 rounded-2xl">
+              <CardContent className="p-4 text-center space-y-1">
+                <p className="text-xs text-muted-foreground">Tu saldo disponible actual</p>
+                <p className="text-lg font-black">$0</p>
+                <p className="text-xs text-red-500 font-bold">Registra un ingreso primero</p>
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter className="flex flex-col gap-2 pt-2">
+            <Button onClick={() => { setInsufficientSavingsOpen(false); window.location.href = '/gestion' }} className="w-full bg-kiri-emerald text-white font-bold rounded-xl h-12">
+              Ir a Billetera
+            </Button>
+            <Button variant="ghost" onClick={() => setInsufficientSavingsOpen(false)} className="w-full text-muted-foreground">
+              Cancelar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

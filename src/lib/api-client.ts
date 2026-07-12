@@ -310,7 +310,7 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) {
+  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,

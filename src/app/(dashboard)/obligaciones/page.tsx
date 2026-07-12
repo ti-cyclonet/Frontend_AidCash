@@ -26,6 +26,7 @@ import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
 import { userApi, WalletState } from "@/lib/api-client"
 import { useBudgetCategories, detectBudgetCategory } from "@/hooks/use-budget-categories"
+import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import Link from "next/link"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -954,7 +955,7 @@ export default function ObligacionesPage() {
 
       {/* Add Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agregar {addType === "deuda" ? "Deuda" : "Gasto Fijo"}</DialogTitle>
             <DialogDescription>Completa los datos del compromiso.</DialogDescription>
@@ -968,17 +969,35 @@ export default function ObligacionesPage() {
               ))}
             </div>
             {addType === "deuda" ? (
-              <DebtFormFields form={addDebtForm} onChange={setAddDebtForm} />
+              <DebtRegistrationForm
+                loading={saving}
+                onSubmit={async (data) => {
+                  setSaving(true)
+                  await addDebt({
+                    nombre: data.nombre,
+                    montoTotal: data.montoTotal,
+                    cuotaPeriodo: data.cuotaPeriodo,
+                    diasPago: data.diasPago,
+                    tasaInteres: data.tasaInteres || undefined,
+                    acreedor: data.acreedor,
+                    saldoRestante: data.saldoActual,
+                  })
+                  setSaving(false)
+                  setIsAddOpen(false)
+                }}
+              />
             ) : (
-              <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} />
+              <>
+                <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} />
+                <DialogFooter className="gap-2 pt-2">
+                  <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleAdd} disabled={saving} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
+                    {saving ? "Guardando..." : "Guardar"}
+                  </Button>
+                </DialogFooter>
+              </>
             )}
           </div>
-          <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAdd} disabled={saving} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
-              {saving ? "Guardando..." : "Guardar"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

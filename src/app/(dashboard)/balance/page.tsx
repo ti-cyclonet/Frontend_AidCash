@@ -347,20 +347,20 @@ export default function BalancePage() {
                     ))}
                   </div>
                   {(obligacionFilter === "todos" || obligacionFilter === "deudas") && (
-                    <HistoryList items={report.debts} emptyMsg="Sin deudas" renderRow={(d) => ({
-                      icon: (d.pagadoEstePeriodo as boolean) ? "✅" : "🔴",
+                    <HistoryList items={report.debts.filter(d => d.pagadoEstePeriodo as boolean)} emptyMsg="Sin deudas pagadas este periodo" renderRow={(d) => ({
+                      icon: "✅",
                       title: d.nombre as string,
                       subtitle: `Deuda · Vence: ${d.diasPago as string} · Total: ${formatAmount(d.montoTotal as number)}`,
-                      amount: (d.pagadoEstePeriodo as boolean) ? -(((d.montoPagadoEstePeriodo as number | null) ?? (d.cuotaPeriodo as number))) : -(d.cuotaPeriodo as number),
-                      formatAmount, faded: !(d.pagadoEstePeriodo as boolean),
+                      amount: -(((d.montoPagadoEstePeriodo as number | null) ?? (d.cuotaPeriodo as number))),
+                      formatAmount,
                     })} />
                   )}
                   {(obligacionFilter === "todos" || obligacionFilter === "fijos") && (
-                    <HistoryList items={report.fixedExpenses} emptyMsg="Sin gastos fijos" renderRow={(f) => ({
-                      icon: (f.pagadoEstePeriodo as boolean) ? "✅" : "⏳",
+                    <HistoryList items={report.fixedExpenses.filter(f => f.pagadoEstePeriodo as boolean)} emptyMsg="Sin gastos fijos pagados este periodo" renderRow={(f) => ({
+                      icon: "✅",
                       title: f.nombre as string,
                       subtitle: `Gasto Fijo · Corte: ${f.fechaCorte as string}`,
-                      amount: -(f.monto as number), formatAmount, faded: !(f.pagadoEstePeriodo as boolean),
+                      amount: -(f.monto as number), formatAmount,
                     })} />
                   )}
                 </div>

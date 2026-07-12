@@ -181,11 +181,12 @@ export function useFinanceData() {
 
   // ─── Deudas ─────────────────────────────────────────────────────────────────
 
-  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) => {
+  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number }) => {
     if (!userId) return
     await debtsApi.create({
       nombre: data.nombre,
       montoTotal: data.montoTotal,
+      saldoRestante: data.saldoRestante,
       cuotaPeriodo: data.cuotaPeriodo,
       acreedor: data.acreedor,
       frecuenciaPago: data.frecuenciaPago as 'mensual' | 'quincenal' | undefined,
@@ -330,11 +331,11 @@ export function useFinanceData() {
 
   // ─── Ahorro ──────────────────────────────────────────────────────────────────
 
-  const addSavingsEntry = async (monto: number, tipo: SavingsEntry['tipo']) => {
+  const addSavingsEntry = async (monto: number, tipo: SavingsEntry['tipo'], skipWalletDeduct = false) => {
     if (!userId) return
     await savingsApi.create(monto, tipo)
-    // Si es ahorro real, deducir del bolsillo "ahorro"
-    if (tipo === 'ahorro' && monto > 0) {
+    // Si es ahorro real y no se pidió omitir la deducción (para evitar doble deducción)
+    if (tipo === 'ahorro' && monto > 0 && !skipWalletDeduct) {
       await userApi.walletDeduct(monto, 'ahorro')
     }
     await fetchAll()
