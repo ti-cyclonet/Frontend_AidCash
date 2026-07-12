@@ -638,7 +638,7 @@ export function CoachFab() {
       {isOpen && (
         <div className={cn(
           "fixed z-[60] bg-card border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden",
-          "inset-0 lg:inset-auto lg:bottom-8 lg:right-8 lg:w-[400px] lg:h-[600px] lg:rounded-2xl"
+          "inset-x-0 top-0 bottom-0 sm:inset-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[380px] sm:rounded-2xl lg:bottom-8 lg:right-8 lg:top-auto lg:w-[400px] lg:h-[600px] lg:rounded-2xl"
         )}>
           {/* Header */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-kiri-emerald/5">
