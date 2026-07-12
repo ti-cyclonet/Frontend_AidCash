@@ -10,6 +10,7 @@ import { ConnectionsTab } from "@/components/social/connections-tab"
 import { SharedPocketsTab } from "@/components/social/shared-pockets-tab"
 import { LoansTab } from "@/components/social/loans-tab"
 import type { Connection } from "@/lib/types"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ type TabId = typeof TABS[number]["id"]
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function SocialPage() {
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("social")
   const { user: authUser } = useAuth()
   const { connected, unreadCount } = useSocket()
 
@@ -48,6 +50,8 @@ export default function SocialPage() {
   const myId = authUser?.id ?? ""
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="social" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-8">
 
       {/* ── Header ── */}
@@ -100,5 +104,6 @@ export default function SocialPage() {
         )}
       </div>
     </div>
+    </>
   )
 }

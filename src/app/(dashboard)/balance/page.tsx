@@ -14,6 +14,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletState } from "@/lib/api-client"
 import { ExportButtons } from "@/components/balance/ExportButtons"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
   { value: "week",  label: "Semana" },
@@ -34,6 +35,7 @@ const HISTORY_TABS: { value: HistoryTab; label: string; icon: React.ReactNode }[
 ]
 
 export default function BalancePage() {
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("balance")
   const { formatAmount, metaAhorro } = useAppContext()
   const { debts, fixedExpenses } = useFinanceData()
 
@@ -126,6 +128,8 @@ export default function BalancePage() {
   }, [s, balanceNeto, timeframe, metaAhorro, ahorroDelPeriodo, realSavingsMeta])
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="balance" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-10">
       {/* ═══ HEADER ═══ */}
       <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -383,6 +387,7 @@ export default function BalancePage() {
         </>
       )}
     </div>
+    </>
   )
 }
 

@@ -6,13 +6,17 @@ import { TrendingUp, Wallet, PieChart } from "lucide-react"
 import { ProyeccionesTab } from "@/components/gestion/ProyeccionesTab"
 import { BilleteraTab } from "@/components/gestion/BilleteraTab"
 import { PresupuestoTab } from "@/components/gestion/PresupuestoTab"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 
 type GestionTab = "billetera" | "presupuesto" | "proyecciones"
 
 export default function GestionPage() {
   const [activeTab, setActiveTab] = useState<GestionTab>("billetera")
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("gestion")
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="gestion" onClose={dismissTutorial} />}
     <div className="space-y-5">
       {/* Tabs */}
       <div className="grid grid-cols-3 gap-2">
@@ -55,5 +59,6 @@ export default function GestionPage() {
       {activeTab === "presupuesto" && <PresupuestoTab />}
       {activeTab === "proyecciones" && <ProyeccionesTab />}
     </div>
+    </>
   )
 }

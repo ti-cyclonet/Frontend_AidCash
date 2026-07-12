@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
@@ -62,6 +63,7 @@ const CATEGORIES: { value: ImpulseCategory; label: string; emoji: string }[] = [
 ]
 
 export default function ObligacionesPage() {
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("obligaciones")
   const {
     debts, fixedExpenses, loading,
     addDebt, updateDebt, deleteDebt,
@@ -473,6 +475,8 @@ export default function ObligacionesPage() {
 
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="obligaciones" onClose={dismissTutorial} />}
     <div className="space-y-6">
       <header className="flex justify-between items-end">
         <div>
@@ -1285,6 +1289,7 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   )
 }
 

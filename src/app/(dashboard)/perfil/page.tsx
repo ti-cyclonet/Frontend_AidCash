@@ -13,10 +13,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer } from "lucide-react"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
+import { TutorialSlider } from "@/components/tutorial/TutorialSlider"
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -31,6 +32,7 @@ export default function PerfilPage() {
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl })
+  const [showFullTutorial, setShowFullTutorial] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,6 +177,54 @@ export default function PerfilPage() {
         </Card>
       </div>
 
+      {/* Ayuda */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Ayuda</h3>
+        <Card className="border-none shadow-sm bg-card rounded-2xl">
+          <CardContent className="p-0 divide-y divide-border">
+            <button
+              onClick={() => setShowFullTutorial(true)}
+              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald">
+                  <BookOpen className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-medium">Tutorial</span>
+                  <p className="text-[10px] text-muted-foreground">Conoce cada módulo de Kiri</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <button className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-cyclon-sky/20 flex items-center justify-center text-cyclon-sky">
+                  <MessageCircle className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-medium">Soporte</span>
+                  <p className="text-[10px] text-muted-foreground">¿Necesitas ayuda? Escríbenos</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <button className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/20 flex items-center justify-center text-cyclon-lavender">
+                  <HelpCircle className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-medium">Preguntas frecuentes</span>
+                  <p className="text-[10px] text-muted-foreground">Resuelve tus dudas</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+
       <Button
         variant="destructive"
         onClick={handleLogout}
@@ -187,6 +237,9 @@ export default function PerfilPage() {
       <div className="text-center pt-4">
         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Kiri Finance v1.0.0</p>
       </div>
+
+      {/* Full Tutorial Overlay */}
+      {showFullTutorial && <TutorialSlider showAll onClose={() => setShowFullTutorial(false)} />}
 
       {/* Edit Profile Modal */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

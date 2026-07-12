@@ -24,6 +24,7 @@ import { useFinanceData } from "@/hooks/use-finance-data"
 import { EmergencyFundSection } from "@/components/recommendations/emergency-fund"
 import { emergencyFundApi, userApi } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
 type PocketIcon = "piggybank" | "plane" | "home" | "education" | "car" | "health" | "star" | "wallet"
@@ -73,6 +74,7 @@ function getPocketColor(color: PocketColor) {
 }
 
 export default function AhorroPage() {
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("ahorro")
   const { formatAmount, savingsAmount, metaAhorro, setMetaAhorro } = useAppContext()
   const { savingsHistory, totalAhorrado, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
   const { user: authUser } = useAuth()
@@ -243,6 +245,8 @@ export default function AhorroPage() {
   }
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="ahorro" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-8">
       <header className="flex justify-between items-start">
         <div>
@@ -697,5 +701,6 @@ export default function AhorroPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   )
 }
