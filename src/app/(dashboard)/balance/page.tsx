@@ -14,6 +14,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletState } from "@/lib/api-client"
 import { ExportButtons } from "@/components/balance/ExportButtons"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
   { value: "week",  label: "Semana" },
@@ -34,6 +35,7 @@ const HISTORY_TABS: { value: HistoryTab; label: string; icon: React.ReactNode }[
 ]
 
 export default function BalancePage() {
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("balance")
   const { formatAmount, metaAhorro } = useAppContext()
   const { debts, fixedExpenses } = useFinanceData()
 
@@ -126,6 +128,8 @@ export default function BalancePage() {
   }, [s, balanceNeto, timeframe, metaAhorro, ahorroDelPeriodo, realSavingsMeta])
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="balance" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-10">
       {/* ═══ HEADER ═══ */}
       <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -343,20 +347,20 @@ export default function BalancePage() {
                     ))}
                   </div>
                   {(obligacionFilter === "todos" || obligacionFilter === "deudas") && (
-                    <HistoryList items={report.debts} emptyMsg="Sin deudas" renderRow={(d) => ({
-                      icon: (d.pagadoEstePeriodo as boolean) ? "✅" : "🔴",
+                    <HistoryList items={report.debts.filter(d => d.pagadoEstePeriodo as boolean)} emptyMsg="Sin deudas pagadas este periodo" renderRow={(d) => ({
+                      icon: "✅",
                       title: d.nombre as string,
                       subtitle: `Deuda · Vence: ${d.diasPago as string} · Total: ${formatAmount(d.montoTotal as number)}`,
-                      amount: (d.pagadoEstePeriodo as boolean) ? -(((d.montoPagadoEstePeriodo as number | null) ?? (d.cuotaPeriodo as number))) : -(d.cuotaPeriodo as number),
-                      formatAmount, faded: !(d.pagadoEstePeriodo as boolean),
+                      amount: -(((d.montoPagadoEstePeriodo as number | null) ?? (d.cuotaPeriodo as number))),
+                      formatAmount,
                     })} />
                   )}
                   {(obligacionFilter === "todos" || obligacionFilter === "fijos") && (
-                    <HistoryList items={report.fixedExpenses} emptyMsg="Sin gastos fijos" renderRow={(f) => ({
-                      icon: (f.pagadoEstePeriodo as boolean) ? "✅" : "⏳",
+                    <HistoryList items={report.fixedExpenses.filter(f => f.pagadoEstePeriodo as boolean)} emptyMsg="Sin gastos fijos pagados este periodo" renderRow={(f) => ({
+                      icon: "✅",
                       title: f.nombre as string,
                       subtitle: `Gasto Fijo · Corte: ${f.fechaCorte as string}`,
-                      amount: -(f.monto as number), formatAmount, faded: !(f.pagadoEstePeriodo as boolean),
+                      amount: -(f.monto as number), formatAmount,
                     })} />
                   )}
                 </div>
@@ -383,6 +387,7 @@ export default function BalancePage() {
         </>
       )}
     </div>
+    </>
   )
 }
 

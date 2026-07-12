@@ -80,7 +80,8 @@ export default function RegisterPage() {
       </div>
 
       {/* Formulario */}
-      <div className="flex-1 px-6 py-8 space-y-6 overflow-y-auto">
+      <div className="flex-1 flex justify-center overflow-y-auto">
+        <div className="w-full max-w-md px-6 py-8 space-y-6">
         <div>
           <h2 className="text-2xl font-black text-foreground">Crear cuenta</h2>
           <p className="text-muted-foreground text-sm mt-1">Empieza a organizar tus finanzas hoy</p>
@@ -183,6 +184,7 @@ export default function RegisterPage() {
             Inicia sesión
           </Link>
         </p>
+        </div>
       </div>
     </div>
   )

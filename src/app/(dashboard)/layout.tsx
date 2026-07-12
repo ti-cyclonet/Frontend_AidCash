@@ -4,6 +4,7 @@ import { TopBar } from "@/components/navigation/top-bar"
 import { CoachFab } from "@/components/navigation/coach-fab"
 import { InactivityGuard } from "@/components/auth/InactivityGuard"
 import { SmartAlertsProvider } from "@/components/providers/smart-alerts-provider"
+import { NotificationInitializer } from "@/components/notifications/NotificationInitializer"
 
 export default function DashboardLayout({
   children,
@@ -20,7 +21,7 @@ export default function DashboardLayout({
 
       <div className="flex-1 min-w-0">
         <main className="min-h-screen">
-          <div className="max-w-4xl mx-auto px-5 pt-[72px] pb-28 lg:pt-8 lg:px-8 lg:pb-8">
+          <div className="max-w-4xl mx-auto px-5 pt-20 pb-28 lg:pt-8 lg:px-8 lg:pb-8">
             {children}
           </div>
         </main>
@@ -34,6 +35,7 @@ export default function DashboardLayout({
       <CoachFab />
       <InactivityGuard />
       <SmartAlertsProvider />
+      <NotificationInitializer />
     </div>
   )
 }

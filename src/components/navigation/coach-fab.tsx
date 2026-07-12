@@ -491,11 +491,12 @@ export function CoachFab() {
               <div className="py-4 space-y-4 text-center">
                 {isListening && (
                   <div className="flex flex-col items-center gap-3">
-                    <div className="h-16 w-16 rounded-full bg-kiri-emerald/20 flex items-center justify-center">
+                    <button onClick={() => { recognitionRef.current?.stop(); setIsListening(false) }}
+                      className="h-16 w-16 rounded-full bg-kiri-emerald/20 flex items-center justify-center hover:bg-kiri-emerald/30 transition-colors cursor-pointer">
                       <Mic className="h-8 w-8 text-kiri-emerald animate-pulse" />
-                    </div>
+                    </button>
                     <p className="text-sm font-bold text-kiri-emerald">Escuchando...</p>
-                    <p className="text-xs text-muted-foreground">Di algo como: "Gano 2000 al mes, pago 500 en luz el día 15"</p>
+                    <p className="text-xs text-muted-foreground">Toca el microfono para detener</p>
                   </div>
                 )}
                 {extracting && (
@@ -637,7 +638,7 @@ export function CoachFab() {
       {isOpen && (
         <div className={cn(
           "fixed z-[60] bg-card border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden",
-          "inset-0 lg:inset-auto lg:bottom-8 lg:right-8 lg:w-[400px] lg:h-[600px] lg:rounded-2xl"
+          "inset-x-0 top-0 bottom-0 sm:inset-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[380px] sm:rounded-2xl lg:bottom-8 lg:right-8 lg:top-auto lg:w-[400px] lg:h-[600px] lg:rounded-2xl"
         )}>
           {/* Header */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-kiri-emerald/5">

@@ -1,448 +1,431 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent } from "@/components/ui/card"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAuth } from "@/lib/auth-context"
-import { debtsApi, fixedExpensesApi } from "@/lib/api-client"
 import {
-  Wallet, ReceiptText, PiggyBank, Plus, Trash2,
-  ChevronRight, SkipForward, Sparkles, AlertTriangle, Pencil, Mic, MicOff, Loader2,
+  ChevronRight, ChevronLeft, Clock, Shield,
+  Calendar, CalendarDays, Wallet, PiggyBank,
+  CheckCircle2, XCircle, Sparkles, Rocket, Target, Brain,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { VoiceExtractOutput } from "@/app/api/ai/voice-extract/route"
 
-interface DebtDraft  { nombre: string; montoTotal: string; cuotaPeriodo: string; diasPago: string }
-interface FixedDraft { nombre: string; monto: string; fechaCorte: string }
+// ─── Pasos del test ───────────────────────────────────────────────────────────
 
-const STEPS = ["Bienvenida", "Ingresos", "Deudas", "Gastos Fijos"]
+const STEPS = [
+  "Bienvenida",
+  "Frecuencia de ingresos",
+  "Sueldo base",
+  "Meta de ahorro",
+  "Situación de deudas",
+  "Finalización",
+]
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { setIncome, setOnboardingDone, setUser, user, incomeFrequency } = useAppContext()
-  const { addDebt, addFixedExpense, updateUserProfile } = useFinanceData()
+  const { setIncome, setOnboardingDone, setUser, user, setIncomeFrequency } = useAppContext()
+  const { updateUserProfile } = useFinanceData()
   const { user: authUser } = useAuth()
 
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Step 0 — nombre
-  const [nombre, setNombre] = useState(user.nombre ?? "")
-
-  // Step 1 — ingreso
+  // Form data
+  const [frecuencia, setFrecuencia] = useState<"mensual" | "quincenal">("mensual")
   const [incomeValue, setIncomeValue] = useState("")
-  const [incomeLocked, setIncomeLocked] = useState(false)
+  const [metaAhorro, setMetaAhorro] = useState("")
+  const [tieneDeudas, setTieneDeudas] = useState<boolean | null>(null)
 
-  // ── Micrófono inteligente en onboarding ───────────────────────────────────
-  const [isListening, setIsListening] = useState(false)
-  const [voiceExtracting, setVoiceExtracting] = useState(false)
-  const [voiceResult, setVoiceResult] = useState<VoiceExtractOutput | null>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const totalSteps = STEPS.length
+  const isFirst = step === 0
+  const isLast = step === totalSteps - 1
 
-  const startVoiceOnboarding = () => {
-    const SR = (window as unknown as Record<string, unknown>).SpeechRecognition ||
-      (window as unknown as Record<string, unknown>).webkitSpeechRecognition
-    if (!SR) { alert("Tu navegador no soporta reconocimiento de voz"); return }
-    const r = new (SR as new () => SpeechRecognition)()
-    r.lang = "es-ES"; r.continuous = false; r.interimResults = false
-    r.onresult = async (e: SpeechRecognitionEvent) => {
-      const transcript = e.results[0][0].transcript
-      setIsListening(false)
-      setVoiceExtracting(true)
-      try {
-        const res = await fetch("/api/ai/voice-extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcripcion: transcript }),
-        })
-        const data: VoiceExtractOutput = await res.json()
-        setVoiceResult(data)
-        // Auto-rellenar campos
-        if (data.ingreso.monto) setIncomeValue(String(data.ingreso.monto))
-        if (data.deudas.length > 0) {
-          setDebts(data.deudas.map(d => ({
-            nombre: d.nombre, montoTotal: String(d.monto),
-            cuotaPeriodo: String(d.cuota ?? d.monto),
-            diasPago: String(d.diaCorte ?? '1'),
-          })))
-        }
-        if (data.gastosFijos.length > 0) {
-          setFixed(data.gastosFijos.map(g => ({
-            nombre: g.nombre, monto: String(g.monto),
-            fechaCorte: g.fechaCorte ?? "",
-          })))
-        }
-      } catch { /* silent */ }
-      setVoiceExtracting(false)
-    }
-    r.onerror = () => setIsListening(false)
-    r.onend = () => setIsListening(false)
-    recognitionRef.current = r
-    r.start()
-    setIsListening(true)
-  }
-
-  // Step 2 — deudas
-  const [debts, setDebts] = useState<DebtDraft[]>([
-    { nombre: "", montoTotal: "", cuotaPeriodo: "", diasPago: "" },
-  ])
-
-  // Step 3 — gastos fijos
-  const [fixed, setFixed] = useState<FixedDraft[]>([
-    { nombre: "", monto: "", fechaCorte: "" },
-  ])
-
-  // ── Omitir ────────────────────────────────────────────────────────────────
-  const handleSkip = async () => {
-    // Marca onboarding como completado para que el middleware no vuelva a traer aquí
-    await updateUserProfile({ onboarding_done: true })
-    setOnboardingDone(true)
-    router.replace("/dashboard")
-  }
-
-  // ── Finalizar ─────────────────────────────────────────────────────────────
-  const handleFinish = async () => {
-    setSaving(true)
-    setSaveError(null)
-
-    const userId = authUser?.id
-    if (!userId) {
-      setSaveError("No se detectó sesión activa. Cierra sesión y vuelve a ingresar.")
-      setSaving(false)
-      return
-    }
-
-    try {
-      const parsedIncome = Number(incomeValue) || 0
-
-      // 1. Guardar perfil en el backend
-      const { error: profileError } = await updateUserProfile({
-        nombre:             nombre || undefined,
-        ingreso_base:       parsedIncome,
-        frecuencia_ingreso: incomeFrequency,
-        onboarding_done:    true,
-      })
-
-      if (profileError) {
-        setSaveError(`No se pudo guardar el perfil: ${profileError}`)
-        setSaving(false)
-        return
-      }
-
-      // 2. Sincroniza contexto local
-      if (parsedIncome > 0) setIncome(parsedIncome)
-      if (nombre) setUser({ ...user, nombre })
-      setOnboardingDone(true)
-
-      // 3. Guardar deudas vía API
-      for (const d of debts) {
-        if (!d.nombre || !d.montoTotal) continue
-        await debtsApi.create({
-          nombre:           d.nombre,
-          montoTotal:       Number(d.montoTotal),
-          cuotaPeriodo:     Number(d.cuotaPeriodo) || 0,
-          diasPago:         d.diasPago || '1',
-        })
-      }
-
-      // 4. Guardar gastos fijos vía API
-      for (const f of fixed) {
-        if (!f.nombre || !f.monto) continue
-        await fixedExpensesApi.create({
-          nombre:    f.nombre,
-          monto:     Number(f.monto),
-          fechaCorte: f.fechaCorte || new Date().toISOString().split('T')[0],
-        })
-      }
-
-      router.replace("/dashboard")
-    } catch (err) {
-      console.error(err)
-      setSaveError("Ocurrió un error inesperado. Intenta de nuevo.")
-      setSaving(false)
+  // ── Navegación ────────────────────────────────────────────────────────────
+  const goNext = () => {
+    if (isLast) {
+      handleFinish()
+    } else {
+      setStep(s => s + 1)
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const addDebtRow    = () => setDebts(p => [...p, { nombre: "", montoTotal: "", cuotaPeriodo: "", diasPago: "" }])
-  const removeDebtRow = (i: number) => setDebts(p => p.filter((_, idx) => idx !== i))
-  const updateDebtRow = (i: number, field: keyof DebtDraft, val: string) =>
-    setDebts(p => p.map((d, idx) => idx === i ? { ...d, [field]: val } : d))
-
-  const addFixedRow    = () => setFixed(p => [...p, { nombre: "", monto: "", fechaCorte: "" }])
-  const removeFixedRow = (i: number) => setFixed(p => p.filter((_, idx) => idx !== i))
-  const updateFixedRow = (i: number, field: keyof FixedDraft, val: string) =>
-    setFixed(p => p.map((f, idx) => idx === i ? { ...f, [field]: val } : f))
+  const goPrev = () => {
+    if (!isFirst) setStep(s => s - 1)
+  }
 
   const canNext = () => {
-    if (step === 1) return !!incomeValue && Number(incomeValue) > 0
+    if (step === 1) return true // frecuencia siempre tiene un valor
+    if (step === 2) return !!incomeValue && Number(incomeValue) > 0
+    if (step === 3) return true // meta es opcional
+    if (step === 4) return tieneDeudas !== null
     return true
   }
 
+  // ── Finalizar y guardar ───────────────────────────────────────────────────
+  const handleFinish = async () => {
+    setSaving(true)
+    try {
+      const parsedIncome = Number(incomeValue) || 0
+      const parsedMeta = Number(metaAhorro) || 5000
+
+      await updateUserProfile({
+        ingreso_base: parsedIncome,
+        frecuencia_ingreso: frecuencia,
+        meta_ahorro_global: parsedMeta,
+        onboarding_done: true,
+      })
+
+      if (parsedIncome > 0) setIncome(parsedIncome)
+      setIncomeFrequency(frecuencia)
+      setOnboardingDone(true)
+      router.replace("/dashboard")
+    } catch {
+      setSaving(false)
+    }
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-3 shrink-0">
-        <div className="flex gap-2">
+    <div className="flex flex-col min-h-screen bg-background">
+      {/* ── Progress bar ── */}
+      <div className="px-6 pt-6 pb-2 shrink-0">
+        <div className="flex items-center gap-1.5">
           {STEPS.map((_, i) => (
             <div
               key={i}
               className={cn(
-                "h-2 rounded-full transition-all duration-300",
-                i === step ? "w-6 bg-cyclon-lavender"
-                  : i < step ? "w-2 bg-cyclon-lavender/40"
-                  : "w-2 bg-muted"
+                "h-1.5 rounded-full transition-all duration-500",
+                i <= step ? "bg-kiri-emerald flex-1" : "bg-muted/30 flex-1"
               )}
             />
           ))}
         </div>
-        <button
-          onClick={handleSkip}
-          className="flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <SkipForward className="h-3.5 w-3.5" />
-          Omitir
-        </button>
-      </div>
-
-      {/* ── Contenido scrollable ── */}
-      <div className="flex-1 overflow-y-auto px-6">
-
-        {/* STEP 0: Bienvenida */}
-        {step === 0 && (
-          <div className="flex flex-col items-center text-center gap-5 pt-6">
-            <div className="h-24 w-24 bg-cyclon-lavender rounded-[2rem] rotate-12 shadow-2xl flex items-center justify-center">
-              <div className="h-12 w-12 bg-white rounded-xl -rotate-12 flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-cyclon-lavender" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h1 className="text-2xl font-black text-foreground">¡Bienvenido a Kiri!</h1>
-              <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mx-auto">
-                Configura tu perfil financiero en menos de 2 minutos.
-              </p>
-            </div>
-            <div className="w-full space-y-2 pt-2 text-left">
-              <Label>¿Cómo te llamas?</Label>
-              <Input
-                placeholder="Tu nombre"
-                value={nombre}
-                onChange={e => setNombre(e.target.value)}
-                className="h-12 rounded-2xl"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* STEP 1: Ingresos */}
-        {step === 1 && (
-          <div className="space-y-5 pt-4">
-            <div className="space-y-1">
-              <div className="h-10 w-10 bg-cyclon-lavender/10 rounded-xl flex items-center justify-center text-cyclon-lavender mb-3">
-                <Wallet className="h-5 w-5" />
-              </div>
-              <h2 className="text-xl font-black">¿Cuánto ganas?</h2>
-              <p className="text-muted-foreground text-sm">Ingresa tu sueldo.</p>
-            </div>
-
-            {/* Input manual */}
-            <div className="space-y-2">
-              <Label>Ingreso por periodo</Label>
-              {incomeLocked ? (
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-14 rounded-2xl bg-muted/30 flex items-center px-4">
-                    <span className="text-2xl font-bold">${Number(incomeValue).toLocaleString()}</span>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setIncomeLocked(false)}
-                    className="rounded-xl h-10 px-4 font-bold text-xs gap-1">
-                    <Pencil className="h-3.5 w-3.5" /> Editar
-                  </Button>
-                </div>
-              ) : (
-                <MoneyInput value={incomeValue} onChange={v => setIncomeValue(v)}
-                  className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl focus-visible:ring-cyclon-lavender"
-                  placeholder="0" autoFocus />
-              )}
-            </div>
-            {incomeValue && Number(incomeValue) > 0 && (
-              <Card className="border-none bg-cyclon-lavender/5 rounded-2xl">
-                <CardContent className="p-3 space-y-1.5">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Distribución 50/30/20</p>
-                  {[
-                    { label: "Necesidades", pct: 50, color: "bg-cyclon-periwinkle" },
-                    { label: "Libre",       pct: 30, color: "bg-cyclon-sky" },
-                    { label: "Ahorro",      pct: 20, color: "bg-cyclon-mint" },
-                  ].map(item => (
-                    <div key={item.label} className="flex justify-between items-center text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("h-2 w-2 rounded-full", item.color)} />
-                        <span className="text-muted-foreground">{item.label}</span>
-                      </div>
-                      <span className="font-bold">${((Number(incomeValue) * item.pct) / 100).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {/* STEP 2: Deudas */}
-        {step === 2 && (
-          <div className="space-y-4 pt-4">
-            <div className="space-y-1">
-              <div className="h-10 w-10 bg-cyclon-pink/20 rounded-xl flex items-center justify-center text-cyclon-pink mb-3">
-                <ReceiptText className="h-5 w-5" />
-              </div>
-              <h2 className="text-xl font-black">¿Tienes deudas?</h2>
-              <p className="text-muted-foreground text-sm">Agrega tus compromisos por voz o manualmente. Puedes omitir.</p>
-            </div>
-
-            {/* ── Dos opciones: voz o manual ── */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={startVoiceOnboarding}
-                disabled={isListening || voiceExtracting}
-                className={cn(
-                  "flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-colors",
-                  isListening
-                    ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald animate-pulse"
-                    : "border-cyclon-lavender/40 bg-cyclon-lavender/5 text-cyclon-lavender hover:border-cyclon-lavender"
-                )}
-              >
-                {voiceExtracting ? <Loader2 className="h-6 w-6 animate-spin" /> :
-                  isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                <span className="text-xs font-bold">
-                  {voiceExtracting ? "Procesando..." : isListening ? "Escuchando..." : "Dictar por voz"}
-                </span>
-                <span className="text-[9px] text-muted-foreground text-center">
-                  "Debo 5000 en Visa, pago 500 el 15"
-                </span>
-              </button>
-              <button
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-muted bg-muted/20 text-muted-foreground hover:border-cyclon-lavender/40 hover:text-cyclon-lavender transition-colors"
-              >
-                <Pencil className="h-6 w-6" />
-                <span className="text-xs font-bold">Escribir manualmente</span>
-                <span className="text-[9px] text-center">Ingresa los datos uno por uno</span>
-              </button>
-            </div>
-
-            {/* Resultado de voz */}
-            {voiceResult && (
-              <div className="bg-kiri-emerald/5 rounded-2xl p-3 border border-kiri-emerald/20 space-y-1.5">
-                <p className="text-xs font-bold text-kiri-emerald">✅ Kiri entendió:</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{voiceResult.resumenKiri}</p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {debts.map((d, i) => (
-                <Card key={i} className="border-none bg-muted/30 rounded-2xl">
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Deuda {i + 1}</span>
-                      {debts.length > 1 && (
-                        <button onClick={() => removeDebtRow(i)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    <Input placeholder="Nombre (ej: TC Visa)" value={d.nombre} onChange={e => updateDebtRow(i, "nombre", e.target.value)} className="h-9 rounded-xl text-sm" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input type="number" placeholder="Monto total" value={d.montoTotal} onChange={e => updateDebtRow(i, "montoTotal", e.target.value)} className="h-9 rounded-xl text-sm" />
-                      <Input type="number" placeholder="Cuota/periodo" value={d.cuotaPeriodo} onChange={e => updateDebtRow(i, "cuotaPeriodo", e.target.value)} className="h-9 rounded-xl text-sm" />
-                    </div>
-                    <Input type="date" value={d.diasPago} onChange={e => updateDebtRow(i, "diasPago", e.target.value)} className="h-9 rounded-xl text-sm" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <Button variant="outline" onClick={addDebtRow} className="w-full h-10 rounded-2xl border-dashed border-2 gap-2 font-bold text-sm">
-              <Plus className="h-4 w-4" /> Agregar otra deuda
-            </Button>
-          </div>
-        )}
-
-        {/* STEP 3: Gastos Fijos */}
-        {step === 3 && (
-          <div className="space-y-4 pt-4">
-            <div className="space-y-1">
-              <div className="h-10 w-10 bg-cyclon-sky/20 rounded-xl flex items-center justify-center text-cyclon-sky mb-3">
-                <PiggyBank className="h-5 w-5" />
-              </div>
-              <h2 className="text-xl font-black">Gastos fijos</h2>
-              <p className="text-muted-foreground text-sm">Suscripciones, servicios, etc.</p>
-            </div>
-            <div className="space-y-3">
-              {fixed.map((f, i) => (
-                <Card key={i} className="border-none bg-muted/30 rounded-2xl">
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Gasto {i + 1}</span>
-                      {fixed.length > 1 && (
-                        <button onClick={() => removeFixedRow(i)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    <Input placeholder="Nombre (ej: Netflix)" value={f.nombre} onChange={e => updateFixedRow(i, "nombre", e.target.value)} className="h-9 rounded-xl text-sm" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input type="number" placeholder="Monto mensual" value={f.monto} onChange={e => updateFixedRow(i, "monto", e.target.value)} className="h-9 rounded-xl text-sm" />
-                      <Input type="date" value={f.fechaCorte} onChange={e => updateFixedRow(i, "fechaCorte", e.target.value)} className="h-9 rounded-xl text-sm" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <Button variant="outline" onClick={addFixedRow} className="w-full h-10 rounded-2xl border-dashed border-2 gap-2 font-bold text-sm">
-              <Plus className="h-4 w-4" /> Agregar otro gasto
-            </Button>
-          </div>
+        {step > 0 && step < totalSteps - 1 && (
+          <p className="text-[10px] text-muted-foreground mt-2 text-center">
+            Paso {step} de {totalSteps - 2}
+          </p>
         )}
       </div>
 
-      {/* ── Footer fijo — SIEMPRE visible ── */}
-      <div className="px-6 py-4 shrink-0 border-t border-border/50 bg-background space-y-2">
-        {saveError && (
-          <div className="flex items-start gap-2 p-2.5 bg-destructive/10 border border-destructive/20 rounded-xl">
-            <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
-            <p className="text-[11px] text-destructive">{saveError}</p>
-          </div>
-        )}
-
-        {step < STEPS.length - 1 ? (
-          <Button
-            onClick={() => { if (step === 1) setIncomeLocked(true); setStep(s => s + 1) }}
-            disabled={!canNext()}
-            className="w-full h-12 rounded-2xl bg-cyclon-lavender hover:bg-cyclon-lavender/90 text-white font-bold text-sm shadow-lg shadow-cyclon-lavender/30 gap-2"
+      {/* ── Contenido ── */}
+      <div className="flex-1 flex items-center justify-center px-6 py-4">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ x: 40, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -40, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="w-full max-w-sm"
           >
-            Continuar <ChevronRight className="h-4 w-4" />
+            {/* ═══ PASO 0: Bienvenida ═══ */}
+            {step === 0 && (
+              <div className="flex flex-col items-center text-center space-y-6">
+                {/* Logo Kiri */}
+                <div className="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
+                  <span className="text-kiri-emerald">🌱</span> Kiri Finance
+                </div>
+
+                {/* Planta */}
+                <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center">
+                  <span className="text-7xl">🌱</span>
+                </div>
+
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-black">¡Bienvenido a Kiri! 🌱</h1>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px]">
+                    Este test inicial nos ayudará a conocerte mejor para ofrecerte una experiencia personalizada y consejos que realmente te servirán.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-6 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-kiri-emerald" /> 2-3 min
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5 text-kiri-emerald" /> 100% confidencial
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* ═══ PASO 1: Frecuencia ═══ */}
+            {step === 1 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald">
+                    <Calendar className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black">¿Con qué frecuencia recibes tus ingresos principales?</h2>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Esto nos ayudará a organizar tu presupuesto correctamente.
+                </p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setFrecuencia("mensual")}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
+                      frecuencia === "mensual"
+                        ? "border-kiri-emerald bg-kiri-emerald/5"
+                        : "border-muted hover:border-kiri-emerald/30"
+                    )}
+                  >
+                    <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      frecuencia === "mensual" ? "border-kiri-emerald" : "border-muted-foreground"
+                    )}>
+                      {frecuencia === "mensual" && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
+                    </div>
+                    <CalendarDays className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold">Mensual</p>
+                      <p className="text-[10px] text-muted-foreground">Una vez al mes</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setFrecuencia("quincenal")}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
+                      frecuencia === "quincenal"
+                        ? "border-kiri-emerald bg-kiri-emerald/5"
+                        : "border-muted hover:border-kiri-emerald/30"
+                    )}
+                  >
+                    <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      frecuencia === "quincenal" ? "border-kiri-emerald" : "border-muted-foreground"
+                    )}>
+                      {frecuencia === "quincenal" && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
+                    </div>
+                    <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold">Quincenal</p>
+                      <p className="text-[10px] text-muted-foreground">Cada 15 días</p>
+                    </div>
+                  </button>
+                </div>
+
+                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
+                  Podrás cambiar esto cuando quieras desde configuración.
+                </p>
+              </div>
+            )}
+
+            {/* ═══ PASO 2: Sueldo base ═══ */}
+            {step === 2 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+                    <Wallet className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black">¿Cuál es tu ingreso base, aproximado por periodo?</h2>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Esta será la base para calcular tu presupuesto inteligente.
+                </p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold">Ingresa tu sueldo {frecuencia === "quincenal" ? "quincenal" : "mensual"}</Label>
+                  <MoneyInput
+                    value={incomeValue}
+                    onChange={v => setIncomeValue(v)}
+                    className="h-14 text-2xl font-bold rounded-2xl"
+                    placeholder="0"
+                    autoFocus
+                  />
+                </div>
+
+                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
+                  Ingresa el valor antes de impuestos de lo que recibes en cada periodo.
+                </p>
+              </div>
+            )}
+
+            {/* ═══ PASO 3: Meta de ahorro ═══ */}
+            {step === 3 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500">
+                    <PiggyBank className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black">¿Cuánto dinero te gustaría alcanzar como meta de ahorro inicial?</h2>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Esta será tu meta global de ahorro y la verás crecer con el tiempo.
+                </p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold">Ingresa tu meta de ahorro</Label>
+                  <MoneyInput
+                    value={metaAhorro}
+                    onChange={v => setMetaAhorro(v)}
+                    className="h-14 text-2xl font-bold rounded-2xl"
+                    placeholder="0"
+                  />
+                </div>
+
+                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
+                  Puedes ajustar o crear metas más específicas más adelante.
+                </p>
+              </div>
+            )}
+
+            {/* ═══ PASO 4: Situación de deudas ═══ */}
+            {step === 4 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                    <Target className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black">¿Tienes deudas u obligaciones financieras activas?</h2>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Esto nos permitirá darte recomendaciones más personalizadas desde el inicio.
+                </p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setTieneDeudas(true)}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
+                      tieneDeudas === true
+                        ? "border-kiri-emerald bg-kiri-emerald/5"
+                        : "border-muted hover:border-kiri-emerald/30"
+                    )}
+                  >
+                    <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      tieneDeudas === true ? "border-kiri-emerald" : "border-muted-foreground"
+                    )}>
+                      {tieneDeudas === true && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
+                    </div>
+                    <CheckCircle2 className="h-5 w-5 text-kiri-emerald shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold">Sí, tengo deudas o obligaciones</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setTieneDeudas(false)}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
+                      tieneDeudas === false
+                        ? "border-kiri-emerald bg-kiri-emerald/5"
+                        : "border-muted hover:border-kiri-emerald/30"
+                    )}
+                  >
+                    <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      tieneDeudas === false ? "border-kiri-emerald" : "border-muted-foreground"
+                    )}>
+                      {tieneDeudas === false && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
+                    </div>
+                    <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold">No, estoy libre de deudas</p>
+                    </div>
+                  </button>
+                </div>
+
+                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
+                  No te preocupes, podrás registrar tus deudas más adelante si cambias de opinión.
+                </p>
+              </div>
+            )}
+
+            {/* ═══ PASO 5: Finalización ═══ */}
+            {step === 5 && (
+              <div className="flex flex-col items-center text-center space-y-6">
+                {/* Planta con confetti */}
+                <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center relative">
+                  <span className="text-7xl">🌱</span>
+                  <div className="absolute -top-2 -right-2 text-2xl">✨</div>
+                  <div className="absolute -bottom-1 -left-2 text-xl">🎉</div>
+                </div>
+
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-black">¡Listo, Kiri te conoce mejor! 🎉</h1>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px]">
+                    Con esta información personalizaremos tu experiencia y te ayudaremos a hacer crecer tu jardín financiero.
+                  </p>
+                </div>
+
+                <div className="w-full space-y-3 text-left">
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-kiri-emerald/5">
+                    <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald shrink-0">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm font-bold">Recomendaciones personalizadas</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-kiri-emerald/5">
+                    <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald shrink-0">
+                      <Target className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm font-bold">Metas adaptadas a ti</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-kiri-emerald/5">
+                    <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald shrink-0">
+                      <Brain className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm font-bold">Consejos inteligentes con IA</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="px-6 py-4 shrink-0 space-y-2">
+        {step === 0 ? (
+          <Button
+            onClick={goNext}
+            className="w-full h-12 rounded-2xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-sm shadow-lg shadow-kiri-emerald/30"
+          >
+            Comenzar test
+          </Button>
+        ) : isLast ? (
+          <Button
+            onClick={goNext}
+            disabled={saving}
+            className="w-full h-12 rounded-2xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-sm shadow-lg shadow-kiri-emerald/30 gap-2"
+          >
+            {saving ? "Guardando..." : "Comenzar mi viaje en Kiri 🚀"}
           </Button>
         ) : (
-          <Button
-            onClick={handleFinish}
-            disabled={saving}
-            className="w-full h-12 rounded-2xl bg-cyclon-lavender hover:bg-cyclon-lavender/90 text-white font-bold text-sm shadow-lg shadow-cyclon-lavender/30 gap-2"
-          >
-            {saving ? "Guardando..." : "¡Listo, empezar! 🎉"}
-          </Button>
-        )}
-
-        {step > 0 && (
-          <button
-            onClick={() => setStep(s => s - 1)}
-            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-          >
-            Volver
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={goPrev}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Volver
+            </button>
+            <Button
+              onClick={goNext}
+              disabled={!canNext()}
+              size="sm"
+              className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-xs gap-1 px-5 h-10"
+            >
+              Siguiente <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         )}
       </div>
     </div>

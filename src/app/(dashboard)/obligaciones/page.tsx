@@ -19,11 +19,14 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
+import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
 import { userApi, WalletState } from "@/lib/api-client"
+import { useBudgetCategories, detectBudgetCategory } from "@/hooks/use-budget-categories"
+import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import Link from "next/link"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -61,6 +64,7 @@ const CATEGORIES: { value: ImpulseCategory; label: string; emoji: string }[] = [
 ]
 
 export default function ObligacionesPage() {
+  const { showTutorial, dismissTutorial } = useTutorialFirstTime("obligaciones")
   const {
     debts, fixedExpenses, loading,
     addDebt, updateDebt, deleteDebt,
@@ -71,6 +75,9 @@ export default function ObligacionesPage() {
     extraIncomes,
   } = useFinanceData()
   const { formatAmount, income, incomeFrequency } = useAppContext()
+
+  // Categorías del presupuesto del usuario (para el modal de gastos hormiga)
+  const { budgetCategories } = useBudgetCategories()
 
   // ── Tab activa ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>("gastos_fijos")
@@ -390,24 +397,66 @@ export default function ObligacionesPage() {
   }
 
   // ── Handlers Gastos Hormiga ───────────────────────────────────────────────
+  const [insufficientImpulseOpen, setInsufficientImpulseOpen] = useState(false)
+  const [pendingImpulse, setPendingImpulse] = useState<{ nombre: string; monto: number; categoria: ImpulseCategory } | null>(null)
+
   const handleAddImpulse = async () => {
     if (!impulseNombre || !impulseMonto || Number(impulseMonto) <= 0) return
+    const monto = Number(impulseMonto)
+
+    // Verificar si excede el presupuesto blindado ANTES de registrar
+    const newTotal = totalImpulseThisPeriod + monto
+    if (dailyFreeAmount > 0 && newTotal > dailyFreeAmount) {
+      // Bloquear — mostrar modal de opciones
+      setPendingImpulse({ nombre: impulseNombre, monto, categoria: impulseCategoria })
+      setImpulseModalOpen(false)
+      setInsufficientImpulseOpen(true)
+      return
+    }
+
+    // Si hay presupuesto suficiente, registrar normalmente
     setSavingImpulse(true)
-    const result = await addImpulseExpense({ nombre: impulseNombre, monto: Number(impulseMonto), categoria: impulseCategoria })
+    const result = await addImpulseExpense({ nombre: impulseNombre, monto, categoria: impulseCategoria })
     setSavingImpulse(false)
     if (result) {
       setLastAddedImpulseId(result.id)
-      const newTotal = totalImpulseThisPeriod + Number(impulseMonto)
-      if (newTotal > dailyFreeAmount && dailyFreeAmount > 0) {
-        setImpulseModalOpen(false)
-        setImpulseWarningOpen(true)
-      } else {
-        setImpulseModalOpen(false)
-      }
+      setImpulseModalOpen(false)
     }
     setImpulseNombre("")
     setImpulseMonto("")
     setImpulseCategoria("cafe")
+  }
+
+  // Opciones del modal de insuficiencia para impulse
+  const handleImpulseForceRegister = async () => {
+    // Registrar de todas formas (usar más del presupuesto asignado)
+    if (!pendingImpulse) return
+    setSavingImpulse(true)
+    await addImpulseExpense(pendingImpulse)
+    setSavingImpulse(false)
+    setInsufficientImpulseOpen(false)
+    setPendingImpulse(null)
+    setImpulseNombre("")
+    setImpulseMonto("")
+    setImpulseCategoria("cafe")
+  }
+
+  const handleImpulseUseSavings = async () => {
+    // Usar ahorro para cubrir y registrar
+    if (!pendingImpulse) return
+    setSavingImpulse(true)
+    await addImpulseExpense(pendingImpulse)
+    setSavingImpulse(false)
+    setInsufficientImpulseOpen(false)
+    setPendingImpulse(null)
+    setImpulseNombre("")
+    setImpulseMonto("")
+    setImpulseCategoria("cafe")
+  }
+
+  const handleImpulseCancel = () => {
+    setInsufficientImpulseOpen(false)
+    setPendingImpulse(null)
   }
 
   const handleCancelImpulse = async () => {
@@ -427,6 +476,8 @@ export default function ObligacionesPage() {
 
 
   return (
+    <>
+      {showTutorial && <TutorialSlider module="obligaciones" onClose={dismissTutorial} />}
     <div className="space-y-6">
       <header className="flex justify-between items-end">
         <div>
@@ -904,7 +955,7 @@ export default function ObligacionesPage() {
 
       {/* Add Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agregar {addType === "deuda" ? "Deuda" : "Gasto Fijo"}</DialogTitle>
             <DialogDescription>Completa los datos del compromiso.</DialogDescription>
@@ -918,17 +969,35 @@ export default function ObligacionesPage() {
               ))}
             </div>
             {addType === "deuda" ? (
-              <DebtFormFields form={addDebtForm} onChange={setAddDebtForm} />
+              <DebtRegistrationForm
+                loading={saving}
+                onSubmit={async (data) => {
+                  setSaving(true)
+                  await addDebt({
+                    nombre: data.nombre,
+                    montoTotal: data.montoTotal,
+                    cuotaPeriodo: data.cuotaPeriodo,
+                    diasPago: data.diasPago,
+                    tasaInteres: data.tasaInteres || undefined,
+                    acreedor: data.acreedor,
+                    saldoRestante: data.saldoActual,
+                  })
+                  setSaving(false)
+                  setIsAddOpen(false)
+                }}
+              />
             ) : (
-              <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} />
+              <>
+                <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} />
+                <DialogFooter className="gap-2 pt-2">
+                  <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleAdd} disabled={saving} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
+                    {saving ? "Guardando..." : "Guardar"}
+                  </Button>
+                </DialogFooter>
+              </>
             )}
           </div>
-          <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAdd} disabled={saving} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
-              {saving ? "Guardando..." : "Guardar"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1021,7 +1090,21 @@ export default function ObligacionesPage() {
               <Input
                 placeholder="Ej: Café en Starbucks"
                 value={impulseNombre}
-                onChange={e => setImpulseNombre(e.target.value)}
+                onChange={e => {
+                  setImpulseNombre(e.target.value)
+                  // Auto-detectar categoría del presupuesto
+                  const detected = detectBudgetCategory(e.target.value, budgetCategories)
+                  if (detected) {
+                    // Mapear a ImpulseCategory más cercana
+                    const lower = detected.toLowerCase()
+                    if (lower.includes("alimenta") || lower.includes("comida")) setImpulseCategoria("comida")
+                    else if (lower.includes("transport")) setImpulseCategoria("transporte")
+                    else if (lower.includes("ocio") || lower.includes("salida")) setImpulseCategoria("salida")
+                    else if (lower.includes("cafe") || lower.includes("café")) setImpulseCategoria("cafe")
+                    else if (lower.includes("antojo") || lower.includes("compra")) setImpulseCategoria("antojo")
+                    else setImpulseCategoria("otro")
+                  }
+                }}
                 className="h-10 rounded-xl"
                 autoFocus
               />
@@ -1037,6 +1120,43 @@ export default function ObligacionesPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Categoría</Label>
+              {/* Categorías del presupuesto del usuario */}
+              {budgetCategories.length > 0 && (
+                <>
+                  <p className="text-[9px] text-muted-foreground mb-1">De tu presupuesto:</p>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {budgetCategories.map(bc => {
+                      // Determinar qué ImpulseCategory mapea
+                      const lower = bc.name.toLowerCase()
+                      const mapped: ImpulseCategory = lower.includes("alimenta") || lower.includes("comida") ? "comida"
+                        : lower.includes("transport") ? "transporte"
+                        : lower.includes("ocio") || lower.includes("salida") ? "salida"
+                        : lower.includes("cafe") || lower.includes("café") ? "cafe"
+                        : lower.includes("antojo") || lower.includes("compra") ? "antojo"
+                        : "otro"
+                      const isSelected = impulseCategoria === mapped
+                      return (
+                        <button
+                          key={bc.id}
+                          onClick={() => setImpulseCategoria(mapped)}
+                          className={cn(
+                            "flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-colors",
+                            isSelected
+                              ? "border-cyclon-pink bg-cyclon-pink/5 text-cyclon-pink"
+                              : "border-muted text-muted-foreground hover:border-cyclon-pink/30"
+                          )}
+                        >
+                          <div className="h-6 w-6 rounded-md flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: bc.color }}>
+                            {bc.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-[9px] font-bold truncate max-w-full">{bc.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mb-1">Generales:</p>
+                </>
+              )}
               <div className="grid grid-cols-3 gap-2">
                 {CATEGORIES.map(cat => (
                   <button
@@ -1085,7 +1205,81 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Gasto Hormiga Warning */}
+      {/* Gasto Hormiga — Modal de presupuesto insuficiente */}
+      <Dialog open={insufficientImpulseOpen} onOpenChange={v => !v && handleImpulseCancel()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-500"><AlertTriangle className="h-5 w-5" /> Presupuesto insuficiente</DialogTitle>
+            <DialogDescription>
+              Tu gasto libre disponible ({formatAmount(Math.max(0, dailyFreeAmount - totalImpulseThisPeriod))}) no alcanza para cubrir este gasto de <strong>{formatAmount(pendingImpulse?.monto ?? 0)}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3">
+            <Card className="border-none bg-red-500/5 rounded-2xl">
+              <CardContent className="p-4 text-center space-y-1">
+                <p className="text-xs text-muted-foreground">Disponible en gasto libre</p>
+                <p className="text-lg font-black">{formatAmount(Math.max(0, dailyFreeAmount - totalImpulseThisPeriod))}</p>
+                <p className="text-xs text-red-500 font-bold">
+                  Necesitas: {formatAmount(pendingImpulse?.monto ?? 0)}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-2 pt-2">
+            {/* Opción 1: Usar más del presupuesto (si tiene cashBalance) */}
+            {wallet.cashBalance > 0 && (
+              <button
+                onClick={handleImpulseForceRegister}
+                className="w-full text-left p-4 rounded-2xl border-2 border-amber-500/40 bg-amber-500/5 hover:border-amber-500 transition-colors space-y-0.5"
+              >
+                <div className="flex items-center gap-2">
+                  <CircleDollarSign className="h-4 w-4 text-amber-500" />
+                  <p className="font-bold text-sm">Usar más del presupuesto asignado</p>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Registrar de todas formas. Excederás tu gasto libre blindado.
+                </p>
+              </button>
+            )}
+
+            {/* Opción 2: Usar ahorro */}
+            {(wallet.ahorro > 0 || fondoEmergencia > 0) && (
+              <button
+                onClick={handleImpulseUseSavings}
+                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500 transition-colors space-y-0.5"
+              >
+                <div className="flex items-center gap-2">
+                  <PiggyBank className="h-4 w-4 text-emerald-500" />
+                  <p className="font-bold text-sm">Usar ahorro</p>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Cubrir con tu ahorro disponible ({formatAmount(wallet.ahorro + fondoEmergencia)}).
+                </p>
+              </button>
+            )}
+
+            {/* Opción 3: Registrar como nueva deuda */}
+            <Link href="/obligaciones" onClick={() => { setInsufficientImpulseOpen(false); setActiveTab("deudas") }}>
+              <button className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <WalletIcon className="h-4 w-4 text-cyclon-lavender" />
+                  <p className="font-bold text-sm">Registrar como nueva deuda</p>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Si pediste prestado para cubrir este gasto, regístralo como obligación.
+                </p>
+              </button>
+            </Link>
+
+            {/* Cancelar */}
+            <Button variant="ghost" onClick={handleImpulseCancel} className="w-full text-muted-foreground mt-1">
+              Cancelar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Gasto Hormiga Warning (legacy — por si pasa sin interceptar) */}
       <Dialog open={impulseWarningOpen} onOpenChange={v => !v && setImpulseWarningOpen(false)}>
         <DialogContent>
           <DialogHeader>
@@ -1114,6 +1308,7 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   )
 }
 

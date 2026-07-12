@@ -310,7 +310,7 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) {
+  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,
@@ -531,9 +531,9 @@ export const connectionsApi = {
       pendingSent:     Record<string, unknown>[]
     }>('/connections')
   },
-  async invite(correo: string) {
+  async invite(correo: string, role?: 'FRIEND' | 'FAMILY' | 'PARTNER') {
     return api<{ connection: Record<string, unknown>; addressee: Record<string, unknown> }>('/connections/invite', {
-      method: 'POST', body: { correo },
+      method: 'POST', body: { correo, role },
     })
   },
   async accept(connectionId: string) {
@@ -636,5 +636,32 @@ export const aiApi = {
       method: 'POST',
       body: { imageBase64, mimeType },
     })
+  },
+}
+
+
+// ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────
+
+export const homeBudgetApi = {
+  async get() {
+    return api<{
+      budget: {
+        ingresoTotal: number
+        ingresoUser1: number
+        ingresoUser2: number
+        obligacionesTotal: number
+        obligacionesUser1: number
+        obligacionesUser2: number
+        ahorro: number
+        ahorroPct: number
+        libre: number
+        librePct: number
+        capacidadEndeudamiento: number
+        capacidadPct: number
+        obligacionesPct: number
+        isOverloaded: boolean
+      }
+      partnerId: string
+    }>('/home-budget')
   },
 }
