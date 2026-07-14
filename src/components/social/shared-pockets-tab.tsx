@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PiggyBank, Plus, ArrowDownToLine, Calculator, Loader2, ChevronDown, ChevronUp } from "lucide-react"
+import { PiggyBank, Plus, ArrowDownToLine, Calculator, Loader2, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,7 +24,14 @@ function initials(name: string) {
 }
 
 function getPeerFromPocket(pocket: SharedPocket, myId: string) {
-  return pocket.userAId === myId ? pocket.userB : pocket.userA
+  // New format uses members array
+  const members = (pocket as any).members as { id: string; nombre: string; correo: string; role: string }[] | undefined
+  if (members) {
+    const peer = members.find(m => m.id !== myId)
+    return peer ? { id: peer.id, nombre: peer.nombre, correo: peer.correo } : undefined
+  }
+  // Fallback for old format
+  return (pocket as any).userAId === myId ? (pocket as any).userB : (pocket as any).userA
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -92,7 +99,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     if (!createForm.partnerId || !createForm.nombre.trim()) return
     setCreating(true)
     const { error } = await sharedPocketsApi.create(
-      createForm.partnerId,
+      [createForm.partnerId],
       createForm.nombre.trim(),
       createForm.meta ? Number(createForm.meta) : undefined
     )
@@ -100,7 +107,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: "Bolsillo creado ✓" })
+      toast({ title: "Ahorro compartido creado ✓" })
       setCreateOpen(false)
       setCreateForm({ partnerId: "", nombre: "", meta: "" })
       load()
@@ -120,7 +127,11 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: `Depósito de ${formatAmount(Number(depositForm.monto))} registrado`, description: `Nuevo saldo: ${formatAmount((data as { newBalance: number })?.newBalance ?? 0)}` })
+      const needsApproval = (data as any)?.requiresApproval
+      toast({
+        title: `Aporte de ${formatAmount(Number(depositForm.monto))} registrado`,
+        description: needsApproval ? "Esperando aprobación del otro miembro" : "Aplicado exitosamente",
+      })
       setDepositOpen(false)
       setDepositForm({ pocketId: "", monto: "", nota: "" })
       load()
@@ -238,6 +249,43 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                     : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                   }
                 </button>
+
+                {/* Acciones cuando está expandido */}
+                {isExpanded && (
+                  <div className="border-t border-border/50 px-4 py-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "" }); setDepositOpen(true) }}
+                        className="rounded-xl bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none font-bold text-xs h-9 gap-1"
+                      >
+                        <ArrowDownToLine className="h-3.5 w-3.5" /> Abonar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "[RETIRO]" }); setDepositOpen(true) }}
+                        className="rounded-xl font-bold text-xs h-9 gap-1 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" /> Retirar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const { data, error } = await sharedPocketsApi.remove(pocket.id)
+                          if (error) toast({ title: error, variant: "destructive" })
+                          else toast({ title: data?.message ?? "Solicitud enviada" })
+                          load()
+                        }}
+                        className="rounded-xl font-bold text-xs h-9 gap-1 text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Depósitos recientes */}
                 {isExpanded && pocket.deposits && pocket.deposits.length > 0 && (

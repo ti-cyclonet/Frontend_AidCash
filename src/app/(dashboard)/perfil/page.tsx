@@ -117,44 +117,6 @@ export default function PerfilPage() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-cyclon-mint/20 flex items-center justify-center text-cyclon-mint">
-                  <Coins className="h-4 w-4" />
-                </div>
-                <Label className="font-medium">Moneda</Label>
-              </div>
-              <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                <SelectTrigger className="w-[110px] h-9 border-none bg-muted/50 font-bold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD ($)</SelectItem>
-                  <SelectItem value="COP">COP ($)</SelectItem>
-                  <SelectItem value="EUR">EUR (€)</SelectItem>
-                  <SelectItem value="MXN">MXN ($)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/20 flex items-center justify-center text-cyclon-lavender">
-                  <Globe className="h-4 w-4" />
-                </div>
-                <Label className="font-medium">Idioma</Label>
-              </div>
-              <Select defaultValue="es">
-                <SelectTrigger className="w-[110px] h-9 border-none bg-muted/50 font-bold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="es">Español</SelectItem>
-                  <SelectItem value="en">English</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </CardContent>
         </Card>
       </div>

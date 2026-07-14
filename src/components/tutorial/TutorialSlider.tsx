@@ -224,30 +224,31 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
               </div>
             </div>
 
-            {/* Footer: Omitir / Siguiente */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                onClick={onClose}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Omitir
-              </button>
+            {/* Footer: solo visible en tutorial completo (showAll) */}
+            {showAll && (
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  onClick={onClose}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Omitir
+                </button>
 
-              <div className="flex items-center gap-2">
-                {!isFirst && showAll && (
+                <div className="flex items-center gap-2">
+                  {!isFirst && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={goPrev}
+                      className="rounded-xl text-xs gap-1"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
-                    variant="ghost"
-                    onClick={goPrev}
-                    className="rounded-xl text-xs gap-1"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  onClick={goNext}
-                  className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-xs gap-1 px-4"
+                    onClick={goNext}
+                    className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-xs gap-1 px-4"
                 >
                   {isLast && currentSlide.id === "final"
                     ? "¡Comenzar mi viaje en Kiri!"
@@ -256,6 +257,7 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
                 </Button>
               </div>
             </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </motion.div>

@@ -1,17 +1,19 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { UserPlus, UserCheck, UserX, Loader2, Users, Mail, Trash2, Clock, Heart, Home, UsersRound } from "lucide-react"
+import { UserPlus, UserCheck, UserX, Loader2, Users, Mail, Trash2, Clock, Heart, Home, UsersRound, ChevronDown, ChevronUp, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { connectionsApi, homeBudgetApi } from "@/lib/api-client"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { useToast } from "@/hooks/use-toast"
 import { GamificationLeaderboard, LeaderboardEntry } from "@/components/social/GamificationLeaderboard"
 import { HomeBudgetDashboard } from "@/components/social/HomeBudgetDashboard"
+import { ConnectionProfileCard } from "@/components/social/ConnectionProfileCard"
 import type { Connection, SocialUser } from "@/lib/types"
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -55,9 +57,11 @@ function getRoleBadge(role: string) {
 
 interface ConnectionsTabProps {
   myId: string
+  showInviteModal?: boolean
+  onCloseInviteModal?: () => void
 }
 
-export function ConnectionsTab({ myId }: ConnectionsTabProps) {
+export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteModal }: ConnectionsTabProps) {
   const { toast } = useToast()
   const { socket } = useSocket()
 
@@ -69,6 +73,13 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [homeBudget, setHomeBudget] = useState<{ budget: any; partnerId: string } | null>(null)
   const [homeBudgetLoading, setHomeBudgetLoading] = useState(false)
+  const [profileCardConnId, setProfileCardConnId] = useState<string | null>(null)
+  const [connectionsExpanded, setConnectionsExpanded] = useState(true)
+  const [inviteModalOpen, setInviteModalOpen] = useState(showInviteModal)
+
+  // Sync invite modal with parent prop
+  useEffect(() => { setInviteModalOpen(showInviteModal) }, [showInviteModal])
+  const closeInviteModal = () => { setInviteModalOpen(false); onCloseInviteModal?.() }
 
   // ── Cargar conexiones ──────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -126,6 +137,7 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
       toast({ title: "Invitación enviada", description: `Se notificó a ${inviteEmail} como ${inviteRole.toLowerCase()}` })
       setInviteEmail("")
       setInviteRole("FRIEND")
+      closeInviteModal()
       load()
     }
   }
@@ -179,51 +191,53 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
   return (
     <div className="space-y-6">
 
-      {/* ── Invitar usuario ── */}
-      <Card className="border-none bg-card rounded-3xl shadow-sm">
-        <CardContent className="p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-cyclon-lavender" />
-            <h3 className="font-bold text-sm">Invitar usuario</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Ingresa el correo de tu pareja, familiar o amigo en Kiri Finance.
-          </p>
-          {/* Selector de rol */}
-          <div className="flex gap-2">
-            {ROLE_CONFIG.map(r => (
-              <button
-                key={r.value}
-                onClick={() => setInviteRole(r.value)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-colors",
-                  inviteRole === r.value ? r.color : "border-muted text-muted-foreground hover:border-muted-foreground/30"
-                )}
+      {/* ── Modal Invitar usuario ── */}
+      <Dialog open={inviteModalOpen} onOpenChange={v => { if (!v) closeInviteModal() }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-kiri-emerald" /> Invitar usuario
+            </DialogTitle>
+            <DialogDescription>Invita a tu pareja, familiar o amigo a Kiri Finance.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Selector de rol */}
+            <div className="flex gap-2">
+              {ROLE_CONFIG.map(r => (
+                <button
+                  key={r.value}
+                  onClick={() => setInviteRole(r.value)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-colors",
+                    inviteRole === r.value ? r.color : "border-muted text-muted-foreground hover:border-muted-foreground/30"
+                  )}
+                >
+                  {r.icon}
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="correo@ejemplo.com"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleInvite() }}
+                className="h-11 rounded-xl flex-1"
+                autoFocus
+              />
+              <Button
+                onClick={handleInvite}
+                disabled={!inviteEmail.trim() || inviting}
+                className="h-11 px-5 rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold gap-1.5"
               >
-                {r.icon}
-                {r.label}
-              </button>
-            ))}
+                {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4" /> Enviar</>}
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Input
-              type="email"
-              placeholder="correo@ejemplo.com"
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleInvite() }}
-              className="h-11 rounded-2xl flex-1"
-            />
-            <Button
-              onClick={handleInvite}
-              disabled={!inviteEmail.trim() || inviting}
-              className="h-11 px-5 rounded-2xl bg-cyclon-lavender hover:bg-cyclon-lavender/90 text-white font-bold"
-            >
-              {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Pendientes recibidas ── */}
       {data.pendingReceived.length > 0 && (
@@ -304,12 +318,21 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
         </section>
       )}
 
-      {/* ── Conectados ── */}
+      {/* ── Conectados (colapsable) ── */}
       <section className="space-y-2">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-          <Users className="h-3.5 w-3.5" />
-          Conexiones activas ({data.accepted.length})
-        </h3>
+        <button
+          onClick={() => setConnectionsExpanded(v => !v)}
+          className="w-full flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider"
+        >
+          <span className="flex items-center gap-2">
+            <Users className="h-3.5 w-3.5" />
+            Conexiones activas ({data.accepted.length})
+          </span>
+          {connectionsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+
+        {connectionsExpanded && (
+          <>
         {data.accepted.length === 0 ? (
           <Card className="border-none bg-muted/30 rounded-3xl">
             <CardContent className="py-10 flex flex-col items-center gap-3 text-muted-foreground">
@@ -326,20 +349,38 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
             return (
               <Card key={conn.id} className="border-none bg-card rounded-2xl shadow-sm">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <Avatar className="h-10 w-10 shrink-0">
-                    <AvatarFallback className="bg-kiri-mint text-kiri-emerald font-bold text-xs">
+                  <Avatar className="h-12 w-12 shrink-0 border-2 border-kiri-emerald/20 cursor-pointer" onClick={() => setProfileCardConnId(conn.id)}>
+                    <AvatarFallback className="bg-kiri-mint text-kiri-emerald font-bold text-sm">
                       {initials(peer.nombre)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setProfileCardConnId(conn.id)}>
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{peer.nombre}</p>
                       {role && getRoleBadge(role)}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-kiri-emerald" title="Conectado" />
+                  <div className="flex items-center gap-1.5">
+                    {/* Cambiar rol */}
+                    <select
+                      value={role ?? 'FRIEND'}
+                      onChange={async (e) => {
+                        const newRole = e.target.value as 'FRIEND' | 'FAMILY' | 'PARTNER'
+                        setActionLoading(conn.id)
+                        const { error } = await connectionsApi.updateRole(conn.id, newRole)
+                        setActionLoading(null)
+                        if (error) toast({ title: error, variant: "destructive" })
+                        else load()
+                      }}
+                      disabled={busy}
+                      className="h-8 rounded-lg bg-muted/50 border-none text-[10px] font-bold px-2 cursor-pointer appearance-none"
+                    >
+                      <option value="FRIEND">Amigo</option>
+                      <option value="FAMILY">Familia</option>
+                      <option value="PARTNER">Pareja</option>
+                    </select>
+                    <span className="h-2 w-2 rounded-full bg-kiri-emerald shrink-0" title="Conectado" />
                     <Button
                       size="icon"
                       variant="ghost"
@@ -355,6 +396,8 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
               </Card>
             )
           })
+        )}
+          </>
         )}
       </section>
 
@@ -380,6 +423,13 @@ export function ConnectionsTab({ myId }: ConnectionsTabProps) {
           <GamificationLeaderboard entries={[]} />
         </section>
       )}
+
+      {/* Tarjeta de perfil de conexión */}
+      <ConnectionProfileCard
+        connectionId={profileCardConnId ?? ""}
+        open={!!profileCardConnId}
+        onClose={() => setProfileCardConnId(null)}
+      />
     </div>
   )
 }

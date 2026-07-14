@@ -549,6 +549,19 @@ export const connectionsApi = {
   async remove(id: string) {
     return api(`/connections/${id}`, { method: 'DELETE' })
   },
+  async updateRole(id: string, role: 'FRIEND' | 'FAMILY' | 'PARTNER') {
+    return api<{ connection: Record<string, unknown> }>(`/connections/${id}/role`, {
+      method: 'PATCH', body: { role },
+    })
+  },
+  async getShared(connectionId: string) {
+    return api<{
+      connection: { id: string; role: string; createdAt: string }
+      peer: { id: string; nombre: string; correo: string }
+      pockets: Record<string, unknown>[]
+      loans: Record<string, unknown>[]
+    }>(`/connections/${connectionId}/shared`)
+  },
 }
 
 // ─── Social: Shared Pockets API ───────────────────────────────────────────────
@@ -557,14 +570,29 @@ export const sharedPocketsApi = {
   async list() {
     return api<{ pockets: Record<string, unknown>[] }>('/shared-pockets')
   },
-  async create(partnerId: string, nombre: string, meta?: number) {
+  async create(partnerIds: string[], nombre: string, meta?: number) {
     return api<{ pocket: Record<string, unknown> }>('/shared-pockets', {
-      method: 'POST', body: { partnerId, nombre, meta },
+      method: 'POST', body: { partnerIds, nombre, meta },
     })
   },
-  async deposit(pocketId: string, monto: number, nota?: string) {
-    return api<{ deposit: Record<string, unknown>; newBalance: number }>(`/shared-pockets/${pocketId}/deposit`, {
-      method: 'POST', body: { monto, nota },
+  async deposit(pocketId: string, monto: number, nota?: string, tipo?: 'aporte' | 'retiro') {
+    return api<{ deposit: Record<string, unknown>; requiresApproval: boolean }>(`/shared-pockets/${pocketId}/deposit`, {
+      method: 'POST', body: { monto, nota, tipo: tipo ?? 'aporte' },
+    })
+  },
+  async approveDeposit(pocketId: string, depositId: string) {
+    return api<{ newBalance: number }>(`/shared-pockets/${pocketId}/deposit/${depositId}/approve`, {
+      method: 'POST',
+    })
+  },
+  async rejectDeposit(pocketId: string, depositId: string) {
+    return api<{ message: string }>(`/shared-pockets/${pocketId}/deposit/${depositId}/reject`, {
+      method: 'POST',
+    })
+  },
+  async remove(pocketId: string) {
+    return api<{ message: string; immediate: boolean; expiresAt?: string }>(`/shared-pockets/${pocketId}`, {
+      method: 'DELETE',
     })
   },
   async splitCalculator(partnerId: string, gasto: number) {
@@ -594,6 +622,11 @@ export const loansApi = {
   },
   async reject(loanId: string) {
     return api<{ loan: Record<string, unknown> }>('/loans/reject', {
+      method: 'POST', body: { loanId },
+    })
+  },
+  async cancel(loanId: string) {
+    return api<{ message: string }>('/loans/cancel', {
       method: 'POST', body: { loanId },
     })
   },

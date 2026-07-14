@@ -242,10 +242,20 @@ export function CoachFab() {
   const handleConfirmExtract = async () => {
     if (!extractResult) return
     try {
-      // Ingreso → actualizar ingreso base + registrar en wallet (sueldo real)
+      // Ingreso → distinguir entre sueldo base y extra
       if (extractResult.ingreso.monto) {
-        setIncome(extractResult.ingreso.monto)
-        await userApi.walletIncome(extractResult.ingreso.monto, 'salario')
+        const montoDetectado = extractResult.ingreso.monto
+        const esSueldo = extractResult.ingreso.tipo === "salario" ||
+          montoDetectado === income ||
+          montoDetectado === Math.round(income / 2) // quincena
+
+        if (esSueldo) {
+          // Es el sueldo normal → registrar en wallet como salario (NO cambiar el ingreso base)
+          await userApi.walletIncome(montoDetectado, 'salario')
+        } else {
+          // Es un ingreso extra → registrar como extra y luego meter al wallet
+          await userApi.walletIncome(montoDetectado, 'extra')
+        }
       }
       // Deudas → registrar como deuda
       for (const d of extractResult.deudas)
