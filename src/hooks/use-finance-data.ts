@@ -165,7 +165,7 @@ export function useFinanceData() {
   }, [userId])
 
   const updateUserProfile = useCallback(async (
-    patch: Partial<Pick<UserProfile, 'nombre' | 'ingreso_base' | 'frecuencia_ingreso' | 'onboarding_done' | 'meta_ahorro_global'>>
+    patch: Partial<Pick<UserProfile, 'nombre' | 'ingreso_base' | 'frecuencia_ingreso' | 'onboarding_done' | 'meta_ahorro_global'>> & { diasPago?: number[] }
   ): Promise<{ error: string | null }> => {
     if (!userId) return { error: 'Sin sesión activa' }
     const apiPatch: Record<string, unknown> = {}
@@ -174,6 +174,7 @@ export function useFinanceData() {
     if (patch.frecuencia_ingreso !== undefined) apiPatch.frecuenciaIngreso  = patch.frecuencia_ingreso
     if (patch.onboarding_done    !== undefined) apiPatch.onboardingDone     = patch.onboarding_done
     if (patch.meta_ahorro_global !== undefined) apiPatch.metaAhorroGlobal   = patch.meta_ahorro_global
+    if (patch.diasPago           !== undefined) apiPatch.diasPago           = patch.diasPago
 
     const { error } = await userApi.updateProfile(apiPatch)
     return { error }

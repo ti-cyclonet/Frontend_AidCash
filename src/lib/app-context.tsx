@@ -157,7 +157,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const frecuencia   = (u.frecuenciaIngreso as IncomeFrequency) ?? "mensual"
       const onboarding   = (u.onboardingDone as boolean) ?? false
       const meta         = Number(u.metaAhorroGlobal ?? 5000)
-      const dias_cobro   = (u.diasCobro as string) ?? "1,16"
+      // diasPago viene como Int[] del backend, convertir a string "14,30"
+      const diasPagoArr  = (u.diasPago as number[] | undefined) ?? []
+      const dias_cobro   = diasPagoArr.length > 0 ? diasPagoArr.join(",") : (localStorage.getItem("kiri_dias_cobro") || "1,16")
 
       setUserState(prev => ({ ...prev, nombre, correo }))
       setIncomeState(ingreso_base)

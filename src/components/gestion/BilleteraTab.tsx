@@ -20,6 +20,7 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
+import { PaydaySelector } from "./PaydaySelector"
 import { Debt, FixedExpense } from "@/lib/types"
 
 // ─── Animated Amount ──────────────────────────────────────────────────────────
@@ -131,12 +132,24 @@ function getNextPeriodLabel(diasCobro: string, frequency: string): string {
   const days = diasCobro.split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)).sort((a, b) => a - b)
   if (days.length < 2) return ""
   const now = new Date(); const day = now.getDate()
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const monthName = now.toLocaleString("es", { month: "long" })
-  const [d1, d2] = days
-  if (day >= d1 && day < d2) return `${d2} - ${lastDay} de ${monthName}`
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleString("es", { month: "long" })
-  return `${d1} - ${d2 - 1} de ${nextMonth}`
+  const [d1, d2] = days
+
+  // Calcular fin de periodo (día anterior al siguiente pago, mínimo 1)
+  const endOfSecondPeriod = d1 - 1 <= 0 ? lastDayOfMonth : d1 - 1
+
+  if (day >= d1 && day < d2) {
+    // Periodo actual: d1 al d2-1. Próximo: d2 al fin del segundo periodo
+    return `${d2} de ${monthName} – ${endOfSecondPeriod} de ${d1 - 1 <= 0 ? monthName : nextMonth}`
+  }
+  if (day >= d2) {
+    // Periodo actual: d2 al endOfSecondPeriod. Próximo: d1 al d2-1 del siguiente mes
+    return `${d1} – ${d2 - 1} de ${nextMonth}`
+  }
+  // day < d1
+  return `${d1} – ${d2 - 1} de ${monthName}`
 }
 
 /**
@@ -431,6 +444,11 @@ export function BilleteraTab() {
             <p className="text-xs text-muted-foreground">
               {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
             </p>
+
+            {/* ── Selector de días de pago ── */}
+            <div className="border-t border-border/50 pt-3">
+              <PaydaySelector compact />
+            </div>
 
             {/* ── Ingresos Extra ── */}
             <div className="border-t border-border/50 pt-3 space-y-2">
