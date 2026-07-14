@@ -20,6 +20,7 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
+import { PaydaySelector } from "./PaydaySelector"
 import { Debt, FixedExpense } from "@/lib/types"
 
 // ─── Animated Amount ──────────────────────────────────────────────────────────
@@ -131,12 +132,24 @@ function getNextPeriodLabel(diasCobro: string, frequency: string): string {
   const days = diasCobro.split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)).sort((a, b) => a - b)
   if (days.length < 2) return ""
   const now = new Date(); const day = now.getDate()
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const monthName = now.toLocaleString("es", { month: "long" })
-  const [d1, d2] = days
-  if (day >= d1 && day < d2) return `${d2} - ${lastDay} de ${monthName}`
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleString("es", { month: "long" })
-  return `${d1} - ${d2 - 1} de ${nextMonth}`
+  const [d1, d2] = days
+
+  // Calcular fin de periodo (día anterior al siguiente pago, mínimo 1)
+  const endOfSecondPeriod = d1 - 1 <= 0 ? lastDayOfMonth : d1 - 1
+
+  if (day >= d1 && day < d2) {
+    // Periodo actual: d1 al d2-1. Próximo: d2 al fin del segundo periodo
+    return `${d2} de ${monthName} – ${endOfSecondPeriod} de ${d1 - 1 <= 0 ? monthName : nextMonth}`
+  }
+  if (day >= d2) {
+    // Periodo actual: d2 al endOfSecondPeriod. Próximo: d1 al d2-1 del siguiente mes
+    return `${d1} – ${d2 - 1} de ${nextMonth}`
+  }
+  // day < d1
+  return `${d1} – ${d2 - 1} de ${monthName}`
 }
 
 /**
@@ -178,13 +191,28 @@ const POCKETS = [
 
 export function BilleteraTab() {
   const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency, diasCobro } = useAppContext()
-  const { debts, fixedExpenses } = useFinanceData()
+  const { debts, fixedExpenses, extraIncomes, addExtraIncome } = useFinanceData()
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [incomeOpen, setIncomeOpen] = useState(false)
   const [editIncomeOpen, setEditIncomeOpen] = useState(false)
   const [editIncomeValue, setEditIncomeValue] = useState("")
   const [obligationsExpanded, setObligationsExpanded] = useState(false)
   const [frequencyExpanded, setFrequencyExpanded] = useState(false)
+
+  // Cerrar paneles desplegables al hacer clic fuera
+  useEffect(() => {
+    if (!frequencyExpanded && !obligationsExpanded) return
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Si el clic fue dentro de un panel desplegable o un dialog, no cerrar
+      if (target.closest('[data-panel="frequency"]') || target.closest('[data-panel="obligations"]') || target.closest('[role="dialog"]')) return
+      setFrequencyExpanded(false)
+      setObligationsExpanded(false)
+    }
+    // Pequeño delay para no interferir con el clic que abrió el panel
+    const timer = setTimeout(() => document.addEventListener('click', handleClickOutside), 100)
+    return () => { clearTimeout(timer); document.removeEventListener('click', handleClickOutside) }
+  }, [frequencyExpanded, obligationsExpanded])
   const [monto, setMonto] = useState("")
   const [tipo, setTipo] = useState<"salario" | "extra">("salario")
   const [extraDesc, setExtraDesc] = useState("")
@@ -192,6 +220,41 @@ export function BilleteraTab() {
   const [resetting, setResetting] = useState(false)
   const [recommendationType, setRecommendationType] = useState<RecommendationType>(null)
   const [recommendationOpen, setRecommendationOpen] = useState(false)
+
+  // ── Extra income inline form state ──
+  const [extraIncomeFormOpen, setExtraIncomeFormOpen] = useState(false)
+  const [extraName, setExtraName] = useState("")
+  const [extraMonto, setExtraMonto] = useState("")
+  const [extraTemp, setExtraTemp] = useState<"una_vez" | "definido" | "indefinido">("una_vez")
+  const [extraFreq, setExtraFreq] = useState<"mensual" | "quincenal">("mensual")
+  const [extraMeses, setExtraMeses] = useState("")
+  const [savingExtra, setSavingExtra] = useState(false)
+
+  const handleAddExtraIncome = async () => {
+    if (!extraName || !extraMonto) return
+    setSavingExtra(true)
+    // Si la frecuencia del extra es quincenal y la del usuario es mensual, duplicar el monto
+    // Si la frecuencia del extra es mensual y la del usuario es quincenal, dividir entre 2
+    let montoAjustado = Number(extraMonto)
+    if (extraFreq === "quincenal" && incomeFrequency === "mensual") {
+      montoAjustado = montoAjustado * 2 // Recibe quincenal, presupuesto mensual → x2
+    } else if (extraFreq === "mensual" && incomeFrequency === "quincenal") {
+      montoAjustado = Math.round(montoAjustado / 2) // Recibe mensual, presupuesto quincenal → /2
+    }
+    await addExtraIncome({
+      nombre: extraName,
+      monto: montoAjustado,
+      temporalidad: extraTemp,
+      mesesRestantes: extraTemp === "definido" ? Number(extraMeses) || 1 : null,
+    })
+    setSavingExtra(false)
+    setExtraName("")
+    setExtraMonto("")
+    setExtraTemp("una_vez")
+    setExtraFreq("mensual")
+    setExtraMeses("")
+    setExtraIncomeFormOpen(false)
+  }
 
   useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
 
@@ -311,7 +374,7 @@ export function BilleteraTab() {
           <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
           <div className="flex items-center justify-center gap-3 pt-2">
-            <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(periodData.effectiveIncome)) }} size="sm"
+            <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(periodData.effectiveIncome + extraIncomes.reduce((a, e) => a + e.monto, 0))) }} size="sm"
               className="bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl gap-1.5 h-9 px-4 text-xs">
               <Plus className="h-3.5 w-3.5" /> Ingresar
             </Button>
@@ -330,14 +393,14 @@ export function BilleteraTab() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <p className="text-white/50 text-[9px] font-bold uppercase tracking-wider">Sueldo Base del periodo</p>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <button onClick={() => { setEditIncomeOpen(true); setEditIncomeValue(String(income)) }}
-                  className="text-white/30 hover:text-white/70 transition-colors">
-                  <Pencil className="h-3 w-3" />
+                  className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors">
+                  <Pencil className="h-4 w-4" />
                 </button>
                 <button onClick={() => setFrequencyExpanded(v => !v)}
-                  className="text-white/30 hover:text-white/70 transition-colors">
-                  {frequencyExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors">
+                  {frequencyExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </button>
               </div>
             </div>
@@ -364,7 +427,7 @@ export function BilleteraTab() {
 
       {/* ═══ FRECUENCIA (desplegable, conectado al Sueldo Base) ═══ */}
       {frequencyExpanded && (
-        <Card className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
+        <Card data-panel="frequency" className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setIncomeFrequency("quincenal")}
@@ -381,13 +444,117 @@ export function BilleteraTab() {
             <p className="text-xs text-muted-foreground">
               {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
             </p>
+
+            {/* ── Selector de días de pago ── */}
+            <div className="border-t border-border/50 pt-3">
+              <PaydaySelector compact />
+            </div>
+
+            {/* ── Ingresos Extra ── */}
+            <div className="border-t border-border/50 pt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold">Ingresos extra</p>
+                <button
+                  onClick={() => setExtraIncomeFormOpen(!extraIncomeFormOpen)}
+                  className="text-[10px] font-bold text-kiri-emerald hover:underline"
+                >
+                  {extraIncomeFormOpen ? "Cancelar" : "+ Agregar extra"}
+                </button>
+              </div>
+
+              {extraIncomeFormOpen && (
+                <div className="space-y-2 bg-muted/20 rounded-xl p-3">
+                  <input
+                    placeholder="Nombre (ej: Freelance, Bono)"
+                    value={extraName}
+                    onChange={e => setExtraName(e.target.value)}
+                    className="w-full h-9 rounded-lg bg-background border border-border px-3 text-sm"
+                  />
+                  <MoneyInput
+                    value={extraMonto}
+                    onChange={v => setExtraMonto(v)}
+                    className="h-9 rounded-lg text-sm"
+                    placeholder="Monto"
+                  />
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] font-bold text-muted-foreground">¿Cada cuánto recibes esto?</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button onClick={() => setExtraFreq("mensual")}
+                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                          extraFreq === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                        Mensual
+                      </button>
+                      <button onClick={() => setExtraFreq("quincenal")}
+                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                          extraFreq === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                        Quincenal
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] font-bold text-muted-foreground">¿Por cuánto tiempo recibirás esto?</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button onClick={() => setExtraTemp("una_vez")}
+                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                          extraTemp === "una_vez" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                        Una vez
+                      </button>
+                      <button onClick={() => setExtraTemp("definido")}
+                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                          extraTemp === "definido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                        Definido
+                      </button>
+                      <button onClick={() => setExtraTemp("indefinido")}
+                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                          extraTemp === "indefinido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                        Siempre
+                      </button>
+                    </div>
+                    {extraTemp === "definido" && (
+                      <input
+                        type="number" min="1" max="60"
+                        placeholder="¿Cuántos periodos?"
+                        value={extraMeses}
+                        onChange={e => setExtraMeses(e.target.value)}
+                        className="w-full h-8 rounded-lg bg-background border border-border px-3 text-xs"
+                      />
+                    )}
+                  </div>
+                  <button
+                    onClick={handleAddExtraIncome}
+                    disabled={!extraName || !extraMonto || savingExtra}
+                    className="w-full h-9 rounded-lg bg-kiri-emerald text-white font-bold text-xs disabled:opacity-50"
+                  >
+                    {savingExtra ? "Guardando..." : "Registrar ingreso extra"}
+                  </button>
+                </div>
+              )}
+
+              {/* Lista de extras activos */}
+              {extraIncomes.length > 0 && (
+                <div className="space-y-1">
+                  {extraIncomes.slice(0, 3).map(e => (
+                    <div key={e.id} className="flex items-center justify-between text-xs py-1">
+                      <span className="text-muted-foreground truncate flex-1">{e.nombre}</span>
+                      <span className="font-bold shrink-0 ml-2">{formatAmount(e.monto)}</span>
+                      <span className="text-[8px] text-muted-foreground ml-1.5 shrink-0">
+                        {e.temporalidad === "una_vez" ? "1×" : e.temporalidad === "definido" ? `${e.mesesRestantes}p` : "∞"}
+                      </span>
+                    </div>
+                  ))}
+                  {extraIncomes.length > 3 && (
+                    <p className="text-[8px] text-muted-foreground text-center">+{extraIncomes.length - 3} más</p>
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* ═══ OBLIGACIONES (desplegable, conectado al Balance) ═══ */}
       {obligationsExpanded && (
-        <Card className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
+        <Card data-panel="obligations" className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 space-y-3">
             <h3 className="font-bold text-sm">
               Obligaciones del período actual
@@ -517,7 +684,9 @@ export function BilleteraTab() {
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
               <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
               {tipo === "salario" && periodData.effectiveIncome > 0 && (
-                <p className="text-[10px] text-muted-foreground">Sugerido: {formatAmount(periodData.effectiveIncome)} (sueldo base del periodo)</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Sugerido: {formatAmount(periodData.effectiveIncome + extraIncomes.reduce((a, e) => a + e.monto, 0))} (sueldo base{extraIncomes.length > 0 ? " + extras" : ""} del periodo)
+                </p>
               )}
             </div>
             {tipo === "extra" && (

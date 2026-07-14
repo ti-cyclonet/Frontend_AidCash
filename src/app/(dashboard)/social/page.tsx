@@ -16,7 +16,7 @@ import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/Tuto
 
 const TABS = [
   { id: "connections",    label: "Conexiones",  icon: Users },
-  { id: "pockets",        label: "Bolsillos",   icon: PiggyBank },
+  { id: "pockets",        label: "Ahorros",     icon: PiggyBank },
   { id: "loans",          label: "Préstamos",   icon: Coins },
 ] as const
 
@@ -31,7 +31,7 @@ export default function SocialPage() {
 
   const [activeTab, setActiveTab] = useState<TabId>("connections")
   const [acceptedConnections, setAcceptedConnections] = useState<Connection[]>([])
-
+  const [showInviteModal, setShowInviteModal] = useState(false)
   // Cargar conexiones aceptadas para pasarlas a sub-tabs
   const loadAccepted = useCallback(async () => {
     const { data } = await connectionsApi.list()
@@ -55,11 +55,19 @@ export default function SocialPage() {
     <div className="space-y-6 pb-8">
 
       {/* ── Header ── */}
-      <header>
-        <h1 className="text-3xl font-black text-cyclon-lavender">Social</h1>
-        <p className="text-muted-foreground text-sm font-medium">
-          Finanzas compartidas con las personas que importan.
-        </p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-cyclon-lavender">Social</h1>
+          <p className="text-muted-foreground text-sm font-medium">
+            Finanzas compartidas con las personas que importan.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowInviteModal(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-kiri-emerald/40 text-kiri-emerald text-xs font-bold hover:bg-kiri-emerald/5 transition-colors shrink-0"
+        >
+          <Users className="h-4 w-4" /> Invitar usuario
+        </button>
       </header>
 
       {/* ── Tabs ── */}
@@ -94,7 +102,7 @@ export default function SocialPage() {
       {/* ── Contenido del tab ── */}
       <div>
         {activeTab === "connections" && (
-          <ConnectionsTab myId={myId} />
+          <ConnectionsTab myId={myId} showInviteModal={showInviteModal} onCloseInviteModal={() => setShowInviteModal(false)} />
         )}
         {activeTab === "pockets" && (
           <SharedPocketsTab myId={myId} acceptedConnections={acceptedConnections} />

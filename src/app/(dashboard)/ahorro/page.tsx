@@ -95,14 +95,32 @@ export default function AhorroPage() {
   }, [fondoLoaded, authUser?.id])
   const handleAporte = useCallback(async (monto: number) => {
     if (!authUser?.id) return
+    // Verificar saldo disponible antes de aportar
+    const { data: walletData } = await userApi.getWallet()
+    const available = walletData?.wallet?.cashBalance ?? 0
+    if (available <= 0 || monto > available) {
+      setInsufficientSavingsOpen(true)
+      return
+    }
+    // Descontar del wallet
+    await userApi.walletDeduct(monto, 'ahorro')
+    // Registrar en fondo de emergencia
     const { data } = await emergencyFundApi.transaction(monto, "aporte")
     if (data) setFondoActual(data.fondoActual)
+    // Disparar evento para refrescar wallet en otros componentes
+    window.dispatchEvent(new Event("kiri:wallet-updated"))
   }, [authUser?.id])
+
   const handleRetiro = useCallback(async (monto: number) => {
     if (!authUser?.id) return
+    if (monto > fondoActual) return
+    // Registrar retiro del fondo
     const { data } = await emergencyFundApi.transaction(monto, "retiro")
     if (data) setFondoActual(data.fondoActual)
-  }, [authUser?.id])
+    // Sumar al wallet (regresa al disponible)
+    await userApi.walletWithdraw(monto, 'ahorro')
+    window.dispatchEvent(new Event("kiri:wallet-updated"))
+  }, [authUser?.id, fondoActual])
 
   // ── Bolsillos (persistidos en localStorage) ────────────────────────────────
   const [pockets, setPockets] = useState<SavingPocket[]>(() => {

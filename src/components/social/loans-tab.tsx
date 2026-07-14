@@ -330,6 +330,26 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                         </>
                       )}
 
+                      {/* Borrower: cancelar solicitud pendiente */}
+                      {isBorrower && loan.status === "PENDING_APPROVAL" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={actionId === loan.id}
+                          onClick={async () => {
+                            setActionId(loan.id)
+                            const { error } = await loansApi.cancel(loan.id)
+                            setActionId(null)
+                            if (error) toast({ title: error, variant: "destructive" })
+                            else { toast({ title: "Solicitud cancelada" }); load() }
+                          }}
+                          className="h-8 px-4 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 font-bold text-xs gap-1"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Cancelar solicitud
+                        </Button>
+                      )}
+
                       {/* Borrower: registrar abono si está ACTIVE */}
                       {isBorrower && loan.status === "ACTIVE" && (
                         <Button
@@ -404,6 +424,13 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                           : `Pendiente: ${formatAmount(loan.remainingAmount)}`
                         }
                       </div>
+                    )}
+
+                    {/* Eliminar préstamo pagado */}
+                    {loan.status === "PAID" && (
+                      <p className="text-[9px] text-muted-foreground text-center pt-1">
+                        Este préstamo se eliminará automáticamente en 3 días.
+                      </p>
                     )}
                   </div>
                 )}
