@@ -1367,12 +1367,21 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
-              <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
-                payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
-                payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
-                payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
-                "bg-muted text-muted-foreground"
-              )}>{payInfo.statusLabel}</span>
+              {(() => {
+                const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
+                const isPartial = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
+                if (isPartial) {
+                  return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Pago parcial</span>
+                }
+                return (
+                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                    payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                    payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
+                    payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                    "bg-muted text-muted-foreground"
+                  )}>{payInfo.statusLabel}</span>
+                )
+              })()}
             </div>
             {!hidden && debt.acreedor && <p className="text-[10px] text-muted-foreground truncate">{debt.acreedor}</p>}
             {!hidden && (
@@ -1431,16 +1440,43 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
         )}
 
         {/* Botón de pagar */}
-        {!debt.pagadoEstePeriodo && debt.estado === 'activa' && (
-          <Button onClick={onPay} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-            Registrar pago de cuota
-          </Button>
-        )}
-        {debt.pagadoEstePeriodo && (
-          <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
-            Deshacer pago
-          </Button>
-        )}
+        {(() => {
+          const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
+          const isPartiallyPaid = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
+
+          if (debt.pagadoEstePeriodo) {
+            return (
+              <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
+                Deshacer pago
+              </Button>
+            )
+          }
+          if (isPartiallyPaid) {
+            return (
+              <div className="space-y-2">
+                <p className="text-[10px] text-amber-500 font-bold">
+                  Abonado: {formatAmount(montoPagadoPeriodo)} de {formatAmount(debt.cuotaPeriodo)} · Falta: {formatAmount(debt.cuotaPeriodo - montoPagadoPeriodo)}
+                </p>
+                <div className="flex gap-2">
+                  <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
+                    Deshacer pago
+                  </Button>
+                  <Button onClick={onPay} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+                    Pagar restante
+                  </Button>
+                </div>
+              </div>
+            )
+          }
+          if (debt.estado === 'activa') {
+            return (
+              <Button onClick={onPay} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+                Registrar pago de cuota
+              </Button>
+            )
+          }
+          return null
+        })()}
       </CardContent>
     </Card>
   )
@@ -1453,6 +1489,9 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
 }) {
   const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo)
+  const montoPagado = (item as any).montoPagadoEstePeriodo ?? 0
+  const isPartiallyPaid = montoPagado > 0 && !item.pagadoEstePeriodo
+  const remaining = item.monto - montoPagado
 
   // Yellow highlight for period priority
   const priorityRing = isPeriodPriority && !item.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
@@ -1464,12 +1503,18 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
-              <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
-                payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
-                payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
-                payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
-                "bg-muted text-muted-foreground"
-              )}>{payInfo.statusLabel}</span>
+              {isPartiallyPaid ? (
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                  Pago parcial
+                </span>
+              ) : (
+                <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                  payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                  payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
+                  payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                  "bg-muted text-muted-foreground"
+                )}>{payInfo.statusLabel}</span>
+              )}
             </div>
             {!hidden && (
               <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
@@ -1490,11 +1535,39 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
             </button>
           </div>
         </div>
-        {!hidden ? <p className="text-xl font-black">{formatAmount(item.monto)}</p> : <p className="text-xl font-black text-muted-foreground">••••••</p>}
-        {!item.pagadoEstePeriodo
-          ? <Button onClick={onTogglePaid} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">Registrar pago</Button>
-          : <Button onClick={onTogglePaid} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">Deshacer pago</Button>
-        }
+
+        {!hidden ? (
+          <div>
+            <p className="text-xl font-black">{formatAmount(item.monto)}</p>
+            {isPartiallyPaid && (
+              <p className="text-[10px] text-amber-500 font-bold mt-0.5">
+                Pagado: {formatAmount(montoPagado)} · Falta: {formatAmount(remaining)}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-xl font-black text-muted-foreground">••••••</p>
+        )}
+
+        {/* Botones de acción */}
+        {item.pagadoEstePeriodo ? (
+          <Button onClick={onTogglePaid} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
+            Deshacer pago
+          </Button>
+        ) : isPartiallyPaid ? (
+          <div className="flex gap-2">
+            <Button onClick={onTogglePaid} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
+              Deshacer pago
+            </Button>
+            <Button onClick={onTogglePaid} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+              Pagar restante
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={onTogglePaid} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+            Registrar pago de cuota
+          </Button>
+        )}
       </CardContent>
     </Card>
   )

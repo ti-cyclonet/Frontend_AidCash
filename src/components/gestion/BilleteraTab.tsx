@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import {
   Plus, RefreshCw, Wallet, Zap,
-  Lock, CheckCircle2, Pencil, ChevronDown, ChevronUp,
+  Lock, CheckCircle2, Pencil, Trash2, ChevronDown, ChevronUp,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -191,7 +191,7 @@ const POCKETS = [
 
 export function BilleteraTab() {
   const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency, diasCobro } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes, addExtraIncome } = useFinanceData()
+  const { debts, fixedExpenses, extraIncomes, addExtraIncome, removeExtraIncome } = useFinanceData()
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [incomeOpen, setIncomeOpen] = useState(false)
   const [editIncomeOpen, setEditIncomeOpen] = useState(false)
@@ -215,6 +215,8 @@ export function BilleteraTab() {
   }, [frequencyExpanded, obligationsExpanded])
   const [monto, setMonto] = useState("")
   const [tipo, setTipo] = useState<"salario" | "extra">("salario")
+  const [extraSubMode, setExtraSubMode] = useState<"variado" | "sueldo_extra">("variado")
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([])
   const [extraDesc, setExtraDesc] = useState("")
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -233,17 +235,10 @@ export function BilleteraTab() {
   const handleAddExtraIncome = async () => {
     if (!extraName || !extraMonto) return
     setSavingExtra(true)
-    // Si la frecuencia del extra es quincenal y la del usuario es mensual, duplicar el monto
-    // Si la frecuencia del extra es mensual y la del usuario es quincenal, dividir entre 2
-    let montoAjustado = Number(extraMonto)
-    if (extraFreq === "quincenal" && incomeFrequency === "mensual") {
-      montoAjustado = montoAjustado * 2 // Recibe quincenal, presupuesto mensual → x2
-    } else if (extraFreq === "mensual" && incomeFrequency === "quincenal") {
-      montoAjustado = Math.round(montoAjustado / 2) // Recibe mensual, presupuesto quincenal → /2
-    }
+    // Guardar monto tal cual — NO ajustar por frecuencia
     await addExtraIncome({
       nombre: extraName,
-      monto: montoAjustado,
+      monto: Number(extraMonto),
       temporalidad: extraTemp,
       mesesRestantes: extraTemp === "definido" ? Number(extraMeses) || 1 : null,
     })
@@ -374,7 +369,7 @@ export function BilleteraTab() {
           <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
           <div className="flex items-center justify-center gap-3 pt-2">
-            <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(periodData.effectiveIncome + extraIncomes.reduce((a, e) => a + e.monto, 0))) }} size="sm"
+            <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)); setSelectedExtras([]) }} size="sm"
               className="bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl gap-1.5 h-9 px-4 text-xs">
               <Plus className="h-3.5 w-3.5" /> Ingresar
             </Button>
@@ -404,7 +399,7 @@ export function BilleteraTab() {
                 </button>
               </div>
             </div>
-            <AnimatedAmount value={periodData.effectiveIncome} formatAmount={formatAmount} className="text-xl font-black text-white block mt-1" />
+            <AnimatedAmount value={incomeFrequency === "quincenal" ? Math.round(income / 2) : income} formatAmount={formatAmount} className="text-xl font-black text-white block mt-1" />
             <p className="text-white/40 text-[8px] mt-0.5">
               {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
             </p>
@@ -532,19 +527,36 @@ export function BilleteraTab() {
 
               {/* Lista de extras activos */}
               {extraIncomes.length > 0 && (
-                <div className="space-y-1">
-                  {extraIncomes.slice(0, 3).map(e => (
-                    <div key={e.id} className="flex items-center justify-between text-xs py-1">
-                      <span className="text-muted-foreground truncate flex-1">{e.nombre}</span>
-                      <span className="font-bold shrink-0 ml-2">{formatAmount(e.monto)}</span>
-                      <span className="text-[8px] text-muted-foreground ml-1.5 shrink-0">
-                        {e.temporalidad === "una_vez" ? "1×" : e.temporalidad === "definido" ? `${e.mesesRestantes}p` : "∞"}
-                      </span>
+                <div className="space-y-2 pt-1">
+                  {extraIncomes.map(e => (
+                    <div key={e.id} className="flex items-center gap-3 py-2 border-b border-border/20 last:border-none">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold">{e.nombre}</p>
+                        <p className="text-[9px] text-muted-foreground">
+                          {e.temporalidad === "una_vez" ? "Una vez" : e.temporalidad === "definido" ? `Definido (${e.mesesRestantes} meses)` : "Siempre"}
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold text-kiri-emerald shrink-0">{formatAmount(e.monto)}</span>
+                      <button
+                        onClick={() => { setExtraName(e.nombre); setExtraMonto(String(e.monto)); setExtraTemp(e.temporalidad as any); setExtraMeses(e.mesesRestantes ? String(e.mesesRestantes) : ""); removeExtraIncome(e.id); setExtraIncomeFormOpen(true) }}
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0"
+                        title="Editar"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => removeExtraIncome(e.id)}
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
                     </div>
                   ))}
-                  {extraIncomes.length > 3 && (
-                    <p className="text-[8px] text-muted-foreground text-center">+{extraIncomes.length - 3} más</p>
-                  )}
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-[10px] text-muted-foreground">Total extras activos</span>
+                    <span className="text-sm font-bold text-kiri-emerald">{formatAmount(extraIncomes.reduce((a, e) => a + e.monto, 0))}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -667,45 +679,117 @@ export function BilleteraTab() {
             <DialogDescription>Se distribuirá en tus 4 bolsillos según tu distribución inteligente.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Tipo */}
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo</Label>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => { setTipo("salario"); setMonto(String(periodData.effectiveIncome)) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
+                <button onClick={() => { setTipo("salario"); setMonto(String(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
                   tipo === "salario" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
                   <Wallet className="h-4 w-4" /> Sueldo
                 </button>
-                <button onClick={() => { setTipo("extra"); setMonto("") }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
+                <button onClick={() => { setTipo("extra"); setMonto(""); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
                   tipo === "extra" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
                   <Zap className="h-4 w-4" /> Extra
                 </button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
-              <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
-              {tipo === "salario" && periodData.effectiveIncome > 0 && (
-                <p className="text-[10px] text-muted-foreground">
-                  Sugerido: {formatAmount(periodData.effectiveIncome + extraIncomes.reduce((a, e) => a + e.monto, 0))} (sueldo base{extraIncomes.length > 0 ? " + extras" : ""} del periodo)
-                </p>
-              )}
-            </div>
-            {tipo === "extra" && (
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">¿Qué es?</Label>
-                <Input value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder="Ej: Freelance, venta, regalo..." className="rounded-xl" />
-              </div>
+
+            {/* Modo Sueldo */}
+            {tipo === "salario" && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
+                  <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
+                  <p className="text-[10px] text-muted-foreground">
+                    Sugerido: {formatAmount(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)} (sueldo base del periodo)
+                  </p>
+                </div>
+                {incomeFrequency === "quincenal" && (
+                  <div className="flex items-center gap-2 bg-kiri-mint/30 rounded-xl px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 text-kiri-emerald shrink-0" />
+                    <p className="text-xs text-kiri-forest font-medium">
+                      Ingreso asignado a <span className="font-bold">Quincena {periodNum}</span> ({periodRange})
+                    </p>
+                  </div>
+                )}
+              </>
             )}
-            {tipo === "salario" && incomeFrequency === "quincenal" && (
-              <div className="flex items-center gap-2 bg-kiri-mint/30 rounded-xl px-3 py-2">
-                <CheckCircle2 className="h-4 w-4 text-kiri-emerald shrink-0" />
-                <p className="text-xs text-kiri-forest font-medium">
-                  Ingreso asignado a <span className="font-bold">Quincena {periodNum}</span> ({periodRange})
-                </p>
-              </div>
+
+            {/* Modo Extra — 2 sub-opciones */}
+            {tipo === "extra" && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setExtraSubMode("variado")} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
+                    extraSubMode === "variado" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>
+                    Ingreso variado
+                  </button>
+                  <button onClick={() => setExtraSubMode("sueldo_extra")} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
+                    extraSubMode === "sueldo_extra" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>
+                    Sueldo extra
+                  </button>
+                </div>
+
+                {extraSubMode === "variado" && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
+                      <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">¿Qué es?</Label>
+                      <Input value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder="Ej: Freelance, venta, regalo..." className="rounded-xl" />
+                    </div>
+                  </div>
+                )}
+
+                {extraSubMode === "sueldo_extra" && (
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selecciona tus ingresos extra</Label>
+                    {extraIncomes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-3">No tienes ingresos extra registrados. Agrégalos desde la sección de frecuencia.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {extraIncomes.map(e => {
+                          const isSelected = selectedExtras.includes(e.id)
+                          return (
+                            <button
+                              key={e.id}
+                              onClick={() => {
+                                const next = isSelected ? selectedExtras.filter(id => id !== e.id) : [...selectedExtras, e.id]
+                                setSelectedExtras(next)
+                                const total = extraIncomes.filter(x => next.includes(x.id)).reduce((a, x) => a + x.monto, 0)
+                                setMonto(String(total))
+                              }}
+                              className={cn(
+                                "w-full flex items-center justify-between p-3 rounded-xl border-2 transition-colors text-left",
+                                isSelected ? "border-kiri-emerald bg-kiri-emerald/5" : "border-muted hover:border-kiri-emerald/30"
+                              )}
+                            >
+                              <div>
+                                <p className="text-sm font-bold">{e.nombre}</p>
+                                <p className="text-[9px] text-muted-foreground">
+                                  {e.temporalidad === "una_vez" ? "Una vez" : e.temporalidad === "definido" ? `${e.mesesRestantes} periodos` : "Siempre"}
+                                </p>
+                              </div>
+                              <span className={cn("text-sm font-bold", isSelected ? "text-kiri-emerald" : "text-muted-foreground")}>
+                                {formatAmount(e.monto)}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <div className="space-y-2 pt-2 border-t border-border/50">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto total a registrar</Label>
+                      <MoneyInput value={monto} onChange={setMonto} className="h-12 text-xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc("") }}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc(""); setSelectedExtras([]) }}>Cancelar</Button>
             <Button onClick={handleRegisterIncome} disabled={saving || !monto || Number(monto) <= 0}
               className={cn("font-bold rounded-xl px-6", tipo === "salario" ? "bg-kiri-emerald text-white" : "bg-cyclon-lavender text-white")}>
               {saving ? "Distribuyendo..." : tipo === "salario" ? "Sí, registrar mi Sueldo Base" : "Registrar"}

@@ -218,6 +218,11 @@ export function useFinanceData() {
     // montoPagado: si no se especifica, se paga la cuota completa
     const realPaid = montoPagado ?? debt.cuotaPeriodo
 
+    // Acumular pagos parciales del periodo
+    const prevPaid = debt.montoPagadoEstePeriodo ?? 0
+    const totalPaidThisPeriod = prevPaid + realPaid
+    const cuotaCubierta = totalPaidThisPeriod >= debt.cuotaPeriodo
+
     // Llamar al backend que resta del saldoRestante y guarda montoPagadoEstePeriodo
     const { data } = await debtsApi.pay(debtId, realPaid)
     if (!data) return
@@ -233,8 +238,8 @@ export function useFinanceData() {
       d.id === debtId ? {
         ...d,
         saldoRestante: nuevoSaldo,
-        pagadoEstePeriodo: true,
-        montoPagadoEstePeriodo: realPaid,
+        pagadoEstePeriodo: cuotaCubierta, // Solo marcar si se cubrió la cuota completa
+        montoPagadoEstePeriodo: totalPaidThisPeriod,
         estado: liquidada ? 'saldada' : 'activa',
       } : d
     ))
@@ -289,18 +294,30 @@ export function useFinanceData() {
     if (!fe) return
 
     const realPaid = montoPagado ?? fe.monto
+    // Acumular pagos parciales
+    const prevPaid = (fe as any).montoPagadoEstePeriodo ?? 0
+    const totalPaid = prevPaid + realPaid
+    const isFullyPaid = totalPaid >= fe.monto
 
-    await fixedExpensesApi.update(id, { pagadoEstePeriodo: true })
+    // Actualizar en backend: solo marcar pagadoEstePeriodo si se cubrió el total
+    await fixedExpensesApi.update(id, {
+      pagadoEstePeriodo: isFullyPaid,
+      montoPagadoEstePeriodo: totalPaid,
+    })
     // Deducir del sueldo real el monto REAL pagado
     await userApi.walletDeduct(realPaid, 'obligaciones')
 
-    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: true, _montoPagado: realPaid } as FixedExpense & { _montoPagado?: number } : f))
+    setFixedExpenses(prev => prev.map(f => f.id === id ? {
+      ...f,
+      pagadoEstePeriodo: isFullyPaid,
+      montoPagadoEstePeriodo: totalPaid,
+    } as any : f))
   }
 
   const undoPayFixed = async (id: string) => {
     const { data } = await fixedExpensesApi.undoPay(id)
     if (!data) return
-    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: false } : f))
+    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: false, montoPagadoEstePeriodo: null } : f))
     return data.wallet
   }
 
