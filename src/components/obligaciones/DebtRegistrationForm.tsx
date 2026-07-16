@@ -139,7 +139,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         cuotaPeriodo: Number(cuotaPeriodo),
         tasaInteres: Number(tasaInteres) || undefined,
         bankEntityId: selectedBank?.id ?? null,
-        acreedor: selectedBank?.nombre ?? searchQuery || "",
+        acreedor: (selectedBank?.nombre ?? searchQuery) || "",
         diasPago: diasPago || "1",
       })
     }
