@@ -47,8 +47,7 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
     setLoading(true)
     connectionsApi.getShared(connectionId).then(({ data: res }) => {
       if (res) setData(res as any)
-      setLoading(false)
-    })
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [open, connectionId])
 
   const handleRoleChange = async (newRole: 'FRIEND' | 'FAMILY' | 'PARTNER') => {

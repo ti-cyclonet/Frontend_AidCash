@@ -492,10 +492,14 @@ export interface BalanceReport {
     totalExtra: number
     totalDebts: number
     totalFixed: number
+    totalFixedPaid: number
     totalImpulse: number
     totalSaved: number
     cashBalance: number
     frecuenciaIngreso: string
+    totalInteresPagado: number
+    totalCapitalAbonado: number
+    totalPagosDeuda: number
   }
   categoryDistribution: { name: string; value: number; color: string }[]
   monthlySeries: { month: string; ingresos: number; egresos: number }[]
@@ -505,6 +509,7 @@ export interface BalanceReport {
   debts: Record<string, unknown>[]
   fixedExpenses: Record<string, unknown>[]
   incomeRecords: Record<string, unknown>[]
+  debtPayments: Record<string, unknown>[]
 }
 
 export const reportsApi = {
@@ -615,9 +620,14 @@ export const loansApi = {
       method: 'POST', body: data,
     })
   },
-  async approve(loanId: string) {
-    return api<{ loan: Record<string, unknown> }>('/loans/approve', {
-      method: 'POST', body: { loanId },
+  async approve(loanId: string, tasaInteres?: number) {
+    return api<{ loan: Record<string, unknown>; requiresConfirmation?: boolean }>('/loans/approve', {
+      method: 'POST', body: { loanId, tasaInteres: tasaInteres ?? 0 },
+    })
+  },
+  async borrowerConfirm(loanId: string, accept: boolean) {
+    return api<{ loan: Record<string, unknown>; accepted: boolean }>('/loans/borrower-confirm', {
+      method: 'POST', body: { loanId, accept },
     })
   },
   async reject(loanId: string) {

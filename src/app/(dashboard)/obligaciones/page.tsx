@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
   Plus, CheckCircle2, Pencil, Trash2,
-  AlertTriangle, Coffee, ShoppingBag, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign,
+  AlertTriangle, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign, Users,
 } from "lucide-react"
-import { Debt, FixedExpense, ImpulseCategory } from "@/lib/types"
+import { Debt, FixedExpense } from "@/lib/types"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -24,13 +24,17 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
-import { userApi, WalletState } from "@/lib/api-client"
-import { useBudgetCategories, detectBudgetCategory } from "@/hooks/use-budget-categories"
+import { userApi, WalletState, loansApi } from "@/lib/api-client"
+import { debtsApi, fixedExpensesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
+import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import type { Loan } from "@/lib/types"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
-type Tab = "gastos_fijos" | "deudas" | "gastos_hormiga"
+type Tab = "gastos_fijos" | "deudas"
 type ItemType = "deuda" | "gasto_fijo"
 type EditScope = "este_mes" | "permanente"
 
@@ -54,15 +58,6 @@ const emptyDebtForm: DebtForm = {
 }
 const emptyFixedForm: FixedForm = { nombre: "", monto: "", frecuencia: "mensual", diasPago: "" }
 
-const CATEGORIES: { value: ImpulseCategory; label: string; emoji: string }[] = [
-  { value: "cafe",       label: "Café",       emoji: "☕" },
-  { value: "comida",     label: "Comida",     emoji: "🍔" },
-  { value: "transporte", label: "Transporte", emoji: "🚕" },
-  { value: "antojo",     label: "Antojo",     emoji: "🍫" },
-  { value: "salida",     label: "Salida",     emoji: "🎉" },
-  { value: "otro",       label: "Otro",       emoji: "💸" },
-]
-
 export default function ObligacionesPage() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("obligaciones")
   const {
@@ -70,14 +65,24 @@ export default function ObligacionesPage() {
     addDebt, updateDebt, deleteDebt,
     addFixedExpense, updateFixedExpense, deleteFixedExpense,
     markPaid, undoPayDebt, markFixedPaid, undoPayFixed,
-    impulseExpenses, impulseThisPeriod, totalImpulseThisPeriod,
-    addImpulseExpense, removeImpulseExpense,
     extraIncomes,
   } = useFinanceData()
   const { formatAmount, income, incomeFrequency } = useAppContext()
+  const { user: authUser } = useAuth()
+  const router = useRouter()
 
-  // Categorías del presupuesto del usuario (para el modal de gastos hormiga)
-  const { budgetCategories } = useBudgetCategories()
+  // ── Préstamos sociales (solo ACTIVE donde soy borrower) ────────────────────
+  const [socialLoans, setSocialLoans] = useState<Loan[]>([])
+  useEffect(() => {
+    loansApi.list().then(({ data }) => {
+      if (data?.loans) {
+        const activeLoans = (data.loans as unknown as Loan[]).filter(
+          l => l.status === "ACTIVE" && l.borrowerId === authUser?.id
+        )
+        setSocialLoans(activeLoans)
+      }
+    }).catch(() => {})
+  }, [authUser?.id])
 
   // ── Tab activa ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>("gastos_fijos")
@@ -95,7 +100,6 @@ export default function ObligacionesPage() {
 
   // ── Asignación de presupuesto — distribución dinámica del periodo actual ──
   const { allocation, periodData } = usePeriodBudget()
-  const dailyFreeAmount = allocation?.dailyFreeAmount ?? 0
 
   // IDs de obligaciones que son PRIORIDAD del periodo actual (para resaltar en amarillo)
   const periodPriorityIds = useMemo(() => {
@@ -120,6 +124,7 @@ export default function ObligacionesPage() {
   const [payFixed, setPayFixed] = useState<FixedExpense | null>(null)
   const [isFixedPartialMode, setIsFixedPartialMode] = useState(false)
   const [fixedPartialAmount, setFixedPartialAmount] = useState("")
+  const [showTCOptions, setShowTCOptions] = useState(false)
 
   // ── Saldo insuficiente modal ───────────────────────────────────────────────
   const [insufficientOpen, setInsufficientOpen] = useState(false)
@@ -164,15 +169,6 @@ export default function ObligacionesPage() {
 
   // ── Delete confirm ─────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<{ type: "debt" | "fixed"; id: string; nombre: string } | null>(null)
-
-  // ── Gasto Hormiga modal ────────────────────────────────────────────────────
-  const [impulseModalOpen, setImpulseModalOpen] = useState(false)
-  const [impulseNombre, setImpulseNombre] = useState("")
-  const [impulseMonto, setImpulseMonto] = useState("")
-  const [impulseCategoria, setImpulseCategoria] = useState<ImpulseCategory>("cafe")
-  const [savingImpulse, setSavingImpulse] = useState(false)
-  const [impulseWarningOpen, setImpulseWarningOpen] = useState(false)
-  const [lastAddedImpulseId, setLastAddedImpulseId] = useState<string | null>(null)
 
   // ── Handlers Pay ──────────────────────────────────────────────────────────
   const openPay = (debt: Debt) => {
@@ -396,84 +392,6 @@ export default function ObligacionesPage() {
     setDeleteTarget(null)
   }
 
-  // ── Handlers Gastos Hormiga ───────────────────────────────────────────────
-  const [insufficientImpulseOpen, setInsufficientImpulseOpen] = useState(false)
-  const [pendingImpulse, setPendingImpulse] = useState<{ nombre: string; monto: number; categoria: ImpulseCategory } | null>(null)
-
-  const handleAddImpulse = async () => {
-    if (!impulseNombre || !impulseMonto || Number(impulseMonto) <= 0) return
-    const monto = Number(impulseMonto)
-
-    // Verificar si excede el presupuesto blindado ANTES de registrar
-    const newTotal = totalImpulseThisPeriod + monto
-    if (dailyFreeAmount > 0 && newTotal > dailyFreeAmount) {
-      // Bloquear — mostrar modal de opciones
-      setPendingImpulse({ nombre: impulseNombre, monto, categoria: impulseCategoria })
-      setImpulseModalOpen(false)
-      setInsufficientImpulseOpen(true)
-      return
-    }
-
-    // Si hay presupuesto suficiente, registrar normalmente
-    setSavingImpulse(true)
-    const result = await addImpulseExpense({ nombre: impulseNombre, monto, categoria: impulseCategoria })
-    setSavingImpulse(false)
-    if (result) {
-      setLastAddedImpulseId(result.id)
-      setImpulseModalOpen(false)
-    }
-    setImpulseNombre("")
-    setImpulseMonto("")
-    setImpulseCategoria("cafe")
-  }
-
-  // Opciones del modal de insuficiencia para impulse
-  const handleImpulseForceRegister = async () => {
-    // Registrar de todas formas (usar más del presupuesto asignado)
-    if (!pendingImpulse) return
-    setSavingImpulse(true)
-    await addImpulseExpense(pendingImpulse)
-    setSavingImpulse(false)
-    setInsufficientImpulseOpen(false)
-    setPendingImpulse(null)
-    setImpulseNombre("")
-    setImpulseMonto("")
-    setImpulseCategoria("cafe")
-  }
-
-  const handleImpulseUseSavings = async () => {
-    // Usar ahorro para cubrir y registrar
-    if (!pendingImpulse) return
-    setSavingImpulse(true)
-    await addImpulseExpense(pendingImpulse)
-    setSavingImpulse(false)
-    setInsufficientImpulseOpen(false)
-    setPendingImpulse(null)
-    setImpulseNombre("")
-    setImpulseMonto("")
-    setImpulseCategoria("cafe")
-  }
-
-  const handleImpulseCancel = () => {
-    setInsufficientImpulseOpen(false)
-    setPendingImpulse(null)
-  }
-
-  const handleCancelImpulse = async () => {
-    if (lastAddedImpulseId) {
-      await removeImpulseExpense(lastAddedImpulseId)
-      setLastAddedImpulseId(null)
-    }
-    setImpulseWarningOpen(false)
-  }
-
-  // Estadísticas para gastos hormiga
-  const usagePct = dailyFreeAmount > 0
-    ? Math.min(100, Math.round((totalImpulseThisPeriod / dailyFreeAmount) * 100))
-    : 0
-  const remaining = Math.max(0, dailyFreeAmount - totalImpulseThisPeriod)
-  const isOver = totalImpulseThisPeriod > dailyFreeAmount
-
 
   return (
     <>
@@ -491,20 +409,6 @@ export default function ObligacionesPage() {
             onClick={() => {
               setAddType(activeTab === "deudas" ? "deuda" : "gasto_fijo")
               setIsAddOpen(true)
-            }}
-          >
-            <Plus className="h-6 w-6" />
-          </Button>
-        )}
-        {activeTab === "gastos_hormiga" && (
-          <Button
-            size="icon"
-            className="rounded-2xl bg-cyclon-pink shadow-lg shadow-cyclon-pink/30"
-            onClick={() => {
-              setImpulseNombre("")
-              setImpulseMonto("")
-              setImpulseCategoria("cafe")
-              setImpulseModalOpen(true)
             }}
           >
             <Plus className="h-6 w-6" />
@@ -530,11 +434,10 @@ export default function ObligacionesPage() {
       )}
 
       {/* ── Pestañas ── */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {[
           { key: "gastos_fijos" as Tab, label: "Gastos Fijos" },
           { key: "deudas" as Tab,       label: "Deudas" },
-          { key: "gastos_hormiga" as Tab, label: "Gastos Hormiga" },
         ].map(tab => (
           <button
             key={tab.key}
@@ -600,6 +503,9 @@ export default function ObligacionesPage() {
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
                   isPeriodPriority={periodPriorityIds.has(fe.id)}
+                  onToggleAutoPay={async () => {
+                    await updateFixedExpense(fe.id, { pagoAutomatico: !fe.pagoAutomatico })
+                  }}
                 />
               ))}
             </>
@@ -653,6 +559,9 @@ export default function ObligacionesPage() {
                   hidden={hiddenItems.has(debt.id)}
                   onToggleHidden={() => toggleItemHidden(debt.id)}
                   isPeriodPriority={periodPriorityIds.has(debt.id)}
+                  onToggleAutoPay={async () => {
+                    await updateDebt(debt.id, { pagoAutomatico: !debt.pagoAutomatico })
+                  }}
                 />
               ))}
             </>
@@ -660,101 +569,49 @@ export default function ObligacionesPage() {
           <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">
             Ver historial completo en Balance →
           </Link>
-        </div>
-      )}
 
-      {/* ════════════════════════════════════════════════════════════
-          TAB: GASTOS HORMIGA
-      ════════════════════════════════════════════════════════════ */}
-      {activeTab === "gastos_hormiga" && (
-        <div className="space-y-4">
-          {/* Barra de progreso */}
-          <Card className={cn("border-none shadow-sm rounded-3xl", isOver && "ring-1 ring-red-400/30 bg-red-500/5")}>
-            <CardContent className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "h-10 w-10 rounded-2xl flex items-center justify-center shrink-0",
-                    isOver ? "bg-red-500/10 text-red-500" : "bg-cyclon-pink/10 text-cyclon-pink"
-                  )}>
-                    <Coffee className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm">Gastos Hormiga</h3>
-                    <p className="text-[10px] text-muted-foreground">Café, antojos, día a día</p>
-                  </div>
-                </div>
-                {dailyFreeAmount === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic">Configura ingresos en Gestión</p>
-                )}
-              </div>
-              {dailyFreeAmount > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] font-bold">
-                    <span className={isOver ? "text-red-500" : "text-muted-foreground"}>
-                      Gastado: {formatAmount(totalImpulseThisPeriod)}
-                    </span>
-                    <span className="text-muted-foreground">Libre: {formatAmount(remaining)}</span>
-                  </div>
-                  <Progress
-                    value={usagePct}
-                    className="h-2"
-                    indicatorClassName={cn(
-                      usagePct >= 100 ? "bg-red-500" : usagePct >= 75 ? "bg-yellow-500" : "bg-cyclon-pink"
-                    )}
-                  />
-                  <p className="text-[9px] text-muted-foreground text-right">
-                    de {formatAmount(dailyFreeAmount)} blindado
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Historial de gastos hormiga */}
-          <div className="space-y-3">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              Historial — {impulseThisPeriod.length > 0 ? `${impulseThisPeriod.length} registros este periodo` : "Sin registros"}
-            </p>
-            {impulseExpenses.length === 0 ? (
-              <div className="text-center py-8 space-y-3">
-                <div className="h-14 w-14 bg-cyclon-pink/10 rounded-2xl flex items-center justify-center mx-auto">
-                  <Coffee className="h-7 w-7 text-cyclon-pink" />
-                </div>
-                <p className="text-sm text-muted-foreground">Aún no tienes gastos hormiga.</p>
-                <p className="text-xs text-muted-foreground">Toca el <strong>+</strong> para registrar uno.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {impulseExpenses.map(item => {
-                  const cat = CATEGORIES.find(c => c.value === item.categoria)
-                  return (
-                    <div key={item.id} className="flex items-center gap-3 bg-card rounded-2xl px-4 py-3 shadow-sm">
-                      <span className="text-lg">{cat?.emoji ?? "💸"}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold truncate">{item.nombre}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {item.createdAt
-                            ? new Date(item.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })
-                            : item.periodo}
-                          {" · "}{cat?.label ?? "Otro"}
-                        </p>
+          {/* ── Préstamos Sociales (P2P aprobados) ── */}
+          {socialLoans.length > 0 && (
+            <div className="space-y-2 pt-3 border-t border-border/50">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="h-3 w-3" /> Préstamos P2P
+              </p>
+              {socialLoans.map(loan => {
+                const lenderName = loan.lender?.nombre ?? "Prestamista"
+                const pct = loan.amount > 0 ? Math.round(((loan.amount - loan.remainingAmount) / loan.amount) * 100) : 0
+                return (
+                  <Card
+                    key={loan.id}
+                    className="border-none bg-card shadow-sm rounded-2xl cursor-pointer hover:ring-2 hover:ring-cyclon-lavender/30 transition-all"
+                    onClick={() => router.push("/social")}
+                  >
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-cyclon-lavender/20 flex items-center justify-center shrink-0">
+                          <Users className="h-5 w-5 text-cyclon-lavender" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">Le debo a {lenderName}</p>
+                          <p className="text-[10px] text-muted-foreground">{loan.descripcion || "Préstamo P2P"}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-black text-amber-600">{formatAmount(loan.remainingAmount)}</p>
+                          <p className="text-[9px] text-muted-foreground">de {formatAmount(loan.amount)}</p>
+                        </div>
                       </div>
-                      <span className="font-black text-sm shrink-0">{formatAmount(item.monto)}</span>
-                      <button
-                        onClick={() => removeImpulseExpense(item.id)}
-                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                      <Progress value={pct} className="h-1.5" indicatorClassName="bg-cyclon-lavender" />
+                      <p className="text-[8px] text-cyclon-lavender font-bold text-center">
+                        Toca para pagar en Social →
+                      </p>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
+
 
       {/* ════ MODALES ════ */}
 
@@ -796,10 +653,60 @@ export default function ObligacionesPage() {
             <DialogDescription>Gasto fijo: <strong>{payFixed?.nombre}</strong></DialogDescription>
           </DialogHeader>
           <div className="py-3 flex flex-col gap-3">
+            {/* Opción 1: Pagar del sueldo real */}
             <Button onClick={confirmFullPayFixed} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
               <CheckCircle2 className="h-5 w-5" />
-              Pagar ({formatAmount(payFixed?.monto ?? 0)})
+              Pagar ({formatAmount(payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0))})
             </Button>
+
+            {/* Opción 2: Pagar con tarjeta de crédito */}
+            {(() => {
+              const tarjetas = debts.filter(d => d.estado === 'activa' && (
+                d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
+                d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
+                d.nombre.toLowerCase().includes('credito')
+              ))
+              if (tarjetas.length === 0) return null
+              return (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTCOptions(v => !v)}
+                    className="h-12 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
+                  >
+                    <CircleDollarSign className="h-4 w-4" />
+                    Pagar con Tarjeta de Crédito
+                  </Button>
+                  {showTCOptions && (
+                    <div className="space-y-2 pl-2">
+                      {tarjetas.map(tc => (
+                        <button
+                          key={tc.id}
+                          onClick={async () => {
+                            if (!payFixed) return
+                            const monto = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
+                            await debtsApi.update(tc.id, { saldoRestante: tc.saldoRestante + monto })
+                            await fixedExpensesApi.update(payFixed.id, { pagadoEstePeriodo: true, montoPagadoEstePeriodo: monto })
+                            setPayFixed(null)
+                            setShowTCOptions(false)
+                            window.location.reload()
+                          }}
+                          className="w-full flex items-center justify-between p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+                        >
+                          <div>
+                            <p className="text-xs font-bold">{tc.nombre}</p>
+                            <p className="text-[9px] text-muted-foreground">Saldo actual: {formatAmount(tc.saldoRestante)}</p>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-500">Seleccionar</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+
+            {/* Opción 3: Pagaste otro valor */}
             <Button variant="outline" onClick={() => setIsFixedPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
               ¿Pagaste otro valor?
             </Button>
@@ -808,7 +715,7 @@ export default function ObligacionesPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold">Monto real pagado</Label>
                   <MoneyInput value={fixedPartialAmount} onChange={v => setFixedPartialAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus={isFixedPartialMode} />
-                  <p className="text-[10px] text-muted-foreground">Si pagaste más o menos del valor esperado ({formatAmount(payFixed?.monto ?? 0)}), registra el monto real aquí.</p>
+                  <p className="text-[10px] text-muted-foreground">Si pagaste más o menos del valor esperado ({formatAmount(payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0))}), registra el monto real aquí.</p>
                 </div>
                 <Button onClick={confirmPartialPayFixed} disabled={!fixedPartialAmount || Number(fixedPartialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">
                   Confirmar pago
@@ -858,7 +765,57 @@ export default function ObligacionesPage() {
               </button>
             )}
 
-            {/* Opción 3: Registrar ingreso rápido */}
+            {/* Opción 3: Pagar con tarjeta de crédito */}
+            {(() => {
+              const tarjetas = debts.filter(d => d.estado === 'activa' && (
+                d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
+                d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
+                d.nombre.toLowerCase().includes('credito')
+              ))
+              if (tarjetas.length === 0) return null
+              return (
+                <div className="space-y-2">
+                  <p className="text-[9px] font-bold text-muted-foreground uppercase pl-1">Pagar con tarjeta de crédito</p>
+                  {tarjetas.map(tc => {
+                    const tasaMensual = tc.tasaInteres ? Number(tc.tasaInteres) : 1.85
+                    const montoTarget = insufficientTarget?.monto ?? 0
+                    const interesMes = Math.round(montoTarget * (tasaMensual / 100))
+                    return (
+                      <button key={tc.id}
+                        onClick={async () => {
+                          if (!insufficientTarget) return
+                          // Sumar al saldo de la tarjeta (no descuenta cashBalance)
+                          await debtsApi.update(tc.id, { saldoRestante: tc.saldoRestante + montoTarget })
+                          // Marcar como pagado
+                          if (insufficientTarget.type === "fixed") {
+                            await fixedExpensesApi.update(insufficientTarget.id, { pagadoEstePeriodo: true, montoPagadoEstePeriodo: montoTarget })
+                          }
+                          setInsufficientOpen(false); setInsufficientTarget(null)
+                          const { data: w } = await userApi.getWallet(); if (w) setWallet(w.wallet)
+                          await (await import('@/hooks/use-finance-data')).useFinanceData ? null : null
+                          window.location.reload()
+                        }}
+                        className="w-full text-left p-4 rounded-2xl border-2 border-amber-500/40 bg-amber-500/5 hover:border-amber-500 transition-colors space-y-1"
+                      >
+                        <div className="flex items-center gap-2">
+                          <CircleDollarSign className="h-4 w-4 text-amber-500" />
+                          <p className="font-bold text-sm">Pagar con {tc.nombre}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground pl-6">
+                          Se sumará {formatAmount(montoTarget)} al saldo de tu tarjeta.
+                        </p>
+                        <div className="pl-6 text-[9px] text-amber-500 space-y-0.5">
+                          <p>Interés mensual estimado: +{formatAmount(interesMes)} ({tasaMensual}%)</p>
+                          <p>Nuevo saldo tarjeta: {formatAmount(tc.saldoRestante + montoTarget)}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
+            {/* Opción 4: Registrar ingreso rápido */}
             <button onClick={() => { setQuickIncomeOpen(true) }} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
               <div className="flex items-center gap-2">
                 <WalletIcon className="h-4 w-4 text-cyclon-lavender" />
@@ -1074,239 +1031,6 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Gasto Hormiga — Modal de registro */}
-      <Dialog open={impulseModalOpen} onOpenChange={v => { if (!v) { setImpulseModalOpen(false); setImpulseNombre(""); setImpulseMonto(""); setImpulseCategoria("cafe") } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShoppingBag className="h-5 w-5 text-cyclon-pink" />
-              Gasto hormiga
-            </DialogTitle>
-            <DialogDescription>¿En qué gastaste?</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción</Label>
-              <Input
-                placeholder="Ej: Café en Starbucks"
-                value={impulseNombre}
-                onChange={e => {
-                  setImpulseNombre(e.target.value)
-                  // Auto-detectar categoría del presupuesto
-                  const detected = detectBudgetCategory(e.target.value, budgetCategories)
-                  if (detected) {
-                    // Mapear a ImpulseCategory más cercana
-                    const lower = detected.toLowerCase()
-                    if (lower.includes("alimenta") || lower.includes("comida")) setImpulseCategoria("comida")
-                    else if (lower.includes("transport")) setImpulseCategoria("transporte")
-                    else if (lower.includes("ocio") || lower.includes("salida")) setImpulseCategoria("salida")
-                    else if (lower.includes("cafe") || lower.includes("café")) setImpulseCategoria("cafe")
-                    else if (lower.includes("antojo") || lower.includes("compra")) setImpulseCategoria("antojo")
-                    else setImpulseCategoria("otro")
-                  }
-                }}
-                className="h-10 rounded-xl"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto</Label>
-              <MoneyInput
-                value={impulseMonto}
-                onChange={v => setImpulseMonto(v)}
-                className="h-12 text-lg font-bold rounded-xl"
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Categoría</Label>
-              {/* Categorías del presupuesto del usuario */}
-              {budgetCategories.length > 0 && (
-                <>
-                  <p className="text-[9px] text-muted-foreground mb-1">De tu presupuesto:</p>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    {budgetCategories.map(bc => {
-                      // Determinar qué ImpulseCategory mapea
-                      const lower = bc.name.toLowerCase()
-                      const mapped: ImpulseCategory = lower.includes("alimenta") || lower.includes("comida") ? "comida"
-                        : lower.includes("transport") ? "transporte"
-                        : lower.includes("ocio") || lower.includes("salida") ? "salida"
-                        : lower.includes("cafe") || lower.includes("café") ? "cafe"
-                        : lower.includes("antojo") || lower.includes("compra") ? "antojo"
-                        : "otro"
-                      const isSelected = impulseCategoria === mapped
-                      return (
-                        <button
-                          key={bc.id}
-                          onClick={() => setImpulseCategoria(mapped)}
-                          className={cn(
-                            "flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-colors",
-                            isSelected
-                              ? "border-cyclon-pink bg-cyclon-pink/5 text-cyclon-pink"
-                              : "border-muted text-muted-foreground hover:border-cyclon-pink/30"
-                          )}
-                        >
-                          <div className="h-6 w-6 rounded-md flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: bc.color }}>
-                            {bc.name.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="text-[9px] font-bold truncate max-w-full">{bc.name}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <p className="text-[9px] text-muted-foreground mb-1">Generales:</p>
-                </>
-              )}
-              <div className="grid grid-cols-3 gap-2">
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat.value}
-                    onClick={() => setImpulseCategoria(cat.value)}
-                    className={cn(
-                      "flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-colors",
-                      impulseCategoria === cat.value
-                        ? "border-cyclon-pink bg-cyclon-pink/5 text-cyclon-pink"
-                        : "border-muted text-muted-foreground hover:border-cyclon-pink/30"
-                    )}
-                  >
-                    <span className="text-lg">{cat.emoji}</span>
-                    <span className="text-[9px] font-bold">{cat.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {dailyFreeAmount > 0 && Number(impulseMonto) > 0 &&
-              (totalImpulseThisPeriod + Number(impulseMonto)) > dailyFreeAmount * 0.8 && (
-              <div className={cn(
-                "flex items-start gap-2 p-2.5 rounded-xl text-xs",
-                (totalImpulseThisPeriod + Number(impulseMonto)) > dailyFreeAmount
-                  ? "bg-red-500/10 text-red-500"
-                  : "bg-yellow-500/10 text-yellow-600"
-              )}>
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>
-                  {(totalImpulseThisPeriod + Number(impulseMonto)) > dailyFreeAmount
-                    ? "Este gasto excede tu presupuesto blindado."
-                    : "Estás usando más del 80% de tu gasto libre."}
-                </span>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setImpulseModalOpen(false)}>Cancelar</Button>
-            <Button
-              onClick={handleAddImpulse}
-              disabled={savingImpulse || !impulseNombre || !impulseMonto || Number(impulseMonto) <= 0}
-              className="bg-cyclon-pink text-white font-bold rounded-xl px-6"
-            >
-              {savingImpulse ? "Guardando..." : "Registrar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Gasto Hormiga — Modal de presupuesto insuficiente */}
-      <Dialog open={insufficientImpulseOpen} onOpenChange={v => !v && handleImpulseCancel()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-500"><AlertTriangle className="h-5 w-5" /> Presupuesto insuficiente</DialogTitle>
-            <DialogDescription>
-              Tu gasto libre disponible ({formatAmount(Math.max(0, dailyFreeAmount - totalImpulseThisPeriod))}) no alcanza para cubrir este gasto de <strong>{formatAmount(pendingImpulse?.monto ?? 0)}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-3">
-            <Card className="border-none bg-red-500/5 rounded-2xl">
-              <CardContent className="p-4 text-center space-y-1">
-                <p className="text-xs text-muted-foreground">Disponible en gasto libre</p>
-                <p className="text-lg font-black">{formatAmount(Math.max(0, dailyFreeAmount - totalImpulseThisPeriod))}</p>
-                <p className="text-xs text-red-500 font-bold">
-                  Necesitas: {formatAmount(pendingImpulse?.monto ?? 0)}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="space-y-2 pt-2">
-            {/* Opción 1: Usar más del presupuesto (si tiene cashBalance) */}
-            {wallet.cashBalance > 0 && (
-              <button
-                onClick={handleImpulseForceRegister}
-                className="w-full text-left p-4 rounded-2xl border-2 border-amber-500/40 bg-amber-500/5 hover:border-amber-500 transition-colors space-y-0.5"
-              >
-                <div className="flex items-center gap-2">
-                  <CircleDollarSign className="h-4 w-4 text-amber-500" />
-                  <p className="font-bold text-sm">Usar más del presupuesto asignado</p>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Registrar de todas formas. Excederás tu gasto libre blindado.
-                </p>
-              </button>
-            )}
-
-            {/* Opción 2: Usar ahorro */}
-            {(wallet.ahorro > 0 || fondoEmergencia > 0) && (
-              <button
-                onClick={handleImpulseUseSavings}
-                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500 transition-colors space-y-0.5"
-              >
-                <div className="flex items-center gap-2">
-                  <PiggyBank className="h-4 w-4 text-emerald-500" />
-                  <p className="font-bold text-sm">Usar ahorro</p>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Cubrir con tu ahorro disponible ({formatAmount(wallet.ahorro + fondoEmergencia)}).
-                </p>
-              </button>
-            )}
-
-            {/* Opción 3: Registrar como nueva deuda */}
-            <Link href="/obligaciones" onClick={() => { setInsufficientImpulseOpen(false); setActiveTab("deudas") }}>
-              <button className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <WalletIcon className="h-4 w-4 text-cyclon-lavender" />
-                  <p className="font-bold text-sm">Registrar como nueva deuda</p>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Si pediste prestado para cubrir este gasto, regístralo como obligación.
-                </p>
-              </button>
-            </Link>
-
-            {/* Cancelar */}
-            <Button variant="ghost" onClick={handleImpulseCancel} className="w-full text-muted-foreground mt-1">
-              Cancelar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Gasto Hormiga Warning (legacy — por si pasa sin interceptar) */}
-      <Dialog open={impulseWarningOpen} onOpenChange={v => !v && setImpulseWarningOpen(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-500"><AlertTriangle className="h-5 w-5" /> Te pasaste del presupuesto</DialogTitle>
-            <DialogDescription>Tus gastos hormiga superaron el monto blindado asignado.</DialogDescription>
-          </DialogHeader>
-          <div className="py-3">
-            <Card className="border-none bg-red-500/5 rounded-2xl">
-              <CardContent className="p-4 text-center space-y-1">
-                <p className="text-xs text-muted-foreground">Presupuesto blindado</p>
-                <p className="text-lg font-black">{formatAmount(dailyFreeAmount)}</p>
-                <p className="text-xs text-red-500 font-bold">
-                  Gastaste: {formatAmount(totalImpulseThisPeriod)}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-          <DialogFooter className="flex flex-col gap-2 pt-2">
-            <Button onClick={() => setImpulseWarningOpen(false)} className="w-full bg-cyclon-periwinkle text-white font-bold rounded-xl h-12">
-              Entendido
-            </Button>
-            <Button variant="ghost" onClick={handleCancelImpulse} className="w-full text-muted-foreground">
-              Cancelar (eliminar último gasto)
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
     </>
   )
@@ -1347,10 +1071,11 @@ function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority }: {
+function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
   debt: Debt; formatAmount: (n: number) => string
   onPay: () => void; onUndoPay: () => void; onEdit: () => void; onDelete: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
+  onToggleAutoPay?: () => void
 }) {
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
   const progreso = debt.montoTotal > 0 ? Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100) : 0
@@ -1392,6 +1117,11 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
             )}
           </div>
           <div className="flex gap-1 shrink-0">
+            <button onClick={onToggleAutoPay} title={debt.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
+              className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
+                debt.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
+              <span className="text-[10px]">⚡</span>
+            </button>
             <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
@@ -1483,10 +1213,11 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden, isPeriodPriority }: {
+function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
   item: FixedExpense; formatAmount: (n: number) => string
   onEdit: () => void; onDelete: () => void; onTogglePaid: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
+  onToggleAutoPay?: () => void
 }) {
   const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo)
   const montoPagado = (item as any).montoPagadoEstePeriodo ?? 0
@@ -1524,6 +1255,11 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
             )}
           </div>
           <div className="flex gap-1 shrink-0">
+            <button onClick={onToggleAutoPay} title={item.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
+              className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
+                item.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
+              <span className="text-[10px]">⚡</span>
+            </button>
             <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
@@ -1748,6 +1484,12 @@ function FixedFormFields({
           {form.frecuencia === "quincenal" ? "Ej: 1 y 15 ó 15 y 30" : "Día del mes en que se cobra"}
         </p>
       </div>
+
+      {/* Tarjeta vinculada */}
+      <CreditCardSelector
+        value={(form as any).tarjetaVinculadaId ?? null}
+        onChange={v => set({ tarjetaVinculadaId: v } as any)}
+      />
     </div>
   )
 }

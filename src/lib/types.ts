@@ -118,6 +118,7 @@ export interface Debt {
   pagadoEstePeriodo: boolean;
   estado: DebtStatus;
   prioridad: DebtPriority;
+  pagoAutomatico?: boolean;
 }
 
 export interface FixedExpense {
@@ -131,6 +132,7 @@ export interface FixedExpense {
   metodoPago?: string | null;
   renovacionAuto: boolean;
   pagadoEstePeriodo: boolean;
+  pagoAutomatico?: boolean;
 }
 
 export type ImpulseCategory = 'cafe' | 'comida' | 'transporte' | 'antojo' | 'salida' | 'otro';

@@ -49,6 +49,7 @@ function mapDebt(row: Record<string, unknown>): Debt {
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
     estado: (row.estado as Debt["estado"]) ?? 'activa',
     prioridad: (row.prioridad as Debt["prioridad"]) ?? 'media',
+    pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
   }
 }
 
@@ -64,6 +65,7 @@ function mapFixed(row: Record<string, unknown>): FixedExpense {
     metodoPago: (row.metodoPago ?? row.metodo_pago) as string | null ?? null,
     renovacionAuto: (row.renovacionAuto ?? row.renovacion_auto ?? false) as boolean,
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
+    pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
   }
 }
 
@@ -293,7 +295,9 @@ export function useFinanceData() {
     const fe = fixedExpenses.find(f => f.id === id)
     if (!fe) return
 
-    const realPaid = montoPagado ?? fe.monto
+    // Si es quincenal, el monto por periodo es la mitad del total
+    const montoPorPeriodo = (fe as any).frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
+    const realPaid = montoPagado ?? montoPorPeriodo
     // Acumular pagos parciales
     const prevPaid = (fe as any).montoPagadoEstePeriodo ?? 0
     const totalPaid = prevPaid + realPaid

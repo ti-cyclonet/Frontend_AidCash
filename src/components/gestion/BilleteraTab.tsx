@@ -191,7 +191,7 @@ const POCKETS = [
 
 export function BilleteraTab() {
   const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency, diasCobro } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes, addExtraIncome, removeExtraIncome } = useFinanceData()
+  const { debts, fixedExpenses, extraIncomes, addExtraIncome, removeExtraIncome, markPaid, markFixedPaid, refetch } = useFinanceData()
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [incomeOpen, setIncomeOpen] = useState(false)
   const [editIncomeOpen, setEditIncomeOpen] = useState(false)
@@ -292,11 +292,76 @@ export function BilleteraTab() {
       if (tipo === 'salario') {
         const label = getIncomeQuincenaLabel(incomeFrequency)
         if (label) addNotification(SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED, { message: label, action: "info" })
+
+        // ═══ AUTOPAGO: Ejecutar pagos automáticos al registrar sueldo base ═══
+        await executeAutoPays()
       }
       if (pendingObligations === 0) { setRecommendationType("no_obligations"); setRecommendationOpen(true) }
       else if (income > 0 && data.wallet.cashBalance > income) { setRecommendationType("extra_income"); setRecommendationOpen(true) }
     }
     setSaving(false); setIncomeOpen(false); setMonto(""); setExtraDesc("")
+  }
+
+  // ═══ Lógica de pagos automáticos ═══
+  const executeAutoPays = async () => {
+    // 1. Deudas con pagoAutomatico activo y pendientes de pago
+    const autoDebts = debts.filter(d => d.pagoAutomatico && !d.pagadoEstePeriodo && d.estado === 'activa')
+    for (const debt of autoDebts) {
+      try {
+        await markPaid(debt.id)
+        console.log(`[AutoPago] Deuda "${debt.nombre}" pagada automáticamente`)
+      } catch (err) { console.error(`[AutoPago] Error pagando deuda "${debt.nombre}":`, err) }
+    }
+
+    // 2. Gastos fijos con pagoAutomatico activo y pendientes de pago
+    const autoFixed = fixedExpenses.filter(f => f.pagoAutomatico && !f.pagadoEstePeriodo)
+    for (const fe of autoFixed) {
+      try {
+        await markFixedPaid(fe.id)
+        console.log(`[AutoPago] Gasto fijo "${fe.nombre}" pagado automáticamente`)
+      } catch (err) { console.error(`[AutoPago] Error pagando gasto fijo "${fe.nombre}":`, err) }
+    }
+
+    // 3. Bolsillos de ahorro con pagoAutomatico activo
+    try {
+      const raw = localStorage.getItem("kiri_saving_pockets")
+      if (raw) {
+        const pockets = JSON.parse(raw) as { id: string; nombre: string; meta: number; acumulado: number; pagoAutomatico?: boolean }[]
+        const autoPockets = pockets.filter(p => p.pagoAutomatico && p.meta > 0 && p.acumulado < p.meta)
+        if (autoPockets.length > 0) {
+          // Calcular cuánto aportar a cada bolsillo (distribución equitativa del ahorro sugerido)
+          const savingsAmount = allocation?.savingsAmount ?? 0
+          const perPocket = autoPockets.length > 0 && savingsAmount > 0
+            ? Math.round(savingsAmount / autoPockets.length)
+            : 0
+          if (perPocket > 0) {
+            const updated = pockets.map(p => {
+              if (p.pagoAutomatico && p.meta > 0 && p.acumulado < p.meta) {
+                const toAdd = Math.min(perPocket, p.meta - p.acumulado)
+                return { ...p, acumulado: p.acumulado + toAdd }
+              }
+              return p
+            })
+            localStorage.setItem("kiri_saving_pockets", JSON.stringify(updated))
+            // Descontar del wallet el total aportado
+            const totalAported = autoPockets.reduce((a, p) => {
+              const toAdd = Math.min(perPocket, p.meta - p.acumulado)
+              return a + toAdd
+            }, 0)
+            if (totalAported > 0) {
+              await userApi.walletDeduct(totalAported, 'ahorro')
+            }
+          }
+        }
+      }
+    } catch {}
+
+    // Refrescar wallet y datos después de los autopagos
+    const { data: freshWallet } = await userApi.getWallet()
+    if (freshWallet) setWallet(freshWallet.wallet)
+    await refetch()
+    // Notificar a otros componentes que el wallet y las obligaciones cambiaron
+    window.dispatchEvent(new Event("kiri:wallet-updated"))
   }
 
   const handleEditIncome = async () => {
@@ -424,105 +489,96 @@ export function BilleteraTab() {
       {frequencyExpanded && (
         <Card data-panel="frequency" className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setIncomeFrequency("quincenal")}
-                className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
-                  incomeFrequency === "quincenal" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
-                Quincenal
-              </button>
-              <button onClick={() => setIncomeFrequency("mensual")}
-                className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
-                  incomeFrequency === "mensual" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
-                Mensual
-              </button>
-            </div>
             <p className="text-xs text-muted-foreground">
               {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
             </p>
-
-            {/* ── Selector de días de pago ── */}
-            <div className="border-t border-border/50 pt-3">
-              <PaydaySelector compact />
-            </div>
 
             {/* ── Ingresos Extra ── */}
             <div className="border-t border-border/50 pt-3 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold">Ingresos extra</p>
-                <button
-                  onClick={() => setExtraIncomeFormOpen(!extraIncomeFormOpen)}
-                  className="text-[10px] font-bold text-kiri-emerald hover:underline"
-                >
-                  {extraIncomeFormOpen ? "Cancelar" : "+ Agregar extra"}
-                </button>
+                {!extraIncomeFormOpen && (
+                  <button
+                    onClick={() => setExtraIncomeFormOpen(true)}
+                    className="text-[10px] font-bold text-kiri-emerald hover:underline"
+                  >
+                    + Agregar extra
+                  </button>
+                )}
               </div>
 
               {extraIncomeFormOpen && (
-                <div className="space-y-2 bg-muted/20 rounded-xl p-3">
-                  <input
-                    placeholder="Nombre (ej: Freelance, Bono)"
-                    value={extraName}
-                    onChange={e => setExtraName(e.target.value)}
-                    className="w-full h-9 rounded-lg bg-background border border-border px-3 text-sm"
-                  />
-                  <MoneyInput
-                    value={extraMonto}
-                    onChange={v => setExtraMonto(v)}
-                    className="h-9 rounded-lg text-sm"
-                    placeholder="Monto"
-                  />
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-bold text-muted-foreground">¿Cada cuánto recibes esto?</p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button onClick={() => setExtraFreq("mensual")}
-                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                          extraFreq === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                        Mensual
-                      </button>
-                      <button onClick={() => setExtraFreq("quincenal")}
-                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                          extraFreq === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                        Quincenal
-                      </button>
+                <Card className="border-2 border-kiri-emerald/30 rounded-xl shadow-sm">
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-kiri-emerald">Nuevo ingreso extra</p>
+                      <button onClick={() => setExtraIncomeFormOpen(false)} className="text-[9px] text-muted-foreground hover:text-foreground">Cancelar</button>
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-bold text-muted-foreground">¿Por cuánto tiempo recibirás esto?</p>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      <button onClick={() => setExtraTemp("una_vez")}
-                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                          extraTemp === "una_vez" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                        Una vez
-                      </button>
-                      <button onClick={() => setExtraTemp("definido")}
-                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                          extraTemp === "definido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                        Definido
-                      </button>
-                      <button onClick={() => setExtraTemp("indefinido")}
-                        className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                          extraTemp === "indefinido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                        Siempre
-                      </button>
+                    <input
+                      placeholder="Nombre (ej: Freelance, Bono)"
+                      value={extraName}
+                      onChange={e => setExtraName(e.target.value)}
+                      className="w-full h-9 rounded-lg bg-background border border-border px-3 text-sm"
+                    />
+                    <MoneyInput
+                      value={extraMonto}
+                      onChange={v => setExtraMonto(v)}
+                      className="h-9 rounded-lg text-sm"
+                      placeholder="Monto"
+                    />
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-bold text-muted-foreground">¿Cada cuánto recibes esto?</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button onClick={() => setExtraFreq("mensual")}
+                          className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                            extraFreq === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Mensual
+                        </button>
+                        <button onClick={() => setExtraFreq("quincenal")}
+                          className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                            extraFreq === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Quincenal
+                        </button>
+                      </div>
                     </div>
-                    {extraTemp === "definido" && (
-                      <input
-                        type="number" min="1" max="60"
-                        placeholder="¿Cuántos periodos?"
-                        value={extraMeses}
-                        onChange={e => setExtraMeses(e.target.value)}
-                        className="w-full h-8 rounded-lg bg-background border border-border px-3 text-xs"
-                      />
-                    )}
-                  </div>
-                  <button
-                    onClick={handleAddExtraIncome}
-                    disabled={!extraName || !extraMonto || savingExtra}
-                    className="w-full h-9 rounded-lg bg-kiri-emerald text-white font-bold text-xs disabled:opacity-50"
-                  >
-                    {savingExtra ? "Guardando..." : "Registrar ingreso extra"}
-                  </button>
-                </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-bold text-muted-foreground">¿Por cuánto tiempo recibirás esto?</p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button onClick={() => setExtraTemp("una_vez")}
+                          className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                            extraTemp === "una_vez" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Una vez
+                        </button>
+                        <button onClick={() => setExtraTemp("definido")}
+                          className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                            extraTemp === "definido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Definido
+                        </button>
+                        <button onClick={() => setExtraTemp("indefinido")}
+                          className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
+                            extraTemp === "indefinido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Siempre
+                        </button>
+                      </div>
+                      {extraTemp === "definido" && (
+                        <input
+                          type="number" min="1" max="60"
+                          placeholder="¿Cuántos periodos?"
+                          value={extraMeses}
+                          onChange={e => setExtraMeses(e.target.value)}
+                          className="w-full h-8 rounded-lg bg-background border border-border px-3 text-xs"
+                        />
+                      )}
+                    </div>
+                    <button
+                      onClick={handleAddExtraIncome}
+                      disabled={!extraName || !extraMonto || savingExtra}
+                      className="w-full h-9 rounded-lg bg-kiri-emerald text-white font-bold text-xs disabled:opacity-50"
+                    >
+                      {savingExtra ? "Guardando..." : "Registrar ingreso extra"}
+                    </button>
+                  </CardContent>
+                </Card>
               )}
 
               {/* Lista de extras activos */}
@@ -823,6 +879,26 @@ export function BilleteraTab() {
                 </div>
               </div>
             )}
+            {/* Frecuencia */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Frecuencia</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setIncomeFrequency("quincenal")}
+                  className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
+                    incomeFrequency === "quincenal" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
+                  Quincenal
+                </button>
+                <button onClick={() => setIncomeFrequency("mensual")}
+                  className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
+                    incomeFrequency === "mensual" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
+                  Mensual
+                </button>
+              </div>
+            </div>
+            {/* Días de pago */}
+            <div className="border-t border-border/50 pt-3">
+              <PaydaySelector compact />
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setEditIncomeOpen(false)}>Cancelar</Button>

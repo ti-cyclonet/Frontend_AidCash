@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { loansApi } from "@/lib/api-client"
+import { loansApi, userApi } from "@/lib/api-client"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { useToast } from "@/hooks/use-toast"
 import { useAppContext } from "@/lib/app-context"
@@ -63,6 +63,11 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
   const [loading, setLoading]       = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [actionId, setActionId]     = useState<string | null>(null)
+  const [selectedInterest, setSelectedInterest] = useState<number | null>(null)
+  const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null)
+  const [cancelLoanId, setCancelLoanId] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState("")
+  const [cancelCustom, setCancelCustom] = useState("")
 
   // ── Modales ────────────────────────────────────────────────────────────────
   const [requestOpen, setRequestOpen]   = useState(false)
@@ -132,9 +137,9 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
   }
 
   // ── Aprobar / rechazar préstamo ────────────────────────────────────────────
-  const handleApprove = async (loanId: string) => {
+  const handleApprove = async (loanId: string, tasaInteres?: number) => {
     setActionId(loanId)
-    const { error } = await loansApi.approve(loanId)
+    const { error } = await loansApi.approve(loanId, tasaInteres ?? 0)
     setActionId(null)
     if (error) {
       toast({ title: error, variant: "destructive" })
@@ -308,26 +313,85 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                       {/* Lender: aprobar / rechazar solicitud pendiente */}
                       {isLender && loan.status === "PENDING_APPROVAL" && (
                         <>
+                          <div className="w-full space-y-2">
+                            {/* Selector de interés */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] text-muted-foreground">Interés:</span>
+                              {[0, 5, 10, 15, 20].map(pct => (
+                                <button
+                                  key={pct}
+                                  onClick={() => setSelectedInterest(prev => prev === pct && selectedLoanId === loan.id ? null : pct)}
+                                  onClickCapture={() => setSelectedLoanId(loan.id)}
+                                  className={cn(
+                                    "h-7 px-2.5 rounded-lg text-[9px] font-bold border transition-colors",
+                                    selectedInterest === pct && selectedLoanId === loan.id
+                                      ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald"
+                                      : "border-muted text-muted-foreground hover:border-kiri-emerald/30"
+                                  )}
+                                >
+                                  {pct}%
+                                </button>
+                              ))}
+                            </div>
+                            {/* Preview del monto con interés */}
+                            {selectedInterest !== null && selectedLoanId === loan.id && (
+                              <p className="text-[9px] text-kiri-emerald pl-1">
+                                Recibirás: {formatAmount(Number(loan.amount) + Math.round(Number(loan.amount) * (selectedInterest / 100)))}
+                                {selectedInterest > 0 && ` (+${formatAmount(Math.round(Number(loan.amount) * (selectedInterest / 100)))} interés)`}
+                              </p>
+                            )}
+                            {/* Botones de acción */}
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={actionId === loan.id || selectedInterest === null || selectedLoanId !== loan.id}
+                                onClick={() => handleApprove(loan.id, selectedInterest ?? 0)}
+                                className="h-8 px-4 rounded-xl bg-kiri-emerald text-white font-bold text-xs gap-1 disabled:opacity-40"
+                              >
+                                {actionId === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                Aprobar ({selectedInterest ?? 0}%)
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={actionId === loan.id}
+                                onClick={() => handleRejectLoan(loan.id)}
+                                className="h-8 px-4 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 font-bold text-xs gap-1"
+                              >
+                                <XCircle className="h-3 w-3" />
+                                Rechazar
+                              </Button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Lender: acciones para préstamo ACTIVO (recordar + cancelar) */}
+                      {isLender && loan.status === "ACTIVE" && (
+                        <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
-                            disabled={actionId === loan.id}
-                            onClick={() => handleApprove(loan.id)}
-                            className="h-8 px-4 rounded-xl bg-kiri-emerald text-white font-bold text-xs gap-1"
+                            variant="outline"
+                            onClick={() => {
+                              toast({ title: "Recordatorio enviado", description: `Se notificó a ${loan.borrower?.nombre ?? 'el deudor'}` })
+                              // Push notification via socket
+                              import('@/lib/api-client').then(({ api }) => {
+                                api('/loans/payment', { method: 'POST', body: { loanId: loan.id, monto: 0.01, nota: '__REMINDER__' } }).catch(() => {})
+                              })
+                            }}
+                            className="h-8 px-3 rounded-xl text-xs font-bold gap-1 border-amber-500/30 text-amber-500"
                           >
-                            {actionId === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                            Aprobar
+                            📢 Recordar pago
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            disabled={actionId === loan.id}
-                            onClick={() => handleRejectLoan(loan.id)}
-                            className="h-8 px-4 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 font-bold text-xs gap-1"
+                            onClick={() => { setCancelLoanId(loan.id) }}
+                            className="h-8 px-3 rounded-xl text-xs font-bold gap-1 text-destructive hover:bg-destructive/10"
                           >
-                            <XCircle className="h-3 w-3" />
-                            Rechazar
+                            <XCircle className="h-3 w-3" /> Cancelar préstamo
                           </Button>
-                        </>
+                        </div>
                       )}
 
                       {/* Borrower: cancelar solicitud pendiente */}
@@ -563,6 +627,57 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
               className="rounded-xl bg-kiri-emerald text-white font-bold px-6"
             >
               {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar abono"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ════ Modal Cancelar préstamo ════ */}
+      <Dialog open={!!cancelLoanId} onOpenChange={v => { if (!v) { setCancelLoanId(null); setCancelReason(""); setCancelCustom("") } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar préstamo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">¿Por qué cancelas este préstamo?</p>
+            {["Ya me pagó todo", "Se arrepintió y me devolvió la plata", "Me arrepentí", "Aprobé por error"].map(reason => (
+              <button key={reason} onClick={() => setCancelReason(reason)}
+                className={cn("w-full text-left p-3 rounded-xl border-2 text-xs font-bold transition-colors",
+                  cancelReason === reason ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
+                {reason}
+              </button>
+            ))}
+            <button onClick={() => setCancelReason("otro")}
+              className={cn("w-full text-left p-3 rounded-xl border-2 text-xs font-bold transition-colors",
+                cancelReason === "otro" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
+              Otro motivo
+            </button>
+            {cancelReason === "otro" && (
+              <Input value={cancelCustom} onChange={e => setCancelCustom(e.target.value)} placeholder="Describe el motivo..." className="rounded-xl" />
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setCancelLoanId(null)}>Volver</Button>
+            <Button
+              disabled={!cancelReason || (cancelReason === "otro" && !cancelCustom)}
+              onClick={async () => {
+                if (!cancelLoanId) return
+                setActionId(cancelLoanId)
+                // Cancelar préstamo y devolver plata al lender
+                const { error } = await loansApi.reject(cancelLoanId)
+                setActionId(null)
+                if (!error) {
+                  toast({ title: "Préstamo cancelado", description: cancelReason === "otro" ? cancelCustom : cancelReason })
+                  // Devolver al wallet del lender
+                  const loan = loans.find(l => l.id === cancelLoanId)
+                  if (loan) await userApi.walletIncome(Number(loan.amount), 'extra')
+                }
+                setCancelLoanId(null); setCancelReason(""); setCancelCustom("")
+                load()
+              }}
+              className="bg-destructive text-white font-bold rounded-xl"
+            >
+              Confirmar cancelación
             </Button>
           </DialogFooter>
         </DialogContent>

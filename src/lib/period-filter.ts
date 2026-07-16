@@ -183,8 +183,44 @@ export function getPeriodData(
   const activeDebts = debts.filter(d => d.estado !== 'saldada')
   const periodDebts = filterPendingOnly(filterByCurrentQuincena(activeDebts, quincena))
   const periodFixed = filterPendingOnly(filterByCurrentQuincena(fixedExpenses, quincena))
-  const totalObligations = periodDebts.reduce((acc, d) => acc + d.cuotaPeriodo, 0) +
-                           periodFixed.reduce((acc, f) => acc + f.monto, 0)
+
+  // ═══ CÁLCULO DE OBLIGACIONES CON DIVISIÓN QUINCENAL + ROLLOVER ═══
+  // - Deudas con frecuencia 'quincenal': cuota completa (se paga cada quincena)
+  // - Deudas con frecuencia 'mensual': cuota / 2 (se divide entre las 2 quincenas)
+  // - Deudas vencidas (de Q1 no pagada, estamos en Q2): se ACUMULA al periodo actual
+  const totalObligations = periodDebts.reduce((acc, d) => {
+    const itemFreq = d.frecuenciaPago ?? 'mensual'
+    const cuota = d.cuotaPeriodo
+
+    // Si es quincenal, paga la cuota completa cada quincena
+    if (itemFreq === 'quincenal') return acc + cuota
+
+    // Si es mensual: ¿es una deuda vencida (rollover) o del periodo actual?
+    const days = parseDays(d.diasPago)
+    const isFromPreviousPeriod = days.some(day => quincena === 2 ? (day >= 1 && day <= 15) : false)
+
+    if (isFromPreviousPeriod) {
+      // ═══ ROLLOVER: No pagó en Q1, se acumula completo en Q2 ═══
+      // El usuario debe la mitad que no pagó + la mitad actual = cuota completa
+      return acc + cuota
+    }
+
+    // Deuda mensual normal del periodo actual: se divide entre 2 quincenas
+    return acc + Math.round(cuota / 2)
+  }, 0) + periodFixed.reduce((acc, f) => {
+    const itemFreq = f.frecuencia ?? 'mensual'
+    if (itemFreq === 'quincenal') return acc + f.monto
+
+    const days = parseDays(f.fechaCorte)
+    const isFromPreviousPeriod = days.some(day => quincena === 2 ? (day >= 1 && day <= 15) : false)
+
+    if (isFromPreviousPeriod) {
+      // Rollover: gasto fijo no pagado en Q1, se acumula completo
+      return acc + f.monto
+    }
+
+    return acc + Math.round(f.monto / 2)
+  }, 0)
 
   return {
     effectiveIncome: Math.round((income / 2) + extraIncome),

@@ -207,9 +207,11 @@ export function CoachFab() {
     if (!SR) { alert("Tu navegador no soporta reconocimiento de voz"); return }
     const r = new (SR as new () => SpeechRecognition)()
     r.lang = "es-ES"; r.continuous = false; r.interimResults = false
-    r.onresult = (e: SpeechRecognitionEvent) => { onTranscript(e.results[0][0].transcript); setIsListening(false) }
-    r.onerror = () => setIsListening(false)
-    r.onend = () => setIsListening(false)
+    // Timeout de seguridad: si no se detecta voz en 8 segundos, detener
+    const timeout = setTimeout(() => { r.stop() }, 8000)
+    r.onresult = (e: SpeechRecognitionEvent) => { clearTimeout(timeout); onTranscript(e.results[0][0].transcript); setIsListening(false) }
+    r.onerror = () => { clearTimeout(timeout); setIsListening(false) }
+    r.onend = () => { clearTimeout(timeout); setIsListening(false) }
     recognitionRef.current = r; r.start(); setIsListening(true)
   }
 
@@ -220,21 +222,27 @@ export function CoachFab() {
 
   // ── Satélite: Voz inteligente ─────────────────────────────────────────────
   const handleVoiceSatellite = () => {
+    // Detener escucha previa si la hay
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null }
+    setIsListening(false)
     setShowSatellites(false)
     setVoiceModalOpen(true)
     setVoiceTranscript(""); setExtractResult(null); setExtractError(null)
-    startListening(async t => {
-      setVoiceTranscript(t); setExtracting(true); setExtractError(null)
-      try {
-        const res = await fetch("/api/ai/voice-extract", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcripcion: t }),
-        })
-        if (!res.ok) throw new Error("Error del servidor")
-        setExtractResult(await res.json())
-      } catch { setExtractError("No pude procesar el audio. Intenta de nuevo.") }
-      finally { setExtracting(false) }
-    })
+    // Iniciar nueva escucha con delay para evitar conflicto
+    setTimeout(() => {
+      startListening(async t => {
+        setVoiceTranscript(t); setExtracting(true); setExtractError(null)
+        try {
+          const res = await fetch("/api/ai/voice-extract", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcripcion: t }),
+          })
+          if (!res.ok) throw new Error("Error del servidor")
+          setExtractResult(await res.json())
+        } catch { setExtractError("No pude procesar el audio. Intenta de nuevo.") }
+        finally { setExtracting(false) }
+      })
+    }, 300)
   }
 
   const handleVoiceExtractStart = () => handleVoiceSatellite()

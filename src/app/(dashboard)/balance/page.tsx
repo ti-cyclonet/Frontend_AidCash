@@ -346,21 +346,24 @@ export default function BalancePage() {
                       </button>
                     ))}
                   </div>
+                  {/* Pagos de deudas (con historial real de debtPayments) */}
                   {(obligacionFilter === "todos" || obligacionFilter === "deudas") && (
-                    <HistoryList items={report.debts.filter(d => d.pagadoEstePeriodo as boolean)} emptyMsg="Sin deudas pagadas este periodo" renderRow={(d) => ({
-                      icon: "✅",
-                      title: d.nombre as string,
-                      subtitle: `Deuda · Vence: ${d.diasPago as string} · Total: ${formatAmount(d.montoTotal as number)}`,
-                      amount: -(((d.montoPagadoEstePeriodo as number | null) ?? (d.cuotaPeriodo as number))),
+                    <HistoryList items={report.debtPayments ?? []} emptyMsg="Sin pagos de deudas en este periodo" renderRow={(p) => ({
+                      icon: "💳",
+                      title: p.debtName as string,
+                      subtitle: `Deuda · ${fmtDate(p.createdAt as string)} · Capital: ${formatAmount(p.abonoCapital as number)} · Interés: ${formatAmount(p.pagoInteres as number)}`,
+                      amount: -(p.montoPagado as number),
                       formatAmount,
                     })} />
                   )}
+                  {/* Gastos fijos pagados */}
                   {(obligacionFilter === "todos" || obligacionFilter === "fijos") && (
                     <HistoryList items={report.fixedExpenses.filter(f => f.pagadoEstePeriodo as boolean)} emptyMsg="Sin gastos fijos pagados este periodo" renderRow={(f) => ({
                       icon: "✅",
                       title: f.nombre as string,
-                      subtitle: `Gasto Fijo · Corte: ${f.fechaCorte as string}`,
-                      amount: -(f.monto as number), formatAmount,
+                      subtitle: `Gasto Fijo · Corte: ${f.fechaCorte as string} · ${(f as any).frecuencia === "quincenal" ? "Quincenal" : "Mensual"}`,
+                      amount: -(((f as any).montoPagadoEstePeriodo ?? (f.monto as number))),
+                      formatAmount,
                     })} />
                   )}
                 </div>
