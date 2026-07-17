@@ -133,7 +133,7 @@ export function Sidebar() {
               </div>
               <div className="min-w-0">
                 <h1 className="text-sm font-bold text-foreground leading-tight">Kiri Finance</h1>
-                <p className="text-[9px] text-muted-foreground">Tus finanzas, en orden</p>
+                <p className="text-[9px] text-muted-foreground">Tu dinero, tu futuro, tu control</p>
               </div>
             </Link>
             <div className="ml-auto flex items-center gap-1">

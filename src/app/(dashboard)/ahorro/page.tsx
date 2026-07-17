@@ -16,15 +16,19 @@ import {
   PiggyBank, History, TrendingUp, TrendingDown,
   XCircle, CheckCircle2, Pencil, Target, ShieldCheck,
   Plus, Trash2, Star, Wallet, Plane, Home, GraduationCap,
-  Car, Heart, Sparkles, Minus, Eye, EyeOff, AlertTriangle,
+  Car, Heart, Sparkles, Minus, Eye, EyeOff, AlertTriangle, Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { EmergencyFundSection } from "@/components/recommendations/emergency-fund"
-import { emergencyFundApi, userApi } from "@/lib/api-client"
+import { emergencyFundApi, userApi, sharedPocketsApi } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
+import { useRouter } from "next/navigation"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
+import { AnimatedBalance } from "@/components/ui/animated-balance"
+import type { SharedPocket } from "@/lib/types"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
 type PocketIcon = "piggybank" | "plane" | "home" | "education" | "car" | "health" | "star" | "wallet"
@@ -38,6 +42,7 @@ interface SavingPocket {
   icono: PocketIcon
   color: PocketColor
   descripcion?: string
+  pagoAutomatico?: boolean
   createdAt: string
 }
 
@@ -78,10 +83,20 @@ export default function AhorroPage() {
   const { formatAmount, savingsAmount, metaAhorro, setMetaAhorro } = useAppContext()
   const { savingsHistory, totalAhorrado, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
   const { user: authUser } = useAuth()
+  const { allocation } = usePeriodBudget()
 
   const [activeTab, setActiveTab] = useState<"ahorro" | "emergencia">("ahorro")
   // Sub-tab dentro de Ahorro
   const [ahorroSubTab, setAhorroSubTab] = useState<"bolsillos" | "historial">("bolsillos")
+
+  // ── Wallet state para badge de saldo ──
+  const [wallet, setWallet] = useState({ cashBalance: 0 })
+  useEffect(() => {
+    userApi.getWallet().then(({ data }) => { if (data) setWallet({ cashBalance: data.wallet.cashBalance }) })
+    const refresh = () => { userApi.getWallet().then(({ data }) => { if (data) setWallet({ cashBalance: data.wallet.cashBalance }) }) }
+    window.addEventListener("kiri:wallet-updated", refresh)
+    return () => window.removeEventListener("kiri:wallet-updated", refresh)
+  }, [])
 
   // ── Fondo emergencia ──────────────────────────────────────────────────────
   const [fondoActual, setFondoActual] = useState(0)
@@ -133,7 +148,7 @@ export default function AhorroPage() {
 
   // ── Modal: nuevo bolsillo ─────────────────────────────────────────────────
   const [newPocketOpen, setNewPocketOpen] = useState(false)
-  const [pocketForm, setPocketForm] = useState({ nombre: "", meta: "", descripcion: "", icono: "piggybank" as PocketIcon, color: "mint" as PocketColor })
+  const [pocketForm, setPocketForm] = useState({ nombre: "", meta: "", descripcion: "", icono: "piggybank" as PocketIcon, color: "mint" as PocketColor, acumuladoInicial: "" })
   const [savingPocket, setSavingPocket] = useState(false)
 
   // ── Modal: aportar/retirar bolsillo ───────────────────────────────────────
@@ -165,6 +180,15 @@ export default function AhorroPage() {
   const [customAmount, setCustomAmount] = useState("")
   const [savingAhorro, setSavingAhorro] = useState(false)
 
+  // ── Bolsillos compartidos (Social) ────────────────────────────────────────
+  const router = useRouter()
+  const [sharedPockets, setSharedPockets] = useState<SharedPocket[]>([])
+  useEffect(() => {
+    sharedPocketsApi.list().then(({ data }) => {
+      if (data?.pockets) setSharedPockets(data.pockets as unknown as SharedPocket[])
+    }).catch(() => {})
+  }, [])
+
   // ── Métricas globales ─────────────────────────────────────────────────────
   const totalAcumuladoBolsillos = pockets.reduce((a, p) => a + p.acumulado, 0)
   const progress = metaAhorro > 0 ? Math.min((totalAcumuladoBolsillos / metaAhorro) * 100, 100) : 0
@@ -172,9 +196,10 @@ export default function AhorroPage() {
   const streakCount = savingsHistory.filter(e => e.tipo === "ahorro").length
 
   // Cuánto le corresponde a cada bolsillo de la distribución de ahorro
-  // Si hay bolsillos, dividimos savingsAmount equitativamente
-  const sugerenciaPorBolsillo = pockets.length > 0 && savingsAmount > 0
-    ? Math.round(savingsAmount / pockets.length)
+  // Usa el ahorro REAL del periodo (con obligaciones descontadas), no el ideal
+  const realSavingsForPeriod = allocation?.savingsAmount ?? savingsAmount
+  const sugerenciaPorBolsillo = pockets.length > 0 && realSavingsForPeriod > 0
+    ? Math.round(realSavingsForPeriod / pockets.length)
     : 0
 
   // ── Handlers bolsillos ────────────────────────────────────────────────────
@@ -184,7 +209,7 @@ export default function AhorroPage() {
       id: Date.now().toString(),
       nombre: pocketForm.nombre,
       meta: Number(pocketForm.meta) || 0,
-      acumulado: 0,
+      acumulado: Number(pocketForm.acumuladoInicial) || 0,
       icono: pocketForm.icono,
       color: pocketForm.color,
       descripcion: pocketForm.descripcion || undefined,
@@ -193,7 +218,7 @@ export default function AhorroPage() {
     setPockets(p => [...p, pocket])
     setSavingPocket(false)
     setNewPocketOpen(false)
-    setPocketForm({ nombre: "", meta: "", descripcion: "", icono: "piggybank", color: "mint" })
+    setPocketForm({ nombre: "", meta: "", descripcion: "", icono: "piggybank", color: "mint", acumuladoInicial: "" })
   }
 
   const handleDeletePocket = (id: string) => setPockets(p => p.filter(x => x.id !== id))
@@ -244,6 +269,7 @@ export default function AhorroPage() {
     setSavingTx(false)
     setTxPocket(null)
     setTxAmount("")
+    window.dispatchEvent(new Event("kiri:wallet-updated"))
   }
 
   // ── Handlers ahorro historial ─────────────────────────────────────────────
@@ -288,15 +314,19 @@ export default function AhorroPage() {
           <h1 className="text-2xl font-bold text-cyclon-mint">Ahorro</h1>
           <p className="text-muted-foreground text-sm">Tu banco personal, a tu ritmo.</p>
         </div>
-        {activeTab === "ahorro" && ahorroSubTab === "bolsillos" && (
-          <Button
-            size="icon"
-            className="rounded-2xl bg-cyclon-mint shadow-lg shadow-cyclon-mint/30 text-cyclon-periwinkle"
-            onClick={() => setNewPocketOpen(true)}
-          >
-            <Plus className="h-6 w-6" />
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Saldo en tiempo real con efecto */}
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo disponible" />
+          {activeTab === "ahorro" && ahorroSubTab === "bolsillos" && (
+            <Button
+              size="icon"
+              className="rounded-2xl bg-cyclon-mint shadow-lg shadow-cyclon-mint/30 text-cyclon-periwinkle"
+              onClick={() => setNewPocketOpen(true)}
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* ── Tabs principales: Ahorro / Emergencia ── */}
@@ -347,7 +377,7 @@ export default function AhorroPage() {
                   <TrendingUp className="h-3.5 w-3.5 text-cyclon-mint shrink-0" />
                   <p className="text-[11px] text-muted-foreground">
                     Sugerido este periodo:{" "}
-                    <span className="font-black text-cyclon-mint">{formatAmount(savingsAmount)}</span>
+                    <span className="font-black text-cyclon-mint">{formatAmount(realSavingsForPeriod)}</span>
                     {pockets.length > 1 && (
                       <span> ({formatAmount(sugerenciaPorBolsillo)} por bolsillo)</span>
                     )}
@@ -388,9 +418,9 @@ export default function AhorroPage() {
                   </div>
                   <p className="text-sm font-bold">Sin bolsillos aún</p>
                   <p className="text-xs text-muted-foreground">Crea tu primer bolsillo con el botón <strong>+</strong></p>
-                  {savingsAmount > 0 && (
+                  {realSavingsForPeriod > 0 && (
                     <p className="text-xs text-cyclon-mint font-bold">
-                      Tienes {formatAmount(savingsAmount)} sugerido para ahorrar este periodo
+                      Tienes {formatAmount(realSavingsForPeriod)} sugerido para ahorrar este periodo
                     </p>
                   )}
                 </div>
@@ -416,6 +446,14 @@ export default function AhorroPage() {
                                   )}
                                 </div>
                                 <div className="flex gap-1 shrink-0">
+                                  <button onClick={() => {
+                                    const updated = pockets.map(p => p.id === pocket.id ? { ...p, pagoAutomatico: !p.pagoAutomatico } : p)
+                                    setPockets(updated)
+                                  }} title={pocket.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
+                                    className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
+                                      pocket.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
+                                    <span className="text-[10px]">⚡</span>
+                                  </button>
                                   <button onClick={() => toggleHidden(pocket.id)}
                                     className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors">
                                     {hiddenPockets.has(pocket.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -485,6 +523,48 @@ export default function AhorroPage() {
                     )
                   })}
                 </>
+              )}
+
+              {/* ── Bolsillos Compartidos (Social) ── */}
+              {sharedPockets.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-border/50">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="h-3 w-3" /> Bolsillos compartidos
+                  </p>
+                  {sharedPockets.map(sp => {
+                    const partnerName = sp.userA?.id === authUser?.id ? sp.userB?.nombre : sp.userA?.nombre
+                    const pct = sp.meta > 0 ? Math.min((sp.balance / sp.meta) * 100, 100) : 0
+                    return (
+                      <Card
+                        key={sp.id}
+                        className="border-none bg-card shadow-sm rounded-2xl cursor-pointer hover:ring-2 hover:ring-cyclon-lavender/30 transition-all"
+                        onClick={() => router.push("/social")}
+                      >
+                        <CardContent className="p-4 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-2xl bg-cyclon-lavender/20 flex items-center justify-center shrink-0">
+                              <Users className="h-5 w-5 text-cyclon-lavender" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-sm truncate">{sp.nombre}</p>
+                              <p className="text-[10px] text-muted-foreground">Con {partnerName ?? "compañero"}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-black">{formatAmount(sp.balance)}</p>
+                              {sp.meta > 0 && <p className="text-[9px] text-muted-foreground">meta: {formatAmount(sp.meta)}</p>}
+                            </div>
+                          </div>
+                          {sp.meta > 0 && (
+                            <Progress value={pct} className="h-1.5" indicatorClassName="bg-cyclon-lavender" />
+                          )}
+                          <p className="text-[8px] text-cyclon-lavender font-bold text-center">
+                            Toca para gestionar en Social →
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )}
@@ -569,6 +649,12 @@ export default function AhorroPage() {
                 className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs font-bold">¿Ya llevas algo ahorrado? <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <MoneyInput value={pocketForm.acumuladoInicial} onChange={v => setPocketForm(f => ({ ...f, acumuladoInicial: v }))}
+                className="h-11 rounded-xl" placeholder="0" />
+              <p className="text-[9px] text-muted-foreground">Si ya tenías dinero ahorrado para esto, regístralo aquí para que tu progreso se refleje desde el inicio.</p>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs font-bold">Descripción <span className="font-normal text-muted-foreground">(opcional)</span></Label>
               <Input placeholder="Para qué es este ahorro..." value={pocketForm.descripcion}
                 onChange={e => setPocketForm(f => ({ ...f, descripcion: e.target.value }))} className="h-10 rounded-xl" />
@@ -650,7 +736,7 @@ export default function AhorroPage() {
                 <Button onClick={() => handleSaveAhorro(savingsAmount)} disabled={savingAhorro || savingsAmount === 0}
                   className="h-16 rounded-2xl bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 font-bold text-base flex flex-col gap-0.5">
                   <span className="text-xs opacity-70">Monto sugerido</span>
-                  <span className="text-xl font-black">{formatAmount(savingsAmount)}</span>
+                  <span className="text-xl font-black">{formatAmount(realSavingsForPeriod)}</span>
                 </Button>
                 <Button variant="outline" onClick={() => setIsCustomMode(true)}
                   className="h-12 rounded-2xl border-dashed border-2 font-bold flex items-center gap-2">

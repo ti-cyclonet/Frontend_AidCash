@@ -1,7 +1,7 @@
 # Kiri Finance — Guía Completa del Proyecto
 
 > **Archivo de referencia vivo.** Actualizar cada vez que se añada o modifique una feature.
-> Última actualización: 12 Julio 2026
+> Última actualización: 15 Julio 2026
 
 ---
 
@@ -968,3 +968,47 @@ Generar nuevas keys: `npx web-push generate-vapid-keys`
 - Rate limiting en autenticación (15 intentos / 15 min) y wallet (30 ops / min).
 - Helmet + CORS restrictivo en producción.
 - Passwords hasheados con bcryptjs (12 rounds).
+
+
+---
+
+## 23. Actualizaciones 15 Julio 2026
+
+### 23.1 Tagline actualizado
+
+- El slogan de la app cambió de **"Tus finanzas, en orden"** a **"Tu dinero, tu futuro, tu control"**.
+- Actualizado en: login (mobile header), registro (mobile header) y sidebar (debajo de "Kiri Finance").
+
+### 23.2 Gastos Fijos Quincenales — División correcta del monto
+
+**Problema resuelto:** Los gastos fijos con frecuencia "quincenal" mostraban el monto completo en el modal de pago y descontaban el total al pagar, en vez de dividir entre 2 quincenas.
+
+**Lógica corregida:**
+- Si `frecuencia === "quincenal"`, el monto por periodo = `Math.round(monto / 2)`.
+- El botón "Pagar ($X)" en el modal muestra la mitad.
+- `markFixedPaid()` en `use-finance-data.ts` usa `monto / 2` como default cuando no se pasa monto explícito.
+- El endpoint backend `PATCH /fixed-expenses/:id/pay` aplica la misma lógica si no recibe `monto` en el body.
+- El pago con tarjeta de crédito vinculada también usa el monto por periodo.
+- `isFullyPaid` se calcula contra el monto TOTAL: solo se marca como completamente pagado cuando `totalPaid >= monto` (es decir, cuando se acumulan ambas quincenas pagadas).
+
+**Flujo esperado para un gasto quincenal de $400,000:**
+1. Quincena 1: Paga $200,000 → `montoPagadoEstePeriodo = 200,000` → `pagadoEstePeriodo = false`
+2. Quincena 2: Paga $200,000 → `montoPagadoEstePeriodo = 400,000` → `pagadoEstePeriodo = true`
+
+**Archivos modificados:**
+- `src/app/(dashboard)/obligaciones/page.tsx` — modal de pago
+- `src/hooks/use-finance-data.ts` — función `markFixedPaid`
+- Backend: `src/routes/fixed-expenses.routes.ts` — endpoint `/pay`
+
+### 23.3 Tipo de Deuda y Tarjeta Vinculada en Gastos Fijos
+
+- Migración `20260715000001_add_tipo_deuda_tarjeta_vinculada`:
+  - Campo `tipo_deuda` en tabla `debts` (libre, tarjeta_credito, prestamo, hipoteca, vehiculo, educacion).
+  - Campo `tarjeta_vinculada_id` en tabla `fixed_expenses` — FK opcional a `debts`.
+- Al pagar un gasto fijo con tarjeta vinculada, el monto se suma al `saldoRestante` de la tarjeta (no se descuenta del cashBalance).
+
+### 23.4 Intereses y Negociación en Préstamos
+
+- Migración `20260715000002_add_loan_interest_negotiation`:
+  - Campos `interest_rate`, `interest_type` (simple/compuesto), `negotiation_notes` en tabla `loans`.
+  - Permite registrar condiciones de interés y notas de negociación en préstamos P2P.

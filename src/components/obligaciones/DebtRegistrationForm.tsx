@@ -234,14 +234,15 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
                   value={searchQuery}
                   onChange={e => { setSearchQuery(e.target.value); setShowDropdown(true); setSelectedBank(null); setIsAddingNew(false) }}
                   onFocus={() => setShowDropdown(true)}
+                  onBlur={() => { setTimeout(() => setShowDropdown(false), 150) }}
                   className="h-11 rounded-xl pl-10"
                 />
                 {selectedBank && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-kiri-emerald" />}
               </div>
 
-              {showDropdown && searchQuery && (
+              {showDropdown && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg z-50 max-h-[180px] overflow-y-auto">
-                  {filteredBanks.map(bank => (
+                  {filteredBanks.length > 0 ? filteredBanks.map(bank => (
                     <button key={bank.id} onClick={() => selectBank(bank)}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors text-left">
                       <div className="flex items-center gap-2">
@@ -252,7 +253,11 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
                         </div>
                       </div>
                     </button>
-                  ))}
+                  )) : (
+                    <p className="text-[10px] text-muted-foreground text-center py-3">
+                      {banks.length === 0 ? "Cargando bancos..." : "Sin resultados"}
+                    </p>
+                  )}
                   {!hasExactMatch && searchQuery.length >= 2 && (
                     <button onClick={startAddNew}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-kiri-emerald/5 transition-colors text-left border-t border-border">

@@ -75,7 +75,7 @@ export default function RegisterPage() {
         </div>
         <div className="text-center">
           <h1 className="text-2xl font-bold text-white">Kiri Finance</h1>
-          <p className="text-white/50 text-xs mt-1">Tus finanzas, en orden</p>
+          <p className="text-white/50 text-xs mt-1">Tu dinero, tu futuro, tu control</p>
         </div>
       </div>
 

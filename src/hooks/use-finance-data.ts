@@ -49,6 +49,7 @@ function mapDebt(row: Record<string, unknown>): Debt {
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
     estado: (row.estado as Debt["estado"]) ?? 'activa',
     prioridad: (row.prioridad as Debt["prioridad"]) ?? 'media',
+    pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
   }
 }
 
@@ -64,6 +65,7 @@ function mapFixed(row: Record<string, unknown>): FixedExpense {
     metodoPago: (row.metodoPago ?? row.metodo_pago) as string | null ?? null,
     renovacionAuto: (row.renovacionAuto ?? row.renovacion_auto ?? false) as boolean,
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
+    pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
   }
 }
 
@@ -200,7 +202,7 @@ export function useFinanceData() {
 
   const updateDebt = async (
     debtId: string,
-    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'cuotaPeriodo' | 'diasPago'>>
+    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'cuotaPeriodo' | 'diasPago' | 'pagoAutomatico'>>
   ) => {
     await debtsApi.update(debtId, data)
     setDebts(prev => prev.map(d => d.id === debtId ? { ...d, ...data } : d))
@@ -218,6 +220,11 @@ export function useFinanceData() {
     // montoPagado: si no se especifica, se paga la cuota completa
     const realPaid = montoPagado ?? debt.cuotaPeriodo
 
+    // Acumular pagos parciales del periodo
+    const prevPaid = debt.montoPagadoEstePeriodo ?? 0
+    const totalPaidThisPeriod = prevPaid + realPaid
+    const cuotaCubierta = totalPaidThisPeriod >= debt.cuotaPeriodo
+
     // Llamar al backend que resta del saldoRestante y guarda montoPagadoEstePeriodo
     const { data } = await debtsApi.pay(debtId, realPaid)
     if (!data) return
@@ -233,8 +240,8 @@ export function useFinanceData() {
       d.id === debtId ? {
         ...d,
         saldoRestante: nuevoSaldo,
-        pagadoEstePeriodo: true,
-        montoPagadoEstePeriodo: realPaid,
+        pagadoEstePeriodo: cuotaCubierta, // Solo marcar si se cubrió la cuota completa
+        montoPagadoEstePeriodo: totalPaidThisPeriod,
         estado: liquidada ? 'saldada' : 'activa',
       } : d
     ))
@@ -273,7 +280,7 @@ export function useFinanceData() {
 
   const updateFixedExpense = async (
     id: string,
-    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto'>>
+    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto' | 'pagoAutomatico'>>
   ) => {
     await fixedExpensesApi.update(id, data)
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, ...data } : f))
@@ -288,19 +295,33 @@ export function useFinanceData() {
     const fe = fixedExpenses.find(f => f.id === id)
     if (!fe) return
 
-    const realPaid = montoPagado ?? fe.monto
+    // Si es quincenal, el monto por periodo es la mitad del total
+    const montoPorPeriodo = (fe as any).frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
+    const realPaid = montoPagado ?? montoPorPeriodo
+    // Acumular pagos parciales
+    const prevPaid = (fe as any).montoPagadoEstePeriodo ?? 0
+    const totalPaid = prevPaid + realPaid
+    const isFullyPaid = totalPaid >= fe.monto
 
-    await fixedExpensesApi.update(id, { pagadoEstePeriodo: true })
+    // Actualizar en backend: solo marcar pagadoEstePeriodo si se cubrió el total
+    await fixedExpensesApi.update(id, {
+      pagadoEstePeriodo: isFullyPaid,
+      montoPagadoEstePeriodo: totalPaid,
+    })
     // Deducir del sueldo real el monto REAL pagado
     await userApi.walletDeduct(realPaid, 'obligaciones')
 
-    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: true, _montoPagado: realPaid } as FixedExpense & { _montoPagado?: number } : f))
+    setFixedExpenses(prev => prev.map(f => f.id === id ? {
+      ...f,
+      pagadoEstePeriodo: isFullyPaid,
+      montoPagadoEstePeriodo: totalPaid,
+    } as any : f))
   }
 
   const undoPayFixed = async (id: string) => {
     const { data } = await fixedExpensesApi.undoPay(id)
     if (!data) return
-    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: false } : f))
+    setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: false, montoPagadoEstePeriodo: null } : f))
     return data.wallet
   }
 
