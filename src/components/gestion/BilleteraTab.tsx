@@ -230,6 +230,7 @@ export function BilleteraTab() {
   const [extraTemp, setExtraTemp] = useState<"una_vez" | "definido" | "indefinido">("una_vez")
   const [extraFreq, setExtraFreq] = useState<"mensual" | "quincenal">("mensual")
   const [extraMeses, setExtraMeses] = useState("")
+  const [extraDiaRecepcion, setExtraDiaRecepcion] = useState("")
   const [savingExtra, setSavingExtra] = useState(false)
 
   const handleAddExtraIncome = async () => {
@@ -241,6 +242,13 @@ export function BilleteraTab() {
       monto: Number(extraMonto),
       temporalidad: extraTemp,
       mesesRestantes: extraTemp === "definido" ? Number(extraMeses) || 1 : null,
+      fechaRecepcion: extraDiaRecepcion ? (() => {
+        const now = new Date()
+        const day = Number(extraDiaRecepcion)
+        const date = new Date(now.getFullYear(), now.getMonth(), day)
+        if (date < now) date.setMonth(date.getMonth() + 1)
+        return date.toISOString().split('T')[0]
+      })() : undefined,
     })
     setSavingExtra(false)
     setExtraName("")
@@ -248,6 +256,7 @@ export function BilleteraTab() {
     setExtraTemp("una_vez")
     setExtraFreq("mensual")
     setExtraMeses("")
+    setExtraDiaRecepcion("")
     setExtraIncomeFormOpen(false)
   }
 
@@ -573,6 +582,20 @@ export function BilleteraTab() {
                         />
                       )}
                     </div>
+                    {/* Día de recepción */}
+                    {extraTemp !== "una_vez" && (
+                      <div className="space-y-1.5">
+                        <p className="text-[9px] font-bold text-muted-foreground">¿Qué día del mes lo recibes?</p>
+                        <input
+                          type="number" min="1" max="31"
+                          placeholder="Ej: 5, 15, 28..."
+                          value={extraDiaRecepcion}
+                          onChange={e => setExtraDiaRecepcion(e.target.value)}
+                          className="w-full h-8 rounded-lg bg-background border border-border px-3 text-xs"
+                        />
+                        <p className="text-[8px] text-muted-foreground">Te notificaremos cuando se acerque este pago.</p>
+                      </div>
+                    )}
                     <button
                       onClick={handleAddExtraIncome}
                       disabled={!extraName || !extraMonto || savingExtra}
@@ -596,6 +619,7 @@ export function BilleteraTab() {
                         <p className="text-sm font-bold truncate">{e.nombre}</p>
                         <p className="text-[9px] text-muted-foreground">
                           {e.temporalidad === "una_vez" ? "⏱ Una vez" : e.temporalidad === "definido" ? `📅 ${e.mesesRestantes} periodos` : "♾️ Recurrente"}
+                          {(e as any).fechaRecepcion && ` · Día ${new Date((e as any).fechaRecepcion).getDate()}`}
                         </p>
                       </div>
                       <span className="text-sm font-black text-kiri-emerald shrink-0">{formatAmount(e.monto)}</span>

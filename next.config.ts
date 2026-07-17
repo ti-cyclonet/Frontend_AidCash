@@ -52,7 +52,7 @@ const withPWA = withPWAInit({
         },
       },
       {
-        urlPattern: /^http:\/\/localhost:4000\/api\/.*/i,
+        urlPattern: /\/api\/.*/i,
         handler: 'NetworkFirst',
         options: {
           cacheName: 'kiri-api-cache',

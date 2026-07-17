@@ -17,7 +17,6 @@ import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Ti
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
-import { TutorialSlider } from "@/components/tutorial/TutorialSlider"
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -32,7 +31,7 @@ export default function PerfilPage() {
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl })
-  const [showFullTutorial, setShowFullTutorial] = useState(false)
+  const handleOpenGuia = () => router.push("/guia-kiri")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,7 +144,7 @@ export default function PerfilPage() {
         <Card className="border-none shadow-sm bg-card rounded-2xl">
           <CardContent className="p-0 divide-y divide-border">
             <button
-              onClick={() => setShowFullTutorial(true)}
+              onClick={handleOpenGuia}
               className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
             >
               <div className="flex items-center gap-3">
@@ -153,8 +152,8 @@ export default function PerfilPage() {
                   <BookOpen className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="font-medium">Tutorial</span>
-                  <p className="text-[10px] text-muted-foreground">Conoce cada módulo de Kiri</p>
+                  <span className="font-medium">Guía Kiri</span>
+                  <p className="text-[10px] text-muted-foreground">Descubre cómo funciona cada módulo</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -199,9 +198,6 @@ export default function PerfilPage() {
       <div className="text-center pt-4">
         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Kiri Finance v1.0.0</p>
       </div>
-
-      {/* Full Tutorial Overlay */}
-      {showFullTutorial && <TutorialSlider showAll onClose={() => setShowFullTutorial(false)} />}
 
       {/* Edit Profile Modal */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

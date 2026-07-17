@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts"
 import {
-  Wallet, ReceiptText, PiggyBank, ChevronRight,
-  TrendingUp, AlertCircle, Sparkles, Eye, Flame,
-  FileText, FileSpreadsheet, TreePine, Users, Heart, Handshake, CalendarDays,
+  Wallet, ReceiptText, ChevronRight,
+  TrendingUp, Sparkles, Eye, Flame,
+  TreePine, CalendarDays,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -18,40 +18,19 @@ import { useStreaks } from "@/hooks/use-streaks"
 import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { analyzeFinances } from "@/lib/recommendations"
-import { ExportButtons } from "@/components/balance/ExportButtons"
 import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
-import { userApi, reportsApi, connectionsApi, sharedPocketsApi, loansApi, WalletState } from "@/lib/api-client"
-import type { BalanceReport } from "@/lib/api-client"
+import { userApi, WalletState } from "@/lib/api-client"
 
 export default function DashboardPage() {
-  const { formatAmount, income, incomeFrequency, diasCobro, onboardingDone, user, metaAhorro } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes, totalAhorrado, savingsHistory } = useFinanceData()
+  const { formatAmount, incomeFrequency, diasCobro, onboardingDone, user } = useAppContext()
+  const { debts, fixedExpenses } = useFinanceData()
   const { streakActual } = useStreaks(incomeFrequency)
   const router = useRouter()
 
-  const [report, setReport] = useState<BalanceReport | null>(null)
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
-  const [socialData, setSocialData] = useState<{ amigos: number; pocketsCount: number; loanAvailable: number; loanTotal: number }>({ amigos: 0, pocketsCount: 0, loanAvailable: 0, loanTotal: 0 })
 
   useEffect(() => {
-    reportsApi.getBalance("month").then(({ data }) => { if (data) setReport(data) })
     userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
-    // Social data
-    connectionsApi.list().then(({ data }) => {
-      if (data) setSocialData(prev => ({ ...prev, amigos: data.accepted.length }))
-    })
-    sharedPocketsApi.list().then(({ data }) => {
-      if (data) setSocialData(prev => ({ ...prev, pocketsCount: (data.pockets as unknown[]).length }))
-    })
-    loansApi.list().then(({ data }) => {
-      if (data) {
-        const loans = data.loans as { amount: number; remainingAmount: number; status: string }[]
-        const active = loans.filter(l => l.status === "ACTIVE")
-        const totalLent = active.reduce((a, l) => a + l.amount, 0)
-        const totalRemaining = active.reduce((a, l) => a + l.remainingAmount, 0)
-        setSocialData(prev => ({ ...prev, loanAvailable: totalRemaining, loanTotal: totalLent }))
-      }
-    })
   }, [])
 
   // ═══ FUENTE ÚNICA DE VERDAD: distribución DINÁMICA del periodo actual ═══
@@ -60,8 +39,6 @@ export default function DashboardPage() {
   //   2. Calcula allocation con ingreso y obligaciones del periodo
   //   3. Cuando el usuario marca algo como pagado → % baja en tiempo real
   const { allocation, periodData } = usePeriodBudget()
-
-  const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
 
   // Para recomendaciones y listados de pendientes
   const { periodDebts } = periodData
@@ -75,37 +52,6 @@ export default function DashboardPage() {
   const pendingDebts = periodDebts.filter(d => !d.pagadoEstePeriodo)
   const pendingFixed = fixedExpenses.filter(f => !f.pagadoEstePeriodo)
   const totalPending = pendingDebts.reduce((a, d) => a + d.cuotaPeriodo, 0) + pendingFixed.reduce((a, f) => a + f.monto, 0)
-
-  // Ahorro REAL: bolsillos de ahorro (localStorage) + fondo de emergencia (DB)
-  const [realSavingsTotal, setRealSavingsTotal] = useState(0)
-  const [realSavingsGoal, setRealSavingsGoal] = useState(0)
-  useEffect(() => {
-    // Leer bolsillos de localStorage
-    let pocketsTotal = 0
-    let pocketsMeta = 0
-    try {
-      const raw = localStorage.getItem("kiri_saving_pockets")
-      if (raw) {
-        const pockets = JSON.parse(raw) as { acumulado: number; meta: number }[]
-        pocketsTotal = pockets.reduce((a, p) => a + (p.acumulado || 0), 0)
-        pocketsMeta = pockets.reduce((a, p) => a + (p.meta || 0), 0)
-      }
-    } catch {}
-    // Leer fondo de emergencia del backend
-    import("@/lib/api-client").then(({ emergencyFundApi }) => {
-      emergencyFundApi.get().then(({ data }) => {
-        const fondoActual = data?.fondoActual ?? 0
-        setRealSavingsTotal(pocketsTotal + fondoActual)
-        setRealSavingsGoal(pocketsMeta)
-      }).catch(() => {
-        setRealSavingsTotal(pocketsTotal)
-        setRealSavingsGoal(pocketsMeta)
-      })
-    })
-  }, [])
-
-  const savingsGoal = realSavingsGoal > 0 ? realSavingsGoal : (metaAhorro || 5000)
-  const savingsProgress = savingsGoal > 0 ? Math.min((realSavingsTotal / savingsGoal) * 100, 100) : 0
 
   // Saldo total real
   const saldoTotal = wallet.cashBalance
@@ -386,60 +332,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Progreso de ahorro (debajo del árbol) */}
-          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
-            <CardContent className="p-5 space-y-3">
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <PiggyBank className="h-4 w-4 text-cyclon-mint" />
-                Progreso de ahorro
-              </h3>
-              <div className="flex items-center gap-4">
-                <div className="text-4xl select-none">🐷</div>
-                <div className="flex-1 space-y-1.5">
-                  <p className="text-[10px] text-muted-foreground">Meta: {formatAmount(savingsGoal)} ✨</p>
-                  <p className="text-xl font-black">{formatAmount(realSavingsTotal)}</p>
-                  <p className="text-[10px] text-muted-foreground">de {formatAmount(savingsGoal)}</p>
-                  <div className="flex items-center gap-2">
-                    <Progress value={savingsProgress} className="h-2 flex-1" indicatorClassName="bg-cyclon-mint" />
-                    <span className="text-[10px] font-black text-cyclon-mint">{Math.round(savingsProgress)}%</span>
-                  </div>
-                </div>
-              </div>
-              <Link href="/ahorro" className="flex items-center justify-center gap-1 text-[11px] font-bold text-cyclon-lavender hover:text-cyclon-lavender/80 transition-colors pt-1">
-                Ver todas mis metas <ChevronRight className="h-3 w-3" />
-              </Link>
-            </CardContent>
-          </Card>
-
-          {/* Estrategias para salir de deudas */}
-          {recommendations?.strategies && debts.length > 0 && (
-            <div className="space-y-3">
-              {/* Sugerencia directa cuando está sobrecargado */}
-              {realAlloc.obligPct >= 100 && recommendations.strategies && (
-                <Card className="border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
-                  <CardContent className="p-4 space-y-2">
-                    <p className="text-xs font-bold text-red-700 dark:text-red-300 flex items-center gap-2">
-                      🎯 Estrategia sugerida: {recommendations.strategies.avalancheWins ? "Avalancha" : "Bola de Nieve"}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      {recommendations.strategies.avalancheWins
-                        ? `Ataca primero "${recommendations.strategies.avalanche.pasos[0]?.nombre ?? "tu deuda más pesada"}" — es la que más presión ejerce sobre tu presupuesto. Al liquidarla liberas ${formatAmount(recommendations.strategies.avalanche.pasos[0]?.cuotaLiberada ?? 0)}/periodo que puedes redirigir a la siguiente.`
-                        : `Empieza por "${recommendations.strategies.snowball.pasos[0]?.nombre ?? "tu deuda más pequeña"}" — la liquidas en ${recommendations.strategies.snowball.pasos[0]?.liquidaEnPeriodo ?? "pocos"} periodos y liberas ${formatAmount(recommendations.strategies.snowball.pasos[0]?.cuotaLiberada ?? 0)}/periodo. Las victorias rápidas mantienen la motivación.`
-                      }
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      📅 Libre de deudas en: <span className="font-bold">{recommendations.strategies.avalancheWins ? recommendations.strategies.avalanche.fechaLibre : recommendations.strategies.snowball.fechaLibre}</span>
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-              <DebtStrategyPanel
-                snowball={recommendations.strategies.snowball}
-                avalanche={recommendations.strategies.avalanche}
-                avalancheWins={recommendations.strategies.avalancheWins}
-              />
-            </div>
-          )}
         </div>
 
         {/* ── COLUMNA DERECHA: Acciones + Detalles (2/5) ── */}
@@ -503,83 +395,36 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Resumen Social */}
-          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
-            <CardContent className="p-5 space-y-3">
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <Users className="h-4 w-4 text-kiri-emerald" />
-                Social
-              </h3>
-              <p className="text-[11px] text-muted-foreground -mt-1">Conéctate, comparte y crece juntos.</p>
+          {/* Estrategias para salir de deudas */}
+          {recommendations?.strategies && debts.length > 0 && (
+            <div className="space-y-3">
+              {/* Sugerencia directa cuando está sobrecargado */}
+              {realAlloc.obligPct >= 100 && recommendations.strategies && (
+                <Card className="border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10 rounded-2xl">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-bold text-red-700 dark:text-red-300 flex items-center gap-2">
+                      🎯 Estrategia sugerida: {recommendations.strategies.avalancheWins ? "Avalancha" : "Bola de Nieve"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      {recommendations.strategies.avalancheWins
+                        ? `Ataca primero "${recommendations.strategies.avalanche.pasos[0]?.nombre ?? "tu deuda más pesada"}" — es la que más presión ejerce sobre tu presupuesto. Al liquidarla liberas ${formatAmount(recommendations.strategies.avalanche.pasos[0]?.cuotaLiberada ?? 0)}/periodo que puedes redirigir a la siguiente.`
+                        : `Empieza por "${recommendations.strategies.snowball.pasos[0]?.nombre ?? "tu deuda más pequeña"}" — la liquidas en ${recommendations.strategies.snowball.pasos[0]?.liquidaEnPeriodo ?? "pocos"} periodos y liberas ${formatAmount(recommendations.strategies.snowball.pasos[0]?.cuotaLiberada ?? 0)}/periodo. Las victorias rápidas mantienen la motivación.`
+                      }
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      📅 Libre de deudas en: <span className="font-bold">{recommendations.strategies.avalancheWins ? recommendations.strategies.avalanche.fechaLibre : recommendations.strategies.snowball.fechaLibre}</span>
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+              <DebtStrategyPanel
+                snowball={recommendations.strategies.snowball}
+                avalanche={recommendations.strategies.avalanche}
+                avalancheWins={recommendations.strategies.avalancheWins}
+              />
+            </div>
+          )}
 
-              {/* Amigos */}
-              <Link href="/social" className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
-                <div className="h-8 w-8 rounded-lg bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald shrink-0">
-                  <Users className="h-4 w-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-bold">Amigos</p>
-                  <p className="text-[10px] text-muted-foreground">Personas conectadas contigo</p>
-                </div>
-                <span className="text-sm font-black text-kiri-emerald">{socialData.amigos}</span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </Link>
-
-              {/* Pareja / Bolsillos compartidos */}
-              <Link href="/social" className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
-                <div className="h-8 w-8 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-500 shrink-0">
-                  <Heart className="h-4 w-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-bold">Pareja</p>
-                  <p className="text-[10px] text-muted-foreground">Finanzas en equipo</p>
-                </div>
-                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", socialData.pocketsCount > 0 ? "bg-kiri-emerald/10 text-kiri-emerald" : "bg-muted text-muted-foreground")}>
-                  {socialData.pocketsCount > 0 ? "Activo" : "—"}
-                </span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </Link>
-
-              {/* Disponible para prestar */}
-              <Link href="/social" className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors">
-                <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/10 flex items-center justify-center text-cyclon-lavender shrink-0">
-                  <Handshake className="h-4 w-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-bold">Préstamos</p>
-                  <p className="text-[10px] text-muted-foreground">Ayuda a quien lo necesita</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-black text-cyclon-lavender">{formatAmount(socialData.loanAvailable)}</p>
-                  {socialData.loanTotal > 0 && <p className="text-[9px] text-muted-foreground">de {formatAmount(socialData.loanTotal)}</p>}
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-              </Link>
-
-              {/* Mensaje motivacional */}
-              <div className="bg-kiri-emerald/5 rounded-2xl p-3 flex items-center gap-3 mt-1">
-                <span className="text-2xl">🌱</span>
-                <div>
-                  <p className="text-[11px] font-bold text-kiri-emerald">¡Tu red te hace más fuerte! 💚</p>
-                  <p className="text-[10px] text-muted-foreground">Comparte, apoya y alcanza tus metas financieras en comunidad.</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Exportar reportes */}
-          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
-            <CardContent className="p-5 space-y-3">
-              <h3 className="font-bold text-sm flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Exportar reportes
-              </h3>
-              <p className="text-[11px] text-muted-foreground">
-                Descarga tus reportes y lleva el control de tus finanzas.
-              </p>
-              <ExportButtons report={report} />
-            </CardContent>
-          </Card>
         </div>
       </div>
 

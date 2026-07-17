@@ -126,6 +126,13 @@ export default function ObligacionesPage() {
   const [isFixedPartialMode, setIsFixedPartialMode] = useState(false)
   const [fixedPartialAmount, setFixedPartialAmount] = useState("")
   const [showTCOptions, setShowTCOptions] = useState(false)
+  const [tcCuotas, setTcCuotas] = useState("1")
+  const [selectedTC, setSelectedTC] = useState<string | null>(null)
+
+  // TC options for debt payment modal
+  const [showDebtTCOptions, setShowDebtTCOptions] = useState(false)
+  const [debtTcCuotas, setDebtTcCuotas] = useState("1")
+  const [selectedDebtTC, setSelectedDebtTC] = useState<string | null>(null)
 
   // ── Saldo insuficiente modal ───────────────────────────────────────────────
   const [insufficientOpen, setInsufficientOpen] = useState(false)
@@ -179,13 +186,20 @@ export default function ObligacionesPage() {
 
   // ── Handlers Pay ──────────────────────────────────────────────────────────
   const openPay = (debt: Debt) => {
-    // Interceptar si no hay saldo suficiente
-    if (wallet.cashBalance < debt.cuotaPeriodo) {
+    // Check if there are credit cards available to pay with
+    const tarjetas = debts.filter(d => d.estado === 'activa' && d.id !== debt.id && (
+      d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
+      d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
+      d.nombre.toLowerCase().includes('credito')
+    ))
+
+    // If no cash AND no credit cards available, show insufficient funds
+    if (wallet.cashBalance < debt.cuotaPeriodo && tarjetas.length === 0) {
       setInsufficientTarget({ type: "debt", id: debt.id, nombre: debt.nombre, monto: debt.cuotaPeriodo })
       setInsufficientOpen(true)
       return
     }
-    setPayDebt(debt); setIsPartialMode(false); setPartialAmount("")
+    setPayDebt(debt); setIsPartialMode(false); setPartialAmount(""); setShowDebtTCOptions(false); setSelectedDebtTC(null); setDebtTcCuotas("1")
   }
 
   const confirmFullPay = async () => {
@@ -207,12 +221,19 @@ export default function ObligacionesPage() {
 
   // ── Handlers Pay Fixed ────────────────────────────────────────────────────
   const openPayFixed = (fe: FixedExpense) => {
-    if (wallet.cashBalance < fe.monto) {
+    // Check if there are credit cards available
+    const tarjetas = debts.filter(d => d.estado === 'activa' && (
+      d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
+      d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
+      d.nombre.toLowerCase().includes('credito')
+    ))
+
+    if (wallet.cashBalance < fe.monto && tarjetas.length === 0) {
       setInsufficientTarget({ type: "fixed", id: fe.id, nombre: fe.nombre, monto: fe.monto })
       setInsufficientOpen(true)
       return
     }
-    setPayFixed(fe); setIsFixedPartialMode(false); setFixedPartialAmount("")
+    setPayFixed(fe); setIsFixedPartialMode(false); setFixedPartialAmount(""); setShowTCOptions(false); setSelectedTC(null); setTcCuotas("1")
   }
 
   const confirmFullPayFixed = async () => {
@@ -634,7 +655,7 @@ export default function ObligacionesPage() {
       {/* ════ MODALES ════ */}
 
       {/* Pay Modal */}
-      <Dialog open={!!payDebt} onOpenChange={v => !v && setPayDebt(null)}>
+      <Dialog open={!!payDebt} onOpenChange={v => { if (!v) { setPayDebt(null); setShowDebtTCOptions(false); setSelectedDebtTC(null); setDebtTcCuotas("1") } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>¿Ya pagaste?</DialogTitle>
@@ -645,6 +666,88 @@ export default function ObligacionesPage() {
               <CheckCircle2 className="h-5 w-5" />
               Pagar ({formatAmount(payDebt?.cuotaPeriodo ?? 0)})
             </Button>
+
+            {/* Opción: Pagar con tarjeta de crédito */}
+            {(() => {
+              const tarjetas = debts.filter(d => d.estado === 'activa' && d.id !== payDebt?.id && (
+                d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
+                d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
+                d.nombre.toLowerCase().includes('credito')
+              ))
+              if (tarjetas.length === 0) return null
+              return (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowDebtTCOptions(v => !v); setSelectedDebtTC(null); setDebtTcCuotas("1") }}
+                    className="h-12 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
+                  >
+                    <CircleDollarSign className="h-4 w-4" />
+                    Pagar con Tarjeta de Crédito
+                  </Button>
+                  {showDebtTCOptions && (
+                    <div className="space-y-3 pl-2">
+                      {tarjetas.map(tc => (
+                        <button
+                          key={tc.id}
+                          onClick={() => setSelectedDebtTC(tc.id === selectedDebtTC ? null : tc.id)}
+                          className={cn(
+                            "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
+                            selectedDebtTC === tc.id
+                              ? "border-amber-500 bg-amber-500/10"
+                              : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
+                          )}
+                        >
+                          <div>
+                            <p className="text-xs font-bold">{tc.nombre}</p>
+                            <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)} · Cuota: {formatAmount(tc.cuotaPeriodo)}</p>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-500">{selectedDebtTC === tc.id ? "✓" : "Seleccionar"}</span>
+                        </button>
+                      ))}
+                      {selectedDebtTC && (
+                        <div className="space-y-3 pt-2 border-t border-border/50">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="48"
+                              value={debtTcCuotas}
+                              onChange={e => setDebtTcCuotas(e.target.value)}
+                              className="h-10 rounded-xl text-center font-bold"
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                              Se sumará <strong>{formatAmount(Math.round((payDebt?.cuotaPeriodo ?? 0) / (Number(debtTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {debtTcCuotas} {Number(debtTcCuotas) === 1 ? "mes" : "meses"}.
+                            </p>
+                          </div>
+                          <Button
+                            onClick={async () => {
+                              if (!payDebt || !selectedDebtTC) return
+                              const monto = payDebt.cuotaPeriodo
+                              const cuotas = Number(debtTcCuotas) || 1
+                              await debtsApi.payWithCard({
+                                tarjetaId: selectedDebtTC,
+                                monto,
+                                cuotas,
+                                sourceType: 'debt',
+                                sourceId: payDebt.id,
+                              })
+                              setPayDebt(null); setShowDebtTCOptions(false); setSelectedDebtTC(null); setDebtTcCuotas("1")
+                              window.location.reload()
+                            }}
+                            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
+                          >
+                            Confirmar pago con TC
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+
             <Button variant="outline" onClick={() => setIsPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
               ¿Pagaste otro valor?
             </Button>
@@ -689,35 +792,75 @@ export default function ObligacionesPage() {
                 <>
                   <Button
                     variant="outline"
-                    onClick={() => setShowTCOptions(v => !v)}
+                    onClick={() => { setShowTCOptions(v => !v); setSelectedTC(null); setTcCuotas("1") }}
                     className="h-12 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
                   >
                     <CircleDollarSign className="h-4 w-4" />
                     Pagar con Tarjeta de Crédito
                   </Button>
                   {showTCOptions && (
-                    <div className="space-y-2 pl-2">
+                    <div className="space-y-3 pl-2">
                       {tarjetas.map(tc => (
                         <button
                           key={tc.id}
-                          onClick={async () => {
-                            if (!payFixed) return
-                            const monto = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
-                            await debtsApi.update(tc.id, { saldoRestante: tc.saldoRestante + monto })
-                            await fixedExpensesApi.update(payFixed.id, { pagadoEstePeriodo: true, montoPagadoEstePeriodo: monto })
-                            setPayFixed(null)
-                            setShowTCOptions(false)
-                            window.location.reload()
-                          }}
-                          className="w-full flex items-center justify-between p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+                          onClick={() => setSelectedTC(tc.id === selectedTC ? null : tc.id)}
+                          className={cn(
+                            "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
+                            selectedTC === tc.id
+                              ? "border-amber-500 bg-amber-500/10"
+                              : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
+                          )}
                         >
                           <div>
                             <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">Saldo actual: {formatAmount(tc.saldoRestante)}</p>
+                            <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)} · Cuota: {formatAmount(tc.cuotaPeriodo)}</p>
                           </div>
-                          <span className="text-[10px] font-bold text-amber-500">Seleccionar</span>
+                          <span className="text-[10px] font-bold text-amber-500">{selectedTC === tc.id ? "✓" : "Seleccionar"}</span>
                         </button>
                       ))}
+                      {selectedTC && (
+                        <div className="space-y-3 pt-2 border-t border-border/50">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="48"
+                              value={tcCuotas}
+                              onChange={e => setTcCuotas(e.target.value)}
+                              className="h-10 rounded-xl text-center font-bold"
+                            />
+                            {(() => {
+                              const montoFijo = payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)
+                              const cuotasNum = Number(tcCuotas) || 1
+                              return (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Se sumará <strong>{formatAmount(Math.round(montoFijo / cuotasNum))}/mes</strong> a la cuota de la tarjeta durante {tcCuotas} {cuotasNum === 1 ? "mes" : "meses"}.
+                                </p>
+                              )
+                            })()}
+                          </div>
+                          <Button
+                            onClick={async () => {
+                              if (!payFixed || !selectedTC) return
+                              const monto = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
+                              const cuotas = Number(tcCuotas) || 1
+                              await debtsApi.payWithCard({
+                                tarjetaId: selectedTC,
+                                monto,
+                                cuotas,
+                                sourceType: 'fixed',
+                                sourceId: payFixed.id,
+                              })
+                              setPayFixed(null); setShowTCOptions(false); setSelectedTC(null); setTcCuotas("1")
+                              window.location.reload()
+                            }}
+                            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
+                          >
+                            Confirmar pago con TC
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
