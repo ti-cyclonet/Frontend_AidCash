@@ -433,13 +433,13 @@ export function BilleteraTab() {
           <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Sueldo Real (disponible)</p>
           <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
-          <div className="flex items-center justify-center gap-3 pt-2">
+          <div className="flex items-center justify-center gap-3 pt-3">
             <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)); setSelectedExtras([]) }} size="sm"
-              className="bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl gap-1.5 h-9 px-4 text-xs">
-              <Plus className="h-3.5 w-3.5" /> Ingresar
+              className="bg-white text-kiri-emerald hover:bg-white/90 font-bold rounded-xl gap-1.5 h-10 px-5 text-sm shadow-lg shadow-black/10">
+              <Plus className="h-4 w-4" /> Registrar Ingreso
             </Button>
             <Button variant="ghost" size="sm" onClick={handleReset} disabled={resetting || total === 0}
-              className="text-white/40 hover:text-white/70 hover:bg-white/10 rounded-xl h-9 px-3 text-xs gap-1">
+              className="text-white/40 hover:text-white/70 hover:bg-white/10 rounded-xl h-10 px-3 text-xs gap-1">
               <RefreshCw className={cn("h-3 w-3", resetting && "animate-spin")} /> Reiniciar
             </Button>
           </div>
@@ -494,15 +494,18 @@ export function BilleteraTab() {
             </p>
 
             {/* ── Ingresos Extra ── */}
-            <div className="border-t border-border/50 pt-3 space-y-2">
+            <div className="border-t border-border/50 pt-3 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold">Ingresos extra</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">💰</span>
+                  <p className="text-xs font-bold">Ingresos extra</p>
+                </div>
                 {!extraIncomeFormOpen && (
                   <button
                     onClick={() => setExtraIncomeFormOpen(true)}
-                    className="text-[10px] font-bold text-kiri-emerald hover:underline"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-kiri-emerald/10 text-kiri-emerald text-[10px] font-bold hover:bg-kiri-emerald/20 transition-colors"
                   >
-                    + Agregar extra
+                    <Plus className="h-3 w-3" /> Agregar
                   </button>
                 )}
               </div>
@@ -585,33 +588,36 @@ export function BilleteraTab() {
               {extraIncomes.length > 0 && (
                 <div className="space-y-2 pt-1">
                   {extraIncomes.map(e => (
-                    <div key={e.id} className="flex items-center gap-3 py-2 border-b border-border/20 last:border-none">
+                    <div key={e.id} className="flex items-center gap-3 bg-kiri-emerald/5 rounded-xl px-3 py-2.5 border border-kiri-emerald/10 hover:border-kiri-emerald/30 transition-colors">
+                      <div className="h-8 w-8 rounded-lg bg-kiri-emerald/10 flex items-center justify-center shrink-0">
+                        <span className="text-sm">💰</span>
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold">{e.nombre}</p>
+                        <p className="text-sm font-bold truncate">{e.nombre}</p>
                         <p className="text-[9px] text-muted-foreground">
-                          {e.temporalidad === "una_vez" ? "Una vez" : e.temporalidad === "definido" ? `Definido (${e.mesesRestantes} meses)` : "Siempre"}
+                          {e.temporalidad === "una_vez" ? "⏱ Una vez" : e.temporalidad === "definido" ? `📅 ${e.mesesRestantes} periodos` : "♾️ Recurrente"}
                         </p>
                       </div>
-                      <span className="text-sm font-bold text-kiri-emerald shrink-0">{formatAmount(e.monto)}</span>
+                      <span className="text-sm font-black text-kiri-emerald shrink-0">{formatAmount(e.monto)}</span>
                       <button
                         onClick={() => { setExtraName(e.nombre); setExtraMonto(String(e.monto)); setExtraTemp(e.temporalidad as any); setExtraMeses(e.mesesRestantes ? String(e.mesesRestantes) : ""); removeExtraIncome(e.id); setExtraIncomeFormOpen(true) }}
-                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0"
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-kiri-emerald hover:bg-kiri-emerald/10 transition-colors shrink-0"
                         title="Editar"
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => removeExtraIncome(e.id)}
-                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
                         title="Eliminar"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-[10px] text-muted-foreground">Total extras activos</span>
-                    <span className="text-sm font-bold text-kiri-emerald">{formatAmount(extraIncomes.reduce((a, e) => a + e.monto, 0))}</span>
+                  <div className="flex items-center justify-between pt-2 px-1">
+                    <span className="text-[10px] text-muted-foreground font-medium">Total extras activos</span>
+                    <span className="text-sm font-black text-kiri-emerald">{formatAmount(extraIncomes.reduce((a, e) => a + e.monto, 0))}</span>
                   </div>
                 </div>
               )}

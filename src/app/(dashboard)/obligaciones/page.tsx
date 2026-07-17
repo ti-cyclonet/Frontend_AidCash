@@ -28,6 +28,7 @@ import { userApi, WalletState, loansApi } from "@/lib/api-client"
 import { debtsApi, fixedExpensesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
+import { AnimatedBalance } from "@/components/ui/animated-balance"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -139,6 +140,12 @@ export default function ObligacionesPage() {
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   useEffect(() => {
     userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
+    const refresh = () => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }
+    window.addEventListener("kiri:wallet-updated", refresh)
+    return () => window.removeEventListener("kiri:wallet-updated", refresh)
+  }, [])
+
+  useEffect(() => {
     // Cargar bolsillos de ahorro y fondo de emergencia
     try {
       const raw = localStorage.getItem("kiri_saving_pockets")
@@ -393,27 +400,34 @@ export default function ObligacionesPage() {
   }
 
 
+  // ── Saldo visible toggle ─────────────────────────────────────────────────
+  const [showSaldo, setShowSaldo] = useState(true)
+
   return (
     <>
       {showTutorial && <TutorialSlider module="obligaciones" onClose={dismissTutorial} />}
     <div className="space-y-6">
-      <header className="flex justify-between items-end">
+      <header className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-cyclon-periwinkle">Obligaciones</h1>
           <p className="text-muted-foreground text-sm">Gestiona tus compromisos y gastos.</p>
         </div>
-        {(activeTab === "gastos_fijos" || activeTab === "deudas") && (
-          <Button
-            size="icon"
-            className="rounded-2xl bg-cyclon-periwinkle shadow-lg shadow-cyclon-periwinkle/30"
-            onClick={() => {
-              setAddType(activeTab === "deudas" ? "deuda" : "gasto_fijo")
-              setIsAddOpen(true)
-            }}
-          >
-            <Plus className="h-6 w-6" />
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Saldo en tiempo real con efecto */}
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" />
+          {(activeTab === "gastos_fijos" || activeTab === "deudas") && (
+            <Button
+              size="icon"
+              className="rounded-2xl bg-cyclon-periwinkle shadow-lg shadow-cyclon-periwinkle/30"
+              onClick={() => {
+                setAddType(activeTab === "deudas" ? "deuda" : "gasto_fijo")
+                setIsAddOpen(true)
+              }}
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* ── Simulador de Escenarios ── */}
@@ -499,6 +513,10 @@ export default function ObligacionesPage() {
                     } else {
                       openPayFixed(fe)
                     }
+                  }}
+                  onUndoPay={async () => {
+                    const walletData = await undoPayFixed(fe.id)
+                    if (walletData) setWallet(walletData)
                   }}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
@@ -1117,11 +1135,13 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
             )}
           </div>
           <div className="flex gap-1 shrink-0">
+            {debt.frecuenciaPago !== 'quincenal' && (
             <button onClick={onToggleAutoPay} title={debt.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 debt.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
             </button>
+            )}
             <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
@@ -1213,9 +1233,9 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
+function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
   item: FixedExpense; formatAmount: (n: number) => string
-  onEdit: () => void; onDelete: () => void; onTogglePaid: () => void
+  onEdit: () => void; onDelete: () => void; onTogglePaid: () => void; onUndoPay: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
 }) {
@@ -1255,11 +1275,13 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
             )}
           </div>
           <div className="flex gap-1 shrink-0">
+            {item.frecuencia !== 'quincenal' && (
             <button onClick={onToggleAutoPay} title={item.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 item.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
             </button>
+            )}
             <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
@@ -1287,12 +1309,12 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, hidden,
 
         {/* Botones de acción */}
         {item.pagadoEstePeriodo ? (
-          <Button onClick={onTogglePaid} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
+          <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
             Deshacer pago
           </Button>
         ) : isPartiallyPaid ? (
           <div className="flex gap-2">
-            <Button onClick={onTogglePaid} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
+            <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
               Deshacer pago
             </Button>
             <Button onClick={onTogglePaid} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">

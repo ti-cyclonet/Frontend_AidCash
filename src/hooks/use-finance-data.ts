@@ -202,7 +202,7 @@ export function useFinanceData() {
 
   const updateDebt = async (
     debtId: string,
-    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'cuotaPeriodo' | 'diasPago'>>
+    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'cuotaPeriodo' | 'diasPago' | 'pagoAutomatico'>>
   ) => {
     await debtsApi.update(debtId, data)
     setDebts(prev => prev.map(d => d.id === debtId ? { ...d, ...data } : d))
@@ -280,7 +280,7 @@ export function useFinanceData() {
 
   const updateFixedExpense = async (
     id: string,
-    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto'>>
+    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto' | 'pagoAutomatico'>>
   ) => {
     await fixedExpensesApi.update(id, data)
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, ...data } : f))

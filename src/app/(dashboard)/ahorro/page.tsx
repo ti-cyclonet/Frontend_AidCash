@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/auth-context"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
+import { AnimatedBalance } from "@/components/ui/animated-balance"
 import type { SharedPocket } from "@/lib/types"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
@@ -87,6 +88,15 @@ export default function AhorroPage() {
   const [activeTab, setActiveTab] = useState<"ahorro" | "emergencia">("ahorro")
   // Sub-tab dentro de Ahorro
   const [ahorroSubTab, setAhorroSubTab] = useState<"bolsillos" | "historial">("bolsillos")
+
+  // ── Wallet state para badge de saldo ──
+  const [wallet, setWallet] = useState({ cashBalance: 0 })
+  useEffect(() => {
+    userApi.getWallet().then(({ data }) => { if (data) setWallet({ cashBalance: data.wallet.cashBalance }) })
+    const refresh = () => { userApi.getWallet().then(({ data }) => { if (data) setWallet({ cashBalance: data.wallet.cashBalance }) }) }
+    window.addEventListener("kiri:wallet-updated", refresh)
+    return () => window.removeEventListener("kiri:wallet-updated", refresh)
+  }, [])
 
   // ── Fondo emergencia ──────────────────────────────────────────────────────
   const [fondoActual, setFondoActual] = useState(0)
@@ -259,6 +269,7 @@ export default function AhorroPage() {
     setSavingTx(false)
     setTxPocket(null)
     setTxAmount("")
+    window.dispatchEvent(new Event("kiri:wallet-updated"))
   }
 
   // ── Handlers ahorro historial ─────────────────────────────────────────────
@@ -303,15 +314,19 @@ export default function AhorroPage() {
           <h1 className="text-2xl font-bold text-cyclon-mint">Ahorro</h1>
           <p className="text-muted-foreground text-sm">Tu banco personal, a tu ritmo.</p>
         </div>
-        {activeTab === "ahorro" && ahorroSubTab === "bolsillos" && (
-          <Button
-            size="icon"
-            className="rounded-2xl bg-cyclon-mint shadow-lg shadow-cyclon-mint/30 text-cyclon-periwinkle"
-            onClick={() => setNewPocketOpen(true)}
-          >
-            <Plus className="h-6 w-6" />
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Saldo en tiempo real con efecto */}
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo disponible" />
+          {activeTab === "ahorro" && ahorroSubTab === "bolsillos" && (
+            <Button
+              size="icon"
+              className="rounded-2xl bg-cyclon-mint shadow-lg shadow-cyclon-mint/30 text-cyclon-periwinkle"
+              onClick={() => setNewPocketOpen(true)}
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* ── Tabs principales: Ahorro / Emergencia ── */}
