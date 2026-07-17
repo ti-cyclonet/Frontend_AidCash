@@ -38,7 +38,7 @@ export function BottomNav() {
       )}
 
       {/* Barra inferior */}
-      <nav className="fixed bottom-0 left-0 right-0 glass-nav border-t border-border/50 flex items-center justify-around px-2 py-2 z-50 safe-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 glass-nav border-t border-border/50 flex items-center justify-around px-2 pt-3 pb-2 z-50 safe-bottom">
         {/* Items izquierda */}
         {leftItems.map(item => {
           const isActive = pathname === item.href
@@ -56,12 +56,12 @@ export function BottomNav() {
         {/* Botón + central */}
         <button onClick={() => setActionsOpen(v => !v)}
           className={cn(
-            "h-14 w-14 -mt-6 rounded-full flex items-center justify-center shadow-lg transition-all duration-200",
+            "h-12 w-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-200",
             actionsOpen
               ? "bg-muted text-foreground rotate-45 scale-95"
               : "bg-gradient-to-br from-kiri-emerald to-kiri-forest text-white scale-100"
           )}>
-          {actionsOpen ? <X className="h-6 w-6" /> : <Plus className="h-7 w-7" />}
+          {actionsOpen ? <X className="h-5 w-5" /> : <Plus className="h-6 w-6" />}
         </button>
 
         {/* Items derecha */}
