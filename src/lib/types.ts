@@ -95,6 +95,7 @@ export interface ExtraIncome {
   monto: number;
   temporalidad: ExtraIncomeTemporality;
   mesesRestantes: number | null; // null = indefinido o una_vez ya registrado
+  fechaRecepcion?: string | null;
 }
 
 export type DebtPriority = 'alta' | 'media' | 'baja';

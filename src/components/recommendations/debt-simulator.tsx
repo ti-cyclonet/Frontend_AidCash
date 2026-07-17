@@ -140,6 +140,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
 
   return (
     <>
+      {!isOpen && (
       <button onClick={() => setOpen(true)} className="w-full text-left">
         <Card className="border-2 border-dashed border-cyclon-lavender/30 bg-cyclon-lavender/5 rounded-3xl hover:border-cyclon-lavender/60 hover:bg-cyclon-lavender/10 transition-colors">
           <CardContent className="p-5 flex items-center gap-4">
@@ -161,6 +162,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
           </CardContent>
         </Card>
       </button>
+      )}
 
       <Dialog open={isOpen} onOpenChange={v => !v && handleClose()}>
         <DialogContent >

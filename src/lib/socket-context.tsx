@@ -71,7 +71,25 @@ const SocketContext = createContext<SocketContextValue>({
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? "http://localhost:4000"
+function getSocketConfig(): { url: string; path?: string } {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"
+  try {
+    const url = new URL(apiUrl)
+    const origin = url.origin
+    // Si la API tiene un path más allá de /api (ej: /api/kiri),
+    // el socket necesita ese path como base
+    const basePath = url.pathname.replace(/\/api\/?$/, "").replace(/\/$/, "")
+    if (basePath && basePath !== "") {
+      // Proxy con sub-path: socket.io path debe incluirlo
+      return { url: origin, path: `${basePath}/socket.io/` }
+    }
+    return { url: origin }
+  } catch {
+    return { url: apiUrl.replace(/\/api.*$/, "") || "http://localhost:4000" }
+  }
+}
+
+const socketConfig = getSocketConfig()
 
 // Eventos que generan notificaciones persistentes en la UI
 const NOTIFICATION_EVENTS: SocketEvent[] = [
@@ -107,8 +125,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const token = getAccessToken()
     if (!token) return
 
-    const sock = io(SOCKET_URL, {
+    const sock = io(socketConfig.url, {
       auth:       { token },
+      ...(socketConfig.path ? { path: socketConfig.path } : {}),
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
       reconnectionDelay:    2000,

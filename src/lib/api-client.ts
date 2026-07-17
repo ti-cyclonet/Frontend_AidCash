@@ -340,6 +340,13 @@ export const debtsApi = {
       method: 'POST',
     })
   },
+
+  async payWithCard(data: { tarjetaId: string; monto: number; cuotas: number; sourceType: 'debt' | 'fixed'; sourceId: string }) {
+    return api<{ success: boolean; tarjeta: { id: string; nombre: string; saldoRestante: number; cuotaPeriodo: number } | null; cuotasAgregadas: number; incrementoCuota: number; montoTotalAgregado: number }>('/debts/pay-with-card', {
+      method: 'POST',
+      body: data,
+    })
+  },
 }
 
 // ─── Fixed Expenses API ───────────────────────────────────────────────────────
@@ -360,6 +367,13 @@ export const fixedExpensesApi = {
     return api<{ fixedExpense: Record<string, unknown> }>(`/fixed-expenses/${id}`, {
       method: 'PATCH',
       body: data,
+    })
+  },
+
+  async pay(id: string, monto?: number) {
+    return api<{ fixedExpense: Record<string, unknown>; pagoConTarjeta: boolean; tarjetaNombre?: string; nuevoSaldoTarjeta?: number }>(`/fixed-expenses/${id}/pay`, {
+      method: 'PATCH',
+      body: monto ? { monto } : {},
     })
   },
 
@@ -396,7 +410,7 @@ export const extraIncomesApi = {
     return api<{ extraIncomes: Record<string, unknown>[] }>('/extra-incomes')
   },
 
-  async create(data: { nombre: string; monto: number; temporalidad: string; mesesRestantes?: number | null }) {
+  async create(data: { nombre: string; monto: number; temporalidad: string; mesesRestantes?: number | null; fechaRecepcion?: string }) {
     return api<{ extraIncome: Record<string, unknown> }>('/extra-incomes', {
       method: 'POST',
       body: data,

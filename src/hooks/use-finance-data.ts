@@ -298,18 +298,19 @@ export function useFinanceData() {
     // Si es quincenal, el monto por periodo es la mitad del total
     const montoPorPeriodo = (fe as any).frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
     const realPaid = montoPagado ?? montoPorPeriodo
-    // Acumular pagos parciales
+
+    // Usar el endpoint /pay que maneja la lógica de tarjeta vinculada correctamente
+    const { data: payResult } = await fixedExpensesApi.pay(id, realPaid)
+
+    // Si NO se pagó con tarjeta, deducir del cashBalance
+    if (!payResult?.pagoConTarjeta) {
+      await userApi.walletDeduct(realPaid, 'obligaciones')
+    }
+
+    // Acumular pagos parciales para el estado local
     const prevPaid = (fe as any).montoPagadoEstePeriodo ?? 0
     const totalPaid = prevPaid + realPaid
     const isFullyPaid = totalPaid >= fe.monto
-
-    // Actualizar en backend: solo marcar pagadoEstePeriodo si se cubrió el total
-    await fixedExpensesApi.update(id, {
-      pagadoEstePeriodo: isFullyPaid,
-      montoPagadoEstePeriodo: totalPaid,
-    })
-    // Deducir del sueldo real el monto REAL pagado
-    await userApi.walletDeduct(realPaid, 'obligaciones')
 
     setFixedExpenses(prev => prev.map(f => f.id === id ? {
       ...f,
@@ -334,6 +335,7 @@ export function useFinanceData() {
       monto: data.monto,
       temporalidad: data.temporalidad,
       mesesRestantes: data.mesesRestantes,
+      fechaRecepcion: data.fechaRecepcion || undefined,
     })
     await fetchAll()
   }
