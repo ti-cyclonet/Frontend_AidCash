@@ -332,12 +332,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-        </div>
-
-        {/* ── COLUMNA DERECHA: Acciones + Detalles (2/5) ── */}
-        <div className="lg:col-span-2 space-y-5">
-
-          {/* Obligaciones pendientes */}
+          {/* Obligaciones pendientes — debajo del árbol */}
           <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
             <CardContent className="p-5 space-y-3">
               <h3 className="font-bold text-sm flex items-center gap-2">
@@ -394,6 +389,11 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+
+        </div>
+
+        {/* ── COLUMNA DERECHA: Estrategias (2/5) ── */}
+        <div className="lg:col-span-2 space-y-5">
 
           {/* Estrategias para salir de deudas */}
           {recommendations?.strategies && debts.length > 0 && (
