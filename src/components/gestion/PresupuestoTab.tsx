@@ -24,6 +24,8 @@ import { analyzeBudgetCategories, BudgetInsight, getCategoryInsight } from "@/li
 import { detectBudgetCategory } from "@/hooks/use-budget-categories"
 import { ImpulseCategory } from "@/lib/types"
 import Link from "next/link"
+import { TopConsumosSection } from "./TopConsumosSection"
+import { DesgloseGastosSection } from "./DesgloseGastosSection"
 
 // --- Types ---
 interface BudgetCategory { id: string; name: string; budget: number; spent: number; color: string; icon: string }
@@ -576,6 +578,9 @@ export function PresupuestoTab() {
         </button>
       )}
 
+      {/* ═══ TOP MAYORES CONSUMOS — Vista General ═══ */}
+      {!selectedCat && catsWithSpent.length > 0 && <TopConsumosSection />}
+
       {/* ═══ MODAL DETALLE DE RECOMENDACIONES ═══ */}
       <Dialog open={insightsModalOpen} onOpenChange={setInsightsModalOpen}>
         <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
@@ -712,6 +717,16 @@ export function PresupuestoTab() {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* ═══ DESGLOSE DE GASTOS — Vista Detallada ═══ */}
+                {selectedCat.expenses.length > 0 && (
+                  <DesgloseGastosSection
+                    expenses={selectedCat.expenses}
+                    categoryName={selectedCat.name}
+                    categoryColor={selectedCat.color}
+                    totalSpent={selectedCat.spent}
+                  />
                 )}
               </CardContent>
             </Card>

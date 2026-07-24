@@ -446,6 +446,28 @@ export const impulseApi = {
   async delete(id: string) {
     return api(`/impulse-expenses/${id}`, { method: 'DELETE' })
   },
+
+  async topConsumos(params?: { categoria?: string; limit?: number; periodo?: string }) {
+    const searchParams = new URLSearchParams()
+    if (params?.categoria) searchParams.set('categoria', params.categoria)
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.periodo) searchParams.set('periodo', params.periodo)
+    const qs = searchParams.toString()
+    return api<TopConsumosResponse>(`/impulse-expenses/top-consumos${qs ? `?${qs}` : ''}`)
+  },
+}
+
+export interface TopConsumoItem {
+  nombre: string
+  totalGastado: number
+  cantidad: number
+  porcentaje: number
+}
+
+export interface TopConsumosResponse {
+  items: TopConsumoItem[]
+  totalGastado: number
+  periodo: string
 }
 
 // ─── Emergency Fund API ───────────────────────────────────────────────────────
