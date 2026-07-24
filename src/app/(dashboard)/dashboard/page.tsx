@@ -20,12 +20,24 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { analyzeFinances } from "@/lib/recommendations"
 import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
 import { userApi, WalletState } from "@/lib/api-client"
+import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 
 export default function DashboardPage() {
   const { formatAmount, incomeFrequency, diasCobro, onboardingDone, user } = useAppContext()
   const { debts, fixedExpenses } = useFinanceData()
   const { streakActual } = useStreaks(incomeFrequency)
   const router = useRouter()
+
+  // ── Welcome onboarding: se muestra una sola vez después del primer onboarding ──
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return !localStorage.getItem('kiri_welcome_seen')
+  })
+
+  const handleWelcomeComplete = () => {
+    setShowWelcome(false)
+    localStorage.setItem('kiri_welcome_seen', 'true')
+  }
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
 
@@ -93,6 +105,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-8">
+      {/* ═══ WELCOME ONBOARDING — solo la primera vez que el usuario llega al dashboard ═══ */}
+      {showWelcome && onboardingDone && (
+        <WelcomeOnboarding onComplete={handleWelcomeComplete} />
+      )}
+
       {/* ═══ HEADER ═══ */}
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
