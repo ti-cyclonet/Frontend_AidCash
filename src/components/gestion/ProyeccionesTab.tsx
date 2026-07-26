@@ -170,7 +170,7 @@ export function ProyeccionesTab() {
       </div>
 
       {/* ═══ COMPARACIÓN DE RESULTADOS ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {/* Comparación VS */}
         <Card className="border-none bg-card shadow-sm rounded-2xl">
           <CardContent className="p-4 space-y-4">

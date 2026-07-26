@@ -44,6 +44,10 @@ interface SavingPocket {
   descripcion?: string
   pagoAutomatico?: boolean
   createdAt: string
+  /** Tipo de meta: libre (sin fecha) o con fecha límite */
+  tipoMeta?: 'libre' | 'fecha'
+  /** Fecha límite para alcanzar la meta (ISO string, solo mes/año) */
+  fechaLimite?: string
 }
 
 const POCKET_ICONS: { value: PocketIcon; icon: React.ReactNode; label: string }[] = [
@@ -76,6 +80,48 @@ function getPocketIcon(icon: PocketIcon, className = "h-5 w-5") {
 
 function getPocketColor(color: PocketColor) {
   return POCKET_COLORS.find(c => c.value === color) ?? POCKET_COLORS[0]
+}
+
+// ─── Cálculo de cuota mensual para metas con fecha ────────────────────────────
+
+/**
+ * Calcula cuántos meses completos hay entre hoy y una fecha objetivo.
+ * La lógica: compara año y mes. Si la fecha objetivo es el mismo mes, retorna 0.
+ *
+ * Ejemplo: hoy = julio 2026, objetivo = diciembre 2026 → 5 meses
+ * Fórmula: (añoObjetivo - añoHoy) * 12 + (mesObjetivo - mesHoy)
+ */
+function calcularMesesRestantes(fechaLimite: string): number {
+  const hoy = new Date()
+  const objetivo = new Date(fechaLimite)
+
+  const meses = (objetivo.getFullYear() - hoy.getFullYear()) * 12
+    + (objetivo.getMonth() - hoy.getMonth())
+
+  // Si la fecha es pasada o es el mismo mes, retornamos 0
+  return Math.max(0, meses)
+}
+
+/**
+ * Calcula la cuota mensual necesaria para alcanzar una meta de ahorro.
+ *
+ * @param meta - Monto objetivo total
+ * @param acumulado - Cuánto ya se tiene ahorrado
+ * @param fechaLimite - Fecha límite (ISO string)
+ * @returns La cuota mensual, o null si no se puede calcular (meta alcanzada, fecha pasada, etc.)
+ */
+function calcularCuotaMensual(meta: number, acumulado: number, fechaLimite: string): number | null {
+  // Si ya se alcanzó la meta, no hay cuota
+  const faltante = meta - acumulado
+  if (faltante <= 0) return null
+
+  const meses = calcularMesesRestantes(fechaLimite)
+
+  // Si no hay meses restantes (fecha pasada o es el mes actual), no se puede dividir
+  if (meses <= 0) return null
+
+  // Cuota mensual = monto faltante / meses restantes
+  return Math.ceil(faltante / meses)
 }
 
 export default function AhorroPage() {
@@ -148,7 +194,7 @@ export default function AhorroPage() {
 
   // ── Modal: nuevo bolsillo ─────────────────────────────────────────────────
   const [newPocketOpen, setNewPocketOpen] = useState(false)
-  const [pocketForm, setPocketForm] = useState({ nombre: "", meta: "", descripcion: "", icono: "piggybank" as PocketIcon, color: "mint" as PocketColor, acumuladoInicial: "" })
+  const [pocketForm, setPocketForm] = useState({ nombre: "", meta: "", descripcion: "", icono: "piggybank" as PocketIcon, color: "mint" as PocketColor, acumuladoInicial: "", tipoMeta: "libre" as 'libre' | 'fecha', fechaLimite: "" })
   const [savingPocket, setSavingPocket] = useState(false)
 
   // ── Modal: aportar/retirar bolsillo ───────────────────────────────────────
@@ -213,12 +259,14 @@ export default function AhorroPage() {
       icono: pocketForm.icono,
       color: pocketForm.color,
       descripcion: pocketForm.descripcion || undefined,
+      tipoMeta: pocketForm.tipoMeta,
+      fechaLimite: pocketForm.tipoMeta === 'fecha' && pocketForm.fechaLimite ? pocketForm.fechaLimite : undefined,
       createdAt: new Date().toISOString(),
     }
     setPockets(p => [...p, pocket])
     setSavingPocket(false)
     setNewPocketOpen(false)
-    setPocketForm({ nombre: "", meta: "", descripcion: "", icono: "piggybank", color: "mint", acumuladoInicial: "" })
+    setPocketForm({ nombre: "", meta: "", descripcion: "", icono: "piggybank", color: "mint", acumuladoInicial: "", tipoMeta: "libre", fechaLimite: "" })
   }
 
   const handleDeletePocket = (id: string) => setPockets(p => p.filter(x => x.id !== id))
@@ -491,6 +539,21 @@ export default function AhorroPage() {
                               </p>
                             </div>
                           )}
+                          {/* Cuota mensual para bolsillos con fecha límite */}
+                          {pocket.tipoMeta === 'fecha' && pocket.fechaLimite && pocket.meta > 0 && !done && (() => {
+                            const cuota = calcularCuotaMensual(pocket.meta, pocket.acumulado, pocket.fechaLimite)
+                            const meses = calcularMesesRestantes(pocket.fechaLimite)
+                            if (!cuota || meses <= 0) return null
+                            return (
+                              <div className="flex items-center gap-1.5 px-1">
+                                <Target className="h-3 w-3 text-cyclon-lavender shrink-0" />
+                                <p className="text-[10px] text-muted-foreground">
+                                  Necesitas <span className="font-bold text-cyclon-lavender">{formatAmount(cuota)}/mes</span>
+                                  {" "}· {meses} {meses === 1 ? 'mes' : 'meses'} restantes
+                                </p>
+                              </div>
+                            )
+                          })()}
                           {pocket.meta > 0 && (
                             <div className="space-y-1">
                               <Progress value={pct} className="h-2" indicatorClassName={cn(c.bar, done && "animate-pulse")} />
@@ -630,7 +693,7 @@ export default function AhorroPage() {
 
       {/* Nuevo bolsillo */}
       <Dialog open={newPocketOpen} onOpenChange={v => !v && setNewPocketOpen(false)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-cyclon-mint" /> Nuevo bolsillo de ahorro
@@ -648,6 +711,113 @@ export default function AhorroPage() {
               <MoneyInput value={pocketForm.meta} onChange={v => setPocketForm(f => ({ ...f, meta: v }))}
                 className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
             </div>
+
+            {/* ═══ SELECTOR: Tipo de meta (libre vs con fecha) ═══ */}
+            {Number(pocketForm.meta) > 0 && (
+              <div className="space-y-2">
+                <Label className="text-xs font-bold">Tipo de meta</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPocketForm(f => ({ ...f, tipoMeta: 'libre', fechaLimite: '' }))}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all",
+                      pocketForm.tipoMeta === 'libre'
+                        ? "border-cyclon-mint bg-cyclon-mint/5 text-cyclon-mint"
+                        : "border-muted text-muted-foreground hover:border-cyclon-mint/30"
+                    )}
+                  >
+                    <PiggyBank className="h-5 w-5" />
+                    <span className="text-[10px] font-bold">Ahorro libre</span>
+                    <span className="text-[8px] text-muted-foreground">Sin fecha límite</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPocketForm(f => ({ ...f, tipoMeta: 'fecha' }))}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all",
+                      pocketForm.tipoMeta === 'fecha'
+                        ? "border-cyclon-mint bg-cyclon-mint/5 text-cyclon-mint"
+                        : "border-muted text-muted-foreground hover:border-cyclon-mint/30"
+                    )}
+                  >
+                    <Target className="h-5 w-5" />
+                    <span className="text-[10px] font-bold">Con fecha límite</span>
+                    <span className="text-[8px] text-muted-foreground">Meta con plazo</span>
+                  </button>
+                </div>
+
+                {/* Date picker (mes/año) */}
+                {pocketForm.tipoMeta === 'fecha' && (
+                  <div className="space-y-1.5 pt-1">
+                    <Label className="text-xs font-bold">¿Para cuándo necesitas esta meta?</Label>
+                    <Input
+                      type="month"
+                      value={pocketForm.fechaLimite}
+                      onChange={e => setPocketForm(f => ({ ...f, fechaLimite: e.target.value }))}
+                      min={(() => {
+                        const d = new Date()
+                        d.setMonth(d.getMonth() + 1)
+                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                      })()}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                )}
+
+                {/* ═══ BLOQUE VISUAL: Cuota mensual calculada ═══ */}
+                {pocketForm.tipoMeta === 'fecha' && pocketForm.fechaLimite && Number(pocketForm.meta) > 0 && (() => {
+                  const cuota = calcularCuotaMensual(
+                    Number(pocketForm.meta),
+                    Number(pocketForm.acumuladoInicial) || 0,
+                    pocketForm.fechaLimite + '-01' // Convertir "2027-03" a fecha ISO
+                  )
+                  const meses = calcularMesesRestantes(pocketForm.fechaLimite + '-01')
+                  const faltante = Number(pocketForm.meta) - (Number(pocketForm.acumuladoInicial) || 0)
+
+                  if (faltante <= 0) {
+                    return (
+                      <div className="bg-cyclon-mint/10 border border-cyclon-mint/30 rounded-xl p-3 text-center space-y-1">
+                        <p className="text-xs font-bold text-cyclon-mint">🎉 ¡Ya alcanzaste tu meta!</p>
+                        <p className="text-[10px] text-muted-foreground">El monto ahorrado ya cubre tu objetivo.</p>
+                      </div>
+                    )
+                  }
+
+                  if (meses <= 0) {
+                    return (
+                      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-center space-y-1">
+                        <p className="text-xs font-bold text-amber-500">⚠️ Fecha muy cercana</p>
+                        <p className="text-[10px] text-muted-foreground">Selecciona al menos el próximo mes para calcular tu cuota.</p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="bg-cyclon-mint/10 border border-cyclon-mint/30 rounded-xl p-4 space-y-2">
+                      <div className="flex items-center gap-2 justify-center">
+                        <TrendingUp className="h-4 w-4 text-cyclon-mint" />
+                        <p className="text-xs font-bold text-center">Para lograr esta meta, necesitas ahorrar:</p>
+                      </div>
+                      <p className="text-2xl font-black text-cyclon-mint text-center">
+                        {formatAmount(cuota!)} <span className="text-sm font-bold text-muted-foreground">/ mes</span>
+                      </p>
+                      <div className="flex justify-center gap-4 pt-1 border-t border-cyclon-mint/20">
+                        <div className="text-center">
+                          <p className="text-[9px] text-muted-foreground">Faltan</p>
+                          <p className="text-xs font-bold">{formatAmount(faltante)}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[9px] text-muted-foreground">Plazo</p>
+                          <p className="text-xs font-bold">{meses} {meses === 1 ? 'mes' : 'meses'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">¿Ya llevas algo ahorrado? <span className="font-normal text-muted-foreground">(opcional)</span></Label>
               <MoneyInput value={pocketForm.acumuladoInicial} onChange={v => setPocketForm(f => ({ ...f, acumuladoInicial: v }))}
