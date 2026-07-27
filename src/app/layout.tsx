@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AppProvider } from '@/lib/app-context'
 import { AuthProvider } from '@/lib/auth-context'
+import { PlanProvider } from '@/lib/plan-context'
 import { SocketProvider } from '@/lib/socket-context'
 import { AuthGuard } from '@/components/auth-guard'
 import { Toaster } from '@/components/ui/toaster'
@@ -46,12 +47,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="font-body antialiased">
         <AuthProvider>
           <AppProvider>
-            <SocketProvider>
-              <AuthGuard>
-                {children}
-              </AuthGuard>
-              <Toaster />
-            </SocketProvider>
+            <PlanProvider>
+              <SocketProvider>
+                <AuthGuard>
+                  {children}
+                </AuthGuard>
+                <Toaster />
+              </SocketProvider>
+            </PlanProvider>
           </AppProvider>
         </AuthProvider>
       </body>

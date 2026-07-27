@@ -11,6 +11,7 @@ import { SharedPocketsTab } from "@/components/social/shared-pockets-tab"
 import { LoansTab } from "@/components/social/loans-tab"
 import type { Connection } from "@/lib/types"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
+import { FeatureGate } from "@/components/plan/feature-gate"
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,14 @@ type TabId = typeof TABS[number]["id"]
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function SocialPage() {
+  return (
+    <FeatureGate feature="socialConnections">
+      <SocialContent />
+    </FeatureGate>
+  )
+}
+
+function SocialContent() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("social")
   const { user: authUser } = useAuth()
   const { connected, unreadCount } = useSocket()

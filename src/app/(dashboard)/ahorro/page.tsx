@@ -28,6 +28,7 @@ import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/Tuto
 import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
+import { FeatureGate } from "@/components/plan/feature-gate"
 import type { SharedPocket } from "@/lib/types"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
@@ -125,6 +126,14 @@ function calcularCuotaMensual(meta: number, acumulado: number, fechaLimite: stri
 }
 
 export default function AhorroPage() {
+  return (
+    <FeatureGate feature="savingsPockets">
+      <AhorroContent />
+    </FeatureGate>
+  )
+}
+
+function AhorroContent() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("ahorro")
   const { formatAmount, savingsAmount, metaAhorro, setMetaAhorro } = useAppContext()
   const { savingsHistory, totalAhorrado, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
