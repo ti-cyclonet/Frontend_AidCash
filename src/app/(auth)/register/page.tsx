@@ -1,18 +1,28 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { Eye, EyeOff, AlertCircle, CheckCircle2, Sprout } from "lucide-react"
+import { Eye, EyeOff, AlertCircle, CheckCircle2, Sprout, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="h-8 w-8 rounded-full border-4 border-primary/30 border-t-primary animate-spin" /></div>}>
+      <RegisterContent />
+    </Suspense>
+  )
+}
+
+function RegisterContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const planFromUrl = searchParams.get("plan")
   const { signUp } = useAuth()
 
   const [nombre, setNombre] = useState("")
@@ -56,9 +66,22 @@ export default function RegisterPage() {
             Te enviamos un correo de confirmación a <strong>{email}</strong>. Confírmalo para activar tu cuenta.
           </p>
         </div>
+
+        {/* Banner de upgrade si vino desde la landing con plan PLUS */}
+        {planFromUrl && (
+          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 shadow-none rounded-2xl w-full max-w-xs">
+            <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
+              <Sparkles className="h-6 w-6 text-amber-600" />
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                Elegiste <strong>KIRI PLUS</strong>. Después de iniciar sesión podrás activar tu plan desde la sección "Mi Plan".
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         <Button
           onClick={() => router.replace("/login")}
-          className="w-full h-14 rounded-2xl bg-kiri-emerald text-white font-bold shadow-xl shadow-kiri-emerald/30"
+          className="w-full max-w-xs h-14 rounded-2xl bg-kiri-emerald text-white font-bold shadow-xl shadow-kiri-emerald/30"
         >
           Ir a Iniciar Sesión
         </Button>

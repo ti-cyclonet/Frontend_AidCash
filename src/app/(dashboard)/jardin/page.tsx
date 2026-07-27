@@ -1,5 +1,6 @@
 "use client"
 
+import { FeatureGate } from "@/components/plan/feature-gate"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
@@ -10,6 +11,14 @@ import { Sprout, Trophy, Flame, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function JardinPage() {
+  return (
+    <FeatureGate feature="gamification">
+      <JardinContent />
+    </FeatureGate>
+  )
+}
+
+function JardinContent() {
   const { income, incomeFrequency } = useAppContext()
   const { debts, fixedExpenses, totalAhorrado, totalImpulseThisPeriod } = useFinanceData()
   const { streakActual, streakMejor, badgesDesbloqueados, loading: streakLoading } = useStreaks(incomeFrequency)
