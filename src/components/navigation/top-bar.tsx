@@ -91,7 +91,7 @@ export function TopBar() {
           </Link>
 
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href="/jardin" className="flex items-center gap-2">
             <div className="h-8 w-8 bg-kiri-emerald rounded-xl flex items-center justify-center">
               <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
             </div>

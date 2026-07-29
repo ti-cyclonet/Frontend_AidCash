@@ -705,7 +705,7 @@ export function BilleteraTab() {
 
       {/* ═══ BOLSILLOS PRESUPUESTO ═══ */}
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold flex items-center gap-2">Tu presupuesto 💰</h2>
+        <h2 className="text-base font-bold flex items-center gap-2">Gestión inteligente 💰</h2>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {POCKETS.map(pocket => <PocketCard key={pocket.key} pocket={pocket} amount={pocketValues[pocket.key]} pct={pocketPcts[pocket.key]} formatAmount={formatAmount} />)}

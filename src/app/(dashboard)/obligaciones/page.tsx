@@ -42,6 +42,7 @@ type EditScope = "este_mes" | "permanente"
 interface DebtForm {
   nombre: string
   montoTotal: string
+  saldoRestante: string
   cuotaPeriodo: string
   diasPago: string
   diaCorte: string
@@ -53,7 +54,7 @@ interface DebtForm {
 interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string }
 
 const emptyDebtForm: DebtForm = {
-  nombre: "", montoTotal: "", cuotaPeriodo: "", diasPago: "",
+  nombre: "", montoTotal: "", saldoRestante: "", cuotaPeriodo: "", diasPago: "",
   diaCorte: "", frecuencia: "mensual", tipoPago: "unica",
   fechaFinalProyectada: "", numCuotas: "",
 }
@@ -91,11 +92,16 @@ export default function ObligacionesPage() {
   // ── Filtro de estado (Todas / Pendientes / Pagadas) ────────────────────────
   const [statusFilter, setStatusFilter] = useState<"todas" | "pendientes" | "pagadas">("todas")
 
-  // ── Items ocultos (ojo) ────────────────────────────────────────────────────
-  const [hiddenItems, setHiddenItems] = useState<Set<string>>(new Set())
+  // ── Items ocultos (ojo) — persistente en localStorage ────────────────────
+  const [hiddenItems, setHiddenItems] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem("kiri_hidden_obligations") ?? "[]")) }
+    catch { return new Set() }
+  })
   const toggleItemHidden = (id: string) => setHiddenItems(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
+    localStorage.setItem("kiri_hidden_obligations", JSON.stringify([...next]))
     return next
   })
 
@@ -359,10 +365,11 @@ export default function ObligacionesPage() {
     setEditDebtForm({
       nombre: debt.nombre,
       montoTotal: String(debt.montoTotal),
+      saldoRestante: String(debt.saldoRestante),
       cuotaPeriodo: String(debt.cuotaPeriodo),
       diasPago: debt.diasPago ?? '1',
       diaCorte: "",
-      frecuencia: "mensual",
+      frecuencia: (debt.frecuenciaPago as "mensual" | "quincenal") || "mensual",
       tipoPago: "unica",
       fechaFinalProyectada: "",
       numCuotas: "",
@@ -382,10 +389,14 @@ export default function ObligacionesPage() {
   const applyDebtEdit = async (scope: EditScope) => {
     if (!editDebt) return
     setSavingEdit(true)
-    const patch: Partial<Pick<Debt, "nombre" | "montoTotal" | "cuotaPeriodo" | "diasPago">> = {
+    const newMontoTotal = Number(editDebtForm.montoTotal)
+    const newSaldoRestante = Number(editDebtForm.saldoRestante)
+    const patch: Record<string, unknown> = {
       nombre: editDebtForm.nombre,
-      montoTotal: Number(editDebtForm.montoTotal),
+      montoTotal: newMontoTotal,
+      saldoRestante: newSaldoRestante || newMontoTotal,
       diasPago: editDebtForm.diasPago,
+      frecuenciaPago: editDebtForm.frecuencia,
     }
     if (scope === "permanente") patch.cuotaPeriodo = Number(editDebtForm.cuotaPeriodo)
     await updateDebt(editDebt.id, patch)
@@ -1096,6 +1107,7 @@ export default function ObligacionesPage() {
                     montoTotal: data.montoTotal,
                     cuotaPeriodo: data.cuotaPeriodo,
                     diasPago: data.diasPago,
+                    frecuenciaPago: data.frecuenciaPago,
                     tasaInteres: data.tasaInteres || undefined,
                     acreedor: data.acreedor,
                     saldoRestante: data.saldoActual,
@@ -1303,6 +1315,9 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
             <div>
               <p className="text-[10px] text-muted-foreground">Saldo restante</p>
               <p className="text-xl font-black">{formatAmount(debt.saldoRestante)}</p>
+              {debt.montoTotal !== debt.saldoRestante && (
+                <p className="text-[9px] text-muted-foreground">de {formatAmount(debt.montoTotal)} original</p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-[10px] text-muted-foreground">
@@ -1507,6 +1522,15 @@ function DebtFormFields({
         <Label className="text-xs font-bold">Monto total de la deuda</Label>
         <MoneyInput value={form.montoTotal} onChange={v => set({ montoTotal: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
       </div>
+
+      {/* Saldo restante (lo que debes hoy) */}
+      {isEdit && (
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold">Saldo restante <span className="font-normal text-muted-foreground">(lo que debes hoy)</span></Label>
+          <MoneyInput value={form.saldoRestante} onChange={v => set({ saldoRestante: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+          <p className="text-[8px] text-muted-foreground">Este valor baja con cada pago que registres.</p>
+        </div>
+      )}
 
       {/* Cuota por periodo */}
       <div className="space-y-1.5">

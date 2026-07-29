@@ -95,26 +95,39 @@ export function showNativeNotification(opts: NotificationOptions) {
   // Mostrar notificación nativa si hay permiso
   if (!hasNotificationPermission()) return
 
-  // Si la página está enfocada, no mostrar notificación nativa (ya se ve in-app)
-  if (document.hasFocus()) return
-
+  // Siempre mostrar la notificación nativa (barra de estado del dispositivo)
+  // para que el usuario reciba la alerta con sonido y vibración del sistema
   try {
-    const notification = new Notification(opts.title, {
-      body: opts.body,
-      icon: opts.icon ?? '/icons/icon-192x192.png',
-      badge: '/icons/icon-96x96.png',
-      tag: opts.tag ?? 'kiri-general',
-      vibrate: [200, 100, 200],
-    })
+    // Usar Service Worker si está disponible (funciona en background + foreground)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.showNotification(opts.title, {
+          body: opts.body,
+          icon: opts.icon ?? '/icons/icon-192x192.png',
+          badge: '/icons/icon-96x96.png',
+          tag: opts.tag ?? 'kiri-general',
+          data: { url: opts.url || '/dashboard' },
+          requireInteraction: false,
+        } as NotificationOptions)
+      })
+    } else {
+      // Fallback: Notification API directa
+      const notification = new Notification(opts.title, {
+        body: opts.body,
+        icon: opts.icon ?? '/icons/icon-192x192.png',
+        badge: '/icons/icon-96x96.png',
+        tag: opts.tag ?? 'kiri-general',
+      })
 
-    notification.onclick = () => {
-      window.focus()
-      if (opts.url) window.location.href = opts.url
-      notification.close()
+      notification.onclick = () => {
+        window.focus()
+        if (opts.url) window.location.href = opts.url
+        notification.close()
+      }
+
+      // Auto-cerrar después de 8 segundos
+      setTimeout(() => notification.close(), 8000)
     }
-
-    // Auto-cerrar después de 6 segundos
-    setTimeout(() => notification.close(), 6000)
   } catch {
     // Notifications not supported or service worker required
   }

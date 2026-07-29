@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useSocket, KiriNotification, SOCKET_EVENTS } from "@/lib/socket-context"
 
 const navItems = [
+  { label: "Árbol Kiri",    icon: Sprout,     href: "/jardin" },
   { label: "Gestión",      icon: TrendingUp, href: "/gestion" },
   { label: "Obligaciones", icon: Landmark,   href: "/obligaciones" },
   { label: "Balance",      icon: BookOpen,   href: "/balance" },
@@ -47,9 +48,15 @@ export function Sidebar() {
   const { unreadCount, notifications, markAllRead, clearNotifications } = useSocket()
 
   const [collapsed, setCollapsed] = useState(false)
-  const [dropOpen, setDropOpen] = useState(false)
   const [notifsOpen, setNotifsOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
+
+  // Auto-cerrar notificaciones después de 5 segundos
+  useEffect(() => {
+    if (!notifsOpen) return
+    const timer = setTimeout(() => setNotifsOpen(false), 5000)
+    return () => clearTimeout(timer)
+  }, [notifsOpen])
 
   // ── Configuración ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -66,7 +73,7 @@ export function Sidebar() {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
-        setDropOpen(false)
+        setNotifsOpen(false)
       }
     }
     document.addEventListener("mousedown", handler)
@@ -74,15 +81,8 @@ export function Sidebar() {
   }, [])
 
   const handleLogout = async () => {
-    setDropOpen(false)
     await signOut()
     router.replace("/login")
-  }
-
-  const handleOpenSettings = () => {
-    setDropOpen(false)
-    setEditForm({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl })
-    setSettingsOpen(true)
   }
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,7 +101,7 @@ export function Sidebar() {
   return (
     <aside className={cn(
       "hidden lg:flex flex-col h-screen bg-card border-r border-border sticky top-0 shrink-0 transition-all duration-300 z-40",
-      collapsed ? "w-[68px]" : "w-[260px]"
+      collapsed ? "w-[68px]" : "w-[280px]"
     )}>
       {/* Header */}
       <div className={cn(
@@ -127,7 +127,7 @@ export function Sidebar() {
         ) : (
           /* ── Expandida: Logo link + nombre + campana + botón cerrar ── */
           <>
-            <Link href="/dashboard" className="flex items-center gap-2 min-w-0 shrink-0">
+            <Link href="/jardin" className="flex items-center gap-2 min-w-0 shrink-0">
               <div className="h-9 w-9 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
                 <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
               </div>
@@ -150,7 +150,7 @@ export function Sidebar() {
                 </button>
                 {/* Panel de notificaciones */}
                 {notifsOpen && (
-                  <div className="fixed top-[80px] left-[270px] w-[320px] bg-card border border-border rounded-2xl shadow-2xl overflow-hidden z-[100]">
+                  <div className="fixed top-[80px] left-[290px] w-[320px] bg-card border border-border rounded-2xl shadow-2xl overflow-hidden z-[100]">
                     <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                       <p className="text-xs font-bold flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> Notificaciones</p>
                       <div className="flex items-center gap-2">
@@ -238,35 +238,11 @@ export function Sidebar() {
         <div className="border-t border-border px-2 py-3" ref={dropRef}>
           <div className="relative">
 
-            {/* Dropdown (aparece encima) */}
-            {dropOpen && (
-              <div className={cn(
-                "absolute bottom-full mb-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50",
-                collapsed ? "left-full ml-2 w-[280px]" : "left-0 right-0"
-              )}>
-                <button
-                  onClick={() => { setDropOpen(false); router.push("/perfil") }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
-                >
-                  <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
-                  Configuración
-                </button>
-                <div className="border-t border-border" />
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-destructive hover:bg-destructive/10 transition-colors"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" />
-                  Cerrar Sesión
-                </button>
-              </div>
-            )}
-
-            {/* Botón pill */}
+            {/* Botón pill — va directo a /perfil */}
             <Tooltip disableHoverableContent={!collapsed}>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => setDropOpen(v => !v)}
+                  onClick={() => router.push("/perfil")}
                   className={cn(
                     "w-full flex items-center rounded-xl transition-colors hover:bg-muted/50",
                     collapsed ? "justify-center h-11 w-11 mx-auto" : "gap-3 px-3 py-2.5"
@@ -279,16 +255,10 @@ export function Sidebar() {
                     </AvatarFallback>
                   </Avatar>
                   {!collapsed && (
-                    <>
-                      <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm font-semibold truncate leading-tight">{user.nombre || "Usuario"}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{displayEmail}</p>
-                      </div>
-                      <ChevronUp className={cn(
-                        "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
-                        !dropOpen && "rotate-180"
-                      )} />
-                    </>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-semibold truncate leading-tight">{user.nombre || "Usuario"}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{displayEmail}</p>
+                    </div>
                   )}
                 </button>
               </TooltipTrigger>

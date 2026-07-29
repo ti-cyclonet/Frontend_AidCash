@@ -659,7 +659,7 @@ export function CoachFab() {
           "inset-x-0 top-0 bottom-0 sm:inset-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[380px] sm:rounded-2xl lg:bottom-8 lg:right-8 lg:top-auto lg:w-[400px] lg:h-[600px] lg:rounded-2xl"
         )}>
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-kiri-emerald/5">
+          <div className="flex items-center gap-3 px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:pt-3 border-b border-border bg-kiri-emerald/5">
             <div className="h-10 w-10 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
               <svg viewBox="0 0 40 40" className="h-6 w-6" fill="none">
                 <rect x="13" y="26" width="14" height="10" rx="3" fill="#D8F3DC" />

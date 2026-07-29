@@ -39,6 +39,7 @@ export interface DebtFormData {
   bankEntityId?: string | null
   acreedor: string
   diasPago: string
+  frecuenciaPago?: string
 }
 
 interface Props {
@@ -56,6 +57,9 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
   const [montoTotal, setMontoTotal] = useState("")
   const [cuotaPeriodo, setCuotaPeriodo] = useState("")
   const [diasPago, setDiasPago] = useState("")
+  const [frecuenciaPago, setFrecuenciaPago] = useState<"mensual" | "quincenal">("mensual")
+  const [yaPagando, setYaPagando] = useState(false)
+  const [saldoActualNormal, setSaldoActualNormal] = useState("")
 
   // Banco mode fields
   const [banks, setBanks] = useState<BankOption[]>([])
@@ -125,8 +129,10 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
       onSubmit({
         nombre,
         montoTotal: Number(montoTotal),
+        saldoActual: yaPagando && saldoActualNormal ? Number(saldoActualNormal) : undefined,
         cuotaPeriodo: Number(cuotaPeriodo),
         diasPago: diasPago || "1",
+        frecuenciaPago,
         acreedor: "",
       })
     } else {
@@ -149,70 +155,21 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
     ? !!nombre && !!montoTotal && !!cuotaPeriodo && !!diasPago
     : !!nombre && (!!montoTotal || !!montoInicial) && !!cuotaPeriodo && !!diasPago
 
-  // ── Si no se ha seleccionado modo, mostrar selector ──
+  // ── Si no se ha seleccionado modo, ir directo a normal (banco desactivado temporalmente) ──
   if (!mode) {
-    return (
-      <div className="space-y-4">
-        <p className="text-xs text-muted-foreground">¿Qué tipo de deuda quieres registrar?</p>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setMode("normal")}
-            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-muted hover:border-cyclon-periwinkle/50 hover:bg-cyclon-periwinkle/5 transition-colors"
-          >
-            <div className="h-12 w-12 rounded-xl bg-cyclon-periwinkle/10 flex items-center justify-center">
-              <CreditCard className="h-6 w-6 text-cyclon-periwinkle" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold">Deuda normal</p>
-              <p className="text-[9px] text-muted-foreground mt-0.5">Préstamo personal, familiar, etc.</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setMode("banco")}
-            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-muted hover:border-kiri-emerald/50 hover:bg-kiri-emerald/5 transition-colors"
-          >
-            <div className="h-12 w-12 rounded-xl bg-kiri-emerald/10 flex items-center justify-center">
-              <Landmark className="h-6 w-6 text-kiri-emerald" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold">Deuda bancaria</p>
-              <p className="text-[9px] text-muted-foreground mt-0.5">Banco, tarjeta de crédito, fintech</p>
-            </div>
-          </button>
-        </div>
-      </div>
-    )
+    // Auto-seleccionar modo normal
+    setMode("normal")
+    return null
   }
 
   // ── Formulario según modo ──
   return (
     <div className="space-y-4">
-      {/* Selector de modo (para poder cambiar) */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setMode("normal")}
-          className={cn("flex-1 h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-            mode === "normal" ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground"
-          )}
-        >
-          Normal
-        </button>
-        <button
-          onClick={() => setMode("banco")}
-          className={cn("flex-1 h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-            mode === "banco" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground"
-          )}
-        >
-          Bancaria
-        </button>
-      </div>
-
       {/* Nombre */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">Nombre de la deuda</Label>
         <Input
-          placeholder={mode === "normal" ? "Ej: Préstamo Juan, Cuota moto..." : "Ej: Crédito libre inversión, TC Visa..."}
+          placeholder="Ej: Préstamo Juan, Cuota moto, Tarjeta Visa..."
           value={nombre}
           onChange={e => setNombre(e.target.value)}
           className="h-11 rounded-xl"
@@ -333,10 +290,76 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         </div>
       )}
 
+      {/* ¿Ya venías pagando? (solo modo normal) */}
+      {mode === "normal" && (
+        <>
+          <button
+            onClick={() => setYaPagando(!yaPagando)}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {yaPagando ? "▾ Ocultar saldo actual" : "▸ ¿Ya venías pagando esta deuda?"}
+          </button>
+          {yaPagando && (
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-bold">¿Cuánto debes actualmente?</Label>
+              <MoneyInput value={saldoActualNormal} onChange={v => setSaldoActualNormal(v)} className="h-10 rounded-xl" placeholder="0" />
+              <p className="text-[7px] text-muted-foreground">Si ya has pagado algunas cuotas, ingresa lo que debes hoy.</p>
+            </div>
+          )}
+          {/* Resumen: lo que llevas pagado */}
+          {yaPagando && Number(montoTotal) > 0 && Number(saldoActualNormal) > 0 && Number(saldoActualNormal) < Number(montoTotal) && (
+            <Card className="border-none bg-emerald-500/5 rounded-xl">
+              <CardContent className="p-3 space-y-1">
+                <p className="text-[8px] font-bold text-emerald-400 uppercase">Resumen</p>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-[7px] text-muted-foreground">Monto total</p>
+                    <p className="text-[11px] font-bold">${Number(montoTotal).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[7px] text-muted-foreground">Ya pagaste</p>
+                    <p className="text-[11px] font-bold text-emerald-400">${(Number(montoTotal) - Number(saldoActualNormal)).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[7px] text-muted-foreground">Te falta</p>
+                    <p className="text-[11px] font-bold text-amber-400">${Number(saldoActualNormal).toLocaleString()}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
       {/* Cuota */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">Cuota por periodo</Label>
         <MoneyInput value={cuotaPeriodo} onChange={v => setCuotaPeriodo(v)} className="h-11 rounded-xl" placeholder="0" />
+      </div>
+
+      {/* Frecuencia de pago */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-bold">Frecuencia de pago</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setFrecuenciaPago("mensual")}
+            className={cn("h-10 rounded-xl text-sm font-bold border-2 transition-colors",
+              frecuenciaPago === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+            )}
+          >
+            Mensual
+          </button>
+          <button
+            type="button"
+            onClick={() => setFrecuenciaPago("quincenal")}
+            className={cn("h-10 rounded-xl text-sm font-bold border-2 transition-colors",
+              frecuenciaPago === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+            )}
+          >
+            Quincenal
+          </button>
+        </div>
       </div>
 
       {/* Día de pago */}

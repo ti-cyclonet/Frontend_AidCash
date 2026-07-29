@@ -50,43 +50,8 @@ function RegisterContent() {
       setLoading(false)
       return
     }
-    setSuccess(true)
-    setLoading(false)
-  }
-
-  if (success) {
-    return (
-      <div className="flex flex-col min-h-screen bg-background items-center justify-center px-6 gap-6">
-        <div className="h-20 w-20 bg-kiri-mint/20 rounded-3xl flex items-center justify-center">
-          <CheckCircle2 className="h-10 w-10 text-kiri-emerald" />
-        </div>
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-black">¡Cuenta creada!</h2>
-          <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">
-            Te enviamos un correo de confirmación a <strong>{email}</strong>. Confírmalo para activar tu cuenta.
-          </p>
-        </div>
-
-        {/* Banner de upgrade si vino desde la landing con plan PLUS */}
-        {planFromUrl && (
-          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 shadow-none rounded-2xl w-full max-w-xs">
-            <CardContent className="p-4 flex flex-col items-center gap-3 text-center">
-              <Sparkles className="h-6 w-6 text-amber-600" />
-              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-                Elegiste <strong>KIRI PLUS</strong>. Después de iniciar sesión podrás activar tu plan desde la sección "Mi Plan".
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        <Button
-          onClick={() => router.replace("/login")}
-          className="w-full max-w-xs h-14 rounded-2xl bg-kiri-emerald text-white font-bold shadow-xl shadow-kiri-emerald/30"
-        >
-          Ir a Iniciar Sesión
-        </Button>
-      </div>
-    )
+    // Registro exitoso → ir directo al onboarding (no hay confirmación de correo)
+    router.replace("/onboarding")
   }
 
   return (

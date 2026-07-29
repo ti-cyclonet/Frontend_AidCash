@@ -59,7 +59,7 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.replace("/dashboard")
+    router.replace("/jardin")
   }
 
   return (

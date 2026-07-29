@@ -148,32 +148,32 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
 
                   {/* Right: card */}
-                  <div className="bg-gradient-to-br from-emerald-900/40 to-emerald-950/20 border border-emerald-800/30 rounded-2xl p-4 space-y-3">
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{step.cardTitle}</p>
-                        <p className="text-[9px] text-muted-foreground">{step.cardSubtitle}</p>
+                        <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">{step.cardTitle}</p>
+                        <p className="text-[9px] text-gray-500 dark:text-gray-400">{step.cardSubtitle}</p>
                       </div>
-                      <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                         <Wallet className="h-4 w-4" />
                       </div>
                     </div>
 
                     <div>
-                      <p className="text-[9px] text-muted-foreground mb-0.5">Disponible ahora</p>
-                      <p className="text-2xl font-black text-white">$3,750,000</p>
+                      <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">Disponible ahora</p>
+                      <p className="text-2xl font-black text-gray-900 dark:text-white">$3,750,000</p>
                     </div>
 
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
                       {step.cardExplanation}
                     </p>
 
-                    <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-300 leading-relaxed font-medium">
                       {step.cardTip}
                     </p>
 
                     <div className="pt-1">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
                         <Sparkles className="h-3 w-3" />
                         {step.cardCta}
                       </div>
@@ -203,26 +203,26 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
 
                   {/* Right: sample obligations */}
-                  <div className="bg-gradient-to-br from-amber-900/20 to-amber-950/10 border border-amber-800/20 rounded-2xl p-4 space-y-3">
-                    <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Próximos pagos</p>
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Próximos pagos</p>
                     <div className="space-y-2.5">
                       {[
                         { name: "Renta", date: "15 Jul 2026", amount: "$1,200,000", icon: "✅" },
                         { name: "Internet", date: "18 Jul 2026", amount: "$80,000", icon: "🌐" },
                         { name: "Tarjeta de crédito", date: "22 Jul 2026", amount: "$250,000", icon: "💳" },
                       ].map((item, i) => (
-                        <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2.5">
+                        <div key={i} className="flex items-center gap-3 bg-gray-50 dark:bg-slate-700/50 rounded-xl px-3 py-2.5">
                           <span className="text-sm">{item.icon}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold truncate">{item.name}</p>
-                            <p className="text-[9px] text-muted-foreground">{item.date}</p>
+                            <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{item.name}</p>
+                            <p className="text-[9px] text-gray-500 dark:text-gray-400">{item.date}</p>
                           </div>
-                          <span className="text-xs font-bold shrink-0">{item.amount}</span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-white shrink-0">{item.amount}</span>
                         </div>
                       ))}
                     </div>
                     <div className="pt-1 text-center">
-                      <span className="text-[9px] text-amber-400/70 font-medium">Ver todas las obligaciones →</span>
+                      <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Ver todas las obligaciones →</span>
                     </div>
                   </div>
                 </div>
@@ -249,32 +249,30 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
 
                   {/* Right: donut chart preview */}
-                  <div className="bg-gradient-to-br from-blue-900/20 to-blue-950/10 border border-blue-800/20 rounded-2xl p-4 space-y-3">
-                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Distribución actual</p>
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Distribución actual</p>
 
-                    {/* Mini donut chart (SVG) */}
+                    {/* Mini donut chart (SVG) — más grande y limpio */}
                     <div className="flex justify-center">
-                      <div className="relative w-[120px] h-[120px]">
+                      <div className="relative w-[100px] h-[100px]">
                         <svg viewBox="0 0 100 100" className="w-full h-full">
-                          <circle cx="50" cy="50" r="35" fill="none" stroke="#10b981" strokeWidth="14"
-                            strokeDasharray="66 220" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
-                          <circle cx="50" cy="50" r="35" fill="none" stroke="#3b82f6" strokeWidth="14"
-                            strokeDasharray="52.8 220" strokeDashoffset="-66" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
-                          <circle cx="50" cy="50" r="35" fill="none" stroke="#a855f7" strokeWidth="14"
-                            strokeDasharray="44 220" strokeDashoffset="-118.8" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
-                          <circle cx="50" cy="50" r="35" fill="none" stroke="#6b7280" strokeWidth="14"
-                            strokeDasharray="44 220" strokeDashoffset="-162.8" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
+                          <circle cx="50" cy="50" r="38" fill="none" stroke="#10b981" strokeWidth="10"
+                            strokeDasharray="86 240" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
+                          <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" strokeWidth="10"
+                            strokeDasharray="57 240" strokeDashoffset="-86" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
+                          <circle cx="50" cy="50" r="38" fill="none" stroke="#a855f7" strokeWidth="10"
+                            strokeDasharray="48 240" strokeDashoffset="-143" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
+                          <circle cx="50" cy="50" r="38" fill="none" stroke="#6b7280" strokeWidth="10"
+                            strokeDasharray="48 240" strokeDashoffset="-191" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-[8px] text-muted-foreground">Total gastado</span>
-                          <span className="text-sm font-black">$2,950,000</span>
-                          <span className="text-[8px] text-amber-400 font-bold">68%</span>
+                          <span className="text-[9px] text-amber-500 font-bold">68%</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Legend */}
-                    <div className="space-y-1.5">
+                    {/* Legend — más legible */}
+                    <div className="space-y-2">
                       {[
                         { name: "Alimentación", pct: "36%", amount: "$1,260,000", color: "bg-emerald-500" },
                         { name: "Transporte", pct: "24%", amount: "$860,000", color: "bg-blue-500" },
@@ -282,10 +280,10 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                         { name: "Otros", pct: "20%", amount: "$500,000", color: "bg-gray-500" },
                       ].map((cat, i) => (
                         <div key={i} className="flex items-center gap-2">
-                          <div className={cn("h-2 w-2 rounded-full shrink-0", cat.color)} />
-                          <span className="text-[9px] flex-1 truncate">{cat.name}</span>
-                          <span className="text-[9px] text-muted-foreground">{cat.pct}</span>
-                          <span className="text-[9px] font-bold">{cat.amount}</span>
+                          <div className={cn("h-2.5 w-2.5 rounded-full shrink-0", cat.color)} />
+                          <span className="text-[10px] text-gray-700 dark:text-gray-200 flex-1">{cat.name}</span>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{cat.pct}</span>
+                          <span className="text-[10px] font-bold text-gray-900 dark:text-white">{cat.amount}</span>
                         </div>
                       ))}
                     </div>
