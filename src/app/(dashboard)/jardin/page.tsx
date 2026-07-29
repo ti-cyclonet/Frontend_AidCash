@@ -340,7 +340,7 @@ export default function JardinPage() {
 
           {/* ── Mobile: Salud del jardín ── */}
           <div className="lg:hidden mt-4">
-            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-3 space-y-1.5">
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-3 space-y-1.5 text-white">
               <div className="flex items-center gap-2">
                 <Heart className="h-3.5 w-3.5 text-emerald-400" />
                 <span className="text-xs font-bold">Salud del jardín</span>
@@ -460,7 +460,7 @@ export default function JardinPage() {
             </div>
 
             {/* ── Derecha: Progreso general (desktop) ── */}
-            <div className="hidden lg:block bg-card/80 border border-border rounded-2xl p-4 space-y-3">
+            <div className="hidden lg:block bg-[#0f2a1c] border border-emerald-900/30 rounded-2xl p-4 space-y-3 text-white">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 Tu progreso general <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
               </h3>
@@ -523,7 +523,7 @@ export default function JardinPage() {
       </Card>
 
       {/* ── Mobile: Tu progreso general (card separada debajo) ── */}
-      <Card className="lg:hidden border-none bg-card shadow-sm rounded-2xl">
+      <Card className="lg:hidden border-none bg-[#0f2a1c] text-white shadow-sm rounded-2xl">
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-bold flex items-center gap-2">
             Tu progreso general <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
