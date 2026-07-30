@@ -22,7 +22,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (user && (pathname === '/' || pathname === '/login' || pathname === '/register')) {
-      router.replace(user.onboardingDone ? '/dashboard' : '/onboarding')
+      router.replace(user.onboardingDone ? '/jardin' : '/onboarding')
     }
   }, [user, loading, pathname, router])
 

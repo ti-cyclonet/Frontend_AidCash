@@ -158,53 +158,6 @@ export default function DashboardPage() {
         {/* ── COLUMNA IZQUIERDA: Donut + Árbol Kiri (3/5) ── */}
         <div className="lg:col-span-3 space-y-5">
 
-          {/* Periodo actual */}
-          <Card className="border-none bg-gradient-to-r from-kiri-forest to-kiri-emerald rounded-2xl overflow-hidden">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full">
-                  Periodo actual: {incomeFrequency === "quincenal" ? `Quincena ${(() => {
-                    const days = diasCobro.split(",").map((d: string) => parseInt(d.trim(), 10)).filter((d: number) => !isNaN(d)).sort((a: number, b: number) => a - b)
-                    if (days.length < 2) return 1
-                    return new Date().getDate() >= days[0] && new Date().getDate() < days[1] ? 1 : 2
-                  })()}` : "Mensual"}
-                </span>
-                <span className="text-white/80 text-xs flex items-center gap-1">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  {(() => {
-                    const days = diasCobro.split(",").map((d: string) => parseInt(d.trim(), 10)).filter((d: number) => !isNaN(d)).sort((a: number, b: number) => a - b)
-                    const now = new Date(); const day = now.getDate()
-                    const monthName = now.toLocaleString("es", { month: "long" })
-                    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-                    if (incomeFrequency === "mensual" || days.length < 2) return `1 - ${lastDay} de ${monthName}`
-                    const [d1, d2] = days
-                    if (day >= d1 && day < d2) return `${d1} - ${d2 - 1} de ${monthName}`
-                    return `${d2} - ${lastDay} de ${monthName}`
-                  })()}
-                </span>
-              </div>
-              {(() => {
-                const now = new Date(); const day = now.getDate()
-                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-                const days = diasCobro.split(",").map((d: string) => parseInt(d.trim(), 10)).filter((d: number) => !isNaN(d)).sort((a: number, b: number) => a - b)
-                let daysLeft = lastDay - day
-                if (incomeFrequency === "quincenal" && days.length >= 2) {
-                  const [d1, d2] = days
-                  daysLeft = (day >= d1 && day < d2) ? d2 - day - 1 : lastDay - day + d1 - 1
-                }
-                const total = incomeFrequency === "quincenal" ? 15 : 30
-                const pct = Math.min(100, Math.round(((total - daysLeft) / total) * 100))
-                return (
-                  <>
-                    <p className="text-white/70 text-[11px]">Día actual: {day} de {now.toLocaleString("es", { month: "long" })}</p>
-                    <Progress value={pct} className="h-2 bg-white/20 [&>div]:bg-white" />
-                    <p className="text-white/60 text-[10px]">Faltan <span className="text-white font-bold">{daysLeft} días</span> para terminar el periodo</p>
-                  </>
-                )
-              })()}
-            </CardContent>
-          </Card>
-
           {/* Distribución de presupuesto (Donut) */}
           <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
             <CardContent className="p-5">

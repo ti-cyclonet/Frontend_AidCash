@@ -22,7 +22,6 @@ const STEPS = [
   "Bienvenida",
   "Frecuencia de ingresos",
   "Sueldo base",
-  "Meta de ahorro",
   "Situación de deudas",
   "Finalización",
 ]
@@ -62,8 +61,7 @@ export default function OnboardingPage() {
   const canNext = () => {
     if (step === 1) return true // frecuencia siempre tiene un valor
     if (step === 2) return !!incomeValue && Number(incomeValue) > 0
-    if (step === 3) return true // meta es opcional
-    if (step === 4) return tieneDeudas !== null
+    if (step === 3) return tieneDeudas !== null
     return true
   }
 
@@ -71,20 +69,21 @@ export default function OnboardingPage() {
   const handleFinish = async () => {
     setSaving(true)
     try {
-      const parsedIncome = Number(incomeValue) || 0
-      const parsedMeta = Number(metaAhorro) || 5000
+      const rawIncome = Number(incomeValue) || 0
+      // Si es quincenal, el usuario ingresó su sueldo POR QUINCENA.
+      // El ingreso_base se guarda como el MENSUAL (quincena × 2).
+      const parsedIncome = frecuencia === "quincenal" ? rawIncome * 2 : rawIncome
 
       await updateUserProfile({
         ingreso_base: parsedIncome,
         frecuencia_ingreso: frecuencia,
-        meta_ahorro_global: parsedMeta,
         onboarding_done: true,
       })
 
       if (parsedIncome > 0) setIncome(parsedIncome)
       setIncomeFrequency(frecuencia)
       setOnboardingDone(true)
-      router.replace("/dashboard")
+      router.replace("/jardin")
     } catch {
       setSaving(false)
     }
@@ -253,40 +252,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 3: Meta de ahorro ═══ */}
+            {/* ═══ PASO 3: Situación de deudas ═══ */}
             {step === 3 && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500">
-                    <PiggyBank className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-black">¿Cuánto dinero te gustaría alcanzar como meta de ahorro inicial?</h2>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Esta será tu meta global de ahorro y la verás crecer con el tiempo.
-                </p>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold">Ingresa tu meta de ahorro</Label>
-                  <MoneyInput
-                    value={metaAhorro}
-                    onChange={v => setMetaAhorro(v)}
-                    className="h-14 text-2xl font-bold rounded-2xl"
-                    placeholder="0"
-                  />
-                </div>
-
-                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  Puedes ajustar o crear metas más específicas más adelante.
-                </p>
-              </div>
-            )}
-
-            {/* ═══ PASO 4: Situación de deudas ═══ */}
-            {step === 4 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">

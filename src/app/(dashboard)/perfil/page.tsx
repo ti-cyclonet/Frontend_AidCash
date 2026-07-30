@@ -158,7 +158,7 @@ export default function PerfilPage() {
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
-            <button className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+            <a href="mailto:notificaciones@cyclonet.com.co?subject=Soporte%20Kiri%20Finance" className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-cyclon-sky/20 flex items-center justify-center text-cyclon-sky">
                   <MessageCircle className="h-4 w-4" />
@@ -169,7 +169,7 @@ export default function PerfilPage() {
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
+            </a>
             <button className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/20 flex items-center justify-center text-cyclon-lavender">

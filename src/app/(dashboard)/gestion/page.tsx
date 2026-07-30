@@ -18,6 +18,7 @@ export default function GestionPage() {
     <>
       {showTutorial && <TutorialSlider module="gestion" onClose={dismissTutorial} />}
     <div className="space-y-5">
+
       {/* Tabs */}
       <div className="grid grid-cols-3 gap-2">
         <button

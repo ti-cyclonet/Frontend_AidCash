@@ -212,11 +212,16 @@ function AhorroContent() {
   const [txAmount, setTxAmount] = useState("")
   const [savingTx, setSavingTx] = useState(false)
 
-  // ── Ocultar bolsillos (ojo) ───────────────────────────────────────────────
-  const [hiddenPockets, setHiddenPockets] = useState<Set<string>>(new Set())
+  // ── Ocultar bolsillos (ojo) — persistente en localStorage ───────────────
+  const [hiddenPockets, setHiddenPockets] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem("kiri_hidden_pockets") ?? "[]")) }
+    catch { return new Set() }
+  })
   const toggleHidden = (id: string) => setHiddenPockets(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
+    localStorage.setItem("kiri_hidden_pockets", JSON.stringify([...next]))
     return next
   })
 
@@ -497,8 +502,10 @@ function AhorroContent() {
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <p className="font-bold text-sm truncate">{pocket.nombre}</p>
-                                  {pocket.descripcion && (
+                                  <p className="font-bold text-sm truncate">
+                                    {hiddenPockets.has(pocket.id) ? "••••••" : pocket.nombre}
+                                  </p>
+                                  {!hiddenPockets.has(pocket.id) && pocket.descripcion && (
                                     <p className="text-[10px] text-muted-foreground truncate">{pocket.descripcion}</p>
                                   )}
                                 </div>
