@@ -1,7 +1,6 @@
 "use client"
 
 import { usePlan } from "@/lib/plan-context"
-import { useRouter } from "next/navigation"
 import { Lock, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -20,7 +19,6 @@ interface FeatureGateProps {
  */
 export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
   const { hasFeature, loading, plan } = usePlan()
-  const router = useRouter()
 
   if (loading) {
     return (
@@ -51,7 +49,7 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
         todas las herramientas de Kiri Finance.
       </p>
       <Button
-        onClick={() => router.push("/mi-plan")}
+        onClick={() => window.open(`${process.env.NEXT_PUBLIC_LANDING_URL || "https://kirifinance.app"}/#planes`, "_blank")}
         className="gap-2"
       >
         <Sparkles className="w-4 h-4" />

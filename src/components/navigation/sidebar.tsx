@@ -127,7 +127,7 @@ export function Sidebar() {
         ) : (
           /* ── Expandida: Logo link + nombre + campana + botón cerrar ── */
           <>
-            <Link href="/jardin" className="flex items-center gap-2 min-w-0 shrink-0">
+            <Link href="/dashboard" className="flex items-center gap-2 min-w-0 shrink-0">
               <div className="h-9 w-9 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
                 <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
               </div>

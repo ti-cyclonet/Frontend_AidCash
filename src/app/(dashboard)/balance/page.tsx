@@ -15,6 +15,7 @@ import { useFinanceData } from "@/hooks/use-finance-data"
 import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletState } from "@/lib/api-client"
 import { ExportButtons } from "@/components/balance/ExportButtons"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
+import { FeatureGate } from "@/components/plan/feature-gate"
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
   { value: "week",  label: "Semana" },
@@ -128,6 +129,7 @@ export default function BalancePage() {
   }, [s, balanceNeto, timeframe, metaAhorro, ahorroDelPeriodo, realSavingsMeta])
 
   return (
+    <FeatureGate feature="basicReports">
     <>
       {showTutorial && <TutorialSlider module="balance" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-10">
@@ -391,6 +393,7 @@ export default function BalancePage() {
       )}
     </div>
     </>
+    </FeatureGate>
   )
 }
 

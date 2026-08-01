@@ -52,6 +52,26 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<PlanData | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Features included in the FREE plan (available even without an active contract)
+  const FREE_FEATURES: Record<string, boolean> = {
+    budgetManagement: true,
+    debtsTracking: true,
+    fixedExpenses: true,
+    savingsPockets: true,
+    // Everything else is locked
+    basicReports: false,
+    impulseExpenses: false,
+    extraIncomes: false,
+    emergencyFund: false,
+    gamification: false,
+    aiCoach: false,
+    advancedReports: false,
+    debtStrategies: false,
+    socialConnections: false,
+    sharedPockets: false,
+    p2pLoans: false,
+  }
+
   const fetchPlan = useCallback(async () => {
     if (!user) {
       setPlan(null)
@@ -61,11 +81,11 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
     try {
       const { data, error } = await api<PlanData>("/plan")
-      if (error || !data) {
-        // If we can't fetch the plan, assume free with no features
+      if (error || !data || !data.hasPlan) {
+        // No active plan — apply FREE features as defaults
         setPlan({
-          planName: "Sin plan",
-          features: {},
+          planName: data?.planName || "Sin plan",
+          features: FREE_FEATURES,
           limits: {},
           hasPlan: false,
         })
@@ -75,7 +95,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     } catch {
       setPlan({
         planName: "Sin plan",
-        features: {},
+        features: FREE_FEATURES,
         limits: {},
         hasPlan: false,
       })

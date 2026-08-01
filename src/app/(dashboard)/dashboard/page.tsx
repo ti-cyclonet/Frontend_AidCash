@@ -104,7 +104,7 @@ export default function DashboardPage() {
   const treeLevelPct = Math.min(100, Math.round((streakActual / (treeLevel === 4 ? 12 : treeLevel === 3 ? 12 : treeLevel === 2 ? 6 : 3)) * 100))
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6 pb-8 max-w-5xl mx-auto">
       {/* ═══ WELCOME ONBOARDING — solo la primera vez que el usuario llega al dashboard ═══ */}
       {showWelcome && onboardingDone && (
         <WelcomeOnboarding onComplete={handleWelcomeComplete} />
@@ -133,6 +133,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </header>
+
+      {/* ═══ PERIODO ACTUAL ═══ */}
+      <PeriodCard frequency={incomeFrequency} diasCobro={diasCobro} />
 
       {/* Onboarding CTA */}
       {!onboardingDone && (
@@ -247,7 +250,8 @@ export default function DashboardPage() {
           </Card>
 
           {/* Árbol Kiri */}
-          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
+          <Link href="/jardin" className="block">
+          <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-bold text-sm flex items-center gap-2">
@@ -301,6 +305,7 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+          </Link>
 
           {/* Obligaciones pendientes — debajo del árbol */}
           <Card className="border-none bg-card shadow-sm rounded-3xl overflow-hidden">
@@ -405,5 +410,75 @@ export default function DashboardPage() {
         </Button>
       </Link>
     </div>
+  )
+}
+
+// ─── Period Card ──────────────────────────────────────────────────────────────
+
+function PeriodCard({ frequency, diasCobro }: { frequency: string; diasCobro: string }) {
+  const now = new Date()
+  const currentDay = now.getDate()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+
+  // Parse payment days (e.g., "1,16" or "15,30")
+  const days = diasCobro.split(",").map(d => parseInt(d.trim())).filter(d => !isNaN(d)).sort((a, b) => a - b)
+
+  let periodLabel = ""
+  let daysLeft = 0
+  let nextPayDate: Date
+
+  if (frequency === "quincenal" && days.length >= 2) {
+    // Determine which quincena we're in
+    if (currentDay < days[1]) {
+      // First quincena: from days[0] to days[1]-1
+      periodLabel = `Quincena 1 (día ${days[0]} - ${days[1] - 1})`
+      nextPayDate = new Date(currentYear, currentMonth, days[1])
+    } else {
+      // Second quincena: from days[1] to end of month / days[0] of next month
+      const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate()
+      periodLabel = `Quincena 2 (día ${days[1]} - ${lastDay})`
+      nextPayDate = new Date(currentYear, currentMonth + 1, days[0])
+    }
+  } else {
+    // Monthly
+    const payDay = days[0] || 1
+    if (currentDay < payDay) {
+      // Before payday this month
+      periodLabel = `Periodo mensual`
+      nextPayDate = new Date(currentYear, currentMonth, payDay)
+    } else {
+      // After payday — next period is next month
+      periodLabel = `Periodo mensual`
+      nextPayDate = new Date(currentYear, currentMonth + 1, payDay)
+    }
+  }
+
+  // Calculate days left
+  const diffMs = nextPayDate.getTime() - now.getTime()
+  daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
+
+  const nextPayLabel = nextPayDate.toLocaleDateString("es-CO", { day: "numeric", month: "short" })
+
+  return (
+    <Card className="border-none bg-card shadow-sm rounded-2xl">
+      <CardContent className="px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-cyclon-sky/10 flex items-center justify-center text-cyclon-sky">
+            <CalendarDays className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-xs font-bold">{periodLabel}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Próximo cobro: {nextPayLabel}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-black text-foreground">{daysLeft}</p>
+          <p className="text-[9px] text-muted-foreground">días restantes</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

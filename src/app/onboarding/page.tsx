@@ -83,7 +83,7 @@ export default function OnboardingPage() {
       if (parsedIncome > 0) setIncome(parsedIncome)
       setIncomeFrequency(frecuencia)
       setOnboardingDone(true)
-      router.replace("/jardin")
+      router.replace("/dashboard")
     } catch {
       setSaving(false)
     }
@@ -316,8 +316,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 5: Finalización ═══ */}
-            {step === 5 && (
+            {/* ═══ PASO 4: Finalización ═══ */}
+            {step === 4 && (
               <div className="flex flex-col items-center text-center space-y-6">
                 {/* Planta con confetti */}
                 <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center relative">
