@@ -49,7 +49,7 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
         todas las herramientas de Kiri Finance.
       </p>
       <Button
-        onClick={() => window.open(`${process.env.NEXT_PUBLIC_LANDING_URL || "https://kirifinance.app"}/#planes`, "_blank")}
+        onClick={() => window.open(`${process.env.NEXT_PUBLIC_LANDING_URL || "https://www.cyclonet.com.co/kiri-finance"}/#planes`, "_blank")}
         className="gap-2"
       >
         <Sparkles className="w-4 h-4" />
