@@ -13,6 +13,7 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
+import { usePlan } from "@/lib/plan-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
 import { useRouter } from "next/navigation"
@@ -24,6 +25,7 @@ import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 
 export default function DashboardPage() {
   const { formatAmount, incomeFrequency, diasCobro, onboardingDone, user } = useAppContext()
+  const { plan } = usePlan()
   const { debts, fixedExpenses } = useFinanceData()
   const { streakActual } = useStreaks(incomeFrequency)
   const router = useRouter()
@@ -116,7 +118,12 @@ export default function DashboardPage() {
           <h1 className="text-2xl sm:text-3xl font-black text-foreground">
             ¡Hola, {user.nombre?.split(" ")[0] || "Usuario"}! 👋
           </h1>
-          <p className="text-muted-foreground text-sm">Estás construyendo tu mejor futuro financiero.</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-muted-foreground text-sm">Estás construyendo tu mejor futuro financiero.</p>
+            <Link href="/mi-plan" className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 transition-colors">
+              {plan?.planName || "FREE"}
+            </Link>
+          </div>
         </div>
         {/* Saldo total pill */}
         <Card className="border-none bg-card shadow-sm rounded-2xl shrink-0">
