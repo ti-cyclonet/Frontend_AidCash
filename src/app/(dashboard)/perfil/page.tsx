@@ -13,16 +13,20 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle } from "lucide-react"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
+import { usePlan } from "@/lib/plan-context"
+import { api } from "@/lib/api-client"
 
 export default function PerfilPage() {
   const router = useRouter()
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout } = useAppContext()
   const { signOut, user: authUser } = useAuth()
+  const { plan } = usePlan()
   const displayEmail = authUser?.correo ?? user.correo
+  const isPlus = plan?.planName?.toLowerCase().includes("plus")
 
   const handleLogout = async () => {
     await signOut()
@@ -31,6 +35,7 @@ export default function PerfilPage() {
 
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl })
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -50,7 +55,11 @@ export default function PerfilPage() {
   }
 
   const handleOpenEdit = () => {
-    setEditForm({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl })
+    setEditForm({
+      nombre: user.nombre || authUser?.nombre || "",
+      correo: user.correo || displayEmail || "",
+      avatarUrl: user.avatarUrl,
+    })
     setIsEditOpen(true)
   }
 
@@ -81,6 +90,39 @@ export default function PerfilPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Plan Section */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Mi Plan</h3>
+        <Card className="border-none shadow-sm bg-card rounded-2xl">
+          <CardContent className="p-0">
+            <button
+              onClick={() => router.push("/mi-plan")}
+              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${isPlus ? "bg-amber-100 text-amber-600" : "bg-muted text-muted-foreground"}`}>
+                  {isPlus ? <Crown className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                </div>
+                <div>
+                  <span className="font-medium">{plan?.planName || "Sin plan"}</span>
+                  <p className="text-[10px] text-muted-foreground">
+                    {isPlus ? "Todas las funcionalidades desbloqueadas" : "Funcionalidades básicas"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {!isPlus && (
+                  <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                    Mejorar
+                  </span>
+                )}
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </button>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* App Settings */}
       <div className="space-y-3">
@@ -125,7 +167,7 @@ export default function PerfilPage() {
         <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Seguridad</h3>
         <Card className="border-none shadow-sm bg-card rounded-2xl">
           <CardContent className="p-0">
-            <button className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+            <button onClick={() => setIsPasswordOpen(true)} className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-cyclon-pink/20 flex items-center justify-center text-cyclon-pink">
                   <Lock className="h-4 w-4" />
@@ -265,6 +307,129 @@ export default function PerfilPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Change Password Modal */}
+      <ChangePasswordDialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen} />
     </div>
+  )
+}
+
+// ─── Change Password Dialog ───────────────────────────────────────────────────
+
+function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const reset = () => {
+    setCurrentPassword("")
+    setNewPassword("")
+    setConfirmPassword("")
+    setError("")
+    setSuccess(false)
+  }
+
+  const handleClose = (v: boolean) => {
+    if (!v) reset()
+    onOpenChange(v)
+  }
+
+  const handleSubmit = async () => {
+    setError("")
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError("Completa todos los campos.")
+      return
+    }
+    if (newPassword.length < 6) {
+      setError("La nueva contraseña debe tener al menos 6 caracteres.")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Las contraseñas no coinciden.")
+      return
+    }
+
+    setLoading(true)
+    const { data, error: apiError } = await api<{ message: string }>("/auth/change-password", {
+      method: "POST",
+      body: { currentPassword, newPassword },
+    })
+    setLoading(false)
+
+    if (apiError) {
+      setError(apiError)
+      return
+    }
+
+    setSuccess(true)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cambiar Contraseña</DialogTitle>
+        </DialogHeader>
+
+        {success ? (
+          <div className="py-6 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+              <Lock className="h-5 w-5 text-green-600" />
+            </div>
+            <p className="text-sm font-medium">Contraseña actualizada exitosamente</p>
+            <Button onClick={() => handleClose(false)} className="mt-2">Cerrar</Button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Contraseña actual</Label>
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nueva contraseña</Label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Confirmar nueva contraseña</Label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Repite la nueva contraseña"
+                />
+              </div>
+              {error && (
+                <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-2">{error}</p>
+              )}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => handleClose(false)}>Cancelar</Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="bg-cyclon-lavender text-white font-bold rounded-xl px-8"
+              >
+                {loading ? "Guardando..." : "Cambiar contraseña"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
