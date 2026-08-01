@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL || "https://kirifinance.app"
+const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL || "https://www.cyclonet.com.co/kiri-finance"
 
 // PLUS exclusive benefits for the highlight section
 const PLUS_BENEFITS = [
