@@ -1111,6 +1111,8 @@ export default function ObligacionesPage() {
                     tasaInteres: data.tasaInteres || undefined,
                     acreedor: data.acreedor,
                     saldoRestante: data.saldoActual,
+                    bankEntityId: data.bankEntityId,
+                    tipoDeuda: data.tipoDeuda,
                   })
                   setSaving(false)
                   setIsAddOpen(false)

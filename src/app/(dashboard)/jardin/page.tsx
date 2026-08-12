@@ -281,8 +281,12 @@ export default function JardinPage() {
       </header>
 
       {/* ═══ JARDÍN PRINCIPAL ═══ */}
-      <Card className="border-none bg-gradient-to-br from-[#0a1f14] to-[#0d2818] shadow-xl rounded-3xl overflow-hidden">
-        <CardContent className="p-5 lg:p-6">
+      <Card className="border-none shadow-xl rounded-3xl overflow-hidden relative">
+        {/* Fondo personalizado del jardín */}
+        <div className="absolute inset-0 z-0">
+          <img src="/img/fondo_arbol.png" alt="" className="w-full h-full object-cover" aria-hidden="true" />
+        </div>
+        <CardContent className="p-5 lg:p-6 relative z-10">
 
           {/* ── Mobile: Estado + Árbol en fila ── */}
           <div className="flex items-start justify-between gap-2 lg:hidden">
@@ -311,29 +315,27 @@ export default function JardinPage() {
                 <motion.img
                   src={currentLevel.image}
                   alt={currentLevel.name}
-                  className="w-[140px] h-[140px] object-contain"
+                  className="w-[220px] h-[220px] object-contain"
                   animate={{
-                    rotate: [0, -3, 3, -2, 2, -1, 1, 0],
-                    scale: [1, 1.02, 0.98, 1.03, 0.97, 1.01, 0.99, 1],
-                    y: [0, -2, 2, -1, 1, 0],
+                    rotate: [0, -1, 1, -0.5, 0.5, 0],
                   }}
-                  transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" }}
+                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1.5, ease: "easeInOut" }}
                 />
               ) : currentLevelIdx >= 2 ? (
                 <motion.img
                   src={currentLevel.image}
                   alt={currentLevel.name}
-                  className="w-[140px] h-[140px] object-contain"
+                  className="w-[220px] h-[220px] object-contain"
+                  style={{ transformOrigin: "bottom center" }}
                   animate={{
-                    rotate: [0, 0.5, -0.5, 0.3, -0.3, 0.1, 0],
-                    skewX: [0, 0.3, -0.2, 0.2, -0.1, 0],
-                    scaleX: [1, 1.005, 0.995, 1.003, 0.997, 1],
+                    rotate: [0, 0.4, -0.3, 0.2, -0.2, 0.1, 0],
+                    skewX: [0, 0.2, -0.15, 0.1, -0.1, 0],
                   }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
                 />
               ) : (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={currentLevel.image} alt={currentLevel.name} className="w-[140px] h-[140px] object-contain" />
+                <img src={currentLevel.image} alt={currentLevel.name} className="w-[220px] h-[220px] object-contain" />
               )}
             </div>
           </div>
@@ -414,36 +416,34 @@ export default function JardinPage() {
                 />
               )}
               {currentLevelIdx === 0 ? (
-                /* Nivel 1 (tierra/semilla): animación de huevo vibrando */
+                /* Nivel 1 (tierra/semilla): ligera vibración suave */
                 <motion.img
                   src={currentLevel.image}
                   alt={currentLevel.name}
                   className="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px] object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.15)]"
                   animate={{
-                    rotate: [0, -3, 3, -2, 2, -1, 1, 0],
-                    scale: [1, 1.02, 0.98, 1.03, 0.97, 1.01, 0.99, 1],
-                    y: [0, -2, 2, -1, 1, 0],
+                    rotate: [0, -1, 1, -0.5, 0.5, 0],
                   }}
                   transition={{
-                    duration: 1.8,
+                    duration: 3,
                     repeat: Infinity,
-                    repeatDelay: 2,
+                    repeatDelay: 1.5,
                     ease: "easeInOut",
                   }}
                 />
               ) : currentLevelIdx >= 2 ? (
-                /* Nivel 3+ (árboles): efecto de brisa natural */
+                /* Nivel 3+ (árboles): brisa suave — base quieta, copa se mueve */
                 <motion.img
                   src={currentLevel.image}
                   alt={currentLevel.name}
                   className="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px] object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.15)]"
+                  style={{ transformOrigin: "bottom center" }}
                   animate={{
-                    rotate: [0, 0.5, -0.5, 0.3, -0.3, 0.1, 0],
-                    skewX: [0, 0.3, -0.2, 0.2, -0.1, 0],
-                    scaleX: [1, 1.005, 0.995, 1.003, 0.997, 1],
+                    rotate: [0, 0.4, -0.3, 0.2, -0.2, 0.1, 0],
+                    skewX: [0, 0.2, -0.15, 0.1, -0.1, 0],
                   }}
                   transition={{
-                    duration: 4,
+                    duration: 5,
                     repeat: Infinity,
                     ease: "easeInOut",
                   }}
@@ -602,18 +602,20 @@ export default function JardinPage() {
         </Card>
 
         {/* Recompensas */}
-        <Card className="border-none bg-card shadow-sm rounded-2xl">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-              <Gift className="h-6 w-6 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold">Recompensas</p>
-              <p className="text-[10px] text-muted-foreground">Ver premios</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </CardContent>
-        </Card>
+        <Link href="/ahorro">
+          <Card className="border-none bg-card shadow-sm rounded-2xl hover:bg-muted/30 transition-colors cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Gift className="h-6 w-6 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">Recompensas</p>
+                <p className="text-[10px] text-muted-foreground">Ver premios</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* ═══ ASÍ CRECE TU JARDÍN — Timeline de niveles ═══ */}

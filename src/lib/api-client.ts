@@ -310,7 +310,7 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string }) {
+  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO' }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,
@@ -742,5 +742,310 @@ export const homeBudgetApi = {
       }
       partnerId: string
     }>('/home-budget')
+  },
+}
+
+// ─── Savings Pockets API (Bolsillos de Ahorro Personales) ─────────────────────
+
+export interface SavingsPocket {
+  id: string
+  userId: string
+  nombre: string
+  meta: number
+  montoActual: number
+  color: string
+  icono: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const savingsPocketsApi = {
+  /** Listar todos los bolsillos del usuario autenticado */
+  async list() {
+    return api<{ pockets: SavingsPocket[] }>('/savings-pockets')
+  },
+
+  /** Crear un nuevo bolsillo de ahorro */
+  async create(data: { nombre: string; meta?: number; montoActual?: number; color?: string; icono?: string }) {
+    return api<{ pocket: SavingsPocket }>('/savings-pockets', {
+      method: 'POST',
+      body: data,
+    })
+  },
+
+  /** Actualizar un bolsillo existente */
+  async update(id: string, data: Partial<Omit<SavingsPocket, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>) {
+    return api<{ pocket: SavingsPocket }>(`/savings-pockets/${id}`, {
+      method: 'PATCH',
+      body: data,
+    })
+  },
+
+  /** Eliminar un bolsillo */
+  async delete(id: string) {
+    return api(`/savings-pockets/${id}`, { method: 'DELETE' })
+  },
+
+  /** Bulk insert — usado en la migración desde localStorage */
+  async bulkCreate(pockets: { nombre: string; meta?: number; montoActual?: number; color?: string; icono?: string }[]) {
+    return api<{ count: number; message: string }>('/savings-pockets/bulk', {
+      method: 'POST',
+      body: { pockets },
+    })
+  },
+}
+
+// ─── Budget Categories API (Categorías de Presupuesto) ────────────────────────
+
+export interface BudgetCategory {
+  id: string
+  userId: string
+  nombre: string
+  icono: string
+  color: string
+  tipo: 'gasto' | 'ingreso' | 'ahorro'
+}
+
+export const budgetCategoriesApi = {
+  /** Listar categorías del usuario (opcionalmente filtra por tipo) */
+  async list(tipo?: 'gasto' | 'ingreso' | 'ahorro') {
+    const qs = tipo ? `?tipo=${tipo}` : ''
+    return api<{ categories: BudgetCategory[] }>(`/budget-categories${qs}`)
+  },
+
+  /** Crear una nueva categoría */
+  async create(data: { nombre: string; icono?: string; color?: string; tipo?: 'gasto' | 'ingreso' | 'ahorro' }) {
+    return api<{ category: BudgetCategory }>('/budget-categories', {
+      method: 'POST',
+      body: data,
+    })
+  },
+
+  /** Actualizar una categoría existente */
+  async update(id: string, data: Partial<Omit<BudgetCategory, 'id' | 'userId'>>) {
+    return api<{ category: BudgetCategory }>(`/budget-categories/${id}`, {
+      method: 'PATCH',
+      body: data,
+    })
+  },
+
+  /** Eliminar una categoría */
+  async delete(id: string) {
+    return api(`/budget-categories/${id}`, { method: 'DELETE' })
+  },
+
+  /** Bulk insert — usado en la migración desde localStorage */
+  async bulkCreate(categories: { nombre: string; icono?: string; color?: string; tipo?: 'gasto' | 'ingreso' | 'ahorro' }[]) {
+    return api<{ count: number; message: string }>('/budget-categories/bulk', {
+      method: 'POST',
+      body: { categories },
+    })
+  },
+}
+
+// ─── Sincronización localStorage → Base de Datos ──────────────────────────────
+
+const SYNC_FLAG_KEY = 'kiri_local_data_synced'
+const LS_POCKETS_KEY = 'kiri_savings_pockets'
+const LS_CATEGORIES_KEY = 'kiri_budget_categories'
+
+/**
+ * syncLocalDataToDB()
+ *
+ * Lee los bolsillos de ahorro y categorías de presupuesto almacenados en
+ * localStorage, los envía al backend mediante bulk insert, y limpia el
+ * localStorage para evitar duplicidades.
+ *
+ * Debe llamarse UNA SOLA VEZ tras el primer login exitoso post-migración.
+ * Usa un flag (kiri_local_data_synced) para no repetir la operación.
+ */
+export async function syncLocalDataToDB(): Promise<{ pocketsSynced: number; categoriesSynced: number }> {
+  if (typeof window === 'undefined') return { pocketsSynced: 0, categoriesSynced: 0 }
+
+  // Si ya se sincronizó previamente, no repetir
+  if (localStorage.getItem(SYNC_FLAG_KEY) === 'true') {
+    return { pocketsSynced: 0, categoriesSynced: 0 }
+  }
+
+  let pocketsSynced = 0
+  let categoriesSynced = 0
+
+  try {
+    // ─── Migrar Bolsillos de Ahorro ─────────────────────────────────────────
+    const rawPockets = localStorage.getItem(LS_POCKETS_KEY)
+    if (rawPockets) {
+      const localPockets = JSON.parse(rawPockets) as Array<{
+        name?: string; nombre?: string; goal?: number; meta?: number;
+        currentAmount?: number; montoActual?: number; color?: string; icon?: string; icono?: string
+      }>
+
+      if (localPockets.length > 0) {
+        const pocketsPayload = localPockets.map(p => ({
+          nombre: p.nombre || p.name || 'Sin nombre',
+          meta: p.meta ?? p.goal ?? 0,
+          montoActual: p.montoActual ?? p.currentAmount ?? 0,
+          color: p.color || '#10B981',
+          icono: p.icono || p.icon || 'piggy-bank',
+        }))
+
+        const res = await savingsPocketsApi.bulkCreate(pocketsPayload)
+        if (!res.error) {
+          pocketsSynced = res.data?.count ?? 0
+          localStorage.removeItem(LS_POCKETS_KEY)
+        }
+      }
+    }
+
+    // ─── Migrar Categorías de Presupuesto ───────────────────────────────────
+    const rawCategories = localStorage.getItem(LS_CATEGORIES_KEY)
+    if (rawCategories) {
+      const localCategories = JSON.parse(rawCategories) as Array<{
+        name?: string; nombre?: string; icon?: string; icono?: string;
+        color?: string; type?: string; tipo?: string
+      }>
+
+      if (localCategories.length > 0) {
+        const categoriesPayload = localCategories.map(c => ({
+          nombre: c.nombre || c.name || 'Sin nombre',
+          icono: c.icono || c.icon || 'tag',
+          color: c.color || '#6366F1',
+          tipo: (c.tipo || c.type || 'gasto') as 'gasto' | 'ingreso' | 'ahorro',
+        }))
+
+        const res = await budgetCategoriesApi.bulkCreate(categoriesPayload)
+        if (!res.error) {
+          categoriesSynced = res.data?.count ?? 0
+          localStorage.removeItem(LS_CATEGORIES_KEY)
+        }
+      }
+    }
+
+    // Marcar como sincronizado para no repetir
+    localStorage.setItem(SYNC_FLAG_KEY, 'true')
+  } catch (error) {
+    console.error('[syncLocalDataToDB] Error durante la migración:', error)
+  }
+
+  return { pocketsSynced, categoriesSynced }
+}
+
+// ─── Open Banking API (Belvo) ─────────────────────────────────────────────────
+
+export interface BelvoLinkAccount {
+  id: string
+  nombre: string
+  tipo: string
+  numero: string | null
+  moneda: string
+  balanceActual: number
+  balanceDisponible: number | null
+}
+
+export interface BelvoLink {
+  id: string
+  userId: string
+  linkId: string
+  institution: string
+  institutionType: string
+  accessMode: string
+  status: string
+  lastSyncAt: string | null
+  createdAt: string
+  updatedAt: string
+  accounts: BelvoLinkAccount[]
+}
+
+export interface BelvoTransaction {
+  id: string
+  belvoLinkId: string
+  transactionId: string
+  accountId: string
+  fecha: string
+  monto: number
+  tipo: 'INFLOW' | 'OUTFLOW'
+  categoria: string | null
+  descripcion: string | null
+  comercio: string | null
+  status: string
+  createdAt: string
+}
+
+export const openBankingApi = {
+  /** Verifica si Belvo está configurado en el backend */
+  async getStatus() {
+    return api<{ configured: boolean; provider: string; message: string }>('/open-banking/status')
+  },
+
+  /** Obtiene un token de acceso para el Connect Widget de Belvo */
+  async getWidgetToken(linkId?: string) {
+    const qs = linkId ? `?linkId=${linkId}` : ''
+    return api<{ token: string }>(`/open-banking/widget-token${qs}`)
+  },
+
+  /** Registra un link tras la conexión exitosa en el widget */
+  async registerLink(data: { linkId: string; institution: string; institutionType?: string; accessMode?: string }) {
+    return api<{ link: BelvoLink; message: string }>('/open-banking/links', {
+      method: 'POST',
+      body: data,
+    })
+  },
+
+  /** Lista los bancos conectados del usuario con sus cuentas */
+  async listLinks() {
+    return api<{ links: BelvoLink[] }>('/open-banking/links')
+  },
+
+  /** Sincroniza cuentas y transacciones de un link */
+  async syncLink(id: string, dateFrom?: string, dateTo?: string) {
+    return api<{ message: string; accountsSynced: number; transactionsSynced: number; dateFrom: string; dateTo: string }>(
+      `/open-banking/links/${id}/sync`,
+      { method: 'POST', body: { dateFrom, dateTo } }
+    )
+  },
+
+  /** Desconecta un banco */
+  async deleteLink(id: string) {
+    return api(`/open-banking/links/${id}`, { method: 'DELETE' })
+  },
+
+  /** Lista transacciones sincronizadas */
+  async listTransactions(params?: { limit?: number; offset?: number; tipo?: 'INFLOW' | 'OUTFLOW' }) {
+    const searchParams = new URLSearchParams()
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.offset) searchParams.set('offset', String(params.offset))
+    if (params?.tipo) searchParams.set('tipo', params.tipo)
+    const qs = searchParams.toString()
+    return api<{ transactions: BelvoTransaction[]; total: number; limit: number; offset: number }>(
+      `/open-banking/transactions${qs ? `?${qs}` : ''}`
+    )
+  },
+}
+
+// ─── Projections API (Análisis predictivo de gasto) ───────────────────────────
+
+export interface SpendingProjection {
+  walletLibre: number
+  gastoPromediodiario7d: number
+  gastoPromediodiario30d: number
+  diasRestantes: number
+  diasHastaPago: number
+  presupuestoDiarioRecomendado: number
+  diferencia: number
+  tendencia: 'estable' | 'creciente' | 'decreciente'
+  riesgo: 'bajo' | 'medio' | 'alto' | 'critico'
+  recomendacion: string
+  stats: {
+    gastoSemanaActual: number
+    gastoSemanaAnterior: number
+    gastoMes: number
+    transaccionesSemana: number
+    transaccionesMes: number
+  }
+}
+
+export const projectionsApi = {
+  /** Obtiene la proyección de gasto actual del usuario */
+  async getSpending() {
+    return api<{ projection: SpendingProjection }>('/projections/spending')
   },
 }

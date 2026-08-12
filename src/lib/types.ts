@@ -104,10 +104,13 @@ export type DebtFrequency = 'mensual' | 'quincenal';
 export type FixedExpenseCategory = 'vivienda' | 'servicios' | 'internet' | 'transporte' | 'educacion' | 'salud' | 'suscripciones' | 'otro';
 export type FixedExpenseFrequency = 'mensual' | 'quincenal' | 'semanal' | 'anual';
 
+export type DebtType = 'PRESTAMO' | 'TARJETA_CREDITO';
+
 export interface Debt {
   id: string;
   userId: string;
   nombre: string;
+  tipoDeuda: DebtType;
   montoTotal: number;
   saldoRestante: number;
   cuotaPeriodo: number;

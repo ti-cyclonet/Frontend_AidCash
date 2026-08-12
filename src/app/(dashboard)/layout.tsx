@@ -5,6 +5,8 @@ import { CoachFab } from "@/components/navigation/coach-fab"
 import { InactivityGuard } from "@/components/auth/InactivityGuard"
 import { SmartAlertsProvider } from "@/components/providers/smart-alerts-provider"
 import { NotificationInitializer } from "@/components/notifications/NotificationInitializer"
+import { DataSyncInitializer } from "@/components/providers/DataSyncInitializer"
+import { OfflineSyncProvider } from "@/components/providers/OfflineSyncProvider"
 
 export default function DashboardLayout({
   children,
@@ -36,6 +38,8 @@ export default function DashboardLayout({
       <InactivityGuard />
       <SmartAlertsProvider />
       <NotificationInitializer />
+      <DataSyncInitializer />
+      <OfflineSyncProvider />
     </div>
   )
 }

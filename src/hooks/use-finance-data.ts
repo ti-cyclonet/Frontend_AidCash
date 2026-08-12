@@ -38,6 +38,7 @@ function mapDebt(row: Record<string, unknown>): Debt {
     id: row.id as string,
     userId: (row.userId ?? row.user_id) as string,
     nombre: row.nombre as string,
+    tipoDeuda: ((row.tipoDeuda ?? row.tipo_deuda) as Debt["tipoDeuda"]) ?? 'PRESTAMO',
     montoTotal: Number(row.montoTotal ?? row.monto_total ?? 0),
     saldoRestante: Number(row.saldoRestante ?? row.saldo_restante ?? row.montoTotal ?? 0),
     cuotaPeriodo: Number(row.cuotaPeriodo ?? row.cuota_periodo ?? 0),
@@ -184,7 +185,7 @@ export function useFinanceData() {
 
   // ─── Deudas ─────────────────────────────────────────────────────────────────
 
-  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number }) => {
+  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO' }) => {
     if (!userId) return
     await debtsApi.create({
       nombre: data.nombre,
@@ -196,6 +197,8 @@ export function useFinanceData() {
       diasPago: data.diasPago,
       tasaInteres: data.tasaInteres,
       prioridad: data.prioridad as 'alta' | 'media' | 'baja' | undefined,
+      bankEntityId: data.bankEntityId,
+      tipoDeuda: data.tipoDeuda,
     })
     await fetchAll()
   }
