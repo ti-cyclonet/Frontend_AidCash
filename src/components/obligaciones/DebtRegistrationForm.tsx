@@ -1,14 +1,16 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Input } from "@/components/ui/input"
 import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
-  Building2, Search, Plus, CheckCircle2, Loader2, Percent, Info, CreditCard, Landmark,
+  Building2, Search, Plus, CheckCircle2, Loader2, Percent,
+  CreditCard, Landmark,
 } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api-client"
 
@@ -17,11 +19,15 @@ import { api } from "@/lib/api-client"
  * DebtRegistrationForm — Formulario de registro de deuda
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Dos modos:
- *   1. "normal" — Deuda simple: nombre, monto total, cuota, día de pago
- *   2. "banco"  — Deuda bancaria: búsqueda de banco, tasa de interés,
- *                  monto inicial (opcional), saldo actual (opcional)
+ * Dos modos con toggle visual en la parte superior:
+ *   1. "normal" — Deuda Simple: nombre, monto total, cuota, día de pago.
+ *      Ideal para préstamos personales, fiado, cuotas informales.
+ *   2. "banco"  — Deuda Bancaria: búsqueda de banco, tasa de interés,
+ *      monto inicial, saldo actual, gráfico de amortización.
+ *      Ideal para tarjetas de crédito, créditos de libre inversión, hipotecas.
  */
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface BankOption {
   id: string
@@ -40,6 +46,7 @@ export interface DebtFormData {
   acreedor: string
   diasPago: string
   frecuenciaPago?: string
+  tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'
 }
 
 interface Props {
@@ -49,10 +56,13 @@ interface Props {
 
 type DebtMode = "normal" | "banco"
 
-export function DebtRegistrationForm({ onSubmit, loading }: Props) {
-  const [mode, setMode] = useState<DebtMode | null>(null)
+// ─── Componente principal ─────────────────────────────────────────────────────
 
-  // Shared fields
+export function DebtRegistrationForm({ onSubmit, loading }: Props) {
+  // Inicializar directamente con "normal" — sin estado null
+  const [mode, setMode] = useState<DebtMode>("normal")
+
+  // Campos compartidos
   const [nombre, setNombre] = useState("")
   const [montoTotal, setMontoTotal] = useState("")
   const [cuotaPeriodo, setCuotaPeriodo] = useState("")
@@ -61,7 +71,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
   const [yaPagando, setYaPagando] = useState(false)
   const [saldoActualNormal, setSaldoActualNormal] = useState("")
 
-  // Banco mode fields
+  // Campos exclusivos del modo banco
   const [banks, setBanks] = useState<BankOption[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [showDropdown, setShowDropdown] = useState(false)
@@ -84,6 +94,8 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
       })
     }
   }, [mode])
+
+  // ─── Lógica de bancos ───────────────────────────────────────────────────────
 
   const filteredBanks = banks.filter(b =>
     b.nombre.toLowerCase().includes(searchQuery.toLowerCase())
@@ -123,7 +135,39 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
     setShowDropdown(false)
   }
 
-  // Submit
+  // ─── Gráfico de amortización (modo banco) ──────────────────────────────────
+
+  const amortizationData = useMemo(() => {
+    const saldo = Number(saldoActual) || Number(montoInicial) || Number(montoTotal)
+    const tasa = Number(tasaInteres) / 100
+    const cuota = Number(cuotaPeriodo)
+
+    if (!saldo || !tasa || !cuota || cuota <= saldo * tasa) return []
+
+    const data = []
+    let remaining = saldo
+    const maxMonths = Math.min(24, Math.ceil(saldo / (cuota - saldo * tasa)) + 2)
+
+    for (let i = 1; i <= maxMonths && remaining > 0; i++) {
+      const interes = Math.round(remaining * tasa)
+      const capital = Math.min(Math.round(cuota - interes), remaining)
+      remaining = Math.max(0, remaining - capital)
+
+      data.push({
+        mes: `M${i}`,
+        interes,
+        capital,
+        saldo: remaining,
+      })
+
+      if (remaining <= 0) break
+    }
+
+    return data
+  }, [saldoActual, montoInicial, montoTotal, tasaInteres, cuotaPeriodo])
+
+  // ─── Submit ─────────────────────────────────────────────────────────────────
+
   const handleSubmit = () => {
     if (mode === "normal") {
       onSubmit({
@@ -147,6 +191,9 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         bankEntityId: selectedBank?.id ?? null,
         acreedor: (selectedBank?.nombre ?? searchQuery) || "",
         diasPago: diasPago || "1",
+        tipoDeuda: nombre.toLowerCase().includes('tarjeta') || nombre.toLowerCase().includes('visa') || nombre.toLowerCase().includes('mastercard')
+          ? 'TARJETA_CREDITO'
+          : 'PRESTAMO',
       })
     }
   }
@@ -155,21 +202,52 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
     ? !!nombre && !!montoTotal && !!cuotaPeriodo && !!diasPago
     : !!nombre && (!!montoTotal || !!montoInicial) && !!cuotaPeriodo && !!diasPago
 
-  // ── Si no se ha seleccionado modo, ir directo a normal (banco desactivado temporalmente) ──
-  if (!mode) {
-    // Auto-seleccionar modo normal
-    setMode("normal")
-    return null
-  }
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
-  // ── Formulario según modo ──
   return (
     <div className="space-y-4">
+      {/* ═══ Toggle de modo: Deuda Simple / Deuda Bancaria ═══ */}
+      <div className="grid grid-cols-2 gap-2 p-1 bg-muted/30 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => setMode("normal")}
+          className={cn(
+            "flex items-center justify-center gap-2 h-11 rounded-xl text-xs font-bold transition-all",
+            mode === "normal"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Landmark className="h-4 w-4" />
+          Deuda Simple
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("banco")}
+          className={cn(
+            "flex items-center justify-center gap-2 h-11 rounded-xl text-xs font-bold transition-all",
+            mode === "banco"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <CreditCard className="h-4 w-4" />
+          Deuda Bancaria
+        </button>
+      </div>
+
+      {/* Subtítulo descriptivo */}
+      <p className="text-[10px] text-muted-foreground text-center -mt-2">
+        {mode === "normal"
+          ? "Préstamos personales, fiado, cuotas entre amigos."
+          : "Tarjetas de crédito, créditos de libre inversión, hipotecas."}
+      </p>
+
       {/* Nombre */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">Nombre de la deuda</Label>
         <Input
-          placeholder="Ej: Préstamo Juan, Cuota moto, Tarjeta Visa..."
+          placeholder={mode === "normal" ? "Ej: Préstamo Juan, Cuota moto..." : "Ej: Visa Bancolombia, Crédito Davivienda..."}
           value={nombre}
           onChange={e => setNombre(e.target.value)}
           className="h-11 rounded-xl"
@@ -206,7 +284,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
                         <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                         <div>
                           <p className="text-xs font-bold">{bank.nombre}</p>
-                          <p className="text-[8px] text-muted-foreground">{bank.tasaInteresPromedio}% mensual{bank.esVerificado && " · ✓"}</p>
+                          <p className="text-[8px] text-muted-foreground">{bank.tasaInteresPromedio}% mensual{bank.esVerificado && " · ✓ Verificado"}</p>
                         </div>
                       </div>
                     </button>
@@ -219,7 +297,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
                     <button onClick={startAddNew}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-kiri-emerald/5 transition-colors text-left border-t border-border">
                       <Plus className="h-3.5 w-3.5 text-kiri-emerald" />
-                      <span className="text-[10px] font-bold text-kiri-emerald">Agregar "{searchQuery}"</span>
+                      <span className="text-[10px] font-bold text-kiri-emerald">Agregar &ldquo;{searchQuery}&rdquo;</span>
                     </button>
                   )}
                 </div>
@@ -281,12 +359,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
       {(mode === "normal" || (!showAdvanced && mode === "banco")) && (
         <div className="space-y-1.5">
           <Label className="text-xs font-bold">{mode === "normal" ? "Monto total de la deuda" : "Monto del préstamo"}</Label>
-          <MoneyInput
-            value={montoTotal}
-            onChange={v => setMontoTotal(v)}
-            className="h-11 rounded-xl"
-            placeholder="0"
-          />
+          <MoneyInput value={montoTotal} onChange={v => setMontoTotal(v)} className="h-11 rounded-xl" placeholder="0" />
         </div>
       )}
 
@@ -306,7 +379,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
               <p className="text-[7px] text-muted-foreground">Si ya has pagado algunas cuotas, ingresa lo que debes hoy.</p>
             </div>
           )}
-          {/* Resumen: lo que llevas pagado */}
+          {/* Resumen visual de progreso */}
           {yaPagando && Number(montoTotal) > 0 && Number(saldoActualNormal) > 0 && Number(saldoActualNormal) < Number(montoTotal) && (
             <Card className="border-none bg-emerald-500/5 rounded-xl">
               <CardContent className="p-3 space-y-1">
@@ -331,7 +404,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         </>
       )}
 
-      {/* Cuota */}
+      {/* Cuota por periodo */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">Cuota por periodo</Label>
         <MoneyInput value={cuotaPeriodo} onChange={v => setCuotaPeriodo(v)} className="h-11 rounded-xl" placeholder="0" />
@@ -369,7 +442,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         <p className="text-[8px] text-muted-foreground">Día del mes en que debes pagar (1-31)</p>
       </div>
 
-      {/* Preview amortización (solo banco con tasa) */}
+      {/* ═══ Preview primera cuota (modo banco con tasa) ═══ */}
       {mode === "banco" && Number(tasaInteres) > 0 && Number(cuotaPeriodo) > 0 && (Number(saldoActual) > 0 || Number(montoTotal) > 0) && (
         <Card className="border-none bg-muted/20 rounded-xl">
           <CardContent className="p-3 space-y-1">
@@ -388,6 +461,56 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
                 </div>
               )
             })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ═══ Gráfico de Amortización (modo banco con tasa y datos suficientes) ═══ */}
+      {mode === "banco" && amortizationData.length > 2 && (
+        <Card className="border-none bg-muted/10 rounded-xl overflow-hidden">
+          <CardContent className="p-3 space-y-2">
+            <p className="text-[8px] font-bold text-muted-foreground uppercase">Proyección de amortización</p>
+            <p className="text-[9px] text-muted-foreground">Así se distribuirá tu cuota mes a mes (interés ↓ · capital ↑)</p>
+            <div className="h-[140px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={amortizationData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="mes" tick={{ fontSize: 8 }} interval={Math.max(0, Math.floor(amortizationData.length / 8))} />
+                  <YAxis tick={{ fontSize: 8 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} width={40} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null
+                      return (
+                        <div className="bg-card border border-border rounded-lg px-2 py-1.5 shadow-lg text-[9px] space-y-0.5">
+                          <p className="font-bold">{payload[0]?.payload?.mes}</p>
+                          <p className="text-red-500">Interés: ${Number(payload[0]?.value ?? 0).toLocaleString()}</p>
+                          <p className="text-emerald-500">Capital: ${Number(payload[1]?.value ?? 0).toLocaleString()}</p>
+                          <p className="text-muted-foreground">Saldo: ${Number(payload[0]?.payload?.saldo ?? 0).toLocaleString()}</p>
+                        </div>
+                      )
+                    }}
+                  />
+                  <Bar dataKey="interes" stackId="a" radius={[0, 0, 0, 0]} name="Interés">
+                    {amortizationData.map((_, i) => (
+                      <Cell key={i} fill="#ef4444" fillOpacity={0.7} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="capital" stackId="a" radius={[4, 4, 0, 0]} name="Capital">
+                    {amortizationData.map((_, i) => (
+                      <Cell key={i} fill="#10b981" fillOpacity={0.8} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center justify-center gap-4 text-[8px] text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-red-500/70" /> Interés (baja)</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500/80" /> Capital (sube)</span>
+            </div>
+            {amortizationData.length > 0 && (
+              <p className="text-[9px] text-center text-kiri-emerald font-bold">
+                ≈ {amortizationData.length} meses para liquidar
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

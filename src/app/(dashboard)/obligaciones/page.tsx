@@ -28,6 +28,7 @@ import { userApi, WalletState, loansApi } from "@/lib/api-client"
 import { debtsApi, fixedExpensesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
+import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -592,28 +593,33 @@ export default function ObligacionesPage() {
             </button>
           ) : (
             <>
-              {[...debts]
-                .filter(d => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !d.pagadoEstePeriodo : d.pagadoEstePeriodo)
-                .sort((a, b) => {
-                  if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                  return 0
-                }).map(debt => (
-                <DebtCard
-                  key={debt.id}
-                  debt={debt}
-                  formatAmount={formatAmount}
-                  onPay={() => openPay(debt)}
-                  onUndoPay={async () => { const w = await undoPayDebt(debt.id); if (w) setWallet(w) }}
-                  onEdit={() => openEditDebt(debt)}
-                  onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
-                  hidden={hiddenItems.has(debt.id)}
-                  onToggleHidden={() => toggleItemHidden(debt.id)}
-                  isPeriodPriority={periodPriorityIds.has(debt.id)}
-                  onToggleAutoPay={async () => {
-                    await updateDebt(debt.id, { pagoAutomatico: !debt.pagoAutomatico })
-                  }}
-                />
-              ))}
+              {(() => {
+                // Calcular estrategia de deuda para resaltar la prioritaria
+                const debtStrategy = calculateDebtStrategy(debts)
+                return [...debts]
+                  .filter(d => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !d.pagadoEstePeriodo : d.pagadoEstePeriodo)
+                  .sort((a, b) => {
+                    if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
+                    return 0
+                  }).map(debt => (
+                  <DebtCard
+                    key={debt.id}
+                    debt={debt}
+                    formatAmount={formatAmount}
+                    onPay={() => openPay(debt)}
+                    onUndoPay={async () => { const w = await undoPayDebt(debt.id); if (w) setWallet(w) }}
+                    onEdit={() => openEditDebt(debt)}
+                    onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
+                    hidden={hiddenItems.has(debt.id)}
+                    onToggleHidden={() => toggleItemHidden(debt.id)}
+                    isPeriodPriority={periodPriorityIds.has(debt.id)}
+                    onToggleAutoPay={async () => {
+                      await updateDebt(debt.id, { pagoAutomatico: !debt.pagoAutomatico })
+                    }}
+                    strategyBadge={debtStrategy?.priorityDebtId === debt.id ? debtStrategy.priorityLabel : null}
+                  />
+                ))
+              })()}
             </>
           )}
           <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">
@@ -1111,6 +1117,8 @@ export default function ObligacionesPage() {
                     tasaInteres: data.tasaInteres || undefined,
                     acreedor: data.acreedor,
                     saldoRestante: data.saldoActual,
+                    bankEntityId: data.bankEntityId,
+                    tipoDeuda: data.tipoDeuda,
                   })
                   setSaving(false)
                   setIsAddOpen(false)
@@ -1244,15 +1252,18 @@ function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
 }
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
+function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay, strategyBadge }: {
   debt: Debt; formatAmount: (n: number) => string
   onPay: () => void; onUndoPay: () => void; onEdit: () => void; onDelete: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
+  strategyBadge?: string | null
 }) {
+  const [showStrategyInfo, setShowStrategyInfo] = useState(false)
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
   const progreso = debt.montoTotal > 0 ? Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100) : 0
   const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo)
+  const obligIcon = getObligationIcon(debt.nombre)
 
   // Yellow highlight for period priority (pending in current period)
   const priorityRing = isPeriodPriority && !debt.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
@@ -1260,34 +1271,77 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
   return (
     <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, priorityRing, debt.estado === 'saldada' && "opacity-40")}>
       <CardContent className="p-4 space-y-3">
+        {/* Strategy Badge — clickeable para ver explicación */}
+        {strategyBadge && !debt.pagadoEstePeriodo && (
+          <div className="flex items-center gap-1.5 -mb-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowStrategyInfo(true) }}
+              className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-500/20 transition-colors cursor-pointer"
+            >
+              {strategyBadge}
+            </button>
+          </div>
+        )}
+
+        {/* Modal explicación de estrategia */}
+        {showStrategyInfo && (
+          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 rounded-xl p-3 space-y-2 -mb-1 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-start justify-between">
+              <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                {strategyBadge?.includes('Nieve') ? '❄️ Estrategia Bola de Nieve' : '⚡ Estrategia Avalancha'}
+              </p>
+              <button onClick={(e) => { e.stopPropagation(); setShowStrategyInfo(false) }} className="text-[10px] text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              {strategyBadge?.includes('Nieve')
+                ? 'La Bola de Nieve prioriza la deuda con MENOR saldo restante. Al liquidarla rápido, liberas esa cuota para atacar la siguiente. Genera motivación psicológica al ver resultados rápidos.'
+                : 'La Avalancha prioriza la deuda con MAYOR tasa de interés. Así minimizas el dinero que regalas al banco en intereses. Es la estrategia que más te ahorra a largo plazo.'
+              }
+            </p>
+            <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
+              {strategyBadge?.includes('Nieve')
+                ? '💡 Paga primero esta deuda porque es la más pequeña. Cuando la liquides, usa esa cuota para la siguiente.'
+                : '💡 Paga primero esta deuda porque es la que más interés te cobra. Cada peso extra que abonas aquí te ahorra más.'
+              }
+            </p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
-              {(() => {
-                const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
-                const isPartial = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
-                if (isPartial) {
-                  return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Pago parcial</span>
-                }
-                return (
-                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
-                    payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
-                    payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
-                    payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
-                    "bg-muted text-muted-foreground"
-                  )}>{payInfo.statusLabel}</span>
-                )
-              })()}
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Icono automático */}
+            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0", obligIcon.bgColor, obligIcon.color)}>
+              {obligIcon.icon}
             </div>
-            {!hidden && debt.acreedor && <p className="text-[10px] text-muted-foreground truncate">{debt.acreedor}</p>}
-            {!hidden && (
-              <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
-                {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
-                {" · "}{debt.frecuenciaPago === 'quincenal' ? 'Quincenal' : 'Mensual'}
-              </p>
-            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
+                {(() => {
+                  const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
+                  const isPartial = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
+                  if (isPartial) {
+                    return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Pago parcial</span>
+                  }
+                  return (
+                    <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                      payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                      payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
+                      payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                      "bg-muted text-muted-foreground"
+                    )}>{payInfo.statusLabel}</span>
+                  )
+                })()}
+              </div>
+              {!hidden && debt.acreedor && <p className="text-[10px] text-muted-foreground truncate">{debt.acreedor}</p>}
+              {!hidden && (
+                <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
+                  {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
+                  {" · "}{debt.frecuenciaPago === 'quincenal' ? 'Quincenal' : 'Mensual'}
+                  {debt.pagoAutomatico && <span className="ml-1.5 text-amber-500">⚡ Auto</span>}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex gap-1 shrink-0">
             {debt.frecuenciaPago !== 'quincenal' && (
@@ -1401,6 +1455,7 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoP
   const montoPagado = (item as any).montoPagadoEstePeriodo ?? 0
   const isPartiallyPaid = montoPagado > 0 && !item.pagadoEstePeriodo
   const remaining = item.monto - montoPagado
+  const obligIcon = getObligationIcon(item.nombre)
 
   // Yellow highlight for period priority
   const priorityRing = isPeriodPriority && !item.pagadoEstePeriodo ? "ring-2 ring-amber-400/60 bg-amber-500/5" : ""
@@ -1409,28 +1464,35 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoP
     <Card className={cn("border-none shadow-sm transition-all bg-card", payInfo.cardRing, priorityRing)}>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
-              {isPartiallyPaid ? (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                  Pago parcial
-                </span>
-              ) : (
-                <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
-                  payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
-                  payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
-                  payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
-                  "bg-muted text-muted-foreground"
-                )}>{payInfo.statusLabel}</span>
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Icono automático */}
+            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0", obligIcon.bgColor, obligIcon.color)}>
+              {obligIcon.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
+                {isPartiallyPaid ? (
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                    Pago parcial
+                  </span>
+                ) : (
+                  <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
+                    payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
+                    payInfo.status === 'vencido' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" :
+                    payInfo.status === 'proximo' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" :
+                    "bg-muted text-muted-foreground"
+                  )}>{payInfo.statusLabel}</span>
+                )}
+              </div>
+              {!hidden && (
+                <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
+                  {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
+                  {" · "}{item.frecuencia === 'quincenal' ? 'Quincenal' : 'Mensual'}
+                  {item.pagoAutomatico && <span className="ml-1.5 text-amber-500">⚡ Auto</span>}
+                </p>
               )}
             </div>
-            {!hidden && (
-              <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
-                {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
-                {" · "}{item.frecuencia === 'quincenal' ? 'Quincenal' : 'Mensual'}
-              </p>
-            )}
           </div>
           <div className="flex gap-1 shrink-0">
             {item.frecuencia !== 'quincenal' && (

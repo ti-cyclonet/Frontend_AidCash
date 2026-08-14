@@ -6,6 +6,7 @@ const withPWA = withPWAInit({
   dest: 'public',
   register: true,
   disable: false,
+  customWorkerSrc: 'worker',
   workboxOptions: {
     skipWaiting: true,
     runtimeCaching: [

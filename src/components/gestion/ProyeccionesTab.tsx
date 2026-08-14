@@ -217,9 +217,9 @@ export function ProyeccionesTab() {
             </div>
             <p className="text-[10px] text-muted-foreground">Consejos personalizados para acelerar tu progreso.</p>
             <div className="space-y-2">
-              <RecoCard icon={<Zap className="h-3.5 w-3.5 text-amber-500" />} title="Prioridad #1" desc="Continúa usando la estrategia Bola de Nieve. Te ahorrará en intereses." />
-              <RecoCard icon={<PiggyBank className="h-3.5 w-3.5 text-emerald-500" />} title="Ahorro automático" desc="Aumenta tu ahorro al 15% de tu ingreso. Tendrás tu fondo de emergencia antes." />
-              <RecoCard icon={<Shield className="h-3.5 w-3.5 text-cyclon-lavender" />} title="Gasto hormiga" desc="Reducir gastos hormiga libera capacidad para ahorrar." />
+              <RecoCard icon={<Zap className="h-3.5 w-3.5 text-amber-500" />} title="Prioridad #1" desc="Continúa usando la estrategia Bola de Nieve. Te ahorrará en intereses." href="/obligaciones" />
+              <RecoCard icon={<PiggyBank className="h-3.5 w-3.5 text-emerald-500" />} title="Ahorro automático" desc="Aumenta tu ahorro al 15% de tu ingreso. Tendrás tu fondo de emergencia antes." href="/ahorro" />
+              <RecoCard icon={<Shield className="h-3.5 w-3.5 text-cyclon-lavender" />} title="Gasto hormiga" desc="Reducir gastos hormiga libera capacidad para ahorrar." href="/gestion" />
             </div>
           </CardContent>
         </Card>
@@ -279,9 +279,9 @@ function HitoItem({ hito }: { hito: ProjectionHito }) {
   )
 }
 
-function RecoCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors">
+function RecoCard({ icon, title, desc, href }: { icon: React.ReactNode; title: string; desc: string; href?: string }) {
+  const content = (
+    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer">
       <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-bold">{title}</p>
@@ -290,6 +290,11 @@ function RecoCard({ icon, title, desc }: { icon: React.ReactNode; title: string;
       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-1" />
     </div>
   )
+
+  if (href) {
+    return <Link href={href}>{content}</Link>
+  }
+  return content
 }
 
 function MiniMetric({ label, value, sub, color, extra }: { label: string; value: string; sub: string; color?: string; extra?: React.ReactNode }) {
