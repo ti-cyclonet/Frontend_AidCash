@@ -223,29 +223,22 @@ export function useFinanceData() {
     // montoPagado: si no se especifica, se paga la cuota completa
     const realPaid = montoPagado ?? debt.cuotaPeriodo
 
-    // Acumular pagos parciales del periodo
-    const prevPaid = debt.montoPagadoEstePeriodo ?? 0
-    const totalPaidThisPeriod = prevPaid + realPaid
-    const cuotaCubierta = totalPaidThisPeriod >= debt.cuotaPeriodo
-
-    // Llamar al backend que resta del saldoRestante y guarda montoPagadoEstePeriodo
+    // Llamar al backend — él se encarga de acumular montoPagadoEstePeriodo
     const { data } = await debtsApi.pay(debtId, realPaid)
     if (!data) return
 
-    // Deducir del sueldo real (cashBalance) el monto REAL pagado
+    // Deducir del wallet el monto REAL pagado
     await userApi.walletDeduct(realPaid, 'obligaciones')
 
-    // Actualizar estado local con datos del backend
-    const nuevoSaldo = data.saldoNuevo ?? Math.max(0, debt.saldoRestante - realPaid)
-    const liquidada = data.liquidada ?? nuevoSaldo <= 0
-
+    // Actualizar estado local DIRECTAMENTE con los datos del backend (fuente de verdad)
+    const backendDebt = data.debt as Record<string, unknown>
     setDebts(prev => prev.map(d =>
       d.id === debtId ? {
         ...d,
-        saldoRestante: nuevoSaldo,
-        pagadoEstePeriodo: cuotaCubierta, // Solo marcar si se cubrió la cuota completa
-        montoPagadoEstePeriodo: totalPaidThisPeriod,
-        estado: liquidada ? 'saldada' : 'activa',
+        saldoRestante: Number(backendDebt.saldoRestante ?? d.saldoRestante),
+        pagadoEstePeriodo: (backendDebt.pagadoEstePeriodo ?? false) as boolean,
+        montoPagadoEstePeriodo: backendDebt.montoPagadoEstePeriodo != null ? Number(backendDebt.montoPagadoEstePeriodo) : null,
+        estado: (backendDebt.estado as 'activa' | 'saldada' | 'vencida') ?? d.estado,
       } : d
     ))
   }
@@ -253,12 +246,14 @@ export function useFinanceData() {
   const undoPayDebt = async (debtId: string) => {
     const { data } = await debtsApi.undoPay(debtId)
     if (!data) return
-    // Actualizar estado local con los datos que devolvió el backend
+    // Actualizar estado local DIRECTAMENTE con datos del backend (fuente de verdad)
+    const backendDebt = data.debt as Record<string, unknown>
     setDebts(prev => prev.map(d =>
       d.id === debtId ? {
         ...d,
-        saldoRestante: Number((data.debt as Record<string, unknown>).saldoRestante ?? d.saldoRestante),
+        saldoRestante: Number(backendDebt.saldoRestante ?? d.saldoRestante),
         pagadoEstePeriodo: false,
+        montoPagadoEstePeriodo: null,
         estado: 'activa' as const,
       } : d
     ))
@@ -302,7 +297,7 @@ export function useFinanceData() {
     const montoPorPeriodo = (fe as any).frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
     const realPaid = montoPagado ?? montoPorPeriodo
 
-    // Usar el endpoint /pay que maneja la lógica de tarjeta vinculada correctamente
+    // Usar el endpoint /pay — el backend maneja la acumulación correctamente
     const { data: payResult } = await fixedExpensesApi.pay(id, realPaid)
 
     // Si NO se pagó con tarjeta, deducir del cashBalance
@@ -310,16 +305,15 @@ export function useFinanceData() {
       await userApi.walletDeduct(realPaid, 'obligaciones')
     }
 
-    // Acumular pagos parciales para el estado local
-    const prevPaid = (fe as any).montoPagadoEstePeriodo ?? 0
-    const totalPaid = prevPaid + realPaid
-    const isFullyPaid = totalPaid >= fe.monto
-
-    setFixedExpenses(prev => prev.map(f => f.id === id ? {
-      ...f,
-      pagadoEstePeriodo: isFullyPaid,
-      montoPagadoEstePeriodo: totalPaid,
-    } as any : f))
+    // Actualizar estado local con datos del backend (fuente de verdad)
+    if (payResult?.fixedExpense) {
+      const be = payResult.fixedExpense as Record<string, unknown>
+      setFixedExpenses(prev => prev.map(f => f.id === id ? {
+        ...f,
+        pagadoEstePeriodo: (be.pagadoEstePeriodo ?? f.pagadoEstePeriodo) as boolean,
+        montoPagadoEstePeriodo: be.montoPagadoEstePeriodo != null ? Number(be.montoPagadoEstePeriodo) : null,
+      } as any : f))
+    }
   }
 
   const undoPayFixed = async (id: string) => {

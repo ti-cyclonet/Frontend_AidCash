@@ -14,7 +14,6 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { calculateProjections, type ProjectionResult, type ProjectionHito } from "@/lib/projections-logic"
-import { SpendingVelocityWidget } from "./SpendingVelocityWidget"
 import Link from "next/link"
 
 export function ProyeccionesTab() {
@@ -74,9 +73,6 @@ export function ProyeccionesTab() {
           </span>
         </div>
       </div>
-
-      {/* ═══ WIDGET VELOCIDAD DE GASTO (IA PROACTIVA) ═══ */}
-      <SpendingVelocityWidget />
 
       {/* ═══ RESUMEN: Patrimonio actual vs proyectado ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">

@@ -100,22 +100,12 @@ export function PresupuestoTab() {
   const { allocation } = usePeriodBudget()
   const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense } = useFinanceData()
 
-  // Usar el gasto libre REAL de la billetera (mismo calculo que BilleteraTab)
-  const fallbackFree = allocation?.dailyFreeAmount ?? 0
-
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
 
-  // El gasto libre real se basa en el cashBalance (misma logica que BilleteraTab)
-  const realFreeAmount = wallet.cashBalance > 0 ? (() => {
-    const oblig = allocation?.obligationsAmount ?? 0
-    const rem = Math.max(0, wallet.cashBalance - oblig)
-    const remPct = wallet.cashBalance > 0 ? (rem / wallet.cashBalance) * 100 : 0
-    const savPct = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
-    const savAmt = Math.min((savPct / 100) * wallet.cashBalance, rem)
-    const afterSav = rem - savAmt
-    return Math.min(afterSav, (15 / 100) * wallet.cashBalance)
-  })() : fallbackFree
+  // El gasto libre real es directamente el bolsillo 'libre' del wallet
+  // Ese valor ya fue calculado por el backend al registrar ingresos
+  const realFreeAmount = wallet.libre
 
   const [categories, setCategories] = useState<BudgetCategory[]>(load)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -142,7 +132,6 @@ export function PresupuestoTab() {
   const totalBudget = catsWithSpent.reduce((a, c) => a + c.budget, 0)
   const totalSpent = catsWithSpent.reduce((a, c) => a + c.spent, 0)
   const totalPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
-  const remaining = Math.max(0, realFreeAmount - totalSpent)
   const selectedCat = catsWithSpent.find(c => c.id === selectedId) ?? null
   const circ = 2 * Math.PI * 42
 
@@ -169,12 +158,14 @@ export function PresupuestoTab() {
     { value: "otro",       label: "Otro",       emoji: "💸" },
   ]
 
-  // Estadísticas de gastos hormiga
+  // Estadísticas de gastos hormiga — solo los marcados con 🐜
+  const hormigaExpenses = impulseExpenses.filter(e => e.nombre.startsWith('🐜'))
+  const totalHormiga = hormigaExpenses.reduce((a, e) => a + e.monto, 0)
   const hormigaUsagePct = realFreeAmount > 0
-    ? Math.min(100, Math.round((totalImpulseThisPeriod / realFreeAmount) * 100))
+    ? Math.min(100, Math.round((totalHormiga / realFreeAmount) * 100))
     : 0
   const hormigaRemaining = Math.max(0, realFreeAmount - totalImpulseThisPeriod)
-  const hormigaIsOver = totalImpulseThisPeriod > realFreeAmount
+  const hormigaIsOver = totalHormiga > realFreeAmount * 0.5
 
   const persist = (cats: BudgetCategory[]) => { setCategories(cats); save(cats) }
   const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length] }); setShowSugg(false); setFormOpen(true) }
@@ -222,10 +213,10 @@ export function PresupuestoTab() {
   const handleExpNombreChange = (value: string) => {
     setExpNombre(value)
 
-    // 1. Detectar tipo de gasto hormiga (para la sub-categoría interna)
+    // 1. Detectar si podría ser gasto hormiga (SOLO sugerencia, no activar automáticamente)
     const hormigaResult = detectIfHormiga(value)
-    setIsDetectedHormiga(hormigaResult.isHormiga)
     setDetectedImpulseCategory(hormigaResult.category)
+    // NO activar isDetectedHormiga automáticamente — el usuario decide
 
     // 2. Detectar categoría del presupuesto
     const detected = detectBudgetCategory(value, categories)
@@ -273,12 +264,16 @@ export function PresupuestoTab() {
       }
     }
 
-    // TODO gasto se registra como impulseExpense (gasto hormiga)
-    // Si tiene categoría, se tagea para que la categoría lo contabilice
+    // Registrar el gasto como impulseExpense (una única transacción)
+    // El nombre se tagea con la categoría para la vinculación
+    // Si es gasto hormiga, se marca con 🐜 para identificarlo
     setExpSaving(true)
     const impulseCategory = detectedImpulseCategory ?? mapToImpulseCategory(budgetCat || expNombre)
-    const nombreConTag = budgetCat ? `[${budgetCat}] ${expNombre}` : expNombre
-    await addImpulseExpense({ nombre: nombreConTag, monto, categoria: impulseCategory })
+    let nombreFinal = expNombre
+    if (budgetCat) nombreFinal = `[${budgetCat}] ${expNombre}`
+    if (isDetectedHormiga) nombreFinal = `🐜 ${nombreFinal}`
+
+    await addImpulseExpense({ nombre: nombreFinal, monto, categoria: impulseCategory })
     setExpSaving(false)
     setExpenseModalOpen(false)
     setExpNombre("")
@@ -313,8 +308,8 @@ export function PresupuestoTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-black">Presupuesto por Categoria</h1>
-          <p className="text-[10px] text-muted-foreground">Asigna y controla tu gasto libre por categoria</p>
+          <h1 className="text-lg font-black">Presupuestos y hábitos de gasto</h1>
+          <p className="text-[10px] text-muted-foreground">Controla tus límites, entiende tus hábitos y encuentra oportunidades para ahorrar.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={() => openExpenseModal()} size="sm" variant="outline" className="font-bold rounded-xl text-xs gap-1 border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5">
@@ -328,10 +323,10 @@ export function PresupuestoTab() {
 
       {/* 4 metricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MC label="Disponible para gastar" value={formatAmount(realFreeAmount)} sub="Tu gasto libre del periodo" color="text-kiri-emerald" />
-        <MC label="Total presupuestado" value={formatAmount(totalBudget)} sub="Limites asignados (no se descuenta)" />
+        <MC label="Disponible para gastar" value={formatAmount(realFreeAmount)} sub="Tu bolsillo de gasto libre" color="text-kiri-emerald" />
+        <MC label="Total presupuestado" value={formatAmount(totalBudget)} sub="Límites asignados a categorías" />
         <MC label="Total gastado" value={formatAmount(totalSpent)} sub={`${totalPct}% del presupuestado`} color={totalSpent > totalBudget ? "text-red-500" : "text-amber-500"} />
-        <MC label="Disponible restante" value={formatAmount(remaining)} sub={`${realFreeAmount > 0 ? Math.round((remaining / realFreeAmount) * 100) : 0}% sin gastar`} />
+        <MC label="Disponible restante" value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={`${realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0}% sin gastar`} />
       </div>
 
       {/* --- VISTA GENERAL --- */}
@@ -467,8 +462,8 @@ export function PresupuestoTab() {
                 <Coffee className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold">Gastos Hormiga</p>
-                <p className="text-[10px] text-muted-foreground">Café, antojos, día a día</p>
+                <p className="text-sm font-bold">🐜 Gastos Hormiga</p>
+                <p className="text-[10px] text-muted-foreground">Pequeños gastos que pueden afectar tus metas sin que lo notes.</p>
               </div>
               <div className="text-right shrink-0">
                 <p className={cn("text-sm font-black", hormigaIsOver ? "text-red-500" : "")}>{hormigaUsagePct}%</p>
@@ -480,15 +475,15 @@ export function PresupuestoTab() {
               <div className="px-4 pb-3.5 space-y-1">
                 <div className="flex justify-between text-[9px] font-bold">
                   <span className={hormigaIsOver ? "text-red-500" : "text-muted-foreground"}>
-                    Gastado: {formatAmount(totalImpulseThisPeriod)}
+                    Hormiga: {formatAmount(totalHormiga)} ({hormigaExpenses.length} gastos)
                   </span>
-                  <span className="text-muted-foreground">Libre: {formatAmount(hormigaRemaining)}</span>
+                  <span className="text-muted-foreground">Total gastado: {formatAmount(totalImpulseThisPeriod)}</span>
                 </div>
                 <Progress
                   value={hormigaUsagePct}
                   className="h-1.5"
                   indicatorClassName={cn(
-                    hormigaUsagePct >= 100 ? "bg-red-500" : hormigaUsagePct >= 75 ? "bg-yellow-500" : "bg-cyclon-pink"
+                    hormigaUsagePct >= 50 ? "bg-red-500" : hormigaUsagePct >= 30 ? "bg-yellow-500" : "bg-cyclon-pink"
                   )}
                 />
                 <p className="text-[8px] text-muted-foreground text-right">
@@ -498,23 +493,23 @@ export function PresupuestoTab() {
             )}
           </button>
 
-          {/* Historial Gastos Hormiga (colapsable) */}
+          {/* Historial Gastos Hormiga (colapsable) — SOLO los marcados como hormiga */}
           {showHormiga && (
             <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Historial — {impulseThisPeriod.length > 0 ? `${impulseThisPeriod.length} registros este periodo` : "Sin registros"}
+                Gastos hormiga — {hormigaExpenses.length > 0 ? `${hormigaExpenses.length} registros este periodo` : "Sin registros"}
               </p>
-              {impulseExpenses.length === 0 ? (
+              {hormigaExpenses.length === 0 ? (
                 <div className="text-center py-6 space-y-2">
-                  <div className="h-12 w-12 bg-cyclon-pink/10 rounded-2xl flex items-center justify-center mx-auto">
-                    <Coffee className="h-6 w-6 text-cyclon-pink" />
+                  <div className="h-12 w-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
+                    <span className="text-2xl">🎉</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">Aún no tienes gastos hormiga.</p>
-                  <p className="text-xs text-muted-foreground">Usa <strong>Registrar gasto</strong> y la app detectará automáticamente si es un gasto hormiga.</p>
+                  <p className="text-sm font-bold text-emerald-500">¡No tienes gastos hormiga!</p>
+                  <p className="text-xs text-muted-foreground">Excelente. Kiri no ha encontrado pequeños gastos marcados como hábito.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {impulseExpenses.map(item => {
+                  {hormigaExpenses.map(item => {
                     const cat = IMPULSE_CATEGORIES.find(c => c.value === item.categoria)
                     return (
                       <div key={item.id} className="flex items-center gap-3 bg-card rounded-2xl px-4 py-3 shadow-sm">
@@ -543,6 +538,17 @@ export function PresupuestoTab() {
             </div>
           )}
         </>
+      )}
+
+      {/* ═══ SIMULADOR DE REDUCCIÓN + IMPACTO + META ═══ */}
+      {!selectedCat && totalHormiga > 0 && (
+        <HormigaSimulator
+          totalHormiga={totalHormiga}
+          hormigaCount={hormigaExpenses.length}
+          realFreeAmount={realFreeAmount}
+          incomeFrequency={incomeFrequency}
+          formatAmount={formatAmount}
+        />
       )}
 
       {/* ═══ BANNER CONSEJO KIRI — Un solo mensaje clickeable ═══ */}
@@ -781,6 +787,39 @@ export function PresupuestoTab() {
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Presupuesto mensual</Label>
               <MoneyInput value={form.budget} onChange={v => setForm(f => ({ ...f, budget: v }))} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+              {/* Sugerencia inteligente de Kiri */}
+              {realFreeAmount > 0 && !editingId && (
+                <div className="bg-kiri-emerald/5 border border-kiri-emerald/20 rounded-xl p-3 space-y-1.5">
+                  <p className="text-[9px] font-bold text-kiri-emerald flex items-center gap-1">
+                    🌱 Sugerencia de Kiri
+                  </p>
+                  <p className="text-[9px] text-muted-foreground leading-relaxed">
+                    Tu disponible para gastar es <strong className="text-foreground">{formatAmount(realFreeAmount)}</strong>.
+                    {categories.length === 0
+                      ? ` Si creas 4 categorías, podrías asignar ~${formatAmount(Math.round(realFreeAmount / 4))} a cada una.`
+                      : ` Ya tienes ${categories.length} categoría${categories.length > 1 ? 's' : ''} con ${formatAmount(totalBudget)} asignados. Te quedan ~${formatAmount(Math.max(0, realFreeAmount - totalBudget))} disponibles para nuevas categorías.`
+                    }
+                  </p>
+                  {!form.budget && (
+                    <div className="flex gap-2 pt-1">
+                      {[
+                        Math.round((realFreeAmount - totalBudget) * 0.5),
+                        Math.round((realFreeAmount - totalBudget) * 0.3),
+                        Math.round((realFreeAmount - totalBudget) * 0.2),
+                      ].filter(v => v > 0).map((suggested, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, budget: String(suggested) }))}
+                          className="text-[9px] font-bold px-2 py-1 rounded-lg bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 transition-colors"
+                        >
+                          {formatAmount(suggested)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Color</Label>
@@ -811,13 +850,13 @@ export function PresupuestoTab() {
               <Receipt className="h-5 w-5 text-kiri-emerald" />
               Registrar gasto
             </DialogTitle>
-            <DialogDescription>Tu gasto se registrará en la categoría y en tu historial de gastos hormiga.</DialogDescription>
+            <DialogDescription>El gasto se registrará en la categoría seleccionada y descontará de tu presupuesto.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Descripción</Label>
               <Input
-                placeholder="Ej: Café en Starbucks, Uber al trabajo, Netflix..."
+                placeholder="Ej: Mercado semanal, Uber al trabajo, Netflix..."
                 value={expNombre}
                 onChange={e => handleExpNombreChange(e.target.value)}
                 className="h-10 rounded-xl"
@@ -847,7 +886,7 @@ export function PresupuestoTab() {
                   {categories.map(cat => (
                     <button
                       key={cat.id}
-                      onClick={() => { setExpCategoria(cat.name); setIsDetectedHormiga(false) }}
+                      onClick={() => { setExpCategoria(cat.name); }}
                       className={cn(
                         "flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-colors",
                         expCategoria === cat.name
@@ -864,11 +903,47 @@ export function PresupuestoTab() {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-xl text-center">
-                  Crea categorías con "Agregar" para organizar tu presupuesto.
+                  Crea categorías con &ldquo;Agregar&rdquo; para organizar tu presupuesto.
                 </p>
               )}
-              <p className="text-[8px] text-muted-foreground italic">Todo gasto se registra automáticamente en tu historial de gastos hormiga.</p>
             </div>
+
+            {/* ═══ CLASIFICACIÓN: ¿Es gasto hormiga? ═══ */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between p-3 rounded-xl border border-muted bg-muted/10">
+                <div className="flex items-center gap-2">
+                  <Coffee className="h-4 w-4 text-cyclon-pink" />
+                  <div>
+                    <p className="text-xs font-bold">🐜 Marcar como gasto hormiga</p>
+                    <p className="text-[9px] text-muted-foreground">Pequeño gasto cotidiano o impulsivo</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDetectedHormiga(!isDetectedHormiga)}
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition-colors",
+                    isDetectedHormiga ? "bg-cyclon-pink" : "bg-muted"
+                  )}
+                >
+                  <span className={cn(
+                    "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                    isDetectedHormiga && "translate-x-5"
+                  )} />
+                </button>
+              </div>
+              {isDetectedHormiga && (
+                <p className="text-[9px] text-cyclon-pink flex items-center gap-1 px-1">
+                  <Coffee className="h-3 w-3" /> Kiri analizará este gasto como hábito de consumo.
+                </p>
+              )}
+              {!isDetectedHormiga && detectedImpulseCategory && (
+                <p className="text-[9px] text-amber-500 flex items-center gap-1 px-1">
+                  💡 Kiri detectó que este podría ser un gasto hormiga. ¿Quieres marcarlo?
+                </p>
+              )}
+            </div>
+
             {/* Warning si se va a exceder el presupuesto de la categoría seleccionada */}
             {expCategoria && expCategoria !== "__hormiga__" && Number(expMonto) > 0 && (() => {
               const cat = catsWithSpent.find(c => c.name === expCategoria)
@@ -1053,6 +1128,162 @@ function InsightRow({ insight, formatAmount }: { insight: BudgetInsight; formatA
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── HormigaSimulator — Simulador de reducción + impacto anual + conexión metas ──
+
+function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFrequency, formatAmount }: {
+  totalHormiga: number
+  hormigaCount: number
+  realFreeAmount: number
+  incomeFrequency: 'mensual' | 'quincenal'
+  formatAmount: (n: number) => string
+}) {
+  const [selectedPct, setSelectedPct] = useState(30)
+
+  // Cálculos dinámicos
+  const savingsPerPeriod = Math.round(totalHormiga * (selectedPct / 100))
+  const periodsPerYear = incomeFrequency === 'quincenal' ? 24 : 12
+  const savingsPerYear = savingsPerPeriod * periodsPerYear
+  const hormigaPctOfFree = realFreeAmount > 0 ? Math.round((totalHormiga / realFreeAmount) * 100) : 0
+
+  // Meta de ahorro del usuario (localStorage)
+  const [savingsMeta, setSavingsMeta] = useState<{ nombre: string; meta: number; acumulado: number } | null>(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('kiri_saving_pockets')
+      if (raw) {
+        const pockets = JSON.parse(raw) as { nombre: string; meta: number; acumulado: number }[]
+        const withMeta = pockets.filter(p => p.meta > 0 && p.acumulado < p.meta)
+        if (withMeta.length > 0) setSavingsMeta(withMeta[0])
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  const percentages = [10, 20, 30, 50]
+
+  return (
+    <div className="space-y-4">
+      {/* Impacto en presupuesto */}
+      <Card className="border-none bg-card shadow-sm rounded-2xl">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📊</span>
+            <h3 className="text-sm font-bold">Impacto de tus gastos hormiga</h3>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-muted/20 rounded-xl p-3 text-center">
+              <p className="text-[9px] text-muted-foreground">Total hormiga</p>
+              <p className="text-sm font-black">{formatAmount(totalHormiga)}</p>
+              <p className="text-[8px] text-muted-foreground">{hormigaCount} gastos</p>
+            </div>
+            <div className="bg-muted/20 rounded-xl p-3 text-center">
+              <p className="text-[9px] text-muted-foreground">% del libre</p>
+              <p className="text-sm font-black text-amber-500">{hormigaPctOfFree}%</p>
+              <p className="text-[8px] text-muted-foreground">de tu presupuesto</p>
+            </div>
+            <div className="bg-muted/20 rounded-xl p-3 text-center">
+              <p className="text-[9px] text-muted-foreground">Proyección anual</p>
+              <p className="text-sm font-black text-red-500">{formatAmount(totalHormiga * periodsPerYear)}</p>
+              <p className="text-[8px] text-muted-foreground">si continúas así</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Simulador de reducción */}
+      <Card className="border-none bg-gradient-to-br from-emerald-50/50 to-green-50/30 dark:from-emerald-950/10 dark:to-green-950/5 shadow-sm rounded-2xl border border-emerald-500/10">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🌱</span>
+            <div>
+              <h3 className="text-sm font-bold">¿Qué pasaría si reduces tus gastos hormiga?</h3>
+              <p className="text-[9px] text-muted-foreground">Selecciona un porcentaje de reducción</p>
+            </div>
+          </div>
+
+          {/* Selector de porcentaje */}
+          <div className="grid grid-cols-4 gap-2">
+            {percentages.map(pct => (
+              <button
+                key={pct}
+                onClick={() => setSelectedPct(pct)}
+                className={cn(
+                  "h-10 rounded-xl text-sm font-bold border-2 transition-all",
+                  selectedPct === pct
+                    ? "bg-kiri-emerald text-white border-kiri-emerald shadow-sm scale-105"
+                    : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+                )}
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+
+          {/* Resultado */}
+          <div className="bg-background/80 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[9px] text-muted-foreground">Podrías liberar por periodo</p>
+                <p className="text-xl font-black text-kiri-emerald">{formatAmount(savingsPerPeriod)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] text-muted-foreground">Potencial anual</p>
+                <p className="text-lg font-black text-emerald-600">{formatAmount(savingsPerYear)}</p>
+              </div>
+            </div>
+
+            {/* Barra visual de reducción */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[9px] text-muted-foreground">
+                <span>Gasto actual: {formatAmount(totalHormiga)}</span>
+                <span>Nuevo: {formatAmount(totalHormiga - savingsPerPeriod)}</span>
+              </div>
+              <div className="h-3 bg-red-500/20 rounded-full overflow-hidden relative">
+                <div
+                  className="h-full bg-kiri-emerald rounded-full transition-all duration-500"
+                  style={{ width: `${100 - selectedPct}%` }}
+                />
+                <div
+                  className="absolute top-0 right-0 h-full bg-emerald-300/40 rounded-r-full transition-all duration-500"
+                  style={{ width: `${selectedPct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Conexión con meta de ahorro */}
+          {savingsMeta ? (
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-kiri-emerald/5 border border-kiri-emerald/20">
+              <PiggyBank className="h-4 w-4 text-kiri-emerald shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-kiri-emerald">🎯 Tu oportunidad de ahorro</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  Si reduces un {selectedPct}% tus gastos hormiga, podrías destinar {formatAmount(savingsPerPeriod)} por periodo a tu meta &ldquo;{savingsMeta.nombre}&rdquo;.
+                </p>
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-[8px]">
+                    <span className="text-muted-foreground">Progreso actual: {formatAmount(savingsMeta.acumulado)}</span>
+                    <span className="font-bold text-kiri-emerald">{Math.round((savingsMeta.acumulado / savingsMeta.meta) * 100)}%</span>
+                  </div>
+                  <Progress value={(savingsMeta.acumulado / savingsMeta.meta) * 100} className="h-1.5" indicatorClassName="bg-kiri-emerald" />
+                  <p className="text-[8px] text-muted-foreground">Meta: {formatAmount(savingsMeta.meta)}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Link href="/ahorro" className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 hover:bg-muted/30 transition-colors">
+              <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1">
+                <p className="text-[10px] font-bold">Convierte este ahorro en una meta</p>
+                <p className="text-[9px] text-muted-foreground">Crea una meta de ahorro y descubre qué impacto tendría este dinero.</p>
+              </div>
+            </Link>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

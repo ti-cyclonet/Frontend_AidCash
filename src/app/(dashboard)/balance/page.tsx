@@ -6,9 +6,10 @@ import { Progress } from "@/components/ui/progress"
 import {
   BookOpen, TrendingUp, TrendingDown, Trash2, Calendar,
   Coffee, ReceiptText, PiggyBank, ArrowUpRight, ArrowDownRight,
-  Trophy, AlertTriangle, BarChart3, Target, Sparkles, ChevronRight,
+  Trophy, AlertTriangle, BarChart3, Target, Sparkles, ChevronRight, CheckCircle2,
 } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
@@ -281,6 +282,93 @@ export default function BalancePage() {
             )}
           </div>
 
+          {/* ═══ RESUMEN DE DEUDAS + COMPARACIÓN ═══ */}
+          {s && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Resumen de deudas */}
+              <Card className="border-none bg-card shadow-sm rounded-2xl">
+                <CardContent className="p-4 space-y-3">
+                  <h3 className="text-sm font-bold">Resumen de deudas</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] text-muted-foreground">Total de deudas</p>
+                      <p className="text-sm font-black">{formatAmount(debts.reduce((a, d) => a + d.montoTotal, 0))}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] text-muted-foreground">Saldo restante</p>
+                      <p className="text-sm font-black text-red-500">{formatAmount(debts.reduce((a, d) => a + d.saldoRestante, 0))}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] text-muted-foreground">Interés pagado (periodo)</p>
+                      <p className="text-sm font-black text-amber-500">{formatAmount(s.totalInteresPagado)}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] text-muted-foreground">Capital abonado</p>
+                      <p className="text-sm font-black text-emerald-500">{formatAmount(s.totalCapitalAbonado)}</p>
+                    </div>
+                  </div>
+                  {debts.length > 0 && (
+                    <Progress
+                      value={Math.round(((debts.reduce((a, d) => a + d.montoTotal, 0) - debts.reduce((a, d) => a + d.saldoRestante, 0)) / Math.max(1, debts.reduce((a, d) => a + d.montoTotal, 0))) * 100)}
+                      className="h-2"
+                      indicatorClassName="bg-emerald-500"
+                    />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Comparación vs mes anterior */}
+              {report?.monthlySeries && report.monthlySeries.length >= 2 && (() => {
+                const current = report.monthlySeries[report.monthlySeries.length - 1]
+                const previous = report.monthlySeries[report.monthlySeries.length - 2]
+                const ingresosChange = previous.ingresos > 0 ? ((current.ingresos - previous.ingresos) / previous.ingresos) * 100 : 0
+                const egresosChange = previous.egresos > 0 ? ((current.egresos - previous.egresos) / previous.egresos) * 100 : 0
+                return (
+                  <Card className="border-none bg-card shadow-sm rounded-2xl">
+                    <CardContent className="p-4 space-y-3">
+                      <h3 className="text-sm font-bold">Comparación vs mes anterior</h3>
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Ingresos</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold">{formatAmount(current.ingresos)}</span>
+                            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full",
+                              ingresosChange >= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                            )}>
+                              {ingresosChange >= 0 ? '↑' : '↓'}{Math.abs(ingresosChange).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Egresos</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold">{formatAmount(current.egresos)}</span>
+                            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full",
+                              egresosChange <= 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                            )}>
+                              {egresosChange >= 0 ? '↑' : '↓'}{Math.abs(egresosChange).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                          <span className="text-xs font-bold">Balance neto</span>
+                          <span className={cn("text-sm font-black",
+                            (current.ingresos - current.egresos) >= 0 ? "text-emerald-500" : "text-red-500"
+                          )}>
+                            {formatAmount(current.ingresos - current.egresos)}
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-muted-foreground">
+                          Mes anterior: {formatAmount(previous.ingresos - previous.egresos)}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+            </div>
+          )}
+
           {/* ═══ BANNER MOTIVACIONAL ═══ */}
           {s && (
             <Card className="border-none bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/10 rounded-2xl">
@@ -288,16 +376,152 @@ export default function BalancePage() {
                 <span className="text-3xl shrink-0">🌱</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-emerald-700 dark:text-emerald-300">
-                    {balanceNeto > 0 ? "¡Vas por buen camino! 🌿" : "Sigue adelante 💪"}
+                    Resumen del mes
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {balanceNeto > 0
-                      ? `Tu balance neto es positivo. Has ahorrado ${formatAmount(ahorroDelPeriodo)} este periodo.`
+                      ? `Tu saldo neto aumentó. Has ahorrado ${formatAmount(ahorroDelPeriodo)} este periodo. ¡Vas por buen camino! 💚`
                       : "Registra un ingreso para comenzar a construir tu balance positivo."}
                   </p>
                 </div>
+                {/* Mini stats del resumen */}
+                <div className="hidden lg:flex items-center gap-4 shrink-0">
+                  <div className="text-center">
+                    <p className="text-xs font-black text-emerald-500">+{formatAmount(ingresosTotales)}</p>
+                    <p className="text-[8px] text-muted-foreground">Ingresos</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-black text-red-500">-{formatAmount(egresosTotales)}</p>
+                    <p className="text-[8px] text-muted-foreground">Egresos</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-black text-cyclon-lavender">{formatAmount(ahorroDelPeriodo)}</p>
+                    <p className="text-[8px] text-muted-foreground">Ahorrado</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* ═══ HISTORIAL RECIENTE + DETALLE ÚLTIMO PAGO ═══ */}
+          {report && (report.debtPayments?.length > 0 || report.fixedExpenses.some(f => f.pagadoEstePeriodo)) && (
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+              {/* Historial de pagos reciente */}
+              <Card className="border-none bg-card shadow-sm rounded-2xl">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold">Historial de pagos (reciente)</h3>
+                    <button onClick={() => setHistoryTab("obligaciones")} className="text-[10px] font-bold text-kiri-emerald hover:underline">
+                      Ver todos
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {/* Combinar debt payments + fixed payments, ordenar por fecha, mostrar top 5 */}
+                    {(() => {
+                      const recentPayments: { id: string; nombre: string; monto: number; fecha: string; tipo: string }[] = []
+
+                      // Pagos de deuda
+                      for (const p of (report.debtPayments ?? []).slice(0, 5)) {
+                        recentPayments.push({
+                          id: (p.id as string) ?? Math.random().toString(),
+                          nombre: (p.debtName as string) ?? 'Deuda',
+                          monto: p.montoPagado as number,
+                          fecha: p.createdAt as string,
+                          tipo: 'Pago realizado',
+                        })
+                      }
+
+                      // Gastos fijos pagados
+                      for (const f of report.fixedExpenses.filter(f => f.pagadoEstePeriodo as boolean).slice(0, 5)) {
+                        recentPayments.push({
+                          id: f.id as string,
+                          nombre: f.nombre as string,
+                          monto: (f as any).montoPagadoEstePeriodo ?? (f.monto as number),
+                          fecha: (f.updatedAt as string) ?? '',
+                          tipo: 'Pago realizado',
+                        })
+                      }
+
+                      // Ordenar por fecha desc, tomar top 5
+                      return recentPayments
+                        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+                        .slice(0, 5)
+                        .map(p => (
+                          <div key={p.id} className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0">
+                            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold truncate">{p.nombre}</p>
+                              <p className="text-[9px] text-muted-foreground">{p.tipo}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-black">{formatAmount(p.monto)}</p>
+                              <p className="text-[8px] text-muted-foreground">
+                                {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                    })()}
+                  </div>
+                  <Link href="/obligaciones" className="flex items-center justify-center gap-1 text-[10px] font-bold text-kiri-emerald hover:underline pt-1">
+                    Ver todo el historial de pagos <ChevronRight className="h-3 w-3" />
+                  </Link>
+                </CardContent>
+              </Card>
+
+              {/* Detalle del último pago */}
+              {(report.debtPayments ?? []).length > 0 && (() => {
+                const lastPayment = (report.debtPayments ?? [])[0] // El más reciente
+                return (
+                  <Card className="border-none bg-card shadow-sm rounded-2xl">
+                    <CardContent className="p-4 space-y-3">
+                      <h3 className="text-sm font-bold">Detalle del último pago</h3>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/10 flex items-center justify-center shrink-0">
+                            <ReceiptText className="h-4 w-4 text-cyclon-lavender" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{(lastPayment.debtName as string) ?? 'Deuda'}</p>
+                            <p className="text-[9px] text-muted-foreground">
+                              {lastPayment.createdAt ? new Date(lastPayment.createdAt as string).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : ''} · Pago realizado
+                            </p>
+                          </div>
+                          <p className="text-sm font-black ml-auto">{formatAmount(lastPayment.montoPagado as number)}</p>
+                        </div>
+
+                        <div className="bg-muted/20 rounded-xl p-3 space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Capital pagado</span>
+                            <span className="font-bold text-emerald-500">{formatAmount(lastPayment.abonoCapital as number)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Intereses pagados</span>
+                            <span className="font-bold text-red-500">{formatAmount(lastPayment.pagoInteres as number)}</span>
+                          </div>
+                          <div className="border-t border-border/50 pt-2 space-y-1.5">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Saldo anterior</span>
+                              <span className="font-bold">{formatAmount(lastPayment.saldoAnterior as number)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Saldo actual</span>
+                              <span className="font-bold">{formatAmount(lastPayment.saldoPosterior as number)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Link href="/obligaciones" className="flex items-center justify-center gap-1 text-[10px] font-bold text-cyclon-lavender hover:underline">
+                          Ver detalle completo de esta deuda <ChevronRight className="h-3 w-3" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+            </div>
           )}
 
           {/* ═══ HISTORIAL DETALLADO ═══ */}
