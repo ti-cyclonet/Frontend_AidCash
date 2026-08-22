@@ -191,10 +191,10 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  async register(nombre: string, correo: string, password: string) {
+  async register(nombre: string, correo: string, password: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string) {
     const res = await api<LoginResponse>('/auth/register', {
       method: 'POST',
-      body: { nombre, correo, password },
+      body: { nombre, correo, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname },
       skipAuth: true,
     })
     if (res.data) {
