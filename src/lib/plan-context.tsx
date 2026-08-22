@@ -96,9 +96,10 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await api<PlanData>("/plan")
       if (error || !data || !data.hasPlan) {
-        // No active plan — apply FREE features as defaults
+        // No active plan — apply FREE features as defaults.
+        // A PENDING upgrade (unsigned) also lands here, so the user stays on FREE.
         setPlan({
-          planName: data?.planName || "Sin plan",
+          planName: "KIRI FREE",
           features: FREE_FEATURES,
           limits: {},
           hasPlan: false,
@@ -108,7 +109,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       setPlan({
-        planName: "Sin plan",
+        planName: "KIRI FREE",
         features: FREE_FEATURES,
         limits: {},
         hasPlan: false,
