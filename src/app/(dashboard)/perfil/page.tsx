@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
-import { api } from "@/lib/api-client"
+import { api, userApi } from "@/lib/api-client"
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -34,7 +34,7 @@ export default function PerfilPage() {
   }
 
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl })
+  const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl, firstName: '', secondName: '', firstSurname: '', secondSurname: '', documentType: 'CC', documentNumber: '' })
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -50,15 +50,37 @@ export default function PerfilPage() {
   }
 
   const handleSaveProfile = () => {
-    setUser(editForm)
+    // Build concatenated nombre for Kiri DB
+    const fullName = [editForm.firstName, editForm.secondName, editForm.firstSurname, editForm.secondSurname].filter(Boolean).join(' ')
+    const updatedForm = { ...editForm, nombre: fullName }
+    setUser(updatedForm)
+    // Send extra fields to backend (which syncs with Authoriza)
+    userApi.updateProfile({
+      nombre: fullName,
+      correo: editForm.correo,
+      firstName: editForm.firstName,
+      secondName: editForm.secondName,
+      firstSurname: editForm.firstSurname,
+      secondSurname: editForm.secondSurname,
+      documentType: editForm.documentType,
+      documentNumber: editForm.documentNumber,
+    })
     setIsEditOpen(false)
   }
 
   const handleOpenEdit = () => {
+    const fullName = user.nombre || authUser?.nombre || ""
+    const parts = fullName.trim().split(' ')
     setEditForm({
-      nombre: user.nombre || authUser?.nombre || "",
+      nombre: fullName,
       correo: user.correo || displayEmail || "",
       avatarUrl: user.avatarUrl,
+      firstName: parts[0] || '',
+      secondName: parts.length === 4 ? parts[1] : '',
+      firstSurname: parts.length >= 3 ? parts[parts.length - 2] : (parts[1] || ''),
+      secondSurname: parts.length >= 3 ? parts[parts.length - 1] : '',
+      documentType: 'CC',
+      documentNumber: '',
     })
     setIsEditOpen(true)
   }
@@ -275,17 +297,46 @@ export default function PerfilPage() {
               <p className="text-xs text-muted-foreground">Toca el ícono para cambiar la foto</p>
             </div>
 
-            <div className="space-y-2">
-              <Label>Nombre</Label>
-              <Input
-                value={editForm.nombre}
-                onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))}
-                placeholder="Tu nombre"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Primer Nombre *</Label>
+                <Input
+                  value={editForm.firstName}
+                  onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
+                  placeholder="Primer nombre"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Segundo Nombre</Label>
+                <Input
+                  value={editForm.secondName}
+                  onChange={e => setEditForm(f => ({ ...f, secondName: e.target.value }))}
+                  placeholder="Segundo nombre"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Primer Apellido *</Label>
+                <Input
+                  value={editForm.firstSurname}
+                  onChange={e => setEditForm(f => ({ ...f, firstSurname: e.target.value }))}
+                  placeholder="Primer apellido"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Segundo Apellido</Label>
+                <Input
+                  value={editForm.secondSurname}
+                  onChange={e => setEditForm(f => ({ ...f, secondSurname: e.target.value }))}
+                  placeholder="Segundo apellido"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Correo</Label>
+              <Label className="text-xs">Correo</Label>
               <Input
                 type="email"
                 value={editForm.correo}
@@ -293,13 +344,38 @@ export default function PerfilPage() {
                 placeholder="tu@correo.com"
               />
             </div>
+
+            <div className="grid grid-cols-[1fr_2fr] gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Tipo Doc. *</Label>
+                <select
+                  value={editForm.documentType}
+                  onChange={e => setEditForm(f => ({ ...f, documentType: e.target.value }))}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="CC">C.C.</option>
+                  <option value="CE">C.E.</option>
+                  <option value="PP">Pasaporte</option>
+                  <option value="TI">T.I.</option>
+                  <option value="NIT">NIT</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Número de Documento *</Label>
+                <Input
+                  value={editForm.documentNumber}
+                  onChange={e => setEditForm(f => ({ ...f, documentNumber: e.target.value }))}
+                  placeholder="Número de documento"
+                />
+              </div>
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
             <Button
               onClick={handleSaveProfile}
-              disabled={!editForm.nombre || !editForm.correo}
+              disabled={!editForm.firstName || !editForm.firstSurname || !editForm.correo}
               className="bg-cyclon-lavender text-white font-bold rounded-xl px-8"
             >
               Guardar

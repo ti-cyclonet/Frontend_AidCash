@@ -54,13 +54,50 @@ function RegisterContent() {
     setError(null)
     // Concatenar nombre completo para la BD de Kiri
     const fullName = [nombre, secondName, firstSurname, secondSurname].filter(Boolean).join(' ')
-    const { error } = await signUp(email, password, fullName, documentType, documentNumber, nombre, secondName, firstSurname, secondSurname)
+    const { error, verificationRequired } = await signUp(email, password, fullName, documentType, documentNumber, nombre, secondName, firstSurname, secondSurname) as any
     if (error) {
       setError(error)
       setLoading(false)
       return
     }
+    if (verificationRequired) {
+      setSuccess(true)
+      setLoading(false)
+      return
+    }
     router.replace("/onboarding")
+  }
+
+  // Verification pending screen
+  if (success) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <div className="bg-kiri-forest px-6 pt-16 pb-10 flex flex-col items-center gap-4">
+          <div className="h-20 w-20 bg-kiri-sage/30 backdrop-blur-sm rounded-[1.5rem] shadow-xl flex items-center justify-center">
+            <Sprout className="h-10 w-10 text-kiri-cream" strokeWidth={1.5} />
+          </div>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white">Kiri Finance</h1>
+            <p className="text-white/50 text-xs mt-1">Tu dinero, tu futuro, tu control</p>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-6 py-10">
+          <div className="w-full max-w-md text-center space-y-4">
+            <div className="h-20 w-20 bg-kiri-emerald/10 rounded-3xl flex items-center justify-center mx-auto">
+              <CheckCircle2 className="h-10 w-10 text-kiri-emerald" strokeWidth={1.5} />
+            </div>
+            <h2 className="text-2xl font-black text-foreground">¡Revisa tu correo! 📧</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Te enviamos un enlace de verificación a <strong className="text-foreground">{email}</strong>.
+              Confirma tu correo para activar tu cuenta y empezar a organizar tus finanzas.
+            </p>
+            <Link href="/login" className="inline-block mt-4 font-bold text-kiri-emerald hover:underline">
+              Ir a Iniciar sesión
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

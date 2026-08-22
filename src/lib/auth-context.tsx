@@ -68,12 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, nombre: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string) => {
     const { data, error } = await authApi.register(nombre, email, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname)
     if (error) return { error }
-    if (data) {
+    // If verification is required, do NOT log the user in
+    const verificationRequired = (data as any)?.verificationRequired
+    if (data && !verificationRequired) {
       setUser(data.user)
-      // Limpiar tutoriales para que el nuevo usuario los vea
       clearTutorialKeys()
     }
-    return { error: null }
+    return { error: null, verificationRequired }
   }
 
   const signOut = async () => {
