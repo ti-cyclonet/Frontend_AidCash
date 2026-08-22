@@ -26,9 +26,14 @@ function RegisterContent() {
   const { signUp } = useAuth()
 
   const [nombre, setNombre] = useState("")
+  const [secondName, setSecondName] = useState("")
+  const [firstSurname, setFirstSurname] = useState("")
+  const [secondSurname, setSecondSurname] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
+  const [documentType, setDocumentType] = useState("CC")
+  const [documentNumber, setDocumentNumber] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -40,17 +45,21 @@ function RegisterContent() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!nombre.trim()) { setError("El primer nombre es obligatorio."); return }
+    if (!firstSurname.trim()) { setError("El primer apellido es obligatorio."); return }
     if (password !== confirm) { setError("Las contraseñas no coinciden."); return }
     if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return }
+    if (!documentNumber.trim()) { setError("El número de documento es obligatorio."); return }
     setLoading(true)
     setError(null)
-    const { error } = await signUp(email, password, nombre)
+    // Concatenar nombre completo para la BD de Kiri
+    const fullName = [nombre, secondName, firstSurname, secondSurname].filter(Boolean).join(' ')
+    const { error } = await signUp(email, password, fullName, documentType, documentNumber, nombre, secondName, firstSurname, secondSurname)
     if (error) {
       setError(error)
       setLoading(false)
       return
     }
-    // Registro exitoso → ir directo al onboarding (no hay confirmación de correo)
     router.replace("/onboarding")
   }
 
@@ -76,19 +85,51 @@ function RegisterContent() {
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Nombre completo</Label>
-            <Input
-              placeholder="Tu nombre"
-              value={nombre}
-              onChange={e => setNombre(e.target.value)}
-              className="h-12 rounded-2xl"
-              autoFocus
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Primer Nombre *</Label>
+              <Input
+                placeholder="Primer nombre"
+                value={nombre}
+                onChange={e => setNombre(e.target.value)}
+                className="h-12 rounded-2xl"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Segundo Nombre</Label>
+              <Input
+                placeholder="Segundo nombre"
+                value={secondName}
+                onChange={e => setSecondName(e.target.value)}
+                className="h-12 rounded-2xl"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Primer Apellido *</Label>
+              <Input
+                placeholder="Primer apellido"
+                value={firstSurname}
+                onChange={e => setFirstSurname(e.target.value)}
+                className="h-12 rounded-2xl"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Segundo Apellido</Label>
+              <Input
+                placeholder="Segundo apellido"
+                value={secondSurname}
+                onChange={e => setSecondSurname(e.target.value)}
+                className="h-12 rounded-2xl"
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Correo electrónico</Label>
+            <Label className="text-xs">Correo electrónico</Label>
             <Input
               type="email"
               placeholder="tu@correo.com"
@@ -99,8 +140,33 @@ function RegisterContent() {
             />
           </div>
 
+          <div className="grid grid-cols-[1fr_2fr] gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo Doc. *</Label>
+              <select
+                value={documentType}
+                onChange={e => setDocumentType(e.target.value)}
+                className="h-12 rounded-2xl border border-input bg-background px-3 text-sm w-full"
+              >
+                <option value="CC">C.C.</option>
+                <option value="CE">C.E.</option>
+                <option value="PP">Pasaporte</option>
+                <option value="TI">T.I.</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Número de Documento *</Label>
+              <Input
+                placeholder="Número de documento"
+                value={documentNumber}
+                onChange={e => setDocumentNumber(e.target.value)}
+                className="h-12 rounded-2xl"
+              />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
-            <Label>Contraseña</Label>
+            <Label className="text-xs">Contraseña</Label>
             <div className="relative">
               <Input
                 type={showPassword ? "text" : "password"}
@@ -134,7 +200,7 @@ function RegisterContent() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Confirmar contraseña</Label>
+            <Label className="text-xs">Confirmar contraseña</Label>
             <Input
               type={showPassword ? "text" : "password"}
               placeholder="Repite tu contraseña"
@@ -159,7 +225,7 @@ function RegisterContent() {
 
           <Button
             type="submit"
-            disabled={loading || !nombre || !email || !password || !confirm}
+            disabled={loading || !nombre || !firstSurname || !email || !password || !confirm || !documentNumber}
             className="w-full h-14 rounded-2xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-base shadow-xl shadow-kiri-emerald/30 mt-2"
           >
             {loading ? "Creando cuenta..." : "Crear Cuenta"}
