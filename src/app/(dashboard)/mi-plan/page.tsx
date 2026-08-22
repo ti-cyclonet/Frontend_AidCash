@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { usePlan } from "@/lib/plan-context"
 import {
   Check, Sparkles, Crown, ArrowRight, ExternalLink,
@@ -8,6 +9,16 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
 const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL || "https://www.cyclonet.com.co/kiri-finance"
+const AUTHORIZA_API_URL = process.env.NEXT_PUBLIC_AUTHORIZA_API_URL || "https://api.cyclonet.com.co/api"
+
+// Formatea un valor mensual en pesos colombianos: 29900 -> "$29.900"
+function formatCOP(value: number): string {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(value)
+}
 
 // PLUS exclusive benefits for the highlight section
 const PLUS_BENEFITS = [
@@ -21,6 +32,30 @@ const PLUS_BENEFITS = [
 
 export default function MiPlanPage() {
   const { plan, loading: planLoading } = usePlan()
+  const [plusPrice, setPlusPrice] = useState<number | null>(null)
+
+  // Obtiene el precio del paquete KIRI PLUS configurado en Authoriza
+  useEffect(() => {
+    let active = true
+    fetch(`${AUTHORIZA_API_URL}/packages/landing?application=Kiri`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((packages: Array<{ name?: string; displayName?: string; price?: number; isHighlighted?: boolean }>) => {
+        if (!active || !Array.isArray(packages)) return
+        // El plan PLUS es el destacado / el que contiene "plus" en su nombre
+        const plus =
+          packages.find((p) => (p.name || p.displayName || "").toLowerCase().includes("plus")) ||
+          packages.find((p) => p.isHighlighted)
+        if (plus && typeof plus.price === "number") {
+          setPlusPrice(plus.price)
+        }
+      })
+      .catch(() => {
+        // Si falla, se mantiene el fallback visual
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   if (planLoading) {
     return (
@@ -131,9 +166,11 @@ export default function MiPlanPage() {
                 Cambiar a KIRI PLUS
                 <ArrowRight className="w-4 h-4" />
               </Button>
-              <span className="text-sm text-muted-foreground">
-                $29.900 / mes
-              </span>
+              {plusPrice !== null && (
+                <span className="text-sm text-muted-foreground">
+                  {formatCOP(plusPrice)} / mes
+                </span>
+              )}
             </div>
           </div>
         </div>
