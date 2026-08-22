@@ -7,6 +7,7 @@ import { SmartAlertsProvider } from "@/components/providers/smart-alerts-provide
 import { NotificationInitializer } from "@/components/notifications/NotificationInitializer"
 import { DataSyncInitializer } from "@/components/providers/DataSyncInitializer"
 import { OfflineSyncProvider } from "@/components/providers/OfflineSyncProvider"
+import { PlanWelcomeModal } from "@/components/providers/PlanWelcomeModal"
 
 export default function DashboardLayout({
   children,
@@ -40,6 +41,7 @@ export default function DashboardLayout({
       <NotificationInitializer />
       <DataSyncInitializer />
       <OfflineSyncProvider />
+      <PlanWelcomeModal />
     </div>
   )
 }

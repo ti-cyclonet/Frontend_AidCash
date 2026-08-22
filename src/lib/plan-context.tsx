@@ -41,6 +41,8 @@ interface PlanContextValue {
   loading: boolean
   hasFeature: (featureName: string) => boolean
   refreshPlan: () => Promise<void>
+  welcomePackage: string | null
+  dismissWelcome: () => void
 }
 
 const PlanContext = createContext<PlanContextValue | null>(null)
@@ -72,11 +74,23 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     p2pLoans: false,
   }
 
+  const [welcomePackage, setWelcomePackage] = useState<string | null>(null)
+
   const fetchPlan = useCallback(async () => {
     if (!user) {
       setPlan(null)
       setLoading(false)
       return
+    }
+
+    // Check for pending plan-upgrade welcome notification
+    try {
+      const { data: welcomeData } = await api<{ pendingWelcome: string | null }>("/plan/welcome")
+      if (welcomeData?.pendingWelcome) {
+        setWelcomePackage(welcomeData.pendingWelcome)
+      }
+    } catch {
+      // ignore
     }
 
     try {
@@ -122,8 +136,10 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     await fetchPlan()
   }, [fetchPlan])
 
+  const dismissWelcome = useCallback(() => setWelcomePackage(null), [])
+
   return (
-    <PlanContext.Provider value={{ plan, loading, hasFeature, refreshPlan }}>
+    <PlanContext.Provider value={{ plan, loading, hasFeature, refreshPlan, welcomePackage, dismissWelcome }}>
       {children}
     </PlanContext.Provider>
   )
