@@ -181,7 +181,7 @@ const POCKETS = [
     bg: "bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/20",
     ringStroke: "stroke-blue-400", ringBg: "stroke-blue-100 dark:stroke-blue-900/40",
     badgeBg: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", illustration: "🎮" },
-  { key: "endeudamiento" as const, allocKey: "debtCapacityPct" as const, title: "Endeudamiento", emoji: "💪",
+  { key: "endeudamiento" as const, allocKey: "debtCapacityPct" as const, title: "Capacidad de endeudamiento", emoji: "💪",
     bg: "bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-violet-950/20",
     ringStroke: "stroke-purple-400", ringBg: "stroke-purple-100 dark:stroke-purple-900/40",
     badgeBg: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300", illustration: "💳" },
@@ -424,13 +424,16 @@ export function BilleteraTab() {
   const pocketValues: Record<string, number> = {
     ahorro: Math.round(realAllocation.savingsAmount),
     obligaciones: Math.round(realAllocation.obligationsAmount),
-    libre: Math.round(realAllocation.freeAmount),
+    // Gasto libre = libre + endeudamiento (todo lo que el usuario puede gastar)
+    libre: Math.round(realAllocation.freeAmount + realAllocation.debtCapAmount),
+    // Endeudamiento mantiene su valor como "capacidad máxima de endeudamiento"
     endeudamiento: Math.round(realAllocation.debtCapAmount),
   }
+  const totalDisponible = realAllocation.freeAmount + realAllocation.debtCapAmount
   const pocketPcts: Record<string, number> = {
     ahorro: Math.round(realAllocation.savingsPct),
     obligaciones: Math.min(100, Math.round(realAllocation.obligationsPct)),
-    libre: Math.round(realAllocation.freePct),
+    libre: Math.round(realAllocation.freePct + realAllocation.debtCapPct),
     endeudamiento: Math.round(realAllocation.debtCapPct),
   }
 

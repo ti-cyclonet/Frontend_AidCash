@@ -42,6 +42,7 @@ interface PlanContextValue {
   hasFeature: (featureName: string) => boolean
   refreshPlan: () => Promise<void>
   welcomePackage: string | null
+  welcomePlanPrice: number | null
   dismissWelcome: () => void
 }
 
@@ -75,6 +76,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }
 
   const [welcomePackage, setWelcomePackage] = useState<string | null>(null)
+  const [welcomePlanPrice, setWelcomePlanPrice] = useState<number | null>(null)
 
   const fetchPlan = useCallback(async () => {
     if (!user) {
@@ -85,9 +87,12 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
     // Check for pending plan-upgrade welcome notification
     try {
-      const { data: welcomeData } = await api<{ pendingWelcome: string | null }>("/plan/welcome")
+      const { data: welcomeData } = await api<{ pendingWelcome: string | null; planPrice: number | null }>("/plan/welcome")
       if (welcomeData?.pendingWelcome) {
         setWelcomePackage(welcomeData.pendingWelcome)
+        if (welcomeData.planPrice) {
+          setWelcomePlanPrice(welcomeData.planPrice)
+        }
       }
     } catch {
       // ignore
@@ -140,7 +145,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const dismissWelcome = useCallback(() => setWelcomePackage(null), [])
 
   return (
-    <PlanContext.Provider value={{ plan, loading, hasFeature, refreshPlan, welcomePackage, dismissWelcome }}>
+    <PlanContext.Provider value={{ plan, loading, hasFeature, refreshPlan, welcomePackage, welcomePlanPrice, dismissWelcome }}>
       {children}
     </PlanContext.Provider>
   )
