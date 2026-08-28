@@ -191,6 +191,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         bankEntityId: selectedBank?.id ?? null,
         acreedor: (selectedBank?.nombre ?? searchQuery) || "",
         diasPago: diasPago || "1",
+        frecuenciaPago,
         tipoDeuda: nombre.toLowerCase().includes('tarjeta') || nombre.toLowerCase().includes('visa') || nombre.toLowerCase().includes('mastercard')
           ? 'TARJETA_CREDITO'
           : 'PRESTAMO',

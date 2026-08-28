@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
-  Plus, CheckCircle2, Pencil, Trash2,
+  Plus, CheckCircle2, Pencil, Trash2, ReceiptText,
   AlertTriangle, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign, Users,
 } from "lucide-react"
 import { Debt, FixedExpense } from "@/lib/types"
@@ -25,7 +25,7 @@ import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
 import { userApi, WalletState, loansApi } from "@/lib/api-client"
-import { debtsApi, fixedExpensesApi } from "@/lib/api-client"
+import { debtsApi, fixedExpensesApi, impulseApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
 import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
@@ -68,7 +68,7 @@ export default function ObligacionesPage() {
     addDebt, updateDebt, deleteDebt,
     addFixedExpense, updateFixedExpense, deleteFixedExpense,
     markPaid, undoPayDebt, markFixedPaid, undoPayFixed,
-    extraIncomes,
+    extraIncomes, addImpulseExpense,
   } = useFinanceData()
   const { formatAmount, income, incomeFrequency } = useAppContext()
   const { user: authUser } = useAuth()
@@ -170,9 +170,50 @@ export default function ObligacionesPage() {
     })
   }, [])
 
+  // ── Sugerencia de vincular gasto fijo a categoría ─────────────────────────
+  const [categorySuggestion, setCategorySuggestion] = useState<{ fixedId: string; fixedName: string; suggestedCategory: string; monto: number } | null>(null)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      setCategorySuggestion(detail)
+    }
+    window.addEventListener('kiri:suggest-category-link', handler)
+    return () => window.removeEventListener('kiri:suggest-category-link', handler)
+  }, [])
+
+  const handleAcceptCategorySuggestion = async () => {
+    if (!categorySuggestion) return
+    const { fixedId, fixedName, suggestedCategory, monto } = categorySuggestion
+    // 1. Vincular el gasto fijo a la categoría en localStorage
+    try {
+      const raw = localStorage.getItem('kiri_budget_categories')
+      if (raw) {
+        const cats = JSON.parse(raw)
+        const updated = cats.map((c: any) => {
+          if (c.name === suggestedCategory) {
+            return { ...c, linkedFixedIds: [...(c.linkedFixedIds ?? []), fixedId] }
+          }
+          return c
+        })
+        localStorage.setItem('kiri_budget_categories', JSON.stringify(updated))
+      }
+    } catch { /* ignore */ }
+    // 2. Registrar el gasto en la categoría
+    await impulseApi.create({ nombre: `[${suggestedCategory}] ${fixedName} (gasto fijo)`, monto, categoria: 'otro' })
+    setCategorySuggestion(null)
+  }
+
   // ── Add modal ──────────────────────────────────────────────────────────────
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [addType, setAddType] = useState<ItemType>("deuda")
+
+  // ── Modal registrar gasto (desde Obligaciones) ─────────────────────────────
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false)
+  const [expNombre, setExpNombre] = useState("")
+  const [expMonto, setExpMonto] = useState("")
+  const [expSaving, setExpSaving] = useState(false)
+  const [expCategoria, setExpCategoria] = useState<string | null>(null)
   const [addDebtForm, setAddDebtForm] = useState<DebtForm>(emptyDebtForm)
   const [addFixedForm, setAddFixedForm] = useState<FixedForm>(emptyFixedForm)
   const [saving, setSaving] = useState(false)
@@ -448,20 +489,48 @@ export default function ObligacionesPage() {
         <div className="flex items-center gap-2">
           {/* Saldo en tiempo real con efecto */}
           <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" />
+          {/* Botón Registrar gasto — abre modal de presupuesto */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5 font-bold text-xs gap-1"
+            onClick={() => { setAddType("gasto_fijo"); setExpenseModalOpen(true) }}
+          >
+            <ReceiptText className="h-3.5 w-3.5" /> Registrar gasto
+          </Button>
           {(activeTab === "gastos_fijos" || activeTab === "deudas") && (
             <Button
-              size="icon"
-              className="rounded-2xl bg-cyclon-periwinkle shadow-lg shadow-cyclon-periwinkle/30"
+              size="sm"
+              className="rounded-xl bg-cyclon-periwinkle shadow-sm font-bold text-xs gap-1"
               onClick={() => {
                 setAddType(activeTab === "deudas" ? "deuda" : "gasto_fijo")
                 setIsAddOpen(true)
               }}
             >
-              <Plus className="h-6 w-6" />
+              <Plus className="h-4 w-4" /> {activeTab === "deudas" ? "Nueva deuda" : "Nuevo gasto fijo"}
             </Button>
           )}
         </div>
       </header>
+
+      {/* ── Sugerencia: vincular gasto fijo a categoría ── */}
+      {categorySuggestion && (
+        <Card className="border-2 border-kiri-emerald/30 bg-kiri-emerald/5 rounded-2xl animate-in fade-in slide-in-from-top-2">
+          <CardContent className="p-4 flex items-start gap-3">
+            <span className="text-lg shrink-0">🌱</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-kiri-emerald">Kiri sugiere vincular este gasto</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                &ldquo;{categorySuggestion.fixedName}&rdquo; parece pertenecer a la categoría <strong>{categorySuggestion.suggestedCategory}</strong>. ¿Deseas registrarlo ahí para que se contabilice en tu presupuesto?
+              </p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => setCategorySuggestion(null)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:bg-muted">No</button>
+              <button onClick={handleAcceptCategorySuggestion} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-kiri-emerald text-white hover:bg-kiri-emerald/90">Sí, vincular</button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Simulador de Escenarios ── */}
       {allocation && (
@@ -1096,13 +1165,6 @@ export default function ObligacionesPage() {
             <DialogDescription>Completa los datos del compromiso.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-2">
-              {(["deuda", "gasto_fijo"] as ItemType[]).map(t => (
-                <button key={t} onClick={() => setAddType(t)} className={cn("h-12 rounded-2xl font-bold text-sm border-2 transition-colors", addType === t ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground")}>
-                  {t === "deuda" ? "Deuda" : "Gasto Fijo"}
-                </button>
-              ))}
-            </div>
             {addType === "deuda" ? (
               <DebtRegistrationForm
                 loading={saving}
@@ -1208,6 +1270,112 @@ export default function ObligacionesPage() {
           <DialogFooter className="gap-2 pt-4">
             <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
             <Button variant="destructive" onClick={confirmDelete} className="rounded-xl font-bold px-8">Eliminar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ MODAL REGISTRAR GASTO (directo desde Obligaciones) ═══ */}
+      <Dialog open={expenseModalOpen} onOpenChange={v => { if (!v) { setExpenseModalOpen(false); setExpNombre(""); setExpMonto(""); setExpCategoria(null) } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ReceiptText className="h-5 w-5 text-kiri-emerald" />
+              Registrar gasto
+            </DialogTitle>
+            <DialogDescription>El gasto se registrará y descontará de tu presupuesto libre.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Descripción</Label>
+              <Input
+                placeholder="Ej: Mercado semanal, Uber, Netflix..."
+                value={expNombre}
+                onChange={e => setExpNombre(e.target.value)}
+                className="h-10 rounded-xl"
+                autoFocus
+              />
+              {/* Detección automática de gasto hormiga */}
+              {expNombre && (() => {
+                const hormigaKeywords = ['café', 'cafe', 'starbucks', 'uber', 'taxi', 'cerveza', 'bar', 'snack', 'helado', 'domicilio', 'rappi', 'pizza', 'hamburguesa', 'cine']
+                const isHormiga = hormigaKeywords.some(k => expNombre.toLowerCase().includes(k))
+                if (isHormiga) return (
+                  <p className="text-[9px] text-cyclon-pink flex items-center gap-1">🐜 Kiri detectó que esto es un gasto hormiga</p>
+                )
+                return null
+              })()}
+              {/* Detección automática de categoría */}
+              {expNombre && (() => {
+                try {
+                  const raw = localStorage.getItem('kiri_budget_categories')
+                  if (!raw) return null
+                  const cats = JSON.parse(raw) as { name: string }[]
+                  const { detectBudgetCategory } = require('@/hooks/use-budget-categories')
+                  const detected = detectBudgetCategory(expNombre, cats)
+                  if (detected) return (
+                    <p className="text-[9px] text-kiri-emerald flex items-center gap-1">📁 Categoría sugerida: {detected}</p>
+                  )
+                } catch {}
+                return null
+              })()}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Monto</Label>
+              <MoneyInput value={expMonto} onChange={v => setExpMonto(v)} className="h-12 text-lg font-bold rounded-xl" placeholder="0" />
+            </div>
+            {/* Selector de categoría */}
+            {(() => {
+              try {
+                const raw = localStorage.getItem('kiri_budget_categories')
+                if (!raw) return null
+                const cats = JSON.parse(raw) as { id: string; name: string; color: string; icon: string }[]
+                if (cats.length === 0) return null
+                return (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold">Categoría (opcional)</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      {cats.slice(0, 6).map(c => (
+                        <button key={c.id} type="button"
+                          onClick={() => setExpCategoria(expCategoria === c.name ? null : c.name)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors",
+                            expCategoria === c.name
+                              ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald"
+                              : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+                          )}
+                          style={{ borderColor: expCategoria === c.name ? undefined : c.color + '40' }}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              } catch { return null }
+            })()}
+            {/* Selector de tarjeta de crédito */}
+            <CreditCardSelector value={null} onChange={() => {}} />
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={async () => {
+                if (!expNombre || !expMonto || Number(expMonto) <= 0) return
+                setExpSaving(true)
+                const hormigaKeywords = ['café', 'cafe', 'starbucks', 'uber', 'taxi', 'cerveza', 'bar', 'snack', 'helado', 'domicilio', 'rappi', 'pizza', 'hamburguesa', 'cine']
+                const isHormiga = hormigaKeywords.some(k => expNombre.toLowerCase().includes(k))
+                const nombre = isHormiga ? `🐜 ${expNombre}` : expNombre
+                await addImpulseExpense({ nombre, monto: Number(expMonto), categoria: (expCategoria || 'otro') as any })
+                setExpSaving(false)
+                setExpenseModalOpen(false)
+                setExpNombre(""); setExpMonto(""); setExpCategoria(null)
+                const { data } = await userApi.getWallet()
+                if (data) setWallet(data.wallet)
+              }}
+              disabled={expSaving || !expNombre || !expMonto || Number(expMonto) <= 0}
+              className="bg-kiri-emerald text-white font-bold rounded-xl px-6"
+            >
+              {expSaving ? "Guardando..." : "Registrar"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

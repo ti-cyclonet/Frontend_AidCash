@@ -241,6 +241,28 @@ export function useFinanceData() {
         estado: (backendDebt.estado as 'activa' | 'saldada' | 'vencida') ?? d.estado,
       } : d
     ))
+
+    // ═══ AUTO-VINCULAR A CATEGORÍA "DEUDAS": Si existe esa categoría, registrar el pago ═══
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem('kiri_budget_categories')
+        if (raw) {
+          const cats = JSON.parse(raw) as { id: string; name: string; linkedFixedIds?: string[] }[]
+          const debtCat = cats.find(c => c.name.toLowerCase() === 'deudas' || c.name.toLowerCase() === 'deuda')
+          if (debtCat) {
+            // Solo registrar si el pago cubrió la cuota (pagadoEstePeriodo = true)
+            if (backendDebt.pagadoEstePeriodo) {
+              const { impulseApi: iApi } = await import('@/lib/api-client')
+              await iApi.create({
+                nombre: `[${debtCat.name}] ${debt.nombre} (pago deuda)`,
+                monto: realPaid,
+                categoria: 'otro',
+              })
+            }
+          }
+        }
+      }
+    } catch { /* No bloquear */ }
   }
 
   const undoPayDebt = async (debtId: string) => {
@@ -314,6 +336,30 @@ export function useFinanceData() {
         montoPagadoEstePeriodo: be.montoPagadoEstePeriodo != null ? Number(be.montoPagadoEstePeriodo) : null,
       } as any : f))
     }
+
+    // ═══ AUTO-REGISTRO EN CATEGORÍA: Si el gasto fijo está vinculado a una categoría,
+    // NO registrar impulseExpense — el PresupuestoTab ya lo contabiliza via linkedFixedIds.
+    // Solo sugerir vinculación si NO está vinculado pero coincide con una categoría. ═══
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem('kiri_budget_categories')
+        if (raw) {
+          const cats = JSON.parse(raw) as { id: string; name: string; linkedFixedIds?: string[] }[]
+          const linkedCat = cats.find(c => c.linkedFixedIds?.includes(id))
+          if (!linkedCat) {
+            // No está vinculado — sugerir categoría si coincide con alguna por keywords
+            const { detectBudgetCategory } = await import('@/hooks/use-budget-categories')
+            const suggested = detectBudgetCategory(fe.nombre, cats as any)
+            if (suggested) {
+              // Emitir evento para que el UI muestre sugerencia al usuario
+              window.dispatchEvent(new CustomEvent('kiri:suggest-category-link', {
+                detail: { fixedId: id, fixedName: fe.nombre, suggestedCategory: suggested, monto: realPaid }
+              }))
+            }
+          }
+        }
+      }
+    } catch { /* No bloquear el flujo si falla la vinculación */ }
   }
 
   const undoPayFixed = async (id: string) => {

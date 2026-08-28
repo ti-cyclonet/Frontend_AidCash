@@ -26,9 +26,10 @@ import { ImpulseCategory } from "@/lib/types"
 import Link from "next/link"
 import { TopConsumosSection } from "./TopConsumosSection"
 import { DesgloseGastosSection } from "./DesgloseGastosSection"
+import { BudgetRadialChart, CategoryDetail } from "@/components/presupuesto/BudgetRadialChart"
 
 // --- Types ---
-interface BudgetCategory { id: string; name: string; budget: number; spent: number; color: string; icon: string }
+interface BudgetCategory { id: string; name: string; budget: number; spent: number; color: string; icon: string; linkedFixedIds?: string[] }
 
 // --- Icons (todos Lucide, sin emojis) ---
 const ICONS = [
@@ -98,35 +99,49 @@ function mapToImpulseCategory(budgetCatName: string): ImpulseCategory {
 export function PresupuestoTab() {
   const { formatAmount, incomeFrequency } = useAppContext()
   const { allocation } = usePeriodBudget()
-  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense } = useFinanceData()
+  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, fixedExpenses } = useFinanceData()
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
 
-  // El gasto libre real es directamente el bolsillo 'libre' del wallet
-  // Ese valor ya fue calculado por el backend al registrar ingresos
-  const realFreeAmount = wallet.libre
+  // El gasto libre real es libre + endeudamiento (todo lo que el usuario puede gastar)
+  const realFreeAmount = wallet.libre + wallet.endeudamiento
 
   const [categories, setCategories] = useState<BudgetCategory[]>(load)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [radialView, setRadialView] = useState<null | 'all' | 'category'>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showSugg, setShowSugg] = useState(false)
   const [form, setForm] = useState({ name: "", budget: "", icon: "more", color: COLORS[0] })
+  const [linkedFixed, setLinkedFixed] = useState<string[]>([])
 
-  // Conectar gastos hormiga a categorias (incluye matching por nombre de categoria personalizada)
+  // Conectar gastos a categorias: impulseExpenses por keyword/tag + gastos fijos vinculados pagados
   const catsWithSpent = categories.map(cat => {
     const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === cat.name.toLowerCase())
-    // Keywords: las predefinidas + el nombre de la categoria como keyword adicional
     const keys = [...(sug?.keys ?? []), cat.name.toLowerCase()]
-    // Tag pattern: [NombreCategoria] al inicio del nombre del gasto
     const tagPattern = `[${cat.name.toLowerCase()}]`
-    // Buscar gastos que coincidan con alguna keyword, nombre de la categoría, o tag
-    const matched = impulseExpenses.filter(e => {
+
+    // Gastos hormiga/impulse que coincidan por keyword o tag
+    const matchedImpulse = impulseExpenses.filter(e => {
       const expName = e.nombre.toLowerCase()
       return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
     })
-    return { ...cat, spent: matched.reduce((a, e) => a + e.monto, 0), expenses: matched }
+
+    // Gastos fijos vinculados que ya fueron pagados este periodo
+    const linkedFixedPaid = (cat.linkedFixedIds ?? [])
+      .map(id => fixedExpenses.find(f => f.id === id))
+      .filter((f): f is NonNullable<typeof f> => !!f && f.pagadoEstePeriodo)
+
+    const spentFromImpulse = matchedImpulse.reduce((a, e) => a + e.monto, 0)
+    const spentFromFixed = linkedFixedPaid.reduce((a, f) => a + f.monto, 0)
+
+    return {
+      ...cat,
+      spent: spentFromImpulse + spentFromFixed,
+      expenses: matchedImpulse,
+      linkedFixedPaid,
+    }
   })
 
   const totalBudget = catsWithSpent.reduce((a, c) => a + c.budget, 0)
@@ -168,12 +183,12 @@ export function PresupuestoTab() {
   const hormigaIsOver = totalHormiga > realFreeAmount * 0.5
 
   const persist = (cats: BudgetCategory[]) => { setCategories(cats); save(cats) }
-  const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length] }); setShowSugg(false); setFormOpen(true) }
-  const openEdit = (cat: BudgetCategory) => { setEditingId(cat.id); setForm({ name: cat.name, budget: String(cat.budget), icon: cat.icon, color: cat.color }); setFormOpen(true) }
+  const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length] }); setLinkedFixed([]); setShowSugg(false); setFormOpen(true) }
+  const openEdit = (cat: BudgetCategory) => { setEditingId(cat.id); setForm({ name: cat.name, budget: String(cat.budget), icon: cat.icon, color: cat.color }); setLinkedFixed(cat.linkedFixedIds ?? []); setFormOpen(true) }
   const handleSave = () => {
     if (!form.name || !form.budget) return
-    if (editingId) persist(categories.map(c => c.id === editingId ? { ...c, name: form.name, budget: Number(form.budget), icon: form.icon, color: form.color } : c))
-    else persist([...categories, { id: Date.now().toString(), name: form.name, budget: Number(form.budget), spent: 0, icon: form.icon, color: form.color }])
+    if (editingId) persist(categories.map(c => c.id === editingId ? { ...c, name: form.name, budget: Number(form.budget), icon: form.icon, color: form.color, linkedFixedIds: linkedFixed } : c))
+    else persist([...categories, { id: Date.now().toString(), name: form.name, budget: Number(form.budget), spent: 0, icon: form.icon, color: form.color, linkedFixedIds: linkedFixed }])
     setFormOpen(false)
   }
   const handleDelete = () => { if (editingId) persist(categories.filter(c => c.id !== editingId)); setFormOpen(false); setSelectedId(null) }
@@ -312,11 +327,8 @@ export function PresupuestoTab() {
           <p className="text-[10px] text-muted-foreground">Controla tus límites, entiende tus hábitos y encuentra oportunidades para ahorrar.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => openExpenseModal()} size="sm" variant="outline" className="font-bold rounded-xl text-xs gap-1 border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5">
-            <Receipt className="h-3.5 w-3.5" /> Registrar gasto
-          </Button>
           <Button onClick={openAdd} size="sm" className="bg-kiri-emerald text-white font-bold rounded-xl text-xs gap-1">
-            <Plus className="h-3.5 w-3.5" /> Agregar
+            <Plus className="h-3.5 w-3.5" /> Agregar categoría
           </Button>
         </div>
       </div>
@@ -329,115 +341,101 @@ export function PresupuestoTab() {
         <MC label="Disponible restante" value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={`${realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0}% sin gastar`} />
       </div>
 
-      {/* --- VISTA GENERAL --- */}
-      {!selectedCat && (
-        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
-          <Card className="border-none bg-card shadow-sm rounded-2xl">
-            <CardContent className="p-5 flex flex-col items-center">
-              <h3 className="text-sm font-bold self-start mb-3">Distribucion actual</h3>
-              <div className="relative w-[200px] h-[200px]">
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" className="text-muted/10" strokeWidth="12" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
-                  {catsWithSpent.map((cat, i) => {
-                    const pct = totalBudget > 0 ? cat.budget / totalBudget : 0
-                    const offset = catsWithSpent.slice(0, i).reduce((a, c) => a + (totalBudget > 0 ? c.budget / totalBudget : 0), 0)
-                    return (
-                      <motion.circle key={cat.id} cx="50" cy="50" r="42" fill="none" stroke={cat.color} strokeWidth="12" strokeLinecap="round"
-                        strokeDasharray={`${pct * circ * 0.94} ${circ}`} strokeDashoffset={-offset * circ}
-                        style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
-                        className="cursor-pointer hover:opacity-80" onClick={() => setSelectedId(cat.id)}
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }} />
-                    )
-                  })}
-                </svg>
-                <div className="absolute inset-0 m-auto w-[95px] h-[95px] rounded-full bg-card flex flex-col items-center justify-center">
-                  <span className="text-[7px] text-muted-foreground">Total gastado</span>
-                  <span className="text-sm font-black">{formatAmount(totalSpent)}</span>
-                  <span className="text-[9px] font-bold text-amber-500">{totalPct}%</span>
-                  <span className="text-[7px] text-muted-foreground">del presupuestado</span>
-                </div>
-              </div>
-              <p className="text-[8px] text-muted-foreground mt-2 text-center">Toca una categoria para ver detalles</p>
-            </CardContent>
-          </Card>
+      {/* ═══ DISTRIBUCIÓN ACTUAL (ancho completo) + DETALLE DEBAJO ═══ */}
+      <BudgetRadialChart
+        categories={catsWithSpent.map(c => ({
+          id: c.id, name: c.name, spent: c.spent, limit: c.budget,
+          color: c.color, icon: c.icon,
+          items: (c.expenses ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
+            const cleanName = e.nombre.replace(/^\[.*?\]\s*/, '').replace(/^🐜\s*/, '')
+            const existing = acc.find(a => a.name === cleanName)
+            if (existing) existing.amount += e.monto
+            else acc.push({ emoji: '', name: cleanName, amount: e.monto })
+            return acc
+          }, []).sort((a: any, b: any) => b.amount - a.amount),
+        }))}
+        onEdit={(catId) => { const cat = catsWithSpent.find(c => c.id === catId); if (cat) openEdit(cat) }}
+        incomeFrequency={incomeFrequency}
+        onSelectionChange={(sel) => {
+          if (!sel) setSelectedId(null)
+          else if (sel.type === 'category') setSelectedId(catsWithSpent[sel.index]?.id ?? null)
+          else if (sel.type === 'all') setSelectedId('__all__')
+        }}
+      />
 
-          {/* Tabla */}
-          <Card className="border-none bg-card shadow-sm rounded-2xl">
-            <CardContent className="p-5">
-              <div className="flex items-baseline justify-between mb-0.5">
-                <h3 className="text-sm font-bold">Tus categorías</h3>
-              </div>
-              <p className="text-[9px] text-muted-foreground mb-3">Edita los límites máximos de gasto por categoría.</p>
-              {/* Header de columnas */}
-              <div className="flex items-center gap-3 mb-2 px-2">
-                <div className="w-9 shrink-0" />
-                <div className="min-w-0 w-[110px] shrink-0">
-                  <span className="text-[9px] text-muted-foreground font-medium">Categoría</span>
-                </div>
-                <span className="text-[9px] text-muted-foreground font-medium w-[80px] text-right shrink-0">Presupuesto</span>
-                <span className="text-[9px] text-muted-foreground font-medium w-[80px] text-right shrink-0">Gastado</span>
-                <div className="w-7 shrink-0" />
-              </div>
-              <div className="space-y-3">
-                {catsWithSpent.map(cat => {
-                  const pct = cat.budget > 0 ? Math.round((cat.spent / cat.budget) * 100) : 0
-                  const over = cat.spent > cat.budget
-                  return (
-                    <div key={cat.id} onClick={() => setSelectedId(cat.id)} className="group cursor-pointer transition-colors rounded-xl hover:bg-muted/10 p-2 -mx-2">
-                      <div className="flex items-center gap-3">
-                        {/* Icono */}
-                        <div className="h-9 w-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ backgroundColor: cat.color }}>
-                          <span className="scale-[0.6]">{getIcon(cat.icon)}</span>
-                        </div>
-                        {/* Nombre + % del total */}
-                        <div className="min-w-0 w-[110px] shrink-0">
-                          <p className="text-xs font-bold truncate">{cat.name}</p>
-                          <p className="text-[9px] text-muted-foreground">{totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0}% del total</p>
-                        </div>
-                        {/* Presupuesto */}
-                        <span className="text-xs font-bold shrink-0 w-[80px] text-right">{formatAmount(cat.budget)}</span>
-                        {/* Gastado */}
-                        <span className={cn("text-xs font-bold shrink-0 w-[80px] text-right", over && "text-red-500")}>{formatAmount(cat.spent)}</span>
-                        {/* Edit icon */}
-                        <button
-                          onClick={e => { e.stopPropagation(); openEdit(cat) }}
-                          className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        {/* Delete icon */}
-                        <button
-                          onClick={e => { e.stopPropagation(); persist(categories.filter(c => c.id !== cat.id)) }}
-                          className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+      {/* Lista de categorías — aparece al clic en centro */}
+      {selectedId === '__all__' && catsWithSpent.length > 0 && (
+        <Card className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <CardContent className="p-5 space-y-3">
+            <h3 className="text-sm font-bold">Tus categorías</h3>
+            <p className="text-[9px] text-muted-foreground">Edita los límites máximos de gasto por categoría.</p>
+            <div className="space-y-3">
+              {catsWithSpent.map(cat => {
+                const pct = cat.budget > 0 ? Math.round((cat.spent / cat.budget) * 100) : 0
+                const over = cat.spent > cat.budget
+                return (
+                  <div key={cat.id} className="space-y-1.5">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ backgroundColor: cat.color }}>
+                        <span className="scale-[0.6]">{getIcon(cat.icon)}</span>
                       </div>
-                      {/* Barra de progreso + porcentaje */}
-                      <div className="flex items-center gap-2 mt-1.5 pl-12">
-                        <div className="flex-1 h-2 rounded-full bg-muted/20 overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: over ? "#ef4444" : cat.color }}
-                          />
-                        </div>
-                        <span className={cn("text-[10px] font-bold w-[35px] text-right", over ? "text-red-500" : "text-muted-foreground")}>{pct}%</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">{cat.name}</p>
+                        <p className="text-[9px] text-muted-foreground">{totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0}% del total</p>
                       </div>
+                      <span className="text-xs font-bold shrink-0">{formatAmount(cat.budget)}</span>
+                      <span className={cn("text-xs font-bold shrink-0", over && "text-red-500")}>{formatAmount(cat.spent)}</span>
+                      <button onClick={() => openEdit(cat)} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => persist(categories.filter(c => c.id !== cat.id))} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  )
-                })}
+                    <div className="flex items-center gap-2 pl-12">
+                      <div className="flex-1 h-2 rounded-full bg-muted/20 overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: over ? "#ef4444" : cat.color }} />
+                      </div>
+                      <span className={cn("text-[10px] font-bold w-[35px] text-right", over ? "text-red-500" : "text-muted-foreground")}>{pct}%</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {catsWithSpent.length > 0 && (
+              <div className="flex justify-between pt-3 border-t border-border text-[10px]">
+                <span>Total asignado <strong>{formatAmount(totalBudget)}</strong></span>
+                <span>Total gastado <strong>{formatAmount(totalSpent)}</strong></span>
+                <span className="font-bold">{totalPct}%</span>
               </div>
-              {catsWithSpent.length > 0 && (
-                <div className="flex justify-between mt-4 pt-3 border-t border-border text-[10px]">
-                  <span>Total asignado <strong>{formatAmount(totalBudget)}</strong></span>
-                  <span>Total gastado <strong>{formatAmount(totalSpent)}</strong></span>
-                  <span className="font-bold">{totalPct}%</span>
-                </div>
-              )}
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detalle de categoría seleccionada — debajo de la gráfica */}
+      {selectedId && selectedId !== '__all__' && (() => {
+        const cat = catsWithSpent.find(c => c.id === selectedId)
+        if (!cat) return null
+        const ratio = cat.budget > 0 ? cat.spent / cat.budget : 0
+        return (
+          <Card className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <CardContent className="p-5">
+              <CategoryDetail
+                cat={{ ...cat, limit: cat.budget, ratio, items: (cat.expenses ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
+                  const cleanName = e.nombre.replace(/^\[.*?\]\s*/, '').replace(/^🐜\s*/, '')
+                  const existing = acc.find(a => a.name === cleanName)
+                  if (existing) existing.amount += e.monto
+                  else acc.push({ emoji: '', name: cleanName, amount: e.monto })
+                  return acc
+                }, []).sort((a: any, b: any) => b.amount - a.amount) }}
+                onEdit={() => openEdit(cat)}
+                frequency={incomeFrequency}
+              />
             </CardContent>
           </Card>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ═══ BOTÓN GASTOS HORMIGA (debajo de categorías) ═══ */}
       {!selectedCat && (
@@ -608,138 +606,6 @@ export function PresupuestoTab() {
         </DialogContent>
       </Dialog>
 
-      {/* --- VISTA DETALLE --- */}
-      {selectedCat && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-          <button onClick={() => setSelectedId(null)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-3.5 w-3.5" /> Volver a distribucion
-          </button>
-          <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-4">
-            {/* Sidebar mini */}
-            <div className="space-y-1">
-              {catsWithSpent.map(cat => {
-                const pct = cat.budget > 0 ? Math.round((cat.spent / cat.budget) * 100) : 0
-                return (
-                  <button key={cat.id} onClick={() => setSelectedId(cat.id)}
-                    className={cn("w-full flex items-center gap-2 p-2 rounded-xl text-left transition-colors", cat.id === selectedId ? "bg-muted/30 ring-1 ring-border" : "hover:bg-muted/10")}>
-                    <div className="h-6 w-6 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: cat.color }}>
-                      <span className="scale-[0.5]">{getIcon(cat.icon)}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold truncate">{cat.name}</p>
-                      <p className="text-[8px] text-muted-foreground">{formatAmount(cat.spent)} / {formatAmount(cat.budget)}</p>
-                    </div>
-                    <span className="text-[9px] font-bold">{pct}%</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Panel */}
-            <Card className="border-none bg-card shadow-sm rounded-2xl">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: selectedCat.color }}>{getIcon(selectedCat.icon)}</div>
-                    <div><h2 className="text-lg font-black">{selectedCat.name}</h2><p className="text-[10px] text-muted-foreground">{totalBudget > 0 ? Math.round((selectedCat.budget / totalBudget) * 100) : 0}% del presupuesto total</p></div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={() => openExpenseModal(selectedCat.name)} className="bg-kiri-emerald text-white font-bold rounded-xl text-xs gap-1">
-                      <Receipt className="h-3 w-3" /> Registrar
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => openEdit(selectedCat)} className="rounded-xl text-xs gap-1"><Pencil className="h-3 w-3" /> Editar</Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-[160px_1fr] gap-6 items-center">
-                  {/* Donut progreso circular */}
-                  <div className="relative w-[160px] h-[160px] mx-auto">
-                    <svg viewBox="0 0 100 100" className="w-full h-full">
-                      <circle cx="50" cy="50" r="42" fill="none" stroke={selectedCat.color} strokeOpacity={0.15} strokeWidth="10" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
-                      <motion.circle cx="50" cy="50" r="42" fill="none"
-                        stroke={selectedCat.spent > selectedCat.budget ? "#ef4444" : selectedCat.color}
-                        strokeWidth="10" strokeLinecap="round"
-                        style={{ transform: "rotate(-90deg)", transformOrigin: "center" }}
-                        initial={{ strokeDasharray: `0 ${circ}` }}
-                        animate={{ strokeDasharray: `${Math.min(selectedCat.budget > 0 ? selectedCat.spent / selectedCat.budget : 0, 1) * circ} ${circ}` }}
-                        transition={{ duration: 0.8, ease: "easeOut" }} />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-black">{selectedCat.budget > 0 ? Math.round((selectedCat.spent / selectedCat.budget) * 100) : 0}%</span>
-                      <span className="text-[8px] text-muted-foreground">del presupuesto</span>
-                      <span className="text-[8px] text-muted-foreground">utilizado</span>
-                      <span className={cn("text-[8px] font-bold mt-0.5", selectedCat.spent > selectedCat.budget ? "text-red-500" : "text-kiri-emerald")}>
-                        {selectedCat.spent > selectedCat.budget ? "Excedido" : "Dentro del presupuesto"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Info */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between py-2 border-b border-border/50"><span className="text-xs text-muted-foreground">Presupuesto asignado</span><span className="text-sm font-black">{formatAmount(selectedCat.budget)}</span></div>
-                    <div className="flex justify-between py-2 border-b border-border/50"><span className="text-xs text-muted-foreground">Gastado</span><span className={cn("text-sm font-black", selectedCat.spent > selectedCat.budget && "text-red-500")}>{formatAmount(selectedCat.spent)}</span></div>
-                    <div className="flex justify-between py-2"><span className="text-xs text-muted-foreground">Disponible</span><span className={cn("text-sm font-black", selectedCat.spent > selectedCat.budget ? "text-red-500" : "text-kiri-emerald")}>{formatAmount(Math.max(0, selectedCat.budget - selectedCat.spent))}</span></div>
-                  </div>
-                </div>
-
-                {/* Consejo Kiri específico de esta categoría — siempre visible */}
-                {(() => {
-                  const catInsight = getCategoryInsight(selectedCat.name, selectedCat.budget, selectedCat.spent, incomeFrequency)
-                  return (
-                    <div
-                      className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border",
-                        catInsight.severity === 'critical' && "bg-red-500/5 border-red-500/20",
-                        catInsight.severity === 'warning' && "bg-amber-500/5 border-amber-500/20",
-                        catInsight.severity === 'success' && "bg-emerald-500/5 border-emerald-500/20",
-                        catInsight.severity === 'info' && "bg-emerald-500/5 border-emerald-500/20",
-                      )}
-                    >
-                      <MapPin className={cn(
-                        "h-4 w-4 shrink-0",
-                        catInsight.severity === 'critical' && "text-red-500",
-                        catInsight.severity === 'warning' && "text-amber-500",
-                        catInsight.severity === 'success' && "text-emerald-500",
-                        catInsight.severity === 'info' && "text-emerald-500",
-                      )} />
-                      <p className="text-[11px] text-muted-foreground flex-1">
-                        <span className="font-bold text-foreground">Consejo Kiri: </span>
-                        {catInsight.message}
-                      </p>
-                    </div>
-                  )
-                })()}
-
-                {/* Historial de gastos de esta categoria */}
-                {selectedCat.expenses.length > 0 && (
-                  <div className="pt-3 border-t border-border">
-                    <h4 className="text-xs font-bold mb-2">Historial de gasto - {selectedCat.name}</h4>
-                    <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
-                      {selectedCat.expenses.map((e, i) => (
-                        <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-muted/10">
-                          <span className="text-[10px] truncate flex-1">{e.nombre}</span>
-                          <span className="text-[10px] font-bold shrink-0">{formatAmount(e.monto)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ═══ DESGLOSE DE GASTOS — Vista Detallada ═══ */}
-                {selectedCat.expenses.length > 0 && (
-                  <DesgloseGastosSection
-                    expenses={selectedCat.expenses}
-                    categoryName={selectedCat.name}
-                    categoryColor={selectedCat.color}
-                    totalSpent={selectedCat.spent}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </motion.div>
-      )}
-
       {/* --- MODAL CREAR/EDITAR --- */}
       <Dialog open={formOpen} onOpenChange={v => { setFormOpen(v); if (!v) setShowSugg(false) }}>
         <DialogContent className="sm:max-w-md">
@@ -831,6 +697,59 @@ export function PresupuestoTab() {
                 ))}
               </div>
             </div>
+
+            {/* Vincular gastos fijos relacionados */}
+            {fixedExpenses.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Vincular gastos fijos (opcional)</Label>
+                <p className="text-[9px] text-muted-foreground">Al pagar estos gastos fijos, se contarán como gasto de esta categoría.</p>
+                <div className="max-h-[120px] overflow-y-auto space-y-1.5 rounded-xl border border-muted p-2">
+                  {fixedExpenses
+                    .filter(f => {
+                      // Sugerir los que coinciden con el nombre de la categoría
+                      if (!form.name) return true
+                      const lower = form.name.toLowerCase()
+                      const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === lower)
+                      const keys = [...(sug?.keys ?? []), lower]
+                      return keys.some(k => f.nombre.toLowerCase().includes(k)) || f.nombre.toLowerCase().includes(lower) || true
+                    })
+                    .map(f => {
+                      const isLinked = linkedFixed.includes(f.id)
+                      // Check if already linked to another category
+                      const linkedElsewhere = categories.find(c => c.id !== editingId && c.linkedFixedIds?.includes(f.id))
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          disabled={!!linkedElsewhere}
+                          onClick={() => {
+                            if (isLinked) setLinkedFixed(prev => prev.filter(id => id !== f.id))
+                            else setLinkedFixed(prev => [...prev, f.id])
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
+                            isLinked ? "bg-kiri-emerald/10 border border-kiri-emerald/30" : "hover:bg-muted/30",
+                            linkedElsewhere && "opacity-40 cursor-not-allowed"
+                          )}
+                        >
+                          <div className={cn(
+                            "h-4 w-4 rounded border-2 flex items-center justify-center shrink-0",
+                            isLinked ? "bg-kiri-emerald border-kiri-emerald" : "border-muted-foreground/30"
+                          )}>
+                            {isLinked && <span className="text-white text-[8px]">✓</span>}
+                          </div>
+                          <span className="text-[10px] font-medium truncate flex-1">{f.nombre}</span>
+                          <span className="text-[9px] text-muted-foreground shrink-0">{formatAmount(f.monto)}</span>
+                          {linkedElsewhere && <span className="text-[8px] text-muted-foreground">({linkedElsewhere.name})</span>}
+                        </button>
+                      )
+                    })}
+                </div>
+                {linkedFixed.length > 0 && (
+                  <p className="text-[9px] text-kiri-emerald font-bold">{linkedFixed.length} gasto{linkedFixed.length > 1 ? 's' : ''} fijo{linkedFixed.length > 1 ? 's' : ''} vinculado{linkedFixed.length > 1 ? 's' : ''}</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             {editingId && <Button variant="destructive" size="sm" onClick={handleDelete} className="mr-auto rounded-xl text-xs">Eliminar</Button>}

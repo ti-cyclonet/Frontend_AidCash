@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import {
   Wallet, ReceiptText, PieChart,
-  ArrowRight, Sparkles, X, ChevronLeft,
+  ArrowRight, Sparkles, X, ChevronLeft, Info, ShieldCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -19,6 +19,7 @@ interface WelcomeOnboardingProps {
 const steps = [
   {
     id: 1,
+    label: "Tu ingreso",
     title: "¡Bienvenido a",
     titleHighlight: "Kiri Finance!",
     description: "Tu aliado para tomar el control de tus finanzas y hacer florecer tu jardín financiero.",
@@ -32,6 +33,7 @@ const steps = [
   },
   {
     id: 2,
+    label: "Tus metas",
     title: "Registra tus",
     titleHighlight: "Obligaciones",
     description: "Lleva el control de tus pagos pendientes y compromisos.",
@@ -41,6 +43,7 @@ const steps = [
   },
   {
     id: 3,
+    label: "Tus deudas",
     title: "Crea tu",
     titleHighlight: "Presupuesto\ny Categorías",
     description: "Divide tu dinero en categorías y establece límites de gasto.",
@@ -54,7 +57,7 @@ const steps = [
 
 export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
   const [currentStep, setCurrentStep] = useState(0)
-  const { formatAmount } = useAppContext()
+  const { formatAmount, income } = useAppContext()
 
   const step = steps[currentStep]
   const isLast = currentStep === steps.length - 1
@@ -72,6 +75,9 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
     if (!isFirst) setCurrentStep(s => s - 1)
   }
 
+  // Sueldo a mostrar: si el usuario ya registró su ingreso, lo usa; si no, muestra ejemplo
+  const displayIncome = income > 0 ? income : 3750000
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -83,31 +89,39 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="relative w-full max-w-lg bg-[#0a1a14] border border-emerald-900/30 rounded-3xl overflow-hidden shadow-2xl shadow-emerald-950/50"
+        className="relative w-full max-w-3xl bg-white dark:bg-[#0f1f18] border border-gray-200 dark:border-emerald-900/30 rounded-3xl overflow-hidden shadow-2xl"
       >
         {/* Close button */}
         <button
           onClick={onComplete}
-          className="absolute top-4 right-4 z-10 h-8 w-8 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+          className="absolute top-4 right-4 z-10 h-8 w-8 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
 
-        {/* Progress bar */}
+        {/* Progress bar with labels */}
         <div className="px-6 pt-5">
           <div className="flex items-center gap-2">
-            {steps.map((_, i) => (
+            {steps.map((s, i) => (
               <div key={i} className="flex items-center gap-2 flex-1">
-                <div className={cn(
-                  "h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all",
-                  i <= currentStep
-                    ? "bg-emerald-500 text-white"
-                    : "bg-white/10 text-muted-foreground"
-                )}>
-                  {i + 1}
+                <div className="flex items-center gap-1.5">
+                  <div className={cn(
+                    "h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all",
+                    i <= currentStep
+                      ? "bg-emerald-500 text-white"
+                      : "bg-gray-200 dark:bg-white/10 text-gray-500 dark:text-muted-foreground"
+                  )}>
+                    {i + 1}
+                  </div>
+                  <span className={cn(
+                    "text-[11px] font-medium hidden sm:inline",
+                    i <= currentStep ? "text-gray-900 dark:text-white" : "text-gray-400 dark:text-muted-foreground"
+                  )}>
+                    {s.label}
+                  </span>
                 </div>
                 {i < steps.length - 1 && (
-                  <div className="flex-1 h-0.5 rounded-full bg-white/10 overflow-hidden">
+                  <div className="flex-1 h-0.5 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 transition-all duration-500"
                       style={{ width: i < currentStep ? '100%' : '0%' }}
@@ -133,22 +147,37 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
               {/* Step 1: Welcome + Sueldo Real */}
               {currentStep === 0 && (
                 <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {/* Left: text */}
-                  <div className="flex flex-col justify-center space-y-3">
-                    <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-                      <span className="text-3xl">🌱</span>
+                  {/* Left: welcome card with nature bg */}
+                  <div className="relative flex flex-col justify-between rounded-2xl overflow-hidden bg-gradient-to-b from-[#0a2e1f] to-[#0f3d28] p-5 min-h-[320px]">
+                    {/* Nature background decoration */}
+                    <div className="absolute inset-0 opacity-20 bg-gradient-to-t from-emerald-800/40 via-transparent to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-emerald-900/60 to-transparent" />
+
+                    <div className="relative z-10 space-y-3 flex-1 flex flex-col justify-center">
+                      <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                        <span className="text-3xl">🌱</span>
+                      </div>
+                      <h2 className="text-2xl font-black leading-tight text-white">
+                        {step.title}{" "}
+                        <span className="text-emerald-400">{step.titleHighlight}</span>
+                      </h2>
+                      <p className="text-sm text-white/70 leading-relaxed">
+                        {step.description}
+                      </p>
                     </div>
-                    <h2 className="text-xl font-black leading-tight">
-                      {step.title}{" "}
-                      <span className="text-emerald-400">{step.titleHighlight}</span>
-                    </h2>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {step.description}
-                    </p>
+
+                    {/* Security badge */}
+                    <div className="relative z-10 mt-4 flex items-center gap-2 bg-white/5 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/10">
+                      <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-white">Tus datos están seguros</p>
+                        <p className="text-[9px] text-white/50">Solo tú puedes ver tu información.</p>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Right: card */}
-                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-5 space-y-4 shadow-lg flex flex-col justify-center">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">{step.cardTitle}</p>
@@ -161,20 +190,29 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
 
                     <div>
                       <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">Disponible ahora</p>
-                      <p className="text-2xl font-black text-gray-900 dark:text-white">$3,750,000</p>
+                      <p className="text-3xl font-black text-gray-900 dark:text-white">
+                        {formatAmount(displayIncome)}
+                      </p>
                     </div>
 
-                    <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
-                      {step.cardExplanation}
-                    </p>
+                    {/* Info box */}
+                    <div className="flex items-start gap-2 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2.5">
+                      <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-gray-700 dark:text-gray-300 leading-relaxed">
+                        {step.cardExplanation}
+                      </p>
+                    </div>
 
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-300 leading-relaxed font-medium">
-                      {step.cardTip}
+                    <p className="text-[11px] text-gray-700 dark:text-gray-200 leading-relaxed">
+                      Registrar tu Sueldo Real es vital para{" "}
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        saber qué es lo que te va quedando tras cada gasto.
+                      </span>
                     </p>
 
                     <div className="pt-1">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
-                        <Sparkles className="h-3 w-3" />
+                      <div className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold">
+                        <Sparkles className="h-3.5 w-3.5" />
                         {step.cardCta}
                       </div>
                     </div>
@@ -252,7 +290,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
                     <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Distribución actual</p>
 
-                    {/* Mini donut chart (SVG) — más grande y limpio */}
+                    {/* Mini donut chart (SVG) */}
                     <div className="flex justify-center">
                       <div className="relative w-[100px] h-[100px]">
                         <svg viewBox="0 0 100 100" className="w-full h-full">
@@ -271,7 +309,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                       </div>
                     </div>
 
-                    {/* Legend — más legible */}
+                    {/* Legend */}
                     <div className="space-y-2">
                       {[
                         { name: "Alimentación", pct: "36%", amount: "$1,260,000", color: "bg-emerald-500" },
@@ -299,14 +337,14 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
             {isFirst ? (
               <button
                 onClick={onComplete}
-                className="text-xs text-muted-foreground hover:text-white transition-colors"
+                className="text-xs text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 Saltar
               </button>
             ) : (
               <button
                 onClick={prev}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-white transition-colors"
+                className="flex items-center gap-1 text-xs text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <ChevronLeft className="h-3.5 w-3.5" /> Atrás
               </button>
@@ -319,7 +357,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   key={i}
                   className={cn(
                     "h-2 rounded-full transition-all duration-300",
-                    i === currentStep ? "w-6 bg-emerald-500" : "w-2 bg-white/20"
+                    i === currentStep ? "w-6 bg-emerald-500" : "w-2 bg-gray-300 dark:bg-white/20"
                   )}
                 />
               ))}

@@ -23,6 +23,7 @@ import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-pa
 import { userApi, WalletState } from "@/lib/api-client"
 import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 import { SpendingVelocityWidget } from "@/components/gestion/SpendingVelocityWidget"
+import { TopConsumosSection } from "@/components/gestion/TopConsumosSection"
 
 export default function DashboardPage() {
   const { formatAmount, incomeFrequency, diasCobro, onboardingDone, user } = useAppContext()
@@ -318,6 +319,9 @@ export default function DashboardPage() {
 
       {/* ═══ VELOCIDAD DE GASTO (IA Proactiva) ═══ */}
       <SpendingVelocityWidget />
+
+      {/* ═══ TOP MAYORES CONSUMOS ═══ */}
+      <TopConsumosSection />
 
       {/* Botón flotante de acción principal (mobile) */}
       <Link href="/gestion" className="lg:hidden block">
