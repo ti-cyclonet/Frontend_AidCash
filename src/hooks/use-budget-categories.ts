@@ -1,15 +1,19 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { budgetCategoriesApi } from "@/lib/api-client"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
  * useBudgetCategories — Acceso compartido a las categorías de presupuesto
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Las categorías del presupuesto se almacenan en localStorage (kiri_budget_categories).
- * Este hook permite leerlas desde cualquier componente (ej: el modal de gastos hormiga
- * en obligaciones) sin duplicar lógica.
+ * Fuente de verdad: el backend real (`budgetCategoriesApi`), no localStorage —
+ * antes cada componente leía `kiri_budget_categories` por su cuenta, lo que hacía
+ * que perdieras tus categorías/límites al cambiar de navegador. Este hook es el
+ * único punto de lectura para componentes (usa `refreshBudgetCategories()` tras
+ * cualquier mutación hecha en otro lado, ya que no hay evento del navegador que
+ * avise de un cambio en la misma pestaña).
  *
  * También expone el mapping de keywords para auto-detectar la categoría de presupuesto
  * a partir de la descripción del gasto.
@@ -22,9 +26,8 @@ export interface BudgetCategoryItem {
   spent: number
   color: string
   icon: string
+  linkedFixedIds?: string[]
 }
-
-const LS_KEY = "kiri_budget_categories"
 
 // Keywords predefinidas por nombre de categoría de presupuesto
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -44,13 +47,13 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   "Viajes": ["vuelo", "hotel", "vacaciones", "paseo", "hospedaje", "maleta"],
 }
 
-function loadCategories(): BudgetCategoryItem[] {
-  if (typeof window === "undefined") return []
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? "[]")
-  } catch {
-    return []
-  }
+async function loadCategories(): Promise<BudgetCategoryItem[]> {
+  const { data } = await budgetCategoriesApi.list()
+  if (!data) return []
+  return data.categories.map(c => ({
+    id: c.id, name: c.nombre, budget: c.montoLimite, spent: 0,
+    color: c.color, icon: c.icono, linkedFixedIds: c.linkedFixedExpenseIds,
+  }))
 }
 
 /**
@@ -76,20 +79,11 @@ export function detectBudgetCategory(description: string, categories: BudgetCate
 export function useBudgetCategories() {
   const [categories, setCategories] = useState<BudgetCategoryItem[]>([])
 
-  useEffect(() => {
-    setCategories(loadCategories())
-
-    // Escuchar cambios en localStorage desde otras tabs/componentes
-    const handler = (e: StorageEvent) => {
-      if (e.key === LS_KEY) setCategories(loadCategories())
-    }
-    window.addEventListener("storage", handler)
-    return () => window.removeEventListener("storage", handler)
-  }, [])
-
   const refresh = useCallback(() => {
-    setCategories(loadCategories())
+    loadCategories().then(setCategories)
   }, [])
+
+  useEffect(() => { refresh() }, [refresh])
 
   return { budgetCategories: categories, refreshBudgetCategories: refresh }
 }

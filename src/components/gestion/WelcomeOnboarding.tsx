@@ -230,12 +230,12 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     </div>
                     <h2 className="text-xl font-black leading-tight">
                       {step.title}{" "}
-                      <span className="text-amber-400">{step.titleHighlight}</span>
+                      <span className="text-amber-600 dark:text-amber-400">{step.titleHighlight}</span>
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       {step.description}
                     </p>
-                    <p className="text-xs text-amber-300/70 leading-relaxed">
+                    <p className="text-xs text-amber-700/80 dark:text-amber-300/70 leading-relaxed">
                       {step.cardExplanation}
                     </p>
                   </div>
@@ -276,12 +276,12 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     </div>
                     <h2 className="text-xl font-black leading-tight">
                       {step.title}{" "}
-                      <span className="text-blue-400 whitespace-pre-line">{step.titleHighlight}</span>
+                      <span className="text-blue-600 dark:text-blue-400 whitespace-pre-line">{step.titleHighlight}</span>
                     </h2>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       {step.description}
                     </p>
-                    <p className="text-xs text-blue-300/70 leading-relaxed">
+                    <p className="text-xs text-blue-700/80 dark:text-blue-300/70 leading-relaxed">
                       {step.cardExplanation}
                     </p>
                   </div>
@@ -304,7 +304,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                             strokeDasharray="48 240" strokeDashoffset="-191" style={{ transform: "rotate(-90deg)", transformOrigin: "center" }} />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-[9px] text-amber-500 font-bold">68%</span>
+                          <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold">68%</span>
                         </div>
                       </div>
                     </div>
@@ -400,7 +400,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
               className="mt-3 text-center"
             >
               <p className="text-[10px] text-muted-foreground">
-                👆 Tu primer paso: Haz clic en &quot;<span className="text-emerald-400 font-bold">+ Registrar Ingreso</span>&quot; para añadir tu Sueldo Real (Disponible).
+                👆 Tu primer paso: Haz clic en &quot;<span className="text-emerald-600 dark:text-emerald-400 font-bold">+ Registrar Ingreso</span>&quot; para añadir tu Sueldo Real (Disponible).
               </p>
             </motion.div>
           )}

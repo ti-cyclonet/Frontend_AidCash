@@ -6,6 +6,7 @@ import { PlanProvider } from '@/lib/plan-context'
 import { SocketProvider } from '@/lib/socket-context'
 import { AuthGuard } from '@/components/auth-guard'
 import { Toaster } from '@/components/ui/toaster'
+import { FinanceDataProvider } from '@/hooks/use-finance-data'
 
 export const metadata: Metadata = {
   title: 'Kiri Finance',
@@ -49,9 +50,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <AppProvider>
             <PlanProvider>
               <SocketProvider>
-                <AuthGuard>
-                  {children}
-                </AuthGuard>
+                <FinanceDataProvider>
+                  <AuthGuard>
+                    {children}
+                  </AuthGuard>
+                </FinanceDataProvider>
                 <Toaster />
               </SocketProvider>
             </PlanProvider>

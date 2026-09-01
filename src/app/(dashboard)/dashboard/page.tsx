@@ -22,7 +22,7 @@ import { analyzeFinances } from "@/lib/recommendations"
 import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
 import { userApi, WalletState } from "@/lib/api-client"
 import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
-import { SpendingVelocityWidget } from "@/components/gestion/SpendingVelocityWidget"
+import { SpendingStatsGrid } from "@/components/gestion/SpendingStatsGrid"
 import { TopConsumosSection } from "@/components/gestion/TopConsumosSection"
 
 export default function DashboardPage() {
@@ -286,8 +286,11 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* ── COLUMNA DERECHA: Obligaciones + Estrategia (2/5) ── */}
+        {/* ── COLUMNA DERECHA: Estadísticas de gasto + Estrategia (2/5) ── */}
         <div className="lg:col-span-2 space-y-5">
+
+          {/* Estadísticas rápidas de gasto — al lado del árbol */}
+          <SpendingStatsGrid />
 
           {/* Estrategias para salir de deudas */}
           {recommendations?.strategies && debts.length > 0 && (
@@ -316,9 +319,6 @@ export default function DashboardPage() {
 
         </div>
       </div>
-
-      {/* ═══ VELOCIDAD DE GASTO (IA Proactiva) ═══ */}
-      <SpendingVelocityWidget />
 
       {/* ═══ TOP MAYORES CONSUMOS ═══ */}
       <TopConsumosSection />

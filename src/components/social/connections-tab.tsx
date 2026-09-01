@@ -1,12 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { UserPlus, UserCheck, UserX, Loader2, Users, Mail, Trash2, Clock, Heart, Home, UsersRound, ChevronDown, ChevronUp, Send } from "lucide-react"
+import { UserCheck, UserX, Loader2, Users, Trash2, Clock, Heart, Home, UsersRound, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { connectionsApi, homeBudgetApi } from "@/lib/api-client"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
@@ -14,13 +11,14 @@ import { useToast } from "@/hooks/use-toast"
 import { GamificationLeaderboard, LeaderboardEntry } from "@/components/social/GamificationLeaderboard"
 import { HomeBudgetDashboard } from "@/components/social/HomeBudgetDashboard"
 import { ConnectionProfileCard } from "@/components/social/ConnectionProfileCard"
+import { AddConnectionModal } from "@/components/social/AddConnectionModal"
+import { UserAvatar } from "@/components/social/UserAvatar"
+import { ParejaChallenge } from "@/components/social/ParejaChallenge"
+import { NeighborGardens } from "@/components/social/NeighborGardens"
+import { useFriendsGarden } from "@/hooks/use-friends-garden"
 import type { Connection, SocialUser } from "@/lib/types"
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
-
-function initials(name: string) {
-  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
-}
 
 function getPeer(conn: Connection, myId: string): SocialUser | undefined {
   if (conn.requesterId === myId) return conn.addressee
@@ -64,12 +62,10 @@ interface ConnectionsTabProps {
 export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteModal }: ConnectionsTabProps) {
   const { toast } = useToast()
   const { socket } = useSocket()
+  const { friends, friendsWhoWateredYouToday, you: myGarden, water } = useFriendsGarden()
 
   const [data, setData] = useState<ConnectionsData>({ accepted: [], pendingReceived: [], pendingSent: [] })
   const [loading, setLoading] = useState(true)
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState<ConnectionRoleType>("FRIEND")
-  const [inviting, setInviting] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [homeBudget, setHomeBudget] = useState<{ budget: any; partnerId: string } | null>(null)
   const [homeBudgetLoading, setHomeBudgetLoading] = useState(false)
@@ -125,23 +121,6 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     }
   }, [socket, load])
 
-  // ── Enviar invitación ──────────────────────────────────────────────────────
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) return
-    setInviting(true)
-    const { error } = await connectionsApi.invite(inviteEmail.trim(), inviteRole)
-    setInviting(false)
-    if (error) {
-      toast({ title: error, variant: "destructive" })
-    } else {
-      toast({ title: "Invitación enviada", description: `Se notificó a ${inviteEmail} como ${inviteRole.toLowerCase()}` })
-      setInviteEmail("")
-      setInviteRole("FRIEND")
-      closeInviteModal()
-      load()
-    }
-  }
-
   // ── Aceptar / rechazar ─────────────────────────────────────────────────────
   const handleAccept = async (connId: string) => {
     setActionLoading(connId)
@@ -192,52 +171,11 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     <div className="space-y-6">
 
       {/* ── Modal Invitar usuario ── */}
-      <Dialog open={inviteModalOpen} onOpenChange={v => { if (!v) closeInviteModal() }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-kiri-emerald" /> Invitar usuario
-            </DialogTitle>
-            <DialogDescription>Invita a tu pareja, familiar o amigo a Kiri Finance.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {/* Selector de rol */}
-            <div className="flex gap-2">
-              {ROLE_CONFIG.map(r => (
-                <button
-                  key={r.value}
-                  onClick={() => setInviteRole(r.value)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-colors",
-                    inviteRole === r.value ? r.color : "border-muted text-muted-foreground hover:border-muted-foreground/30"
-                  )}
-                >
-                  {r.icon}
-                  {r.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="correo@ejemplo.com"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleInvite() }}
-                className="h-11 rounded-xl flex-1"
-                autoFocus
-              />
-              <Button
-                onClick={handleInvite}
-                disabled={!inviteEmail.trim() || inviting}
-                className="h-11 px-5 rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold gap-1.5"
-              >
-                {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4" /> Enviar</>}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AddConnectionModal
+        open={inviteModalOpen}
+        onClose={closeInviteModal}
+        onInvited={() => { closeInviteModal(); load() }}
+      />
 
       {/* ── Pendientes recibidas ── */}
       {data.pendingReceived.length > 0 && (
@@ -252,11 +190,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
             return (
               <Card key={conn.id} className="border-none bg-card rounded-2xl shadow-sm">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <Avatar className="h-10 w-10 shrink-0">
-                    <AvatarFallback className="bg-cyclon-lavender/10 text-cyclon-lavender font-bold text-xs">
-                      {initials(peer.nombre)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar nombre={peer.nombre} avatarUrl={peer.avatarUrl} className="h-10 w-10 shrink-0" fallbackClassName="bg-cyclon-lavender/10 text-cyclon-lavender" />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">{peer.nombre}</p>
                     <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
@@ -299,11 +233,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
             return (
               <Card key={conn.id} className="border-none bg-card rounded-2xl shadow-sm opacity-70">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <Avatar className="h-10 w-10 shrink-0">
-                    <AvatarFallback className="bg-muted text-muted-foreground font-bold text-xs">
-                      {initials(peer.nombre)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar nombre={peer.nombre} avatarUrl={peer.avatarUrl} className="h-10 w-10 shrink-0" fallbackClassName="bg-muted text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">{peer.nombre}</p>
                     <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
@@ -349,11 +279,9 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
             return (
               <Card key={conn.id} className="border-none bg-card rounded-2xl shadow-sm">
                 <CardContent className="p-4 flex items-center gap-3">
-                  <Avatar className="h-12 w-12 shrink-0 border-2 border-kiri-emerald/20 cursor-pointer" onClick={() => setProfileCardConnId(conn.id)}>
-                    <AvatarFallback className="bg-kiri-mint text-kiri-emerald font-bold text-sm">
-                      {initials(peer.nombre)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div onClick={() => setProfileCardConnId(conn.id)} className="cursor-pointer">
+                    <UserAvatar nombre={peer.nombre} avatarUrl={peer.avatarUrl} className="h-12 w-12 shrink-0 border-2 border-kiri-emerald/20" fallbackClassName="bg-kiri-mint text-kiri-emerald text-sm" />
+                  </div>
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setProfileCardConnId(conn.id)}>
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate">{peer.nombre}</p>
@@ -417,10 +345,38 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
         </section>
       )}
 
-      {/* ── Ranking de hábitos (cuando hay conexiones) ── */}
-      {data.accepted.length > 0 && (
-        <section>
-          <GamificationLeaderboard entries={[]} />
+      {/* ── Reto en pareja (solo si hay conexión PARTNER) ── */}
+      {(() => {
+        const partnerConn = data.accepted.find((c: any) => c.role === 'PARTNER')
+        return partnerConn ? <ParejaChallenge connection={partnerConn} myId={myId} /> : null
+      })()}
+
+      {/* ── Racha entre amigos + Jardines vecinos (solo conexiones tipo amigo) ── */}
+      {friends.length > 0 && myGarden && (
+        <section className="space-y-4">
+          <GamificationLeaderboard
+            entries={[
+              ...friends.map(f => ({
+                id: f.connectionId,
+                nombre: f.peer.nombre,
+                avatarUrl: f.peer.avatarUrl,
+                streakActual: f.streak,
+                streakMejor: f.streakMejor,
+                badgesCount: f.badgesCount,
+                health: f.health,
+              })),
+              {
+                id: myId,
+                nombre: "Tú",
+                streakActual: myGarden.streak,
+                streakMejor: myGarden.streakMejor,
+                badgesCount: myGarden.badgesCount,
+                health: myGarden.health,
+                isCurrentUser: true,
+              },
+            ] as LeaderboardEntry[]}
+          />
+          <NeighborGardens friends={friends} friendsWhoWateredYouToday={friendsWhoWateredYouToday} onWater={water} />
         </section>
       )}
 

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type RefObject } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { FileText, Loader2, Calendar, Download } from "lucide-react"
-import { exportToPdf } from "@/lib/export-utils"
+import { exportToPdf, type PdfChartImages } from "@/lib/export-utils"
 import { reportsApi, type BalanceReport } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
@@ -22,6 +22,24 @@ import { cn } from "@/lib/utils"
 interface ExportButtonsProps {
   report: BalanceReport | null
   className?: string
+  /** Contenedores de los gráficos ya renderizados en pantalla — se capturan como
+   * imagen (html2canvas) al exportar, para que el PDF se vea igual que la app. */
+  chartRefs?: {
+    evolution?: RefObject<HTMLDivElement | null>
+    category?: RefObject<HTMLDivElement | null>
+  }
+}
+
+/** Convierte un contenedor de gráfico ya renderizado en un PNG data URL. */
+async function captureChart(ref?: RefObject<HTMLDivElement | null>): Promise<string | undefined> {
+  if (!ref?.current) return undefined
+  try {
+    const { default: html2canvas } = await import('html2canvas')
+    const canvas = await html2canvas(ref.current, { scale: 2, backgroundColor: null, logging: false })
+    return canvas.toDataURL('image/png')
+  } catch {
+    return undefined
+  }
 }
 
 // Genera los últimos 12 meses como opciones
@@ -48,7 +66,7 @@ function getLast12Months(): { value: string; label: string; from: string; to: st
   return months
 }
 
-export function ExportButtons({ report, className }: ExportButtonsProps) {
+export function ExportButtons({ report, className, chartRefs }: ExportButtonsProps) {
   const [loadingPdf, setLoadingPdf] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
@@ -56,12 +74,19 @@ export function ExportButtons({ report, className }: ExportButtonsProps) {
 
   const months = getLast12Months()
 
-  // Descarga rápida del periodo actual
+  // Descarga rápida del periodo actual — incluye los gráficos tal como se ven
+  // en pantalla ahora mismo (por eso solo aplica acá, no en "Elegir meses":
+  // ese flujo trae datos de OTRO mes, y los gráficos en pantalla no le
+  // corresponderían).
   const handleQuickPdf = async () => {
     if (!report) return
     setLoadingPdf(true)
     try {
-      await exportToPdf(report, `kiri-balance-${report.timeframe}`)
+      const images: PdfChartImages = {
+        evolution: await captureChart(chartRefs?.evolution),
+        category: await captureChart(chartRefs?.category),
+      }
+      await exportToPdf(report, `kiri-balance-${report.timeframe}`, images)
     } finally {
       setLoadingPdf(false)
     }

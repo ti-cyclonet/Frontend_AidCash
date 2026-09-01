@@ -85,6 +85,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
       {
         id: '__scenario__',
         userId: '',
+        tipoDeuda: 'PRESTAMO',
         nombre: productName || 'Nueva compra',
         montoTotal: Number(amount),
         saldoRestante: Number(amount),

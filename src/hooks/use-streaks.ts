@@ -101,6 +101,7 @@ export interface StreakData {
   streakMejor: number
   ultimoCheck: string | null
   badgesDesbloqueados: string[]
+  xpFromMissions: number
   loading: boolean
 }
 
@@ -113,6 +114,7 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
     streakMejor: 0,
     ultimoCheck: null,
     badgesDesbloqueados: [],
+    xpFromMissions: 0,
     loading: true,
   })
 
@@ -130,6 +132,7 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
           streakMejor: result.streak.mejor,
           ultimoCheck: result.streak.ultimoCheck,
           badgesDesbloqueados: (result.badges ?? []).map((b: Record<string, unknown>) => b.badgeId as string),
+          xpFromMissions: result.xpFromMissions ?? 0,
           loading: false,
         })
       } else {

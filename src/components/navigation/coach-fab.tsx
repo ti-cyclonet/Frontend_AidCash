@@ -253,8 +253,7 @@ export function CoachFab() {
       // Ingreso → distinguir entre sueldo base y extra
       if (extractResult.ingreso.monto) {
         const montoDetectado = extractResult.ingreso.monto
-        const esSueldo = extractResult.ingreso.tipo === "salario" ||
-          montoDetectado === income ||
+        const esSueldo = montoDetectado === income ||
           montoDetectado === Math.round(income / 2) // quincena
 
         if (esSueldo) {

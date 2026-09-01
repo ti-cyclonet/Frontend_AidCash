@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import {
   X, PiggyBank, Coins, Loader2, ChevronRight, ArrowLeft,
@@ -13,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { connectionsApi } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
 import { useToast } from "@/hooks/use-toast"
+import { UserAvatar } from "@/components/social/UserAvatar"
 
 /**
  * ConnectionProfileCard — Tarjeta de presentación completa de una conexión
@@ -36,7 +36,7 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [updatingRole, setUpdatingRole] = useState(false)
   const [data, setData] = useState<{
-    peer: { id: string; nombre: string; correo: string }
+    peer: { id: string; nombre: string; correo: string; avatarUrl?: string | null }
     connection: { id: string; role: string; createdAt: string }
     pockets: { id: string; nombre: string; balance: number; meta: number }[]
     loans: { id: string; amount: number; remainingAmount: number; status: string; descripcion?: string; lenderId: string; borrowerId: string; createdAt: string }[]
@@ -61,10 +61,6 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
       setData(prev => prev ? { ...prev, connection: { ...prev.connection, role: newRole } } : null)
       toast({ title: "Rol actualizado" })
     }
-  }
-
-  function initials(name: string) {
-    return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
   }
 
   function formatDate(dateStr: string) {
@@ -119,11 +115,12 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
         <div className="px-4 -mt-12 pb-6 space-y-4 max-w-lg mx-auto">
           {/* Avatar + Nombre */}
           <div className="flex flex-col items-center gap-3">
-            <Avatar className="h-24 w-24 border-4 border-kiri-emerald/30 shadow-lg shadow-kiri-emerald/20">
-              <AvatarFallback className="bg-kiri-mint text-kiri-emerald font-black text-3xl">
-                {initials(data.peer.nombre)}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              nombre={data.peer.nombre}
+              avatarUrl={data.peer.avatarUrl}
+              className="h-24 w-24 border-4 border-kiri-emerald/30 shadow-lg shadow-kiri-emerald/20"
+              fallbackClassName="bg-kiri-mint text-kiri-emerald font-black text-3xl"
+            />
             <div className="text-center">
               <h2 className="text-xl font-black flex items-center gap-1.5 justify-center">
                 {data.peer.nombre}

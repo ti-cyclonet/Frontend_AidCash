@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useToast } from "@/hooks/use-toast"
+import { getPeriodRangeLabel } from "@/lib/period-filter"
 
 /**
  * PaydaySelector — Input libre para días de pago
@@ -53,29 +54,12 @@ export function PaydaySelector({ compact }: Props) {
     toast({ title: "Días de pago actualizados ✓" })
   }
 
-  // Calcular periodo actual para mostrar al usuario
+  // Calcular periodo actual para mostrar al usuario — misma función canónica
+  // que usa el resto de la app (period-filter.ts), con los días que está
+  // escribiendo ahora mismo (aún no guardados).
   const getPeriodLabel = () => {
-    if (parsedDays.length === 0) return null
-    const today = new Date().getDate()
-
-    if (parsedDays.length === 1) {
-      const d = parsedDays[0]
-      return `Periodo actual: del ${d} al ${d - 1 === 0 ? 30 : d - 1} del siguiente mes`
-    }
-
-    // Quincenal: determinar en qué quincena estamos
-    const [d1, d2] = parsedDays
-    if (today >= d1 && today < d2) {
-      // Estamos en el primer periodo (d1 hasta el día antes de d2)
-      return `Periodo actual: del ${d1} al ${d2 - 1}`
-    }
-    // Estamos en el segundo periodo (d2 hasta el día antes de d1 del siguiente mes)
-    const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
-    if (today >= d2) {
-      return `Periodo actual: del ${d2} al ${d1 - 1 === 0 ? lastDay : d1 - 1}`
-    }
-    // today < d1 (inicio del mes, antes del primer día de pago)
-    return `Periodo actual: del ${d2} al ${d1 - 1}`
+    if (parsedDays.length === 0 || !isValid) return null
+    return `Periodo actual: ${getPeriodRangeLabel(incomeFrequency, parsedDays.join(","))}`
   }
 
   return (

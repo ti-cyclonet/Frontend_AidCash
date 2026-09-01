@@ -4,13 +4,16 @@ export type ExtraIncomeTemporality = 'una_vez' | 'definido' | 'indefinido';
 // ─── Phase 3: Social ──────────────────────────────────────────────────────────
 
 export type ConnectionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+export type ConnectionRole = 'FRIEND' | 'FAMILY' | 'PARTNER';
 export type LoanStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED' | 'PAID';
 export type LoanPaymentStatus = 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'REJECTED';
 
 export interface SocialUser {
   id: string;
   nombre: string;
-  correo: string;
+  correo?: string; // el buscador de usuarios nunca lo devuelve — opcional a propósito
+  username?: string;
+  avatarUrl?: string | null;
 }
 
 export interface Connection {
@@ -18,10 +21,63 @@ export interface Connection {
   requesterId: string;
   addresseeId: string;
   status: ConnectionStatus;
+  role: ConnectionRole;
   createdAt: string;
   updatedAt: string;
   requester?: SocialUser;
   addressee?: SocialUser;
+}
+
+// ─── Fase 4: Social gamificado (racha entre amigos, jardines vecinos, riego) ──
+
+export interface FriendGardenEntry {
+  connectionId: string;
+  peer: SocialUser;
+  streak: number;
+  streakMejor: number;
+  badgesCount: number;
+  health: number;
+  wateredByMeToday: boolean;
+}
+
+export interface FriendsGardenResponse {
+  friends: FriendGardenEntry[];
+  friendsWhoWateredYouToday: number;
+  you: { streak: number; streakMejor: number; badgesCount: number; health: number };
+}
+
+export interface SharedPocketContribution {
+  [userId: string]: number;
+}
+
+export interface ConnectionSharedPocket {
+  id: string;
+  nombre: string;
+  balance: number;
+  meta: number;
+  deadline: string | null;
+  members: { id: string; nombre: string; role: string }[];
+  recentDeposits: SharedDeposit[];
+  contributions: SharedPocketContribution;
+}
+
+export interface ConnectionSharedLoan {
+  id: string;
+  amount: number;
+  remainingAmount: number;
+  status: LoanStatus;
+  descripcion?: string | null;
+  lenderId: string;
+  borrowerId: string;
+  createdAt: string;
+  recentPayments: LoanPayment[];
+}
+
+export interface ConnectionSharedResponse {
+  connection: { id: string; role: ConnectionRole; createdAt: string };
+  peer: SocialUser;
+  pockets: ConnectionSharedPocket[];
+  loans: ConnectionSharedLoan[];
 }
 
 export interface SharedDeposit {
@@ -176,4 +232,31 @@ export interface BudgetAllocation {
   totalIncome: number;
   isOverloaded: boolean;   // obligaciones > ingreso
   isTight: boolean;        // obligaciones > 70% del ingreso
+}
+
+// ─── Fase 3: Misiones diarias/semanales ────────────────────────────────────────
+
+export type MissionKey = 'gasto_hormiga' | 'pagar_obligacion' | 'categorizar' | 'racha_semanal';
+export type RewardType = 'xp' | 'boost';
+
+export interface Mission {
+  key: MissionKey;
+  title: string;
+  desc: string;
+  icon: string;
+  target: number;
+  progress: number;
+  claimed: boolean;
+}
+
+export interface MissionsResponse {
+  daily: Mission[];
+  weekly: Mission;
+}
+
+export interface RewardResult {
+  type: RewardType;
+  amount: number;
+  label: string;
+  icon: string;
 }

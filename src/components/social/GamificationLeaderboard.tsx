@@ -3,6 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { Trophy, Flame, Medal, Crown } from "lucide-react"
+import { UserAvatar } from "@/components/social/UserAvatar"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -20,9 +21,12 @@ import { Trophy, Flame, Medal, Crown } from "lucide-react"
 export interface LeaderboardEntry {
   id: string
   nombre: string
+  avatarUrl?: string | null
   streakActual: number
   streakMejor: number
   badgesCount: number
+  /** Salud del jardín (0-100). Opcional — si no se pasa, no se muestra la fila de abajo del nombre. */
+  health?: number
   isCurrentUser?: boolean
 }
 
@@ -97,11 +101,17 @@ export function GamificationLeaderboard({ entries }: Props) {
                    <span className="text-xs font-bold text-muted-foreground">{position}</span>}
                 </div>
 
+                {/* Avatar */}
+                <UserAvatar nombre={entry.nombre} avatarUrl={entry.avatarUrl} className="h-7 w-7 shrink-0" fallbackClassName="text-[9px]" />
+
                 {/* Nombre */}
                 <div className="flex-1 min-w-0">
                   <p className={cn("text-xs font-bold truncate", entry.isCurrentUser && "text-kiri-emerald")}>
                     {entry.nombre} {entry.isCurrentUser && "(Tú)"}
                   </p>
+                  {entry.health !== undefined && (
+                    <p className="text-[9px] text-muted-foreground">Salud del jardín: {entry.health}%</p>
+                  )}
                 </div>
 
                 {/* Racha actual */}

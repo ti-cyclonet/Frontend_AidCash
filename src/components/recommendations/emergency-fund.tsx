@@ -52,15 +52,15 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
   return (
     <div className="space-y-6">
       {/* ── Card principal ── */}
-      <Card className="border-none bg-gradient-to-br from-cyclon-sky/10 to-cyclon-periwinkle/5 rounded-3xl shadow-none overflow-hidden relative">
+      <Card className="border-none bg-gradient-to-br from-sky-500/10 to-indigo-500/5 rounded-3xl shadow-none overflow-hidden relative">
         <div className="absolute top-[-20px] right-[-20px] h-32 w-32 bg-white/20 rounded-full blur-2xl" />
         <CardContent className="p-8 flex flex-col items-center text-center space-y-4">
-          <div className="h-20 w-20 bg-card rounded-3xl shadow-xl shadow-cyclon-sky/10 flex items-center justify-center">
-            <ShieldCheck className="h-10 w-10 text-cyclon-periwinkle" />
+          <div className="h-20 w-20 bg-card rounded-3xl shadow-xl shadow-sky-500/10 flex items-center justify-center">
+            <ShieldCheck className="h-10 w-10 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
             <p className="text-muted-foreground text-sm font-medium tracking-wide">FONDO DE EMERGENCIA</p>
-            <h2 className="text-4xl font-black text-cyclon-periwinkle mt-1">{formatAmount(fondoActual)}</h2>
+            <h2 className="text-4xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{formatAmount(fondoActual)}</h2>
           </div>
 
           {/* Progreso dual: mínimo y ideal */}
@@ -70,7 +70,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
               <div className="flex justify-between text-xs font-bold">
                 <span className="text-muted-foreground">Mínimo (3 meses): {formatAmount(analysis.metaMinima)}</span>
                 <span className={cn(
-                  analysis.pctMinima >= 100 ? "text-cyclon-periwinkle" : "text-muted-foreground"
+                  analysis.pctMinima >= 100 ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground"
                 )}>
                   {analysis.pctMinima}%
                 </span>
@@ -78,7 +78,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
               <Progress
                 value={analysis.pctMinima}
                 className="h-2 bg-white/50"
-                indicatorClassName={analysis.pctMinima >= 100 ? "bg-cyclon-periwinkle" : "bg-cyclon-sky"}
+                indicatorClassName={analysis.pctMinima >= 100 ? "bg-indigo-500" : "bg-sky-500"}
               />
             </div>
             {/* Meta ideal: 6 meses */}
@@ -86,7 +86,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
               <div className="flex justify-between text-xs font-bold">
                 <span className="text-muted-foreground">Ideal (6 meses): {formatAmount(analysis.metaIdeal)}</span>
                 <span className={cn(
-                  analysis.pctIdeal >= 100 ? "text-cyclon-periwinkle" : "text-muted-foreground"
+                  analysis.pctIdeal >= 100 ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground"
                 )}>
                   {analysis.pctIdeal}%
                 </span>
@@ -94,7 +94,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
               <Progress
                 value={analysis.pctIdeal}
                 className="h-2 bg-white/50"
-                indicatorClassName={analysis.pctIdeal >= 100 ? "bg-cyclon-periwinkle" : "bg-cyclon-lavender"}
+                indicatorClassName={analysis.pctIdeal >= 100 ? "bg-indigo-500" : "bg-violet-500"}
               />
             </div>
           </div>
@@ -105,7 +105,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
       <div className="grid grid-cols-2 gap-3">
         <Card className="border-none shadow-sm bg-card">
           <CardContent className="p-4 flex flex-col gap-1">
-            <div className="h-8 w-8 rounded-lg bg-cyclon-sky/10 flex items-center justify-center text-cyclon-sky">
+            <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
               <CalendarCheck className="h-4 w-4" />
             </div>
             <p className="text-[10px] font-bold text-muted-foreground uppercase mt-2">Meta mínima en</p>
@@ -119,7 +119,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
         </Card>
         <Card className="border-none shadow-sm bg-card">
           <CardContent className="p-4 flex flex-col gap-1">
-            <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/10 flex items-center justify-center text-cyclon-lavender">
+            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-600 dark:text-violet-400">
               <TrendingUp className="h-4 w-4" />
             </div>
             <p className="text-[10px] font-bold text-muted-foreground uppercase mt-2">Meta ideal en</p>
@@ -143,7 +143,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
             sin tocar tus deudas ni tu inversión libre.
           </p>
           {totalGastosFijos === 0 && (
-            <p className="text-xs text-cyclon-pink font-bold">
+            <p className="text-xs text-pink-600 dark:text-pink-400 font-bold">
               ⚠ Agrega gastos fijos en la sección Deudas para calcular tu meta.
             </p>
           )}
@@ -154,7 +154,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
       <div className="grid grid-cols-2 gap-3">
         <Button
           onClick={() => openModal('aporte')}
-          className="h-14 rounded-2xl bg-cyclon-periwinkle text-white font-bold hover:bg-cyclon-periwinkle/90 shadow-lg shadow-cyclon-periwinkle/20 gap-2"
+          className="h-14 rounded-2xl bg-indigo-500 text-white font-bold hover:bg-indigo-500/90 shadow-lg shadow-indigo-500/20 gap-2"
         >
           <Plus className="h-5 w-5" /> Aportar
         </Button>
@@ -213,7 +213,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
               className={cn(
                 "font-bold rounded-xl px-8",
                 modalType === 'aporte'
-                  ? "bg-cyclon-periwinkle text-white"
+                  ? "bg-indigo-500 text-white"
                   : "bg-destructive text-white"
               )}
             >

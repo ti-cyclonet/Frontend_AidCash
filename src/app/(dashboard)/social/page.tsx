@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { Users, PiggyBank, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -37,8 +38,10 @@ function SocialContent() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("social")
   const { user: authUser } = useAuth()
   const { connected, unreadCount } = useSocket()
+  const searchParams = useSearchParams()
 
-  const [activeTab, setActiveTab] = useState<TabId>("connections")
+  const initialTab = (TABS.find(t => t.id === searchParams.get("tab"))?.id ?? "connections") as TabId
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
   const [acceptedConnections, setAcceptedConnections] = useState<Connection[]>([])
   const [showInviteModal, setShowInviteModal] = useState(false)
   // Cargar conexiones aceptadas para pasarlas a sub-tabs
