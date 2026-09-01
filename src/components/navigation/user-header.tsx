@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Settings, Lock, Coins, Moon, Sun, Camera, Globe } from "lucide-react"
+import { userApi } from "@/lib/api-client"
 
 export function UserHeader() {
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
@@ -36,7 +37,8 @@ export function UserHeader() {
   }
 
   const handleSaveProfile = () => {
-    setUser(editForm)
+    setUser({ ...user, ...editForm })
+    userApi.updateProfile({ nombre: editForm.nombre, correo: editForm.correo, avatarUrl: editForm.avatarUrl })
     setSettingsOpen(false)
   }
 

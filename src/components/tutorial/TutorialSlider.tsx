@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, ChevronRight, ChevronLeft, Wallet, Building2, BarChart3, Users, PiggyBank, Sparkles, Trophy, BookOpen } from "lucide-react"
+import { X, ChevronRight, ChevronLeft, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
+import { MODULE_GUIDES, type ModuleGuideData, type GuideItem } from "@/lib/module-guide-content"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -15,93 +16,36 @@ import { useRouter } from "next/navigation"
  * Uso:
  *   - Como overlay de primera vez: <TutorialSlider module="gestion" onClose={...} />
  *   - Como tutorial completo: <TutorialSlider showAll onClose={...} />
+ *
+ * El contenido de cada módulo vive en `module-guide-content.ts` — la misma
+ * fuente que usa /guia-kiri — para que ambas pantallas nunca se desincronicen.
  */
 
-// ─── Contenido de cada módulo ─────────────────────────────────────────────────
+// ─── Slide — un módulo real (de MODULE_GUIDES) o el cierre "final" ────────────
 
-export interface TutorialSlide {
-  id: string
-  number: number
-  title: string
-  subtitle: string
-  icon: React.ReactNode
-  color: string
-  features: { icon: string; title: string; description: string }[]
-}
+export type TutorialSlide =
+  | (ModuleGuideData & { features: GuideItem[] })
+  | {
+      id: "final"
+      number: number
+      title: string
+      subtitle: string
+      textColor: string
+      badgeSolid: string
+      bgGradient: string
+      features: GuideItem[]
+    }
 
 const TUTORIAL_SLIDES: TutorialSlide[] = [
-  {
-    id: "gestion",
-    number: 1,
-    title: "Gestión",
-    subtitle: "¡El centro de mando de tu dinero!",
-    icon: <Wallet className="h-6 w-6" />,
-    color: "from-emerald-500/20 to-emerald-900/20",
-    features: [
-      { icon: "💰", title: "BILLETERA", description: "Registra tus ingresos, ve tu saldo real y configura pagos automáticos al recibir tu sueldo." },
-      { icon: "📊", title: "PRESUPUESTO", description: "Crea categorías, controla gastos hormiga y monitorea cuánto gastas en cada cosa." },
-      { icon: "📈", title: "PROYECCIONES", description: "Simula escenarios y proyecta tu futuro financiero a 3, 6, 12 o 24 meses." },
-    ],
-  },
-  {
-    id: "obligaciones",
-    number: 2,
-    title: "Obligaciones",
-    subtitle: "¡Mantén tus compromisos a raya sin estrés!",
-    icon: <Building2 className="h-6 w-6" />,
-    color: "from-blue-500/20 to-blue-900/20",
-    features: [
-      { icon: "🏠", title: "GASTOS FIJOS", description: "Añade pagos recurrentes (renta, servicios), activa el pago automático ⚡ y dales check al pagarlos." },
-      { icon: "💳", title: "DEUDAS Y TARJETAS", description: "Registra tarjetas de crédito, controla cuotas e intereses. Visualiza monto mínimo, cuota negociada y pago total." },
-      { icon: "⚡", title: "ESTRATEGIAS DE DEUDA", description: "Usa 'Bola de Nieve' o 'Avalancha' para salir de deudas más rápido. Simula cuántos meses tardas." },
-    ],
-  },
-  {
-    id: "balance",
-    number: 3,
-    title: "Balance",
-    subtitle: "¡Tu máquina del tiempo financiera!",
-    icon: <BarChart3 className="h-6 w-6" />,
-    color: "from-purple-500/20 to-purple-900/20",
-    features: [
-      { icon: "📅", title: "FILTROS TEMPORALES", description: "Revisa tus números por semana, mes, año o todo tu historial." },
-      { icon: "📋", title: "HISTORIAL DETALLADO", description: "Navega por 5 pestañas para ver el desglose exacto de tus movimientos." },
-      { icon: "📄", title: "EXPORTACIÓN", description: "Descarga tus reportes en PDF o Excel con un solo clic." },
-    ],
-  },
-  {
-    id: "social",
-    number: 4,
-    title: "Social",
-    subtitle: "¡Mejorar tus finanzas es más divertido en equipo!",
-    icon: <Users className="h-6 w-6" />,
-    color: "from-pink-500/20 to-pink-900/20",
-    features: [
-      { icon: "🤝", title: "CONEXIONES", description: "Invita a tus amigos, familia o pareja." },
-      { icon: "🐷", title: "BOLSILLOS COMPARTIDOS", description: "Creen metas juntos y usen la calculadora inteligente para aportar lo justo según sus ingresos." },
-      { icon: "💸", title: "PRÉSTAMOS P2P", description: "Pide prestado, aprueba solicitudes y lleva el registro exacto de cada abono hasta saldar la cuenta." },
-    ],
-  },
-  {
-    id: "ahorro",
-    number: 5,
-    title: "Ahorro",
-    subtitle: "¡El lugar donde tus metas cobran vida!",
-    icon: <PiggyBank className="h-6 w-6" />,
-    color: "from-amber-500/20 to-amber-900/20",
-    features: [
-      { icon: "🎨", title: "BOLSILLOS DE AHORRO", description: "Crea alcancías personalizadas, activa el pago automático ⚡ y llénalas poco a poco." },
-      { icon: "🛡️", title: "FONDO DE EMERGENCIA", description: "Mantén tu colchón de seguridad. La app te guiará hasta alcanzar la meta ideal de 6 meses de gastos fijos." },
-      { icon: "👥", title: "BOLSILLOS COMPARTIDOS", description: "Los ahorros que crees en Social también aparecen aquí para que no los pierdas de vista." },
-    ],
-  },
+  ...MODULE_GUIDES.map(mod => ({ ...mod, features: mod.items })),
   {
     id: "final",
-    number: 6,
+    number: MODULE_GUIDES.length + 1,
     title: "¡Todo en orden!",
     subtitle: "Ya conoces tu jardín financiero",
-    icon: <Sparkles className="h-6 w-6" />,
-    color: "from-kiri-emerald/20 to-emerald-900/20",
+    textColor: "text-kiri-emerald",
+    badgeSolid: "bg-kiri-emerald",
+    bgGradient: "from-kiri-emerald/10 to-emerald-900/5",
     features: [
       { icon: "🌱", title: "Usa cada módulo a tu ritmo", description: "" },
       { icon: "💡", title: "Toma mejores decisiones", description: "" },
@@ -199,9 +143,11 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
             transition={{ duration: 0.2 }}
             className="p-6 pt-10 pb-4 overflow-y-auto max-h-[90vh]"
           >
-            {/* Número + Título */}
+            {/* Número + Título — círculo SÓLIDO (no translúcido): el número va en
+                blanco encima, y un tinte al 20% de opacidad no da contraste
+                suficiente en modo claro. */}
             <div className="flex items-center gap-3 mb-2">
-              <div className={cn("h-12 w-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white font-black text-lg", currentSlide.color)}>
+              <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center text-white font-black text-lg", currentSlide.badgeSolid)}>
                 {currentSlide.number}
               </div>
               <div>
@@ -211,18 +157,14 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
             <p className="text-sm text-muted-foreground mb-4">{currentSlide.subtitle}</p>
 
             {/* Descripción del módulo */}
-            {currentSlide.id !== "final" && (
+            {currentSlide.id !== "final" && "description" in currentSlide && (
               <p className="text-xs text-muted-foreground leading-relaxed mb-5 border-l-2 border-kiri-emerald/30 pl-3">
-                {currentSlide.id === "gestion" && "Piensa en este módulo como tu centro de mando financiero. Configura tus ingresos, define presupuestos y proyecta tu futuro."}
-                {currentSlide.id === "obligaciones" && "Gestiona todos tus compromisos financieros fijos e ineludibles. Desde deudas bancarias y tarjetas de crédito hasta facturas mensuales."}
-                {currentSlide.id === "balance" && "Tu historial financiero detallado. Reportes completos con gráficos visuales para diferentes periodos."}
-                {currentSlide.id === "social" && "La dimensión social de tus finanzas. Conéctate con otros usuarios para compartir objetivos y gestionar presupuestos conjuntos."}
-                {currentSlide.id === "ahorro" && "Tu espacio dedicado a hacer crecer tu dinero. Gestiona tus bolsillos de ahorro y sigue tu progreso hacia metas específicas."}
+                {currentSlide.description}
               </p>
             )}
 
             {/* Área visual — Qué debes hacer aquí */}
-            <div className={cn("rounded-2xl p-5 mb-5 bg-gradient-to-br border border-border/50", currentSlide.color)}>
+            <div className={cn("rounded-2xl p-5 mb-5 bg-gradient-to-br border border-border/50", currentSlide.bgGradient)}>
               {currentSlide.id !== "final" && (
                 <p className="text-[10px] font-bold uppercase tracking-wider text-foreground mb-3">Qué debes hacer aquí:</p>
               )}

@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,9 +19,11 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { userApi, WalletState } from "@/lib/api-client"
+import { userApi, WalletState, budgetCategoriesApi } from "@/lib/api-client"
 import { analyzeBudgetCategories, BudgetInsight, getCategoryInsight } from "@/lib/budget-insights"
 import { detectBudgetCategory } from "@/hooks/use-budget-categories"
+import { getPeriodDateRange, getPeriodLabel } from "@/lib/period-filter"
+import { SUGGESTIONS } from "@/lib/budget-category-spend"
 import { ImpulseCategory } from "@/lib/types"
 import Link from "next/link"
 import { TopConsumosSection } from "./TopConsumosSection"
@@ -52,23 +54,6 @@ const ICONS = [
 const COLORS = ["#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#ec4899", "#06b6d4", "#f97316", "#6366f1", "#14b8a6", "#e11d48"]
 function getIcon(key: string) { return ICONS.find(i => i.key === key)?.el || <MoreHorizontal className="h-5 w-5" /> }
 
-const SUGGESTIONS = [
-  { name: "Vivienda", icon: "home", color: "#06b6d4", keys: ["arriendo", "renta", "hipoteca", "administracion", "arreglo casa", "muebles"] },
-  { name: "Alimentacion", icon: "utensils", color: "#10b981", keys: ["comida", "mercado", "supermercado", "restaurante", "hamburguesa", "almuerzo", "cena", "cafeteria", "snack", "desayuno", "pizza", "pollo", "arroz"] },
-  { name: "Transporte", icon: "car", color: "#3b82f6", keys: ["gasolina", "uber", "taxi", "bus", "peaje", "parqueadero", "metro", "moto", "lavada", "mantenimiento", "aceite", "llanta"] },
-  { name: "Servicios", icon: "wifi", color: "#f59e0b", keys: ["internet", "luz", "agua", "gas", "telefono", "celular", "plan datos", "streaming"] },
-  { name: "Deudas", icon: "more", color: "#ef4444", keys: ["tarjeta", "credito", "prestamo", "cuota", "banco", "interes"] },
-  { name: "Ocio", icon: "gamepad", color: "#a855f7", keys: ["netflix", "spotify", "cine", "juego", "bar", "fiesta", "salida", "discoteca", "cerveza", "trago"] },
-  { name: "Salud", icon: "heart", color: "#ec4899", keys: ["medico", "doctor", "farmacia", "odontologo", "hospital", "lentes", "examen", "cirugia"] },
-  { name: "Familia", icon: "baby", color: "#14b8a6", keys: ["colegio", "guarderia", "juguete", "mesada", "hijos", "papa", "mama", "regalo familia"] },
-  { name: "Educacion", icon: "education", color: "#6366f1", keys: ["universidad", "curso", "libro", "matricula", "capacitacion", "idiomas", "diplomado"] },
-  { name: "Ahorro", icon: "gift", color: "#84cc16", keys: ["ahorro", "inversion", "fondo", "meta", "emergencia"] },
-  { name: "Mascotas", icon: "paw", color: "#f97316", keys: ["veterinario", "perro", "gato", "mascota", "comida mascota", "peluqueria mascota", "vacuna mascota"] },
-  { name: "Compras", icon: "shopping", color: "#e11d48", keys: ["ropa", "zapatos", "accesorios", "electronica", "amazon", "tienda", "online"] },
-  { name: "Deporte", icon: "dumbbell", color: "#8b5cf6", keys: ["gym", "gimnasio", "cancha", "yoga", "suplemento", "proteina"] },
-  { name: "Viajes", icon: "plane", color: "#0ea5e9", keys: ["vuelo", "hotel", "vacaciones", "paseo", "hospedaje", "maleta"] },
-]
-
 function suggestIcon(n: string): string {
   const l = n.toLowerCase()
   for (const s of SUGGESTIONS) { if (s.keys.some(k => l.includes(k)) || l.includes(s.name.toLowerCase())) return s.icon }
@@ -80,9 +65,12 @@ function filterSuggestions(input: string) {
   return SUGGESTIONS.filter(s => s.name.toLowerCase().includes(l) || s.keys.some(k => k.includes(l)))
 }
 
-const LS_KEY = "kiri_budget_categories"
-function load(): BudgetCategory[] { if (typeof window === "undefined") return []; try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") } catch { return [] } }
-function save(c: BudgetCategory[]) { localStorage.setItem(LS_KEY, JSON.stringify(c)) }
+// Mapeo entre la forma del backend (nombre/icono/montoLimite/linkedFixedExpenseIds)
+// y la forma local que ya usaba este archivo (name/icon/budget/linkedFixedIds) —
+// se mantiene la forma local para no reescribir todo el componente de una vez.
+function fromApi(c: { id: string; nombre: string; icono: string; color: string; montoLimite: number; linkedFixedExpenseIds: string[] }): BudgetCategory {
+  return { id: c.id, name: c.nombre, budget: c.montoLimite, spent: 0, icon: c.icono, color: c.color, linkedFixedIds: c.linkedFixedExpenseIds }
+}
 
 // Mapear categoría de presupuesto a ImpulseCategory del backend
 function mapToImpulseCategory(budgetCatName: string): ImpulseCategory {
@@ -97,18 +85,41 @@ function mapToImpulseCategory(budgetCatName: string): ImpulseCategory {
 
 // --- Component ---
 export function PresupuestoTab() {
-  const { formatAmount, incomeFrequency } = useAppContext()
+  const { formatAmount, incomeFrequency, diasCobro } = useAppContext()
   const { allocation } = usePeriodBudget()
   const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, fixedExpenses } = useFinanceData()
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
-  useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
+  const [walletError, setWalletError] = useState(false)
+  useEffect(() => {
+    userApi.getWallet()
+      .then(({ data, error }) => { if (data) setWallet(data.wallet); if (error) setWalletError(true) })
+      .catch(() => setWalletError(true))
+  }, [])
 
   // El gasto libre real es libre + endeudamiento (todo lo que el usuario puede gastar)
   const realFreeAmount = wallet.libre + wallet.endeudamiento
 
-  const [categories, setCategories] = useState<BudgetCategory[]>(load)
+  const [categories, setCategories] = useState<BudgetCategory[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const fetchCategories = async () => {
+    const { data } = await budgetCategoriesApi.list()
+    if (data) setCategories(data.categories.map(fromApi))
+    setCategoriesLoading(false)
+  }
+  useEffect(() => { fetchCategories() }, [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selectedDetailRef = useRef<HTMLDivElement>(null)
+  // Al elegir una categoría (o "ver todas") en el diagrama, el detalle aparece
+  // más abajo en la página — sin esto, en pantallas chicas quedaba fuera de
+  // vista y parecía que no había pasado nada al tocar.
+  useEffect(() => {
+    if (!selectedId) return
+    const t = setTimeout(() => {
+      selectedDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 50)
+    return () => clearTimeout(t)
+  }, [selectedId])
   const [radialView, setRadialView] = useState<null | 'all' | 'category'>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -116,14 +127,24 @@ export function PresupuestoTab() {
   const [form, setForm] = useState({ name: "", budget: "", icon: "more", color: COLORS[0] })
   const [linkedFixed, setLinkedFixed] = useState<string[]>([])
 
+  // Gasto por categoría se reinicia cada periodo (mensual/quincenal, según
+  // incomeFrequency — el mismo que ya se elige en Billetera). El límite de la
+  // categoría (budget) NO se reinicia, solo lo gastado: se filtran los gastos
+  // hormiga por fecha dentro del periodo actual antes de sumarlos.
+  const periodRange = getPeriodDateRange(incomeFrequency, diasCobro)
+  const impulseThisBudgetPeriod = impulseExpenses.filter(e => {
+    const created = new Date(e.createdAt)
+    return created >= periodRange.start && created < periodRange.end
+  })
+
   // Conectar gastos a categorias: impulseExpenses por keyword/tag + gastos fijos vinculados pagados
   const catsWithSpent = categories.map(cat => {
     const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === cat.name.toLowerCase())
     const keys = [...(sug?.keys ?? []), cat.name.toLowerCase()]
     const tagPattern = `[${cat.name.toLowerCase()}]`
 
-    // Gastos hormiga/impulse que coincidan por keyword o tag
-    const matchedImpulse = impulseExpenses.filter(e => {
+    // Gastos hormiga/impulse del periodo actual que coincidan por keyword o tag
+    const matchedImpulse = impulseThisBudgetPeriod.filter(e => {
       const expName = e.nombre.toLowerCase()
       return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
     })
@@ -155,8 +176,8 @@ export function PresupuestoTab() {
 
   const { insights } = useMemo(() => {
     if (categories.length === 0) return { insights: [], analyses: [] }
-    return analyzeBudgetCategories(categories, impulseExpenses, incomeFrequency, realFreeAmount)
-  }, [categories, impulseExpenses, incomeFrequency, realFreeAmount])
+    return analyzeBudgetCategories(categories, impulseExpenses, incomeFrequency, realFreeAmount, diasCobro)
+  }, [categories, impulseExpenses, incomeFrequency, realFreeAmount, diasCobro])
 
   // Insight principal: el más relevante para mostrar como banner único
   const primaryInsight = insights.length > 0 ? insights[0] : null
@@ -182,16 +203,32 @@ export function PresupuestoTab() {
   const hormigaRemaining = Math.max(0, realFreeAmount - totalImpulseThisPeriod)
   const hormigaIsOver = totalHormiga > realFreeAmount * 0.5
 
-  const persist = (cats: BudgetCategory[]) => { setCategories(cats); save(cats) }
+  const [savingCategory, setSavingCategory] = useState(false)
   const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length] }); setLinkedFixed([]); setShowSugg(false); setFormOpen(true) }
   const openEdit = (cat: BudgetCategory) => { setEditingId(cat.id); setForm({ name: cat.name, budget: String(cat.budget), icon: cat.icon, color: cat.color }); setLinkedFixed(cat.linkedFixedIds ?? []); setFormOpen(true) }
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name || !form.budget) return
-    if (editingId) persist(categories.map(c => c.id === editingId ? { ...c, name: form.name, budget: Number(form.budget), icon: form.icon, color: form.color, linkedFixedIds: linkedFixed } : c))
-    else persist([...categories, { id: Date.now().toString(), name: form.name, budget: Number(form.budget), spent: 0, icon: form.icon, color: form.color, linkedFixedIds: linkedFixed }])
+    setSavingCategory(true)
+    const payload = { nombre: form.name, montoLimite: Number(form.budget), icono: form.icon, color: form.color, linkedFixedExpenseIds: linkedFixed }
+    if (editingId) await budgetCategoriesApi.update(editingId, payload)
+    else await budgetCategoriesApi.create(payload)
+    await fetchCategories()
+    setSavingCategory(false)
     setFormOpen(false)
   }
-  const handleDelete = () => { if (editingId) persist(categories.filter(c => c.id !== editingId)); setFormOpen(false); setSelectedId(null) }
+  const handleDelete = async () => {
+    if (!editingId) return
+    setSavingCategory(true)
+    await budgetCategoriesApi.delete(editingId)
+    await fetchCategories()
+    setSavingCategory(false)
+    setFormOpen(false)
+    setSelectedId(null)
+  }
+  const handleDeleteCategory = async (id: string) => {
+    await budgetCategoriesApi.delete(id)
+    await fetchCategories()
+  }
 
   // ═══ REGISTRAR GASTO — modal con categorías del presupuesto ═══
   const [expenseModalOpen, setExpenseModalOpen] = useState(false)
@@ -325,6 +362,9 @@ export function PresupuestoTab() {
         <div>
           <h1 className="text-lg font-black">Presupuestos y hábitos de gasto</h1>
           <p className="text-[10px] text-muted-foreground">Controla tus límites, entiende tus hábitos y encuentra oportunidades para ahorrar.</p>
+          <p className="text-[9px] font-bold text-kiri-emerald mt-0.5">
+            {getPeriodLabel(incomeFrequency, diasCobro)} · el gasto por categoría se reinicia cada periodo
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={openAdd} size="sm" className="bg-kiri-emerald text-white font-bold rounded-xl text-xs gap-1">
@@ -333,9 +373,16 @@ export function PresupuestoTab() {
         </div>
       </div>
 
+      {walletError && (
+        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-[11px] font-medium rounded-xl px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          No pudimos cargar tu billetera — los montos de abajo pueden no ser exactos.
+        </div>
+      )}
+
       {/* 4 metricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MC label="Disponible para gastar" value={formatAmount(realFreeAmount)} sub="Tu bolsillo de gasto libre" color="text-kiri-emerald" />
+        <AnimatedStatCard label="Disponible para gastar" value={realFreeAmount} sub="Tu bolsillo de gasto libre" formatAmount={formatAmount} />
         <MC label="Total presupuestado" value={formatAmount(totalBudget)} sub="Límites asignados a categorías" />
         <MC label="Total gastado" value={formatAmount(totalSpent)} sub={`${totalPct}% del presupuestado`} color={totalSpent > totalBudget ? "text-red-500" : "text-amber-500"} />
         <MC label="Disponible restante" value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={`${realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0}% sin gastar`} />
@@ -365,7 +412,7 @@ export function PresupuestoTab() {
 
       {/* Lista de categorías — aparece al clic en centro */}
       {selectedId === '__all__' && catsWithSpent.length > 0 && (
-        <Card className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+        <Card ref={selectedDetailRef} className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
           <CardContent className="p-5 space-y-3">
             <h3 className="text-sm font-bold">Tus categorías</h3>
             <p className="text-[9px] text-muted-foreground">Edita los límites máximos de gasto por categoría.</p>
@@ -388,7 +435,7 @@ export function PresupuestoTab() {
                       <button onClick={() => openEdit(cat)} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors shrink-0">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => persist(categories.filter(c => c.id !== cat.id))} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0">
+                      <button onClick={() => handleDeleteCategory(cat.id)} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -419,7 +466,7 @@ export function PresupuestoTab() {
         if (!cat) return null
         const ratio = cat.budget > 0 ? cat.spent / cat.budget : 0
         return (
-          <Card className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <Card ref={selectedDetailRef} className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <CardContent className="p-5">
               <CategoryDetail
                 cat={{ ...cat, limit: cat.budget, ratio, items: (cat.expenses ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
@@ -752,10 +799,10 @@ export function PresupuestoTab() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            {editingId && <Button variant="destructive" size="sm" onClick={handleDelete} className="mr-auto rounded-xl text-xs">Eliminar</Button>}
-            <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!form.name || !form.budget} className="bg-kiri-emerald text-white font-bold rounded-xl px-6">
-              {editingId ? "Guardar" : "+ Agregar"}
+            {editingId && <Button variant="destructive" size="sm" onClick={handleDelete} disabled={savingCategory} className="mr-auto rounded-xl text-xs">Eliminar</Button>}
+            <Button variant="ghost" onClick={() => setFormOpen(false)} disabled={savingCategory}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={!form.name || !form.budget || savingCategory} className="bg-kiri-emerald text-white font-bold rounded-xl px-6">
+              {savingCategory ? "Guardando..." : editingId ? "Guardar" : "+ Agregar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1004,6 +1051,100 @@ function MC({ label, value, sub, color }: { label: string; value: string; sub: s
         <p className="text-[8px] text-muted-foreground font-bold uppercase">{label}</p>
         <p className={cn("text-sm font-black mt-0.5", color)}>{value}</p>
         <p className="text-[8px] text-muted-foreground">{sub}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── AnimatedStatCard — como MC, pero con el efecto de "Sueldo Real" (tween +
+// delta flotante + mini sparkline). Usa el token de marca `kiri-emerald` (ya
+// usado sin variante dark: en el resto de este archivo) en vez de blanco fijo,
+// porque a diferencia de la tarjeta de Sueldo Real (siempre verde oscuro), esta
+// vive sobre `bg-card`, que cambia entre claro y oscuro. ──────────────────────
+
+function AnimatedStatCard({ label, value, sub, formatAmount }: {
+  label: string; value: number; sub: string; formatAmount: (n: number) => string
+}) {
+  const prevRef = useRef(value)
+  const idRef = useRef(0)
+  const frameRef = useRef<number>(0)
+  const [display, setDisplay] = useState(value)
+  const [flash, setFlash] = useState<"up" | "down" | null>(null)
+  const [delta, setDelta] = useState<{ amount: number; id: number } | null>(null)
+  const [history, setHistory] = useState<number[]>([value])
+
+  useEffect(() => {
+    const from = prevRef.current
+    const to = value
+    if (from === to) return
+    setHistory(h => [...h.slice(-9), to])
+    setFlash(to > from ? "up" : "down")
+
+    const deltaId = idRef.current++
+    setDelta({ amount: to - from, id: deltaId })
+    setTimeout(() => setDelta(d => (d?.id === deltaId ? null : d)), 1400)
+
+    const duration = 900
+    const startTime = performance.now()
+    const animate = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = -(Math.cos(Math.PI * progress) - 1) / 2
+      setDisplay(Math.round(from + (to - from) * eased))
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate)
+      } else {
+        setDisplay(to)
+        prevRef.current = to
+        setTimeout(() => setFlash(null), 700)
+      }
+    }
+    frameRef.current = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(frameRef.current)
+  }, [value])
+
+  const W = 64, H = 14
+  const vals = history.length > 1 ? history : [value, value]
+  const min = Math.min(...vals), max = Math.max(...vals)
+  const range = max - min || 1
+  const points = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W
+    const y = H - ((v - min) / range) * (H - 3) - 1.5
+    return `${x},${y}`
+  }).join(" ")
+
+  return (
+    <Card className="border-none bg-card shadow-sm rounded-2xl">
+      <CardContent className="p-3">
+        <p className="text-[8px] text-muted-foreground font-bold uppercase">{label}</p>
+        <div className="relative inline-block">
+          <p className={cn(
+            "text-sm font-black mt-0.5 transition-colors duration-500",
+            flash === "up" && "text-emerald-600 dark:text-emerald-400",
+            flash === "down" && "text-red-600 dark:text-red-400",
+            !flash && "text-kiri-emerald"
+          )}>
+            {formatAmount(display)}
+          </p>
+          {delta && (
+            <span
+              key={delta.id}
+              className={cn(
+                "absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-bold rounded-full px-1.5 py-0.5 pointer-events-none",
+                delta.amount > 0
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  : "bg-red-500/15 text-red-600 dark:text-red-400"
+              )}
+              style={{ animation: "kiriFloatUp 1.4s ease-out forwards" }}
+            >
+              {delta.amount > 0 ? "+" : ""}{formatAmount(delta.amount)}
+            </span>
+          )}
+        </div>
+        <p className="text-[8px] text-muted-foreground">{sub}</p>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mt-1 text-kiri-emerald opacity-60">
+          <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </CardContent>
     </Card>
   )

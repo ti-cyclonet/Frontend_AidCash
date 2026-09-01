@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react"
 import {
-  Utensils, Car, Home, Zap, Film, HeartPulse, ShoppingBag, MoreHorizontal,
-  Pencil, X, GraduationCap, PawPrint, Dumbbell, Plane, Gamepad2, Wifi,
+  Utensils, Car, Home, Wrench, Gift, Heart, ShoppingBag, MoreHorizontal,
+  Pencil, GraduationCap, PawPrint, Dumbbell, Plane, Gamepad2, Wifi, Baby, ReceiptText,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { getCategoryInsight } from "@/lib/budget-insights"
@@ -51,17 +52,19 @@ function statusFor(ratio: number) {
   return { label: 'Dentro del presupuesto', color: '#22c55e' }
 }
 
-function insightFor(cat: RadialCategory, frequency: 'mensual' | 'quincenal') {
-  const insight = getCategoryInsight(cat.name, cat.limit, cat.spent, frequency)
+function insightFor(cat: RadialCategory, frequency: 'mensual' | 'quincenal', diasCobro: string) {
+  const insight = getCategoryInsight(cat.name, cat.limit, cat.spent, frequency, diasCobro)
   return insight.message
 }
 
-// Icon resolver — reutiliza el mapeo existente del proyecto
+// Icon resolver — mismas claves e íconos que ICONS en PresupuestoTab.tsx.
+// (Antes "gift"→Film, "tools"→Zap y "baby"→Film no coincidían con el ícono
+// real de la categoría — se veía distinto acá que en el formulario/lista.)
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; color?: string; className?: string }>> = {
   utensils: Utensils, car: Car, home: Home, wifi: Wifi, gamepad: Gamepad2,
-  heart: HeartPulse, shopping: ShoppingBag, education: GraduationCap,
+  heart: Heart, shopping: ShoppingBag, education: GraduationCap,
   paw: PawPrint, dumbbell: Dumbbell, plane: Plane, more: MoreHorizontal,
-  tools: Zap, gift: Film, baby: Film,
+  tools: Wrench, gift: Gift, baby: Baby,
 }
 
 function resolveIcon(iconKey: string) {
@@ -105,9 +108,18 @@ function RingProgress({ ratio, color, size = 130 }: { ratio: number; color: stri
 }
 
 export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory & { ratio: number }; onEdit: () => void; frequency: 'mensual' | 'quincenal' }) {
+  const router = useRouter()
+  const { diasCobro } = useAppContext()
   const status = statusFor(cat.ratio)
   const totalItems = cat.items.reduce((s, it) => s + it.amount, 0) || 1
   const IconComp = resolveIcon(cat.icon)
+
+  // "Registrar gasto" no vive acá — Obligaciones ya tiene ese modal completo
+  // (con detección de gasto hormiga, tarjeta de crédito, etc.). En vez de
+  // duplicarlo, se navega ahí con la categoría pre-seleccionada.
+  const goRegisterExpense = () => {
+    router.push(`/obligaciones?registrarGasto=1&categoria=${encodeURIComponent(cat.name)}`)
+  }
 
   return (
     <div className="space-y-4">
@@ -120,12 +132,20 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
           <p className="text-foreground text-base font-bold">{cat.name}</p>
           <p className="text-muted-foreground text-xs">Presupuesto de esta categoría</p>
         </div>
-        <button
-          onClick={onEdit}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
-        >
-          <Pencil size={14} /> Editar
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={goRegisterExpense}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-kiri-emerald text-white text-sm font-semibold hover:bg-kiri-emerald/90 transition-colors"
+          >
+            <ReceiptText size={14} /> Registrar gasto
+          </button>
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+          >
+            <Pencil size={14} /> Editar
+          </button>
+        </div>
       </div>
 
       {/* Ring + Stats */}
@@ -146,7 +166,7 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
 
       {/* Consejo Kiri */}
       <div className="p-3 rounded-xl bg-muted/20 text-muted-foreground text-xs leading-relaxed">
-        📍 <strong className="text-foreground">Consejo Kiri:</strong> {insightFor(cat, frequency)}
+        📍 <strong className="text-foreground">Consejo Kiri:</strong> {insightFor(cat, frequency, diasCobro)}
       </div>
 
       {/* Desglose */}
@@ -179,56 +199,10 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
   )
 }
 
-export function AllCategoriesList({ categories, onPick, onEdit, totalLimit }: {
-  categories: (RadialCategory & { ratio: number })[]
-  onPick: (i: number) => void
-  onEdit: (id: string) => void
-  totalLimit: number
-}) {
-  const totalSpent = categories.reduce((s, c) => s + c.spent, 0)
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <p className="text-foreground text-base font-bold">Tus categorías</p>
-        <p className="text-muted-foreground text-xs">Edita los límites máximos de gasto por categoría.</p>
-      </div>
-      <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-        {categories.map((c, i) => {
-          const share = totalLimit ? Math.round((c.limit / totalLimit) * 100) : 0
-          const IconComp = resolveIcon(c.icon)
-          return (
-            <div key={c.id} className="space-y-1.5">
-              <div className="flex items-center gap-2.5">
-                <button onClick={() => onPick(i)} className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 hover:scale-110 transition-transform" style={{ background: `${c.color}22` }}>
-                  <IconComp size={14} color={c.color} />
-                </button>
-                <button onClick={() => onPick(i)} className="flex-1 text-left min-w-0">
-                  <p className="text-foreground text-sm font-semibold truncate">{c.name}</p>
-                  <p className="text-muted-foreground text-[10px]">{share}% del total</p>
-                </button>
-                <div className="text-right shrink-0">
-                  <p className="text-foreground text-sm font-semibold">{cop(c.limit)}</p>
-                  <p className="text-muted-foreground text-[10px]">{cop(c.spent)} gastado</p>
-                </div>
-                <button onClick={() => onEdit(c.id)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
-                  <Pencil size={13} />
-                </button>
-              </div>
-              <div className="h-[5px] rounded-full bg-muted/20 overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(c.ratio, 1) * 100}%`, background: c.color }} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="flex justify-between pt-3 border-t border-border/50 text-xs text-muted-foreground">
-        <span>Total asignado <strong className="text-foreground">{cop(totalLimit)}</strong></span>
-        <span>Total gastado <strong className="text-foreground">{cop(totalSpent)}</strong></span>
-      </div>
-    </div>
-  )
-}
+// Nota: la lista de "todas las categorías" y el detalle de una categoría
+// seleccionada NO se renderizan acá — este componente solo dibuja el gráfico.
+// PresupuestoTab.tsx es quien decide qué mostrar debajo, usando `CategoryDetail`
+// (exportado más abajo) directamente y su propia lista de categorías.
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -283,12 +257,6 @@ export function BudgetRadialChart({ categories, onEdit, incomeFrequency, onSelec
     setView(newView)
     onSelectionChange?.(newView === 'all' ? { type: 'all' } : null)
   }
-
-  const panel = view === 'all' ? (
-    <AllCategoriesList categories={spokes} onPick={handlePick} onEdit={onEdit} totalLimit={totalLimit} />
-  ) : view !== null && typeof view === 'number' ? (
-    <CategoryDetail cat={spokes[view]} onEdit={() => onEdit(spokes[view].id)} frequency={incomeFrequency} />
-  ) : null
 
   return (
     <div className="space-y-0">

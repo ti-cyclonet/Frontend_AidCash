@@ -11,6 +11,8 @@
  * - Tipado de respuestas
  */
 
+import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse } from './types'
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
 // ─── Storage Keys ─────────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ interface ApiOptions extends Omit<RequestInit, 'body'> {
   skipAuth?: boolean
 }
 
-interface ApiResponse<T = unknown> {
+export interface ApiResponse<T = unknown> {
   data: T | null
   error: string | null
   status: number
@@ -292,6 +294,12 @@ export const userApi = {
     return api<{ wallet: WalletState }>('/users/wallet/reset', {
       method: 'POST',
     })
+  },
+
+  // ─── Búsqueda de usuarios (Social) — coincidencia exacta únicamente ────────
+
+  async searchUser(method: 'username' | 'correo', value: string) {
+    return api<{ user: SocialUser | null }>(`/users/search?method=${method}&value=${encodeURIComponent(value)}`)
   },
 }
 
@@ -489,7 +497,7 @@ export const emergencyFundApi = {
 
 export const gamificationApi = {
   async getStatus() {
-    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[] }>('/gamification/status')
+    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number }>('/gamification/status')
   },
 
   async updateStreak(streakActual: number, streakMejor?: number) {
@@ -508,6 +516,20 @@ export const gamificationApi = {
 
   async getBadges() {
     return api<{ badges: Record<string, unknown>[] }>('/gamification/badges')
+  },
+}
+
+// ─── Missions API (Fase 3) ─────────────────────────────────────────────────────
+
+export const missionsApi = {
+  async getMissions() {
+    return api<MissionsResponse>('/missions')
+  },
+
+  async claim(missionKey: string) {
+    return api<{ reward: RewardResult }>(`/missions/${missionKey}/claim`, {
+      method: 'POST',
+    })
   },
 }
 
@@ -536,6 +558,9 @@ export interface BalanceReport {
     totalInteresPagado: number
     totalCapitalAbonado: number
     totalPagosDeuda: number
+    totalInteresHistorico: number
+    totalCapitalHistorico: number
+    interesEvitado: number
   }
   categoryDistribution: { name: string; value: number; color: string }[]
   monthlySeries: { month: string; ingresos: number; egresos: number }[]
@@ -546,6 +571,29 @@ export interface BalanceReport {
   fixedExpenses: Record<string, unknown>[]
   incomeRecords: Record<string, unknown>[]
   debtPayments: Record<string, unknown>[]
+}
+
+// ─── Movimiento unificado — Balance/Historial ─────────────────────────────────
+// Forma compartida de "un renglón" del historial financiero, sin importar si es
+// un pago de deuda, un gasto fijo, un gasto hormiga, un ingreso o un ahorro.
+
+export type MovementType = "deudas" | "gastos_fijos" | "hormiga" | "ingresos" | "ahorros"
+
+export interface Movement {
+  id: string
+  fecha: string
+  nombre: string
+  tipo: MovementType
+  tipoLabel: string
+  monto: number
+  estado: "pagado" | "pendiente" | "parcial"
+  // Desglose de amortización — solo presente para tipo === "deudas"
+  abonoCapital?: number
+  pagoInteres?: number
+  saldoAnterior?: number
+  saldoPosterior?: number
+  tasaInteres?: string
+  acreedor?: string
 }
 
 export const reportsApi = {
@@ -572,9 +620,9 @@ export const connectionsApi = {
       pendingSent:     Record<string, unknown>[]
     }>('/connections')
   },
-  async invite(correo: string, role?: 'FRIEND' | 'FAMILY' | 'PARTNER') {
+  async invite(method: 'username' | 'correo', value: string, role?: 'FRIEND' | 'FAMILY' | 'PARTNER') {
     return api<{ connection: Record<string, unknown>; addressee: Record<string, unknown> }>('/connections/invite', {
-      method: 'POST', body: { correo, role },
+      method: 'POST', body: { method, value, role },
     })
   },
   async accept(connectionId: string) {
@@ -596,12 +644,16 @@ export const connectionsApi = {
     })
   },
   async getShared(connectionId: string) {
-    return api<{
-      connection: { id: string; role: string; createdAt: string }
-      peer: { id: string; nombre: string; correo: string }
-      pockets: Record<string, unknown>[]
-      loans: Record<string, unknown>[]
-    }>(`/connections/${connectionId}/shared`)
+    return api<ConnectionSharedResponse>(`/connections/${connectionId}/shared`)
+  },
+
+  // ─── Fase 4: racha entre amigos, jardines vecinos, riego ───────────────────
+
+  async getFriendsGarden() {
+    return api<FriendsGardenResponse>('/connections/friends-garden')
+  },
+  async water(connectionId: string) {
+    return api<{ watered: boolean }>(`/connections/${connectionId}/water`, { method: 'POST' })
   },
 }
 
@@ -804,6 +856,8 @@ export interface BudgetCategory {
   icono: string
   color: string
   tipo: 'gasto' | 'ingreso' | 'ahorro'
+  montoLimite: number
+  linkedFixedExpenseIds: string[]
 }
 
 export const budgetCategoriesApi = {
@@ -814,7 +868,7 @@ export const budgetCategoriesApi = {
   },
 
   /** Crear una nueva categoría */
-  async create(data: { nombre: string; icono?: string; color?: string; tipo?: 'gasto' | 'ingreso' | 'ahorro' }) {
+  async create(data: { nombre: string; icono?: string; color?: string; tipo?: 'gasto' | 'ingreso' | 'ahorro'; montoLimite?: number; linkedFixedExpenseIds?: string[] }) {
     return api<{ category: BudgetCategory }>('/budget-categories', {
       method: 'POST',
       body: data,

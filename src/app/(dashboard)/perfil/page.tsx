@@ -34,7 +34,9 @@ export default function PerfilPage() {
   }
 
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, avatarUrl: user.avatarUrl, firstName: '', secondName: '', firstSurname: '', secondSurname: '', documentType: 'CC', documentNumber: '' })
+  const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, username: user.username, avatarUrl: user.avatarUrl, firstName: '', secondName: '', firstSurname: '', secondSurname: '', documentType: 'CC', documentNumber: '' })
+  const [avatarChanged, setAvatarChanged] = useState(false)
+  const [usernameError, setUsernameError] = useState<string | null>(null)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -45,19 +47,24 @@ export default function PerfilPage() {
     const reader = new FileReader()
     reader.onload = (ev) => {
       setEditForm(f => ({ ...f, avatarUrl: ev.target?.result as string }))
+      setAvatarChanged(true)
     }
     reader.readAsDataURL(file)
   }
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     // Build concatenated nombre for Kiri DB
     const fullName = [editForm.firstName, editForm.secondName, editForm.firstSurname, editForm.secondSurname].filter(Boolean).join(' ')
     const updatedForm = { ...editForm, nombre: fullName }
-    setUser(updatedForm)
-    // Send extra fields to backend (which syncs with Authoriza)
-    userApi.updateProfile({
+    setUsernameError(null)
+
+    // Send extra fields to backend (which syncs con Authoriza) — el avatar solo
+    // se reenvía si cambió, para no resubir la foto entera en cada edición.
+    const { error } = await userApi.updateProfile({
       nombre: fullName,
       correo: editForm.correo,
+      username: editForm.username,
+      ...(avatarChanged ? { avatarUrl: editForm.avatarUrl } : {}),
       firstName: editForm.firstName,
       secondName: editForm.secondName,
       firstSurname: editForm.firstSurname,
@@ -65,6 +72,14 @@ export default function PerfilPage() {
       documentType: editForm.documentType,
       documentNumber: editForm.documentNumber,
     })
+
+    if (error) {
+      setUsernameError(error)
+      return
+    }
+
+    setUser(updatedForm)
+    setAvatarChanged(false)
     setIsEditOpen(false)
   }
 
@@ -74,6 +89,7 @@ export default function PerfilPage() {
     setEditForm({
       nombre: fullName,
       correo: user.correo || displayEmail || "",
+      username: user.username,
       avatarUrl: user.avatarUrl,
       firstName: parts[0] || '',
       secondName: parts.length === 4 ? parts[1] : '',
@@ -82,6 +98,8 @@ export default function PerfilPage() {
       documentType: 'CC',
       documentNumber: '',
     })
+    setAvatarChanged(false)
+    setUsernameError(null)
     setIsEditOpen(true)
   }
 
@@ -343,6 +361,17 @@ export default function PerfilPage() {
                 onChange={e => setEditForm(f => ({ ...f, correo: e.target.value }))}
                 placeholder="tu@correo.com"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Nombre de usuario</Label>
+              <Input
+                value={editForm.username}
+                onChange={e => setEditForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+                placeholder="tu_usuario"
+              />
+              <p className="text-[10px] text-muted-foreground">Así te encuentran tus amigos en Social — @{editForm.username || 'usuario'}</p>
+              {usernameError && <p className="text-[10px] text-destructive">{usernameError}</p>}
             </div>
 
             <div className="grid grid-cols-[1fr_2fr] gap-3">

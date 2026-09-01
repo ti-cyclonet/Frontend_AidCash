@@ -2,7 +2,7 @@
 
 import {
   createContext, useContext, useState, useEffect,
-  useCallback, useRef, ReactNode,
+  useCallback, useMemo, useRef, ReactNode,
 } from "react"
 import { IncomeFrequency } from "@/lib/types"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
@@ -26,6 +26,7 @@ const CURRENCY_CONFIG: Record<Currency, { locale: string; currency: string }> = 
 interface UserProfile {
   nombre: string
   correo: string
+  username: string
   avatarUrl: string
 }
 
@@ -67,7 +68,7 @@ const LS = {
   inactivityTimeout: "kiri_inactivity_timeout",
 } as const
 
-const defaultUser: UserProfile = { nombre: "", correo: "", avatarUrl: "" }
+const defaultUser: UserProfile = { nombre: "", correo: "", username: "", avatarUrl: "" }
 
 const AppContext = createContext<AppContextValue | null>(null)
 
@@ -153,6 +154,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const u = data.user
       const nombre       = (u.nombre as string) ?? ""
       const correo       = (u.correo as string) ?? ""
+      const username     = (u.username as string) ?? ""
       const ingreso_base = Number(u.ingresoBase ?? 0)
       const frecuencia   = (u.frecuenciaIngreso as IncomeFrequency) ?? "mensual"
       const onboarding   = (u.onboardingDone as boolean) ?? false
@@ -161,7 +163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const diasPagoArr  = (u.diasPago as number[] | undefined) ?? []
       const dias_cobro   = diasPagoArr.length > 0 ? diasPagoArr.join(",") : (localStorage.getItem("kiri_dias_cobro") || "1,16")
 
-      setUserState(prev => ({ ...prev, nombre, correo }))
+      setUserState(prev => ({ ...prev, nombre, correo, username }))
       setIncomeState(ingreso_base)
       setIncomeFrequencyState(frecuencia)
       setDiasCobroState(dias_cobro)
@@ -175,7 +177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(LS.diasCobro,  dias_cobro)
       localStorage.setItem(LS.onboarding, String(onboarding))
       localStorage.setItem(LS.metaAhorro, String(meta))
-      localStorage.setItem(LS.user, JSON.stringify({ nombre, correo, avatarUrl: "" }))
+      localStorage.setItem(LS.user, JSON.stringify({ nombre, correo, username, avatarUrl: "" }))
       profileLoadedRef.current = true
       setProfileLoading(false)
     })
@@ -282,21 +284,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }).format(amount)
   }, [currency])
 
+  // Memoizado para que la referencia solo cambie cuando algún valor realmente
+  // cambia — sin esto, cada render de AppProvider crea un objeto nuevo y
+  // dispara de nuevo cualquier useEffect que dependa de useAppContext() en
+  // toda la app (causaba una tormenta de refetch en cascada).
+  const value = useMemo(() => ({
+    user, setUser,
+    currency, setCurrency,
+    isDarkMode, setIsDarkMode,
+    formatAmount,
+    income, setIncome,
+    incomeFrequency, setIncomeFrequency,
+    diasCobro, setDiasCobro,
+    savingsAmount,
+    onboardingDone, setOnboardingDone,
+    metaAhorro, setMetaAhorro,
+    profileLoading,
+    inactivityTimeout, setInactivityTimeout,
+  }), [
+    user, setUser,
+    currency, setCurrency,
+    isDarkMode, setIsDarkMode,
+    formatAmount,
+    income, setIncome,
+    incomeFrequency, setIncomeFrequency,
+    diasCobro, setDiasCobro,
+    savingsAmount,
+    onboardingDone, setOnboardingDone,
+    metaAhorro, setMetaAhorro,
+    profileLoading,
+    inactivityTimeout, setInactivityTimeout,
+  ])
+
   return (
-    <AppContext.Provider value={{
-      user, setUser,
-      currency, setCurrency,
-      isDarkMode, setIsDarkMode,
-      formatAmount,
-      income, setIncome,
-      incomeFrequency, setIncomeFrequency,
-      diasCobro, setDiasCobro,
-      savingsAmount,
-      onboardingDone, setOnboardingDone,
-      metaAhorro, setMetaAhorro,
-      profileLoading,
-      inactivityTimeout, setInactivityTimeout,
-    }}>
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   )

@@ -137,7 +137,7 @@ export default function OnboardingPage() {
         await addFixedExpense({
           nombre: currentObligation.nombre,
           monto: Number(currentObligation.monto),
-          diasPago: currentObligation.diasPago || "1",
+          fechaCorte: currentObligation.diasPago || "1",
           frecuencia,
         })
       }

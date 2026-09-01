@@ -35,9 +35,38 @@ function fmtPct(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
 }
 
+export interface PdfChartImages {
+  /** PNG data URL del contenedor de "Evolución del balance", capturado con html2canvas */
+  evolution?: string
+  /** PNG data URL del contenedor de "Distribución por categoría" (dona + leyenda) */
+  category?: string
+}
+
+/** Une deudas/gastos fijos/hormiga/ingresos/ahorro en una sola lista, ordenada
+ * por fecha desc — mismo criterio que el historial unificado de la app. */
+function buildMovements(report: BalanceReport): { fecha: string; nombre: string; monto: number }[] {
+  const rows: { fecha: string; nombre: string; monto: number }[] = []
+  for (const p of (report.debtPayments ?? [])) {
+    rows.push({ fecha: p.createdAt as string, nombre: (p.debtName as string) ?? 'Deuda', monto: -(p.montoPagado as number) })
+  }
+  for (const f of report.fixedExpenses.filter(f => f.pagadoEstePeriodo as boolean)) {
+    rows.push({ fecha: (f.updatedAt as string) ?? (f.createdAt as string), nombre: f.nombre as string, monto: -((f as any).montoPagadoEstePeriodo ?? (f.monto as number)) })
+  }
+  for (const e of report.impulseExpenses) {
+    rows.push({ fecha: e.createdAt as string, nombre: e.nombre as string, monto: -(e.monto as number) })
+  }
+  for (const r of (report.incomeRecords ?? [])) {
+    rows.push({ fecha: r.createdAt as string, nombre: (r.tipo as string) === 'salario' ? 'Sueldo' : 'Ingreso extra', monto: r.monto as number })
+  }
+  for (const sv of report.savingsHistory.filter(e => (e.tipo as string) === 'ahorro')) {
+    rows.push({ fecha: sv.createdAt as string, nombre: `Ahorro — ${sv.periodo as string}`, monto: -(sv.monto as number) })
+  }
+  return rows.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+}
+
 // ─── Export PDF ───────────────────────────────────────────────────────────────
 
-export async function exportToPdf(report: BalanceReport, filename = 'kiri-balance'): Promise<void> {
+export async function exportToPdf(report: BalanceReport, filename = 'kiri-balance', images: PdfChartImages = {}): Promise<void> {
   const { default: jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
 
@@ -45,6 +74,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   const s = report.summary
   const pageWidth = 210
   const margin = 14
+  const contentWidth = pageWidth - margin * 2
 
   // Colores del brand
   const GREEN = [16, 185, 129] as [number, number, number]
@@ -53,45 +83,146 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   const RED = [239, 68, 68] as [number, number, number]
   const PURPLE = [99, 102, 241] as [number, number, number]
 
+  /** Dibuja una imagen ya capturada, respetando su proporción real, y devuelve la Y siguiente. */
+  const addChartImage = (dataUrl: string | undefined, atY: number, maxHeight = 60): number => {
+    if (!dataUrl) return atY
+    try {
+      const props = doc.getImageProperties(dataUrl)
+      const h = Math.min(maxHeight, (contentWidth * props.height) / props.width)
+      const w = (h * props.width) / props.height
+      doc.addImage(dataUrl, 'PNG', margin + (contentWidth - w) / 2, atY, w, h)
+      return atY + h + 6
+    } catch {
+      return atY
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
-  // ENCABEZADO
+  // PÁGINA 1 — Portada clara: KPIs + gráficos + movimientos recientes
   // ══════════════════════════════════════════════════════════════════════════
 
-  doc.setFillColor(DARK_GREEN[0], DARK_GREEN[1], DARK_GREEN[2])
-  doc.rect(0, 0, pageWidth, 32, 'F')
-
-  // Logo texto
-  doc.setTextColor(GREEN[0], GREEN[1], GREEN[2])
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.text('🌱 Kiri Finance', margin, 12)
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(180, 220, 200)
-  doc.text('Tu dinero, tu futuro, tu equilibrio.', margin, 17)
-
-  // Título central
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Balance General', pageWidth / 2, 12, { align: 'center' })
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Resumen completo de tu salud financiera', pageWidth / 2, 18, { align: 'center' })
-
-  // Info derecha
-  doc.setFontSize(7)
-  doc.setTextColor(180, 220, 200)
   const now = new Date()
-  doc.text(`Fecha: ${now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`, pageWidth - margin, 10, { align: 'right' })
-  doc.text(`Periodo: ${fmtDate(report.from)} — ${fmtDate(report.to)}`, pageWidth - margin, 15, { align: 'right' })
-  doc.text(`Hora: ${now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`, pageWidth - margin, 20, { align: 'right' })
+  const periodLabel = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
 
-  let y = 38
+  doc.setFillColor(255, 255, 255)
+  doc.rect(0, 0, pageWidth, 297, 'F')
+
+  doc.setTextColor(GREEN[0], GREEN[1], GREEN[2])
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('KIRI FINANCE', margin, 16)
+
+  doc.setTextColor(20, 20, 20)
+  doc.setFontSize(20)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`Balance · ${periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}`, margin, 26)
+
+  doc.setTextColor(120, 120, 120)
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Reporte generado el ${now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`, margin, 32)
+
+  let y = 42
+
+  // ── 3 KPIs principales ──
+  const coverKpis = [
+    { label: 'Total recibido', value: s.totalIngreso },
+    { label: 'Total gastado', value: s.totalEgreso },
+    { label: 'Ahorro del periodo', value: s.totalSaved },
+  ]
+  const kpiWidth = (contentWidth - 6 * 2) / 3
+  coverKpis.forEach((k, i) => {
+    const x = margin + i * (kpiWidth + 6)
+    doc.setFillColor(243, 244, 246)
+    doc.roundedRect(x, y, kpiWidth, 18, 2.5, 2.5, 'F')
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(107, 114, 128)
+    doc.text(k.label, x + 4, y + 7)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(17, 24, 39)
+    doc.text(fmtMoney(k.value), x + 4, y + 14)
+  })
+  y += 26
+
+  // ── Evolución del balance (imagen capturada del gráfico real) ──
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(17, 24, 39)
+  doc.text('Evolución del balance', margin, y)
+  y += 4
+  if (images.evolution) {
+    y = addChartImage(images.evolution, y, 55)
+  } else {
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(150, 150, 150)
+    doc.text('Sin datos suficientes para graficar.', margin, y + 5)
+    y += 12
+  }
+
+  // ── Distribución de gastos (imagen capturada de la dona) ──
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(17, 24, 39)
+  doc.text('Distribución de gastos', margin, y)
+  y += 4
+  if (images.category) {
+    y = addChartImage(images.category, y, 45)
+  } else {
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(150, 150, 150)
+    doc.text('Crea categorías en Presupuesto para ver tu distribución de gastos acá.', margin, y + 5)
+    y += 12
+  }
+
+  // ── Movimientos del periodo (lista limpia, los 6 más recientes) ──
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(17, 24, 39)
+  doc.text('Movimientos del periodo', margin, y)
+  y += 4
+
+  const recentMovements = buildMovements(report).slice(0, 6)
+  if (recentMovements.length > 0) {
+    doc.setDrawColor(229, 231, 235)
+    doc.roundedRect(margin, y, contentWidth, recentMovements.length * 8, 2, 2, 'S')
+    recentMovements.forEach((m, i) => {
+      const rowY = y + i * 8
+      if (i % 2 === 1) {
+        doc.setFillColor(249, 250, 251)
+        doc.rect(margin, rowY, contentWidth, 8, 'F')
+      }
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(55, 65, 81)
+      doc.text(`${fmtDate(m.fecha)} · ${m.nombre}`, margin + 4, rowY + 5.5)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(m.monto >= 0 ? GREEN[0] : RED[0], m.monto >= 0 ? GREEN[1] : RED[1], m.monto >= 0 ? GREEN[2] : RED[2])
+      doc.text(`${m.monto >= 0 ? '+' : '-'}${fmtMoney(m.monto)}`, pageWidth - margin - 4, rowY + 5.5, { align: 'right' })
+    })
+    y += recentMovements.length * 8 + 8
+  } else {
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(150, 150, 150)
+    doc.text('Sin movimientos en este periodo.', margin, y + 5)
+    y += 12
+  }
+
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(160, 160, 180)
+  doc.text('El detalle completo de deudas, ahorros y transacciones sigue en las páginas siguientes →', margin, 275)
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 5 TARJETAS MÉTRICAS
+  // PÁGINAS SIGUIENTES — mismo detalle exhaustivo que ya existía
   // ══════════════════════════════════════════════════════════════════════════
+
+  doc.addPage()
+  y = 20
 
   const balanceNeto = s.cashBalance
   const metrics = [
@@ -173,39 +304,39 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   // Resumen de intereses
   const totalDeuda = report.debts.filter(d => (d.estado as string) === 'activa').reduce((a, d) => a + (d.saldoRestante as number), 0)
-  const totalInteresEstimado = report.debts
-    .filter(d => (d.estado as string) === 'activa' && d.tasaInteres)
-    .reduce((a, d) => a + ((d.saldoRestante as number) * (Number(d.tasaInteres) / 100)), 0)
-  const interesAhorrado = s.totalCapitalAbonado > 0 ? Math.round(s.totalCapitalAbonado * 0.03) : 0
   const pctPagado = report.debts.length > 0
     ? Math.round(((report.debts.reduce((a, d) => a + (d.montoTotal as number), 0) - totalDeuda) / Math.max(1, report.debts.reduce((a, d) => a + (d.montoTotal as number), 0))) * 100)
     : 0
 
-  // Cards de intereses
+  // Cards de intereses — "Interés evitado" es un cálculo real (motor de
+  // amortización comparando el plan original vs el proyectado desde el saldo
+  // actual), no una estimación — ver summary.interesEvitado en el backend.
   const interestCards = [
     { label: 'Total de deudas', value: fmtMoney(report.debts.reduce((a, d) => a + (d.montoTotal as number), 0)) },
     { label: 'Saldo restante', value: fmtMoney(totalDeuda) },
     { label: `${pctPagado}% Pagado`, value: '' },
-    { label: 'Interés mensual estimado', value: fmtMoney(Math.round(totalInteresEstimado)) },
+    { label: 'Interés evitado', value: fmtMoney(s.interesEvitado) },
     { label: 'Capital abonado este periodo', value: fmtMoney(s.totalCapitalAbonado) },
   ]
 
   const icWidth = (pageWidth - margin * 2 - 4 * 2) / 3
-  interestCards.slice(0, 3).forEach((c, i) => {
-    const x = margin + i * (icWidth + 2)
+  const drawInterestCard = (c: { label: string; value: string }, x: number, rowY: number) => {
     doc.setFillColor(245, 250, 248)
-    doc.roundedRect(x, y, icWidth, 12, 1.5, 1.5, 'F')
+    doc.roundedRect(x, rowY, icWidth, 12, 1.5, 1.5, 'F')
     doc.setFontSize(6)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(100, 100, 120)
-    doc.text(c.label, x + 3, y + 5)
+    doc.text(c.label, x + 3, rowY + 5)
     if (c.value) {
       doc.setFontSize(8)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(40, 40, 60)
-      doc.text(c.value, x + 3, y + 10)
+      doc.text(c.value, x + 3, rowY + 10)
     }
-  })
+  }
+  interestCards.slice(0, 3).forEach((c, i) => drawInterestCard(c, margin + i * (icWidth + 2), y))
+  y += 14
+  interestCards.slice(3, 5).forEach((c, i) => drawInterestCard(c, margin + i * (icWidth + 2), y))
   y += 16
 
   // ══════════════════════════════════════════════════════════════════════════

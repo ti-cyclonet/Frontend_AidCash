@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
 import {
   debtsApi,
   fixedExpensesApi,
@@ -103,9 +103,9 @@ function mapImpulse(row: Record<string, unknown>): ImpulseExpense {
   }
 }
 
-// ─── Hook principal ───────────────────────────────────────────────────────────
+// ─── Hook interno — un solo dueño del estado, ver FinanceDataProvider más abajo ─
 
-export function useFinanceData() {
+function useFinanceDataInternal() {
   const { user: authUser } = useAuth()
   const userId = authUser?.id ?? null
 
@@ -244,22 +244,17 @@ export function useFinanceData() {
 
     // ═══ AUTO-VINCULAR A CATEGORÍA "DEUDAS": Si existe esa categoría, registrar el pago ═══
     try {
-      if (typeof window !== 'undefined') {
-        const raw = localStorage.getItem('kiri_budget_categories')
-        if (raw) {
-          const cats = JSON.parse(raw) as { id: string; name: string; linkedFixedIds?: string[] }[]
-          const debtCat = cats.find(c => c.name.toLowerCase() === 'deudas' || c.name.toLowerCase() === 'deuda')
-          if (debtCat) {
-            // Solo registrar si el pago cubrió la cuota (pagadoEstePeriodo = true)
-            if (backendDebt.pagadoEstePeriodo) {
-              const { impulseApi: iApi } = await import('@/lib/api-client')
-              await iApi.create({
-                nombre: `[${debtCat.name}] ${debt.nombre} (pago deuda)`,
-                monto: realPaid,
-                categoria: 'otro',
-              })
-            }
-          }
+      const { budgetCategoriesApi, impulseApi: iApi } = await import('@/lib/api-client')
+      const { data: catsRes } = await budgetCategoriesApi.list()
+      const debtCat = catsRes?.categories.find(c => c.nombre.toLowerCase() === 'deudas' || c.nombre.toLowerCase() === 'deuda')
+      if (debtCat) {
+        // Solo registrar si el pago cubrió la cuota (pagadoEstePeriodo = true)
+        if (backendDebt.pagadoEstePeriodo) {
+          await iApi.create({
+            nombre: `[${debtCat.nombre}] ${debt.nombre} (pago deuda)`,
+            monto: realPaid,
+            categoria: 'otro',
+          })
         }
       }
     } catch { /* No bloquear */ }
@@ -342,20 +337,21 @@ export function useFinanceData() {
     // Solo sugerir vinculación si NO está vinculado pero coincide con una categoría. ═══
     try {
       if (typeof window !== 'undefined') {
-        const raw = localStorage.getItem('kiri_budget_categories')
-        if (raw) {
-          const cats = JSON.parse(raw) as { id: string; name: string; linkedFixedIds?: string[] }[]
-          const linkedCat = cats.find(c => c.linkedFixedIds?.includes(id))
-          if (!linkedCat) {
-            // No está vinculado — sugerir categoría si coincide con alguna por keywords
-            const { detectBudgetCategory } = await import('@/hooks/use-budget-categories')
-            const suggested = detectBudgetCategory(fe.nombre, cats as any)
-            if (suggested) {
-              // Emitir evento para que el UI muestre sugerencia al usuario
-              window.dispatchEvent(new CustomEvent('kiri:suggest-category-link', {
-                detail: { fixedId: id, fixedName: fe.nombre, suggestedCategory: suggested, monto: realPaid }
-              }))
-            }
+        const { budgetCategoriesApi } = await import('@/lib/api-client')
+        const { data: catsRes } = await budgetCategoriesApi.list()
+        const cats = (catsRes?.categories ?? []).map(c => ({
+          id: c.id, name: c.nombre, budget: c.montoLimite, spent: 0, color: c.color, icon: c.icono, linkedFixedIds: c.linkedFixedExpenseIds,
+        }))
+        const linkedCat = cats.find(c => c.linkedFixedIds?.includes(id))
+        if (!linkedCat) {
+          // No está vinculado — sugerir categoría si coincide con alguna por keywords
+          const { detectBudgetCategory } = await import('@/hooks/use-budget-categories')
+          const suggested = detectBudgetCategory(fe.nombre, cats)
+          if (suggested) {
+            // Emitir evento para que el UI muestre sugerencia al usuario
+            window.dispatchEvent(new CustomEvent('kiri:suggest-category-link', {
+              detail: { fixedId: id, fixedName: fe.nombre, suggestedCategory: suggested, monto: realPaid }
+            }))
           }
         }
       }
@@ -467,4 +463,36 @@ export function useFinanceData() {
 
     refetch: fetchAll,
   }
+}
+
+// ─── Contexto compartido ────────────────────────────────────────────────────────
+//
+// useFinanceData() se llama de forma independiente en ~19 componentes de la app.
+// Antes, cada llamada creaba su PROPIO estado y su PROPIO fetchAll() al montar —
+// una página con varios de esos componentes a la vez disparaba la misma tanda de
+// peticiones (deudas, gastos fijos, ahorro, ingresos extra, gastos hormiga) una
+// vez POR COMPONENTE (confirmado: 8 peticiones duplicadas a /api/debts en una
+// sola carga del dashboard). FinanceDataProvider corre el hook UNA sola vez y lo
+// comparte via contexto — useFinanceData() ahora solo lee ese contexto, así que
+// ningún componente que ya lo use necesita cambiar una sola línea.
+
+type FinanceData = ReturnType<typeof useFinanceDataInternal>
+
+const FinanceDataContext = createContext<FinanceData | null>(null)
+
+export function FinanceDataProvider({ children }: { children: ReactNode }) {
+  const value = useFinanceDataInternal()
+  return (
+    <FinanceDataContext.Provider value={value}>
+      {children}
+    </FinanceDataContext.Provider>
+  )
+}
+
+export function useFinanceData(): FinanceData {
+  const ctx = useContext(FinanceDataContext)
+  if (!ctx) {
+    throw new Error("useFinanceData() debe usarse dentro de <FinanceDataProvider> (ver src/app/(dashboard)/layout.tsx)")
+  }
+  return ctx
 }

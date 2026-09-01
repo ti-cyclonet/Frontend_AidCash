@@ -17,6 +17,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { userApi, WalletState } from "@/lib/api-client"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
+import { getCurrentQuincena, getPeriodRangeLabel, getNextPeriodLabel, isGenuinelyOverdue } from "@/lib/period-filter"
 import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
@@ -95,73 +96,130 @@ function CountingAmount({ value, formatAmount, className, duration = 1600 }: {
   )
 }
 
-// ─── Period helpers ───────────────────────────────────────────────────────────
+// ─── Balance Aura (partículas + delta flotante + sparkline de tendencia) ───────
+// Envuelve el número real (CountingAmount, sin tocarlo) y reacciona a cambios
+// reales del saldo — nada de botones "simular", la animación se dispara sola
+// cuando `total` cambia de verdad (registrar ingreso, pagar obligación, etc.).
 
-function getPeriodRangeLabel(diasCobro: string, frequency: string): string {
-  const days = diasCobro.split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)).sort((a, b) => a - b)
-  const now = new Date()
-  const day = now.getDate()
-  const monthName = now.toLocaleString("es", { month: "long" })
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  if (frequency === "mensual" || days.length < 2) return `1 - ${lastDay} de ${monthName}`
-  const [d1, d2] = days
-  if (day >= d1 && day < d2) return `${d1} - ${d2 - 1} de ${monthName}`
-  return `${d2} - ${lastDay} de ${monthName}`
-}
+interface BalanceParticle { id: number; x: number; delay: number; icon: string; dir: "up" | "down" }
 
-function getCurrentPeriodNumber(diasCobro: string, frequency: string): 1 | 2 {
-  if (frequency === "mensual") return 1
-  const days = diasCobro.split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)).sort((a, b) => a - b)
-  if (days.length < 2) return 1
-  return new Date().getDate() >= days[0] && new Date().getDate() < days[1] ? 1 : 2
-}
+function BalanceAura({ total, formatAmount, children }: {
+  total: number; formatAmount: (n: number) => string; children: React.ReactNode
+}) {
+  const prevRef = useRef(total)
+  const idRef = useRef(0)
+  const pulseTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [history, setHistory] = useState<number[]>([total])
+  const [pulse, setPulse] = useState<"up" | "down" | null>(null)
+  const [delta, setDelta] = useState<{ amount: number; id: number } | null>(null)
+  const [particles, setParticles] = useState<BalanceParticle[]>([])
 
-function getDaysRemaining(diasCobro: string, frequency: string): number {
-  const now = new Date(); const day = now.getDate()
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  if (frequency === "mensual") return lastDay - day
-  const days = diasCobro.split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)).sort((a, b) => a - b)
-  if (days.length < 2) return lastDay - day
-  const [d1, d2] = days
-  if (day >= d1 && day < d2) return d2 - day - 1
-  return lastDay - day + d1 - 1
-}
+  useEffect(() => {
+    const prev = prevRef.current
+    if (total === prev) return
+    const amount = total - prev
+    prevRef.current = total
+    setHistory(h => [...h.slice(-11), total])
 
-function getNextPeriodLabel(diasCobro: string, frequency: string): string {
-  if (frequency === "mensual") return ""
-  const days = diasCobro.split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d)).sort((a, b) => a - b)
-  if (days.length < 2) return ""
-  const now = new Date(); const day = now.getDate()
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const monthName = now.toLocaleString("es", { month: "long" })
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleString("es", { month: "long" })
-  const [d1, d2] = days
+    const direction: "up" | "down" = amount > 0 ? "up" : "down"
+    setPulse(direction)
+    clearTimeout(pulseTimeout.current)
+    pulseTimeout.current = setTimeout(() => setPulse(null), 900)
 
-  // Calcular fin de periodo (día anterior al siguiente pago, mínimo 1)
-  const endOfSecondPeriod = d1 - 1 <= 0 ? lastDayOfMonth : d1 - 1
+    const deltaId = idRef.current++
+    setDelta({ amount, id: deltaId })
+    setTimeout(() => setDelta(d => (d?.id === deltaId ? null : d)), 1600)
 
-  if (day >= d1 && day < d2) {
-    // Periodo actual: d1 al d2-1. Próximo: d2 al fin del segundo periodo
-    return `${d2} de ${monthName} – ${endOfSecondPeriod} de ${d1 - 1 <= 0 ? monthName : nextMonth}`
-  }
-  if (day >= d2) {
-    // Periodo actual: d2 al endOfSecondPeriod. Próximo: d1 al d2-1 del siguiente mes
-    return `${d1} – ${d2 - 1} de ${nextMonth}`
-  }
-  // day < d1
-  return `${d1} – ${d2 - 1} de ${monthName}`
+    const burst: BalanceParticle[] = Array.from({ length: 6 }).map(() => ({
+      id: idRef.current++,
+      x: 38 + Math.random() * 24,
+      delay: Math.random() * 0.15,
+      icon: direction === "up" ? (Math.random() > 0.5 ? "✨" : "🌿") : "🍂",
+      dir: direction,
+    }))
+    setParticles(p => [...p, ...burst])
+    setTimeout(() => setParticles(p => p.filter(x => !burst.find(b => b.id === x.id))), 1300)
+  }, [total])
+
+  // Sparkline — tendencia de esta sesión (arranca en el saldo actual, crece con cada cambio real)
+  const W = 220, H = 32
+  const vals = history.length > 1 ? history : [total, total]
+  const min = Math.min(...vals), max = Math.max(...vals)
+  const range = max - min || 1
+  const points = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W
+    const y = H - ((v - min) / range) * (H - 6) - 3
+    return `${x},${y}`
+  }).join(" ")
+  const lastPoint = points.split(" ").slice(-1)[0].split(",")
+
+  const glowOpacity = pulse === "up" ? 0.35 : pulse === "down" ? 0.22 : 0.12
+
+  return (
+    <div className="relative">
+      {/* Aura de fondo — pulsa con el cambio, siempre blanca (la tarjeta ya es verde) */}
+      <div
+        className="absolute -top-8 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full pointer-events-none transition-opacity duration-500"
+        style={{ background: `radial-gradient(circle, rgba(255,255,255,${glowOpacity}) 0%, transparent 70%)` }}
+      />
+
+      <div className="relative inline-block">
+        {children}
+
+        {particles.map(p => (
+          <span
+            key={p.id}
+            className="absolute text-sm pointer-events-none"
+            style={{
+              left: `${p.x}%`,
+              top: p.dir === "down" ? -2 : "45%",
+              animation: `${p.dir === "down" ? "kiriParticleDown" : "kiriParticleUp"} 1.1s ease-${p.dir === "down" ? "in" : "out"} ${p.delay}s forwards`,
+            }}
+          >
+            {p.icon}
+          </span>
+        ))}
+
+        {delta && (
+          <span
+            key={delta.id}
+            className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap bg-white/20 text-white text-[11px] font-bold rounded-full px-2.5 py-1 pointer-events-none"
+            style={{ animation: "kiriFloatUp 1.6s ease-out forwards" }}
+          >
+            {delta.amount > 0 ? "+" : ""}{formatAmount(delta.amount)}
+          </span>
+        )}
+      </div>
+
+      {/* Mini gráfica de tendencia */}
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} className="mt-1 block mx-auto max-w-[220px]">
+        <polyline
+          points={points}
+          fill="none"
+          stroke="rgba(255,255,255,0.55)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx={lastPoint[0]} cy={lastPoint[1]} r="3" fill="white" />
+      </svg>
+    </div>
+  )
 }
 
 /**
  * Calcula el monto a mostrar de una obligación en la lista del periodo.
- * Si la frecuencia de la obligación es QUINCENAL, el monto se DIVIDE entre 2
- * (se paga la mitad en cada quincena).
- * Si es MENSUAL, se muestra completo (solo aparece en 1 periodo).
+ *
+ * Deudas (`cuotaPeriodo`) y gastos fijos (`monto`) NO se tratan igual: `cuotaPeriodo`
+ * ya es el monto que se cobra POR QUINCENA (el backend la carga completa cada vez,
+ * no es un total mensual a repartir), mientras que `monto` de un gasto fijo SÍ es
+ * el total mensual y se divide entre las 2 quincenas. Mostrar `cuotaPeriodo/2`
+ * subestimaba a la mitad lo que realmente se cobra en una deuda quincenal.
  */
 function getDisplayAmount(item: { frecuenciaPago?: string; frecuencia?: string; cuotaPeriodo?: number; monto?: number }): number {
   const freq = item.frecuenciaPago || item.frecuencia || "mensual"
-  const rawAmount = item.cuotaPeriodo ?? item.monto ?? 0
-  // Quincenal: el monto se divide entre las 2 quincenas
+  if (item.cuotaPeriodo != null) return item.cuotaPeriodo // deuda: ya es el monto por periodo
+  const rawAmount = item.monto ?? 0
   if (freq === "quincenal") return Math.round(rawAmount / 2)
   return rawAmount
 }
@@ -220,6 +278,7 @@ export function BilleteraTab() {
   const [extraDesc, setExtraDesc] = useState("")
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [recommendationType, setRecommendationType] = useState<RecommendationType>(null)
   const [recommendationOpen, setRecommendationOpen] = useState(false)
 
@@ -273,9 +332,9 @@ export function BilleteraTab() {
   const { periodDebts, periodFixed } = periodData
   const { addNotification } = useSocket()
 
-  const periodNum = getCurrentPeriodNumber(diasCobro, incomeFrequency)
-  const periodRange = getPeriodRangeLabel(diasCobro, incomeFrequency)
-  const nextPeriodLabel = getNextPeriodLabel(diasCobro, incomeFrequency)
+  const periodNum = incomeFrequency === "mensual" ? 1 : getCurrentQuincena(diasCobro)
+  const periodRange = getPeriodRangeLabel(incomeFrequency, diasCobro)
+  const nextPeriodLabel = getNextPeriodLabel(incomeFrequency, diasCobro)
 
   // Obligaciones con monto ajustado por frecuencia (quincenal = /2)
   const displayObligationsTotal = useMemo(() => {
@@ -299,7 +358,7 @@ export function BilleteraTab() {
     if (data) {
       setWallet(data.wallet)
       if (tipo === 'salario') {
-        const label = getIncomeQuincenaLabel(incomeFrequency)
+        const label = getIncomeQuincenaLabel(incomeFrequency, diasCobro)
         if (label) addNotification(SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED, { message: label, action: "info" })
 
         // ═══ AUTOPAGO: Ejecutar pagos automáticos al registrar sueldo base ═══
@@ -381,7 +440,13 @@ export function BilleteraTab() {
     setEditIncomeValue("")
   }
 
-  const handleReset = async () => { setResetting(true); const { data } = await userApi.walletReset(); if (data) setWallet(data.wallet); setResetting(false) }
+  const handleReset = async () => {
+    setResetConfirmOpen(false)
+    setResetting(true)
+    const { data } = await userApi.walletReset()
+    if (data) setWallet(data.wallet)
+    setResetting(false)
+  }
 
   const total = wallet.cashBalance
 
@@ -443,20 +508,38 @@ export function BilleteraTab() {
       <Card className="border-none bg-gradient-to-br from-emerald-600 to-kiri-emerald rounded-2xl overflow-hidden shadow-lg">
         <CardContent className="p-6 text-center space-y-2">
           <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Sueldo Real (disponible)</p>
-          <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
+          <BalanceAura total={total > 0 ? total : 0} formatAmount={formatAmount}>
+            <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
+          </BalanceAura>
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
           <div className="flex items-center justify-center gap-3 pt-3">
             <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)); setSelectedExtras([]) }} size="sm"
               className="bg-white text-kiri-emerald hover:bg-white/90 font-bold rounded-xl gap-1.5 h-10 px-5 text-sm shadow-lg shadow-black/10">
               <Plus className="h-4 w-4" /> Registrar Ingreso
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleReset} disabled={resetting || total === 0}
+            <Button variant="ghost" size="sm" onClick={() => setResetConfirmOpen(true)} disabled={resetting || total === 0}
               className="text-white/40 hover:text-white/70 hover:bg-white/10 rounded-xl h-10 px-3 text-xs gap-1">
               <RefreshCw className={cn("h-3 w-3", resetting && "animate-spin")} /> Reiniciar
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      {/* ═══ Confirmación: reiniciar billetera (borra el saldo, irreversible) ═══ */}
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>¿Reiniciar tu billetera?</DialogTitle>
+            <DialogDescription>
+              Esto pondrá tu saldo disponible en $0. No se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setResetConfirmOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button variant="destructive" onClick={handleReset} className="rounded-xl">Sí, reiniciar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ SUELDO BASE + BALANCE OBLIGACIONES (lado a lado) ═══ */}
       <div className="grid grid-cols-2 gap-3">
@@ -675,12 +758,14 @@ export function BilleteraTab() {
                   <ObligationRow key={d.id} name={d.nombre} day={d.diasPago}
                     amount={getDisplayAmount(d)} fullAmount={d.cuotaPeriodo}
                     isQuincenal={d.frecuenciaPago === "quincenal"}
+                    isOverdue={isGenuinelyOverdue(d)}
                     paid={d.pagadoEstePeriodo} formatAmount={formatAmount} />
                 ))}
                 {periodFixed.map(f => (
                   <ObligationRow key={f.id} name={f.nombre} day={f.fechaCorte}
                     amount={getDisplayAmount(f)} fullAmount={f.monto}
                     isQuincenal={f.frecuencia === "quincenal"}
+                    isOverdue={isGenuinelyOverdue(f)}
                     paid={f.pagadoEstePeriodo} formatAmount={formatAmount} />
                 ))}
               </div>
@@ -948,8 +1033,8 @@ export function BilleteraTab() {
 
 // ─── Subcomponents ────────────────────────────────────────────────────────────
 
-function ObligationRow({ name, day, amount, fullAmount, isQuincenal, paid, formatAmount }: {
-  name: string; day: string; amount: number; fullAmount: number; isQuincenal: boolean; paid: boolean; formatAmount: (n: number) => string
+function ObligationRow({ name, day, amount, fullAmount, isQuincenal, isOverdue, paid, formatAmount }: {
+  name: string; day: string; amount: number; fullAmount: number; isQuincenal: boolean; isOverdue: boolean; paid: boolean; formatAmount: (n: number) => string
 }) {
   let dayLabel = day
   if (day.includes("-")) { dayLabel = day.split("-").pop() || day }
@@ -960,13 +1045,18 @@ function ObligationRow({ name, day, amount, fullAmount, isQuincenal, paid, forma
         {isQuincenal && (
           <span className="text-[9px] text-muted-foreground">Quincenal · Total: {formatAmount(fullAmount)}</span>
         )}
+        {isOverdue && (
+          <span className="text-[9px] text-red-500 font-medium">Venció el día {dayLabel} de este mes</span>
+        )}
       </div>
       <div className="flex items-center gap-2.5 shrink-0">
         <span className="text-[10px] text-muted-foreground">Día {dayLabel}</span>
         <span className="text-sm font-bold">{formatAmount(amount)}</span>
         <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full",
-          paid ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-        )}>{paid ? "Pagado" : "Pendiente"}</span>
+          paid ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+            : isOverdue ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+            : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+        )}>{paid ? "Pagado" : isOverdue ? "Vencido" : "Pendiente"}</span>
       </div>
     </div>
   )

@@ -108,7 +108,7 @@ export function showNativeNotification(opts: NotificationOptions) {
           tag: opts.tag ?? 'kiri-general',
           data: { url: opts.url || '/dashboard' },
           requireInteraction: false,
-        } as NotificationOptions)
+        } as globalThis.NotificationOptions)
       })
     } else {
       // Fallback: Notification API directa

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
-import { Landmark, Sprout, PiggyBank, TrendingUp, LogOut, ChevronUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users, PanelLeftClose, PanelLeftOpen, Bell, ReceiptText } from "lucide-react"
+import { Landmark, Sprout, PiggyBank, TrendingUp, LogOut, ChevronUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users, PanelLeftClose, PanelLeftOpen, Bell } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,13 +16,13 @@ import { Input } from "@/components/ui/input"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, KiriNotification, SOCKET_EVENTS } from "@/lib/socket-context"
+import { userApi } from "@/lib/api-client"
 
 const navItems = [
   { label: "Árbol Kiri",    icon: Sprout,     href: "/jardin" },
   { label: "Gestión",      icon: TrendingUp, href: "/gestion" },
   { label: "Obligaciones", icon: Landmark,   href: "/obligaciones" },
   { label: "Balance",      icon: BookOpen,   href: "/balance" },
-  { label: "Historial",    icon: ReceiptText, href: "/historial" },
   { label: "Social",       icon: Users,      href: "/social" },
   { label: "Ahorro",       icon: PiggyBank,  href: "/ahorro" },
 ]
@@ -95,7 +95,8 @@ export function Sidebar() {
   }
 
   const handleSaveProfile = () => {
-    setUser(editForm)
+    setUser({ ...user, ...editForm })
+    userApi.updateProfile({ nombre: editForm.nombre, correo: editForm.correo, avatarUrl: editForm.avatarUrl })
     setSettingsOpen(false)
   }
 

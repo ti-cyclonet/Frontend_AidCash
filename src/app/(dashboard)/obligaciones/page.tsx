@@ -17,22 +17,25 @@ import { Input } from "@/components/ui/input"
 import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { getNextPaymentInfo } from "@/lib/payment-schedule"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
+import { useBudgetCategories, detectBudgetCategory } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
 import { userApi, WalletState, loansApi } from "@/lib/api-client"
-import { debtsApi, fixedExpensesApi, impulseApi } from "@/lib/api-client"
+import { debtsApi, fixedExpensesApi, impulseApi, budgetCategoriesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
 import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { useToast } from "@/hooks/use-toast"
 import type { Loan } from "@/lib/types"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -72,7 +75,21 @@ export default function ObligacionesPage() {
   } = useFinanceData()
   const { formatAmount, income, incomeFrequency } = useAppContext()
   const { user: authUser } = useAuth()
+  const { toast } = useToast()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { budgetCategories } = useBudgetCategories()
+
+  // Llegar desde Presupuesto → "Registrar gasto" en una categoría abre este
+  // modal directo con esa categoría ya elegida (ver BudgetRadialChart.tsx).
+  useEffect(() => {
+    if (searchParams.get('registrarGasto') !== '1') return
+    const categoria = searchParams.get('categoria')
+    if (categoria) setExpCategoria(categoria)
+    setExpenseModalOpen(true)
+    router.replace('/obligaciones', { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // ── Préstamos sociales (solo ACTIVE donde soy borrower) ────────────────────
   const [socialLoans, setSocialLoans] = useState<Loan[]>([])
@@ -185,18 +202,14 @@ export default function ObligacionesPage() {
   const handleAcceptCategorySuggestion = async () => {
     if (!categorySuggestion) return
     const { fixedId, fixedName, suggestedCategory, monto } = categorySuggestion
-    // 1. Vincular el gasto fijo a la categoría en localStorage
+    // 1. Vincular el gasto fijo a la categoría (backend real)
     try {
-      const raw = localStorage.getItem('kiri_budget_categories')
-      if (raw) {
-        const cats = JSON.parse(raw)
-        const updated = cats.map((c: any) => {
-          if (c.name === suggestedCategory) {
-            return { ...c, linkedFixedIds: [...(c.linkedFixedIds ?? []), fixedId] }
-          }
-          return c
+      const { data } = await budgetCategoriesApi.list()
+      const cat = data?.categories.find(c => c.nombre === suggestedCategory)
+      if (cat) {
+        await budgetCategoriesApi.update(cat.id, {
+          linkedFixedExpenseIds: [...(cat.linkedFixedExpenseIds ?? []), fixedId],
         })
-        localStorage.setItem('kiri_budget_categories', JSON.stringify(updated))
       }
     } catch { /* ignore */ }
     // 2. Registrar el gasto en la categoría
@@ -242,8 +255,10 @@ export default function ObligacionesPage() {
     ))
 
     // If no cash AND no credit cards available, show insufficient funds
-    if (wallet.cashBalance < debt.cuotaPeriodo && tarjetas.length === 0) {
-      setInsufficientTarget({ type: "debt", id: debt.id, nombre: debt.nombre, monto: debt.cuotaPeriodo })
+    // (comparar contra lo que REALMENTE falta, no la cuota completa si ya hubo un abono)
+    const restante = Math.max(0, debt.cuotaPeriodo - (debt.montoPagadoEstePeriodo ?? 0))
+    if (wallet.cashBalance < restante && tarjetas.length === 0) {
+      setInsufficientTarget({ type: "debt", id: debt.id, nombre: debt.nombre, monto: restante })
       setInsufficientOpen(true)
       return
     }
@@ -252,7 +267,10 @@ export default function ObligacionesPage() {
 
   const confirmFullPay = async () => {
     if (!payDebt) return
-    await markPaid(payDebt.id)
+    // Si ya hay un abono parcial este periodo, "pagar" debe cubrir solo lo que
+    // falta — no la cuota completa de nuevo (si no, se paga de más).
+    const restante = payDebt.cuotaPeriodo - (payDebt.montoPagadoEstePeriodo ?? 0)
+    await markPaid(payDebt.id, restante > 0 ? restante : undefined)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayDebt(null)
@@ -276,8 +294,10 @@ export default function ObligacionesPage() {
       d.nombre.toLowerCase().includes('credito')
     ))
 
-    if (wallet.cashBalance < fe.monto && tarjetas.length === 0) {
-      setInsufficientTarget({ type: "fixed", id: fe.id, nombre: fe.nombre, monto: fe.monto })
+    const montoPorPeriodo = fe.frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
+    const restante = Math.max(0, montoPorPeriodo - ((fe as any).montoPagadoEstePeriodo ?? 0))
+    if (wallet.cashBalance < restante && tarjetas.length === 0) {
+      setInsufficientTarget({ type: "fixed", id: fe.id, nombre: fe.nombre, monto: restante })
       setInsufficientOpen(true)
       return
     }
@@ -286,7 +306,11 @@ export default function ObligacionesPage() {
 
   const confirmFullPayFixed = async () => {
     if (!payFixed) return
-    await markFixedPaid(payFixed.id)
+    // Igual que con deudas: si ya hay un abono parcial este periodo, completar
+    // solo lo que falta — no el monto del periodo de nuevo.
+    const montoPorPeriodo = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
+    const restante = montoPorPeriodo - ((payFixed as any).montoPagadoEstePeriodo ?? 0)
+    await markFixedPaid(payFixed.id, restante > 0 ? restante : undefined)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayFixed(null)
@@ -382,7 +406,11 @@ export default function ObligacionesPage() {
   const handleAdd = async () => {
     setSaving(true)
     if (addType === "deuda") {
-      if (!addDebtForm.nombre || !addDebtForm.montoTotal || !addDebtForm.diasPago) { setSaving(false); return }
+      if (!addDebtForm.nombre || !addDebtForm.montoTotal || !addDebtForm.diasPago) {
+        setSaving(false)
+        toast({ title: "Faltan datos", description: "Completa nombre, monto total y día(s) de pago.", variant: "destructive" })
+        return
+      }
       // Si varias cuotas y se usó calculadora, la cuota ya está en addDebtForm.cuotaPeriodo
       const cuota = addDebtForm.cuotaPeriodo ? Number(addDebtForm.cuotaPeriodo) : 0
       await addDebt({
@@ -393,7 +421,11 @@ export default function ObligacionesPage() {
       })
       setAddDebtForm(emptyDebtForm)
     } else {
-      if (!addFixedForm.nombre || !addFixedForm.monto || !addFixedForm.diasPago) { setSaving(false); return }
+      if (!addFixedForm.nombre || !addFixedForm.monto || !addFixedForm.diasPago) {
+        setSaving(false)
+        toast({ title: "Faltan datos", description: "Completa nombre, monto y día(s) de pago.", variant: "destructive" })
+        return
+      }
       await addFixedExpense({ nombre: addFixedForm.nombre, monto: Number(addFixedForm.monto), fechaCorte: addFixedForm.diasPago, frecuencia: addFixedForm.frecuencia })
       setAddFixedForm(emptyFixedForm)
     }
@@ -481,12 +513,12 @@ export default function ObligacionesPage() {
     <>
       {showTutorial && <TutorialSlider module="obligaciones" onClose={dismissTutorial} />}
     <div className="space-y-6">
-      <header className="flex justify-between items-start">
+      <header className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start">
         <div>
           <h1 className="text-2xl font-bold text-cyclon-periwinkle">Obligaciones</h1>
           <p className="text-muted-foreground text-sm">Gestiona tus compromisos y gastos.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Saldo en tiempo real con efecto */}
           <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" />
           {/* Botón Registrar gasto — abre modal de presupuesto */}
@@ -750,7 +782,7 @@ export default function ObligacionesPage() {
           <div className="py-3 flex flex-col gap-3">
             <Button onClick={confirmFullPay} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
               <CheckCircle2 className="h-5 w-5" />
-              Pagar ({formatAmount(payDebt?.cuotaPeriodo ?? 0)})
+              Pagar ({formatAmount(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)))})
             </Button>
 
             {/* Opción: Pagar con tarjeta de crédito */}
@@ -804,13 +836,13 @@ export default function ObligacionesPage() {
                               className="h-10 rounded-xl text-center font-bold"
                             />
                             <p className="text-[10px] text-muted-foreground">
-                              Se sumará <strong>{formatAmount(Math.round((payDebt?.cuotaPeriodo ?? 0) / (Number(debtTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {debtTcCuotas} {Number(debtTcCuotas) === 1 ? "mes" : "meses"}.
+                              Se sumará <strong>{formatAmount(Math.round(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)) / (Number(debtTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {debtTcCuotas} {Number(debtTcCuotas) === 1 ? "mes" : "meses"}.
                             </p>
                           </div>
                           <Button
                             onClick={async () => {
                               if (!payDebt || !selectedDebtTC) return
-                              const monto = payDebt.cuotaPeriodo
+                              const monto = Math.max(0, payDebt.cuotaPeriodo - (payDebt.montoPagadoEstePeriodo ?? 0))
                               const cuotas = Number(debtTcCuotas) || 1
                               await debtsApi.payWithCard({
                                 tarjetaId: selectedDebtTC,
@@ -863,7 +895,7 @@ export default function ObligacionesPage() {
             {/* Opción 1: Pagar del sueldo real */}
             <Button onClick={confirmFullPayFixed} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
               <CheckCircle2 className="h-5 w-5" />
-              Pagar ({formatAmount(payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0))})
+              Pagar ({formatAmount(Math.max(0, (payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)) - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0)))})
             </Button>
 
             {/* Opción 2: Pagar con tarjeta de crédito */}
@@ -917,7 +949,8 @@ export default function ObligacionesPage() {
                               className="h-10 rounded-xl text-center font-bold"
                             />
                             {(() => {
-                              const montoFijo = payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)
+                              const montoPorPeriodo = payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)
+                              const montoFijo = Math.max(0, montoPorPeriodo - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0))
                               const cuotasNum = Number(tcCuotas) || 1
                               return (
                                 <p className="text-[10px] text-muted-foreground">
@@ -929,7 +962,8 @@ export default function ObligacionesPage() {
                           <Button
                             onClick={async () => {
                               if (!payFixed || !selectedTC) return
-                              const monto = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
+                              const montoPorPeriodo = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
+                              const monto = Math.max(0, montoPorPeriodo - ((payFixed as any).montoPagadoEstePeriodo ?? 0))
                               const cuotas = Number(tcCuotas) || 1
                               await debtsApi.payWithCard({
                                 tarjetaId: selectedTC,
@@ -1305,17 +1339,11 @@ export default function ObligacionesPage() {
               })()}
               {/* Detección automática de categoría */}
               {expNombre && (() => {
-                try {
-                  const raw = localStorage.getItem('kiri_budget_categories')
-                  if (!raw) return null
-                  const cats = JSON.parse(raw) as { name: string }[]
-                  const { detectBudgetCategory } = require('@/hooks/use-budget-categories')
-                  const detected = detectBudgetCategory(expNombre, cats)
-                  if (detected) return (
-                    <p className="text-[9px] text-kiri-emerald flex items-center gap-1">📁 Categoría sugerida: {detected}</p>
-                  )
-                } catch {}
-                return null
+                const detected = detectBudgetCategory(expNombre, budgetCategories)
+                if (!detected) return null
+                return (
+                  <p className="text-[9px] text-kiri-emerald flex items-center gap-1">📁 Categoría sugerida: {detected}</p>
+                )
               })()}
             </div>
             <div className="space-y-1.5">
@@ -1323,35 +1351,27 @@ export default function ObligacionesPage() {
               <MoneyInput value={expMonto} onChange={v => setExpMonto(v)} className="h-12 text-lg font-bold rounded-xl" placeholder="0" />
             </div>
             {/* Selector de categoría */}
-            {(() => {
-              try {
-                const raw = localStorage.getItem('kiri_budget_categories')
-                if (!raw) return null
-                const cats = JSON.parse(raw) as { id: string; name: string; color: string; icon: string }[]
-                if (cats.length === 0) return null
-                return (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold">Categoría (opcional)</Label>
-                    <div className="flex gap-2 flex-wrap">
-                      {cats.slice(0, 6).map(c => (
-                        <button key={c.id} type="button"
-                          onClick={() => setExpCategoria(expCategoria === c.name ? null : c.name)}
-                          className={cn(
-                            "px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors",
-                            expCategoria === c.name
-                              ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald"
-                              : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
-                          )}
-                          style={{ borderColor: expCategoria === c.name ? undefined : c.color + '40' }}
-                        >
-                          {c.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              } catch { return null }
-            })()}
+            {budgetCategories.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Categoría (opcional)</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {budgetCategories.slice(0, 6).map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => setExpCategoria(expCategoria === c.name ? null : c.name)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors",
+                        expCategoria === c.name
+                          ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald"
+                          : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+                      )}
+                      style={{ borderColor: expCategoria === c.name ? undefined : c.color + '40' }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Selector de tarjeta de crédito */}
             <CreditCardSelector value={null} onChange={() => {}} />
           </div>
@@ -1363,9 +1383,22 @@ export default function ObligacionesPage() {
                 setExpSaving(true)
                 const hormigaKeywords = ['café', 'cafe', 'starbucks', 'uber', 'taxi', 'cerveza', 'bar', 'snack', 'helado', 'domicilio', 'rappi', 'pizza', 'hamburguesa', 'cine']
                 const isHormiga = hormigaKeywords.some(k => expNombre.toLowerCase().includes(k))
-                const nombre = isHormiga ? `🐜 ${expNombre}` : expNombre
-                await addImpulseExpense({ nombre, monto: Number(expMonto), categoria: (expCategoria || 'otro') as any })
+                const withHormiga = isHormiga ? `🐜 ${expNombre}` : expNombre
+                // La categoría que se elige acá es una categoría de Presupuesto (nombre
+                // libre, ej. "Alimentación") — no la de gasto hormiga (enum fijo cafe/
+                // comida/transporte/antojo/salida/otro que espera el backend). Antes se
+                // mandaba el nombre de la categoría tal cual en ese campo: el backend lo
+                // rechazaba (400, enum inválido) y el gasto NUNCA se guardaba — el modal
+                // igual se cerraba como si hubiera funcionado. La categoría de Presupuesto
+                // se etiqueta en el nombre (así la reconoce budget-category-spend.ts para
+                // el gasto por categoría), y a la API se le manda siempre 'otro'.
+                const nombre = expCategoria ? `${withHormiga} [${expCategoria}]` : withHormiga
+                const result = await addImpulseExpense({ nombre, monto: Number(expMonto), categoria: 'otro' })
                 setExpSaving(false)
+                if (!result) {
+                  toast({ title: "No se pudo registrar el gasto", description: "Intenta de nuevo.", variant: "destructive" })
+                  return
+                }
                 setExpenseModalOpen(false)
                 setExpNombre(""); setExpMonto(""); setExpCategoria(null)
                 const { data } = await userApi.getWallet()
@@ -1385,39 +1418,6 @@ export default function ObligacionesPage() {
   )
 }
 
-// ─── Helper: próxima fecha de pago inteligente ────────────────────────────────
-function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): {
-  nextDate: string; daysUntil: number
-  status: 'pagado' | 'proximo' | 'pendiente' | 'vencido'
-  statusLabel: string; statusColor: string; cardRing: string
-} {
-  const today = new Date()
-  const currentMonth = today.getMonth()
-  const currentYear = today.getFullYear()
-  const days = diasPago.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d) && d >= 1 && d <= 31)
-  if (days.length === 0) days.push(1)
-
-  if (pagadoEstePeriodo) {
-    const nextDate = new Date(currentYear, currentMonth + 1, days[0])
-    const label = nextDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-    return { nextDate: label, daysUntil: 999, status: 'pagado', statusLabel: 'Pagado ✓', statusColor: 'text-emerald-600', cardRing: '' }
-  }
-
-  let closest: Date | null = null
-  for (const day of days) {
-    const thisMonth = new Date(currentYear, currentMonth, day)
-    if (thisMonth >= today && (!closest || thisMonth < closest)) closest = thisMonth
-  }
-  if (!closest) closest = new Date(currentYear, currentMonth + 1, days[0])
-
-  const diffMs = closest.getTime() - today.getTime()
-  const daysUntil = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-  const label = closest.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-
-  if (daysUntil < 0) return { nextDate: label, daysUntil, status: 'vencido', statusLabel: `Vencido (${Math.abs(daysUntil)}d)`, statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
-  if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? 'Vence hoy' : `Vence en ${daysUntil}d`, statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
-  return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
-}
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
 function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay, strategyBadge }: {
@@ -1513,7 +1513,7 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
           </div>
           <div className="flex gap-1 shrink-0">
             {debt.frecuenciaPago !== 'quincenal' && (
-            <button onClick={onToggleAutoPay} title={debt.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
+            <button onClick={onToggleAutoPay} title={debt.pagoAutomatico ? "Pago automático activado: se paga sola al registrar tu sueldo en Billetera" : "Pagar sola al registrar tu sueldo en Billetera"}
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 debt.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
@@ -1664,7 +1664,7 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoP
           </div>
           <div className="flex gap-1 shrink-0">
             {item.frecuencia !== 'quincenal' && (
-            <button onClick={onToggleAutoPay} title={item.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
+            <button onClick={onToggleAutoPay} title={item.pagoAutomatico ? "Pago automático activado: se paga solo al registrar tu sueldo en Billetera" : "Pagarlo solo al registrar tu sueldo en Billetera"}
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 item.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
@@ -1773,7 +1773,14 @@ function DebtFormFields({
         <Label className="text-xs font-bold">Frecuencia de pago</Label>
         <div className="grid grid-cols-2 gap-2">
           {(["mensual", "quincenal"] as const).map(f => (
-            <button key={f} type="button" onClick={() => set({ frecuencia: f })} className={cn(
+            <button key={f} type="button" onClick={() => {
+              // Al cambiar de frecuencia, precargar un día por defecto — si no,
+              // el campo queda vacío detrás de un placeholder que parece valor
+              // real ("15"), y "Guardar" no hacía nada sin avisar.
+              if (f === "quincenal" && !form.diasPago.includes(',')) set({ frecuencia: f, diasPago: "15,30" })
+              else if (f === "mensual" && !form.diasPago) set({ frecuencia: f, diasPago: "1" })
+              else set({ frecuencia: f })
+            }} className={cn(
               "h-10 rounded-xl text-sm font-bold border-2 transition-colors capitalize",
               form.frecuencia === f ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
             )}>{f}</button>
@@ -1862,7 +1869,14 @@ function FixedFormFields({
         <Label className="text-xs font-bold">Frecuencia de pago</Label>
         <div className="grid grid-cols-2 gap-2">
           {(["mensual", "quincenal"] as const).map(f => (
-            <button key={f} type="button" onClick={() => set({ frecuencia: f })} className={cn(
+            <button key={f} type="button" onClick={() => {
+              // Al cambiar de frecuencia, precargar un día por defecto — si no,
+              // el campo queda vacío detrás de un placeholder que parece valor
+              // real ("15"), y "Guardar" no hacía nada sin avisar.
+              if (f === "quincenal" && !form.diasPago.includes(',')) set({ frecuencia: f, diasPago: "15,30" })
+              else if (f === "mensual" && !form.diasPago) set({ frecuencia: f, diasPago: "1" })
+              else set({ frecuencia: f })
+            }} className={cn(
               "h-10 rounded-xl text-sm font-bold border-2 transition-colors capitalize",
               form.frecuencia === f ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
             )}>{f}</button>

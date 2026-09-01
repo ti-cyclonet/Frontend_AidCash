@@ -2,12 +2,13 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { Wallet, PieChart } from "lucide-react"
+import { Wallet, PieChart, TrendingUp } from "lucide-react"
 import { BilleteraTab } from "@/components/gestion/BilleteraTab"
 import { PresupuestoTab } from "@/components/gestion/PresupuestoTab"
+import { ProyeccionesTab } from "@/components/gestion/ProyeccionesTab"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 
-type GestionTab = "billetera" | "presupuesto"
+type GestionTab = "billetera" | "presupuesto" | "proyecciones"
 
 export default function GestionPage() {
   const [activeTab, setActiveTab] = useState<GestionTab>("billetera")
@@ -19,7 +20,7 @@ export default function GestionPage() {
     <div className="space-y-5">
 
       {/* Tabs */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <button
           onClick={() => setActiveTab("billetera")}
           className={cn(
@@ -42,10 +43,22 @@ export default function GestionPage() {
         >
           <PieChart className="h-4 w-4" /> Presupuesto
         </button>
+        <button
+          onClick={() => setActiveTab("proyecciones")}
+          className={cn(
+            "flex items-center justify-center gap-1.5 h-11 rounded-2xl text-xs font-bold border-2 transition-colors",
+            activeTab === "proyecciones"
+              ? "bg-cyclon-lavender text-white border-cyclon-lavender shadow-lg shadow-cyclon-lavender/25"
+              : "border-muted text-muted-foreground hover:border-cyclon-lavender/40"
+          )}
+        >
+          <TrendingUp className="h-4 w-4" /> Proyecciones
+        </button>
       </div>
 
       {activeTab === "billetera" && <BilleteraTab />}
       {activeTab === "presupuesto" && <PresupuestoTab />}
+      {activeTab === "proyecciones" && <ProyeccionesTab />}
     </div>
     </>
   )

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { useAppContext } from "@/lib/app-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { usePushNotifications } from "@/hooks/use-push-notifications"
-import { getCurrentQuincena } from "@/lib/period-filter"
+import { getCurrentQuincena, getPeriodRangeLabel } from "@/lib/period-filter"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -37,22 +37,20 @@ const ALERT_SHOWN_KEY = "kiri_alert_shown_period"
  * Útil para mostrar al usuario: "Ingreso asignado a Quincena 1" / "Quincena 2".
  *
  * @param frequency - Frecuencia del usuario
+ * @param diasCobro - Días de pago reales del usuario (frontera Q1/Q2)
  * @param registrationDate - Fecha en que se registra (default: hoy)
  * @returns Label descriptivo o null si es mensual
  */
 export function getIncomeQuincenaLabel(
   frequency: 'mensual' | 'quincenal',
+  diasCobro: string = '',
   registrationDate: Date = new Date()
 ): string | null {
   if (frequency === 'mensual') return null
 
-  const day = registrationDate.getDate()
-  const month = registrationDate.toLocaleString('es', { month: 'long' })
-
-  if (day <= 15) {
-    return `Ingreso asignado a Quincena 1 (1-15 de ${month})`
-  }
-  return `Ingreso asignado a Quincena 2 (16-fin de ${month})`
+  const quincena = getCurrentQuincena(diasCobro, registrationDate)
+  const range = getPeriodRangeLabel(frequency, diasCobro, registrationDate)
+  return `Ingreso asignado a Quincena ${quincena} (${range})`
 }
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
@@ -83,7 +81,7 @@ export function useSmartAlerts() {
     const year = today.getFullYear()
 
     // Generar un ID de periodo para no repetir alertas
-    const quincena = getCurrentQuincena()
+    const quincena = getCurrentQuincena(diasCobro)
     const periodKey = incomeFrequency === 'quincenal'
       ? `${year}-${month}-Q${quincena}`
       : `${year}-${month}`

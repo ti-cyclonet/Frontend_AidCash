@@ -25,7 +25,7 @@ export function PlanWelcomeModal() {
     addFixedExpense({
       nombre: `Kiri Finance ${welcomePackage}`,
       monto: welcomePlanPrice,
-      diasPago: diaPago,
+      fechaCorte: diaPago,
       frecuencia: incomeFrequency || "mensual",
     })
   }, [welcomePackage, welcomePlanPrice, addFixedExpense, incomeFrequency])

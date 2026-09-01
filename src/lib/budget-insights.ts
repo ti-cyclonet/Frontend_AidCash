@@ -1,4 +1,5 @@
 import { ImpulseExpense } from './types'
+import { getDaysElapsedAndTotal } from './period-filter'
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -68,20 +69,6 @@ const SUGGESTIONS_KEYS: Record<string, string[]> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getDaysInPeriod(frequency: 'mensual' | 'quincenal'): number {
-  return frequency === 'quincenal' ? 15 : 30
-}
-
-function getDaysElapsed(frequency: 'mensual' | 'quincenal'): number {
-  const now = new Date()
-  const dayOfMonth = now.getDate()
-
-  if (frequency === 'quincenal') {
-    return dayOfMonth <= 15 ? dayOfMonth : dayOfMonth - 15
-  }
-  return dayOfMonth
-}
-
 function getExpenseTrend(expenses: ImpulseExpense[], categoryKeys: string[]): 'rising' | 'stable' | 'declining' {
   if (expenses.length < 3) return 'stable'
 
@@ -109,12 +96,12 @@ export function analyzeBudgetCategories(
   impulseExpenses: ImpulseExpense[],
   frequency: 'mensual' | 'quincenal',
   freeAmount: number,
+  diasCobro: string = '',
 ): { insights: BudgetInsight[]; analyses: CategoryAnalysis[] } {
   const insights: BudgetInsight[] = []
   const analyses: CategoryAnalysis[] = []
 
-  const daysInPeriod = getDaysInPeriod(frequency)
-  const daysElapsed = getDaysElapsed(frequency)
+  const { elapsed: daysElapsed, total: daysInPeriod } = getDaysElapsedAndTotal(frequency, diasCobro)
   const daysLeft = Math.max(1, daysInPeriod - daysElapsed)
 
   for (const cat of categories) {
@@ -265,10 +252,10 @@ export function getCategoryInsight(
   budget: number,
   spent: number,
   frequency: 'mensual' | 'quincenal',
+  diasCobro: string = '',
 ): BudgetInsight {
   const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0
-  const daysInPeriod = getDaysInPeriod(frequency)
-  const daysElapsed = getDaysElapsed(frequency)
+  const { elapsed: daysElapsed, total: daysInPeriod } = getDaysElapsedAndTotal(frequency, diasCobro)
   const daysLeft = Math.max(1, daysInPeriod - daysElapsed)
   const periodPct = Math.round((daysElapsed / daysInPeriod) * 100)
   const dailyAvg = daysElapsed > 0 ? spent / daysElapsed : 0

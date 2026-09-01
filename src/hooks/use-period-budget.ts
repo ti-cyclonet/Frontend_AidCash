@@ -53,7 +53,7 @@ export interface PeriodBudgetResult {
 }
 
 export function usePeriodBudget(): PeriodBudgetResult {
-  const { income, incomeFrequency } = useAppContext()
+  const { income, incomeFrequency, diasCobro } = useAppContext()
   const { debts, fixedExpenses, extraIncomes } = useFinanceData()
 
   const totalExtraIncome = useMemo(
@@ -66,8 +66,8 @@ export function usePeriodBudget(): PeriodBudgetResult {
   // Cuando markPaid() actualiza el estado local de una deuda (pagadoEstePeriodo = true),
   // filterPendingOnly la excluye → totalObligations baja → allocation se recalcula.
   const periodData = useMemo(
-    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency),
-    [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency]
+    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency, diasCobro),
+    [income, totalExtraIncome, debts, fixedExpenses, incomeFrequency, diasCobro]
   )
 
   // ═══ PASO 2: "El Cerebro" calcula la distribución con datos dinámicos ═══

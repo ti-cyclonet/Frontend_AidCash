@@ -33,7 +33,7 @@ import type { SharedPocket } from "@/lib/types"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
 type PocketIcon = "piggybank" | "plane" | "home" | "education" | "car" | "health" | "star" | "wallet"
-type PocketColor = "mint" | "sky" | "lavender" | "pink" | "periwinkle"
+type PocketColor = "mint" | "sky" | "lavender" | "pink" | "periwinkle" | "amber" | "rose" | "cyan" | "orange" | "teal"
 
 interface SavingPocket {
   id: string
@@ -63,11 +63,16 @@ const POCKET_ICONS: { value: PocketIcon; icon: React.ReactNode; label: string }[
 ]
 
 const POCKET_COLORS: { value: PocketColor; bg: string; text: string; bar: string; ring: string }[] = [
-  { value: "mint",       bg: "bg-cyclon-mint/20",       text: "text-cyclon-mint",       bar: "bg-cyclon-mint",       ring: "ring-cyclon-mint/30" },
-  { value: "sky",        bg: "bg-cyclon-sky/20",        text: "text-cyclon-sky",        bar: "bg-cyclon-sky",        ring: "ring-cyclon-sky/30" },
-  { value: "lavender",   bg: "bg-cyclon-lavender/20",   text: "text-cyclon-lavender",   bar: "bg-cyclon-lavender",   ring: "ring-cyclon-lavender/30" },
-  { value: "pink",       bg: "bg-cyclon-pink/20",       text: "text-cyclon-pink",       bar: "bg-cyclon-pink",       ring: "ring-cyclon-pink/30" },
-  { value: "periwinkle", bg: "bg-cyclon-periwinkle/20", text: "text-cyclon-periwinkle", bar: "bg-cyclon-periwinkle", ring: "ring-cyclon-periwinkle/30" },
+  { value: "mint",       bg: "bg-emerald-500/20",       text: "text-emerald-600 dark:text-emerald-400",       bar: "bg-emerald-500",       ring: "ring-emerald-500/30" },
+  { value: "sky",        bg: "bg-sky-500/20",        text: "text-sky-600 dark:text-sky-400",        bar: "bg-sky-500",        ring: "ring-sky-500/30" },
+  { value: "lavender",   bg: "bg-violet-500/20",   text: "text-violet-600 dark:text-violet-400",   bar: "bg-violet-500",   ring: "ring-violet-500/30" },
+  { value: "pink",       bg: "bg-pink-500/20",       text: "text-pink-600 dark:text-pink-400",       bar: "bg-pink-500",       ring: "ring-pink-500/30" },
+  { value: "periwinkle", bg: "bg-indigo-500/20", text: "text-indigo-600 dark:text-indigo-400", bar: "bg-indigo-500", ring: "ring-indigo-500/30" },
+  { value: "amber",      bg: "bg-amber-500/20",      text: "text-amber-600 dark:text-amber-400",      bar: "bg-amber-500",      ring: "ring-amber-500/30" },
+  { value: "rose",       bg: "bg-rose-500/20",       text: "text-rose-600 dark:text-rose-400",       bar: "bg-rose-500",       ring: "ring-rose-500/30" },
+  { value: "cyan",       bg: "bg-cyan-500/20",       text: "text-cyan-600 dark:text-cyan-400",       bar: "bg-cyan-500",       ring: "ring-cyan-500/30" },
+  { value: "orange",     bg: "bg-orange-500/20",     text: "text-orange-600 dark:text-orange-400",     bar: "bg-orange-500",     ring: "ring-orange-500/30" },
+  { value: "teal",       bg: "bg-teal-500/20",       text: "text-teal-600 dark:text-teal-400",       bar: "bg-teal-500",       ring: "ring-teal-500/30" },
 ]
 
 const POCKETS_KEY = "kiri_saving_pockets"
@@ -373,7 +378,7 @@ function AhorroContent() {
     <div className="space-y-6 pb-8">
       <header className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-cyclon-mint">Ahorro</h1>
+          <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">Ahorro</h1>
           <p className="text-muted-foreground text-sm">Tu banco personal, a tu ritmo.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -382,7 +387,7 @@ function AhorroContent() {
           {activeTab === "ahorro" && ahorroSubTab === "bolsillos" && (
             <Button
               size="icon"
-              className="rounded-2xl bg-cyclon-mint shadow-lg shadow-cyclon-mint/30 text-cyclon-periwinkle"
+              className="rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30 text-white"
               onClick={() => setNewPocketOpen(true)}
             >
               <Plus className="h-6 w-6" />
@@ -404,9 +409,9 @@ function AhorroContent() {
               "h-11 rounded-2xl text-sm font-bold border-2 transition-colors",
               activeTab === tab.key
                 ? tab.key === "ahorro"
-                  ? "bg-cyclon-mint text-cyclon-periwinkle border-cyclon-mint"
-                  : "bg-cyclon-periwinkle text-white border-cyclon-periwinkle"
-                : "border-muted text-muted-foreground hover:border-cyclon-mint/40"
+                  ? "bg-emerald-500 text-white border-emerald-500"
+                  : "bg-indigo-500 text-white border-indigo-500"
+                : "border-muted text-muted-foreground hover:border-emerald-500/40"
             )}
           >
             {tab.icon}{tab.label}
@@ -419,15 +424,15 @@ function AhorroContent() {
         <div className="space-y-5">
 
           {/* ── Cuadro resumen (como emergencia) ── */}
-          <Card className="border-none bg-cyclon-mint/10 rounded-3xl overflow-hidden relative shadow-none">
+          <Card className="border-none bg-emerald-500/10 rounded-3xl overflow-hidden relative shadow-none">
             <div className="absolute top-[-20px] right-[-20px] h-32 w-32 bg-white/20 rounded-full blur-2xl" />
             <CardContent className="p-8 flex flex-col items-center text-center space-y-4">
-              <div className="h-20 w-20 bg-card rounded-3xl shadow-xl shadow-cyclon-mint/10 flex items-center justify-center">
-                <PiggyBank className="h-10 w-10 text-cyclon-mint" />
+              <div className="h-20 w-20 bg-card rounded-3xl shadow-xl shadow-emerald-500/10 flex items-center justify-center">
+                <PiggyBank className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
                 <p className="text-muted-foreground text-sm font-medium tracking-wide">TOTAL AHORRADO</p>
-                <h2 className="text-4xl font-black text-cyclon-periwinkle mt-1">{formatAmount(totalAcumuladoBolsillos)}</h2>
+                <h2 className="text-4xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{formatAmount(totalAcumuladoBolsillos)}</h2>
                 {pockets.length > 0 && (
                   <p className="text-[11px] text-muted-foreground mt-1">
                     en {pockets.length} {pockets.length === 1 ? "bolsillo" : "bolsillos"}
@@ -436,10 +441,10 @@ function AhorroContent() {
               </div>
               {savingsAmount > 0 && (
                 <div className="flex items-center gap-2 pt-1 border-t border-white/30 w-full justify-center">
-                  <TrendingUp className="h-3.5 w-3.5 text-cyclon-mint shrink-0" />
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <p className="text-[11px] text-muted-foreground">
                     Sugerido este periodo:{" "}
-                    <span className="font-black text-cyclon-mint">{formatAmount(realSavingsForPeriod)}</span>
+                    <span className="font-black text-emerald-600 dark:text-emerald-400">{formatAmount(realSavingsForPeriod)}</span>
                     {pockets.length > 1 && (
                       <span> ({formatAmount(sugerenciaPorBolsillo)} por bolsillo)</span>
                     )}
@@ -461,8 +466,8 @@ function AhorroContent() {
                 className={cn(
                   "h-10 rounded-xl text-xs font-bold border-2 transition-colors",
                   ahorroSubTab === sub.key
-                    ? "bg-cyclon-mint/20 text-cyclon-periwinkle border-cyclon-mint"
-                    : "border-muted text-muted-foreground hover:border-cyclon-mint/40"
+                    ? "bg-emerald-500/20 text-indigo-600 dark:text-indigo-400 border-emerald-500"
+                    : "border-muted text-muted-foreground hover:border-emerald-500/40"
                 )}
               >
                 {sub.icon}{sub.label}
@@ -475,13 +480,13 @@ function AhorroContent() {
             <div className="space-y-3">
               {pockets.length === 0 ? (
                 <div className="text-center py-8 space-y-3">
-                  <div className="h-16 w-16 bg-cyclon-mint/10 rounded-2xl flex items-center justify-center mx-auto">
-                    <PiggyBank className="h-8 w-8 text-cyclon-mint" />
+                  <div className="h-16 w-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
+                    <PiggyBank className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <p className="text-sm font-bold">Sin bolsillos aún</p>
                   <p className="text-xs text-muted-foreground">Crea tu primer bolsillo con el botón <strong>+</strong></p>
                   {realSavingsForPeriod > 0 && (
-                    <p className="text-xs text-cyclon-mint font-bold">
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
                       Tienes {formatAmount(realSavingsForPeriod)} sugerido para ahorrar este periodo
                     </p>
                   )}
@@ -523,7 +528,7 @@ function AhorroContent() {
                                     {hiddenPockets.has(pocket.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                   </button>
                                   <button onClick={() => openEditPocket(pocket)}
-                                    className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
+                                    className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-500/10 transition-colors">
                                     <Pencil className="h-3.5 w-3.5" />
                                   </button>
                                   <button onClick={() => handleDeletePocket(pocket.id)}
@@ -548,10 +553,10 @@ function AhorroContent() {
                           </div>
                           {sugerenciaPorBolsillo > 0 && (
                             <div className="flex items-center gap-1.5 px-1">
-                              <TrendingUp className="h-3 w-3 text-cyclon-mint shrink-0" />
+                              <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                               <p className="text-[10px] text-muted-foreground">
                                 Sugerido este periodo:{" "}
-                                <span className="font-bold text-cyclon-mint">{formatAmount(sugerenciaPorBolsillo)}</span>
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatAmount(sugerenciaPorBolsillo)}</span>
                               </p>
                             </div>
                           )}
@@ -562,9 +567,9 @@ function AhorroContent() {
                             if (!cuota || meses <= 0) return null
                             return (
                               <div className="flex items-center gap-1.5 px-1">
-                                <Target className="h-3 w-3 text-cyclon-lavender shrink-0" />
+                                <Target className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
                                 <p className="text-[10px] text-muted-foreground">
-                                  Necesitas <span className="font-bold text-cyclon-lavender">{formatAmount(cuota)}/mes</span>
+                                  Necesitas <span className="font-bold text-violet-600 dark:text-violet-400">{formatAmount(cuota)}/mes</span>
                                   {" "}· {meses} {meses === 1 ? 'mes' : 'meses'} restantes
                                 </p>
                               </div>
@@ -575,7 +580,7 @@ function AhorroContent() {
                               <Progress value={pct} className="h-2" indicatorClassName={cn(c.bar, done && "animate-pulse")} />
                               <div className="flex justify-between text-[10px] text-muted-foreground font-bold">
                                 <span>{Math.round(pct)}% completado</span>
-                                {done && <span className="text-cyclon-mint">🎉 ¡Meta alcanzada!</span>}
+                                {done && <span className="text-emerald-600 dark:text-emerald-400">🎉 ¡Meta alcanzada!</span>}
                               </div>
                             </div>
                           )}
@@ -616,13 +621,13 @@ function AhorroContent() {
                     return (
                       <Card
                         key={sp.id}
-                        className="border-none bg-card shadow-sm rounded-2xl cursor-pointer hover:ring-2 hover:ring-cyclon-lavender/30 transition-all"
+                        className="border-none bg-card shadow-sm rounded-2xl cursor-pointer hover:ring-2 hover:ring-violet-500/30 transition-all"
                         onClick={() => router.push("/social")}
                       >
                         <CardContent className="p-4 space-y-2">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-2xl bg-cyclon-lavender/20 flex items-center justify-center shrink-0">
-                              <Users className="h-5 w-5 text-cyclon-lavender" />
+                            <div className="h-10 w-10 rounded-2xl bg-violet-500/20 flex items-center justify-center shrink-0">
+                              <Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-sm truncate">{sp.nombre}</p>
@@ -634,9 +639,9 @@ function AhorroContent() {
                             </div>
                           </div>
                           {sp.meta > 0 && (
-                            <Progress value={pct} className="h-1.5" indicatorClassName="bg-cyclon-lavender" />
+                            <Progress value={pct} className="h-1.5" indicatorClassName="bg-violet-500" />
                           )}
-                          <p className="text-[8px] text-cyclon-lavender font-bold text-center">
+                          <p className="text-[8px] text-violet-600 dark:text-violet-400 font-bold text-center">
                             Toca para gestionar en Social →
                           </p>
                         </CardContent>
@@ -671,7 +676,7 @@ function AhorroContent() {
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "h-8 w-8 rounded-xl flex items-center justify-center shrink-0",
-                          item.tipo === "ahorro" ? "bg-cyclon-mint/20 text-cyclon-mint" : "bg-cyclon-pink/20 text-cyclon-pink"
+                          item.tipo === "ahorro" ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-pink-500/20 text-pink-600 dark:text-pink-400"
                         )}>
                           {item.tipo === "ahorro" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                         </div>
@@ -682,7 +687,7 @@ function AhorroContent() {
                           </p>
                         </div>
                       </div>
-                      <div className={cn("text-sm font-black", item.tipo === "ahorro" ? "text-cyclon-mint" : "text-muted-foreground")}>
+                      <div className={cn("text-sm font-black", item.tipo === "ahorro" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
                         {item.tipo === "ahorro" ? `+${formatAmount(item.monto)}` : "—"}
                       </div>
                     </div>
@@ -712,7 +717,7 @@ function AhorroContent() {
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-cyclon-mint" /> Nuevo bolsillo de ahorro
+              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Nuevo bolsillo de ahorro
             </DialogTitle>
             <DialogDescription>Define tu meta y personaliza tu bolsillo.</DialogDescription>
           </DialogHeader>
@@ -739,8 +744,8 @@ function AhorroContent() {
                     className={cn(
                       "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all",
                       pocketForm.tipoMeta === 'libre'
-                        ? "border-cyclon-mint bg-cyclon-mint/5 text-cyclon-mint"
-                        : "border-muted text-muted-foreground hover:border-cyclon-mint/30"
+                        ? "border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+                        : "border-muted text-muted-foreground hover:border-emerald-500/30"
                     )}
                   >
                     <PiggyBank className="h-5 w-5" />
@@ -753,8 +758,8 @@ function AhorroContent() {
                     className={cn(
                       "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all",
                       pocketForm.tipoMeta === 'fecha'
-                        ? "border-cyclon-mint bg-cyclon-mint/5 text-cyclon-mint"
-                        : "border-muted text-muted-foreground hover:border-cyclon-mint/30"
+                        ? "border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+                        : "border-muted text-muted-foreground hover:border-emerald-500/30"
                     )}
                   >
                     <Target className="h-5 w-5" />
@@ -793,8 +798,8 @@ function AhorroContent() {
 
                   if (faltante <= 0) {
                     return (
-                      <div className="bg-cyclon-mint/10 border border-cyclon-mint/30 rounded-xl p-3 text-center space-y-1">
-                        <p className="text-xs font-bold text-cyclon-mint">🎉 ¡Ya alcanzaste tu meta!</p>
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center space-y-1">
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">🎉 ¡Ya alcanzaste tu meta!</p>
                         <p className="text-[10px] text-muted-foreground">El monto ahorrado ya cubre tu objetivo.</p>
                       </div>
                     )
@@ -810,15 +815,15 @@ function AhorroContent() {
                   }
 
                   return (
-                    <div className="bg-cyclon-mint/10 border border-cyclon-mint/30 rounded-xl p-4 space-y-2">
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 space-y-2">
                       <div className="flex items-center gap-2 justify-center">
-                        <TrendingUp className="h-4 w-4 text-cyclon-mint" />
+                        <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         <p className="text-xs font-bold text-center">Para lograr esta meta, necesitas ahorrar:</p>
                       </div>
-                      <p className="text-2xl font-black text-cyclon-mint text-center">
+                      <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 text-center">
                         {formatAmount(cuota!)} <span className="text-sm font-bold text-muted-foreground">/ mes</span>
                       </p>
-                      <div className="flex justify-center gap-4 pt-1 border-t border-cyclon-mint/20">
+                      <div className="flex justify-center gap-4 pt-1 border-t border-emerald-500/20">
                         <div className="text-center">
                           <p className="text-[9px] text-muted-foreground">Faltan</p>
                           <p className="text-xs font-bold">{formatAmount(faltante)}</p>
@@ -851,7 +856,7 @@ function AhorroContent() {
                 {POCKET_ICONS.map(i => (
                   <button key={i.value} onClick={() => setPocketForm(f => ({ ...f, icono: i.value }))}
                     className={cn("flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-colors",
-                      pocketForm.icono === i.value ? "border-cyclon-mint bg-cyclon-mint/5 text-cyclon-mint" : "border-muted text-muted-foreground hover:border-cyclon-mint/30")}>
+                      pocketForm.icono === i.value ? "border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400" : "border-muted text-muted-foreground hover:border-emerald-500/30")}>
                     {i.icon}
                     <span className="text-[9px] font-bold">{i.label}</span>
                   </button>
@@ -860,7 +865,7 @@ function AhorroContent() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Color</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {POCKET_COLORS.map(c => (
                   <button key={c.value} onClick={() => setPocketForm(f => ({ ...f, color: c.value }))}
                     className={cn("h-8 w-8 rounded-full transition-all", c.bar,
@@ -872,7 +877,7 @@ function AhorroContent() {
           <DialogFooter className="gap-2 pt-2">
             <Button variant="ghost" onClick={() => setNewPocketOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreatePocket} disabled={savingPocket || !pocketForm.nombre}
-              className="bg-cyclon-mint text-cyclon-periwinkle font-bold rounded-xl px-8 hover:bg-cyclon-mint/80">
+              className="bg-emerald-500 text-white font-bold rounded-xl px-8 hover:bg-emerald-500/80">
               {savingPocket ? "Creando..." : "Crear bolsillo"}
             </Button>
           </DialogFooter>
@@ -884,7 +889,7 @@ function AhorroContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {txType === "aporte" ? <TrendingUp className="h-5 w-5 text-cyclon-mint" /> : <TrendingDown className="h-5 w-5 text-cyclon-pink" />}
+              {txType === "aporte" ? <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <TrendingDown className="h-5 w-5 text-pink-600 dark:text-pink-400" />}
               {txType === "aporte" ? "Aportar a" : "Retirar de"} {txPocket?.nombre}
             </DialogTitle>
             <DialogDescription>
@@ -902,7 +907,7 @@ function AhorroContent() {
             <Button variant="ghost" onClick={() => setTxPocket(null)}>Cancelar</Button>
             <Button onClick={handleTx}
               disabled={savingTx || !txAmount || Number(txAmount) <= 0 || (txType === "retiro" && txPocket !== null && Number(txAmount) > txPocket.acumulado)}
-              className={cn("font-bold rounded-xl px-8", txType === "aporte" ? "bg-cyclon-mint text-cyclon-periwinkle" : "bg-cyclon-pink text-white")}>
+              className={cn("font-bold rounded-xl px-8", txType === "aporte" ? "bg-emerald-500 text-white" : "bg-pink-500 text-white")}>
               {savingTx ? "Guardando..." : txType === "aporte" ? "Aportar" : "Retirar"}
             </Button>
           </DialogFooter>
@@ -920,7 +925,7 @@ function AhorroContent() {
             {!isCustomMode ? (
               <>
                 <Button onClick={() => handleSaveAhorro(savingsAmount)} disabled={savingAhorro || savingsAmount === 0}
-                  className="h-16 rounded-2xl bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 font-bold text-base flex flex-col gap-0.5">
+                  className="h-16 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-500/80 font-bold text-base flex flex-col gap-0.5">
                   <span className="text-xs opacity-70">Monto sugerido</span>
                   <span className="text-xl font-black">{formatAmount(realSavingsForPeriod)}</span>
                 </Button>
@@ -929,7 +934,7 @@ function AhorroContent() {
                   <Pencil className="h-4 w-4" /> Otro monto
                 </Button>
                 <Button variant="ghost" onClick={handleSkipAhorro} disabled={savingAhorro}
-                  className="h-11 rounded-2xl text-muted-foreground hover:text-cyclon-pink font-medium flex items-center gap-2">
+                  className="h-11 rounded-2xl text-muted-foreground hover:text-pink-600 dark:hover:text-pink-400 font-medium flex items-center gap-2">
                   <XCircle className="h-4 w-4" /> No ahorré este periodo
                 </Button>
               </>
@@ -941,7 +946,7 @@ function AhorroContent() {
                   <Button variant="ghost" onClick={() => setIsCustomMode(false)} className="flex-1">Volver</Button>
                   <Button onClick={() => handleSaveAhorro(Number(customAmount))}
                     disabled={savingAhorro || !customAmount || Number(customAmount) <= 0}
-                    className="flex-1 bg-cyclon-mint text-cyclon-periwinkle font-bold h-12 rounded-xl">
+                    className="flex-1 bg-emerald-500 text-white font-bold h-12 rounded-xl">
                     {savingAhorro ? "Guardando..." : "Confirmar"}
                   </Button>
                 </div>
@@ -956,7 +961,7 @@ function AhorroContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-cyclon-periwinkle" /> Editar meta de ahorro
+              <Target className="h-5 w-5 text-indigo-600 dark:text-indigo-400" /> Editar meta de ahorro
             </DialogTitle>
             <DialogDescription>Actualmente vas {Math.round(progress)}% del camino.</DialogDescription>
           </DialogHeader>
@@ -971,7 +976,7 @@ function AhorroContent() {
           <DialogFooter className="gap-2 pt-2">
             <Button variant="ghost" onClick={() => setIsMetaOpen(false)}>Cancelar</Button>
             <Button onClick={handleSaveMeta} disabled={savingMeta || !metaInput || Number(metaInput) <= 0}
-              className="bg-cyclon-mint text-cyclon-periwinkle font-bold rounded-xl px-8 hover:bg-cyclon-mint/80">
+              className="bg-emerald-500 text-white font-bold rounded-xl px-8 hover:bg-emerald-500/80">
               {savingMeta ? "Guardando..." : "Guardar"}
             </Button>
           </DialogFooter>
@@ -983,7 +988,7 @@ function AhorroContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-cyclon-lavender" /> Editar bolsillo
+              <Pencil className="h-5 w-5 text-violet-600 dark:text-violet-400" /> Editar bolsillo
             </DialogTitle>
             <DialogDescription>Modifica los datos de &quot;{editPocket?.nombre}&quot;.</DialogDescription>
           </DialogHeader>
@@ -1003,7 +1008,7 @@ function AhorroContent() {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setEditPocket(null)}>Cancelar</Button>
-            <Button onClick={handleSaveEditPocket} disabled={!editForm.nombre} className="bg-cyclon-lavender text-white font-bold rounded-xl px-8">Guardar</Button>
+            <Button onClick={handleSaveEditPocket} disabled={!editForm.nombre} className="bg-violet-500 text-white font-bold rounded-xl px-8">Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
