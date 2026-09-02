@@ -66,6 +66,10 @@ Para resumenKiri: explica claramente qué entendiste y DÓNDE se va a guardar ca
 Responde solo con JSON válido.`,
     })
 
+    if (!output) {
+      throw new Error('El modelo no devolvió una respuesta válida')
+    }
+
     return NextResponse.json(output)
   } catch (error) {
     console.error("[VoiceExtract]", error)

@@ -96,12 +96,10 @@ function CountingAmount({ value, formatAmount, className, duration = 1600 }: {
   )
 }
 
-// ─── Balance Aura (partículas + delta flotante + sparkline de tendencia) ───────
+// ─── Balance Aura (delta flotante) ─────────────────────────────────────────────
 // Envuelve el número real (CountingAmount, sin tocarlo) y reacciona a cambios
 // reales del saldo — nada de botones "simular", la animación se dispara sola
 // cuando `total` cambia de verdad (registrar ingreso, pagar obligación, etc.).
-
-interface BalanceParticle { id: number; x: number; delay: number; icon: string; dir: "up" | "down" }
 
 function BalanceAura({ total, formatAmount, children }: {
   total: number; formatAmount: (n: number) => string; children: React.ReactNode
@@ -109,17 +107,14 @@ function BalanceAura({ total, formatAmount, children }: {
   const prevRef = useRef(total)
   const idRef = useRef(0)
   const pulseTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const [history, setHistory] = useState<number[]>([total])
   const [pulse, setPulse] = useState<"up" | "down" | null>(null)
   const [delta, setDelta] = useState<{ amount: number; id: number } | null>(null)
-  const [particles, setParticles] = useState<BalanceParticle[]>([])
 
   useEffect(() => {
     const prev = prevRef.current
     if (total === prev) return
     const amount = total - prev
     prevRef.current = total
-    setHistory(h => [...h.slice(-11), total])
 
     const direction: "up" | "down" = amount > 0 ? "up" : "down"
     setPulse(direction)
@@ -129,29 +124,7 @@ function BalanceAura({ total, formatAmount, children }: {
     const deltaId = idRef.current++
     setDelta({ amount, id: deltaId })
     setTimeout(() => setDelta(d => (d?.id === deltaId ? null : d)), 1600)
-
-    const burst: BalanceParticle[] = Array.from({ length: 6 }).map(() => ({
-      id: idRef.current++,
-      x: 38 + Math.random() * 24,
-      delay: Math.random() * 0.15,
-      icon: direction === "up" ? (Math.random() > 0.5 ? "✨" : "🌿") : "🍂",
-      dir: direction,
-    }))
-    setParticles(p => [...p, ...burst])
-    setTimeout(() => setParticles(p => p.filter(x => !burst.find(b => b.id === x.id))), 1300)
   }, [total])
-
-  // Sparkline — tendencia de esta sesión (arranca en el saldo actual, crece con cada cambio real)
-  const W = 220, H = 32
-  const vals = history.length > 1 ? history : [total, total]
-  const min = Math.min(...vals), max = Math.max(...vals)
-  const range = max - min || 1
-  const points = vals.map((v, i) => {
-    const x = (i / (vals.length - 1)) * W
-    const y = H - ((v - min) / range) * (H - 6) - 3
-    return `${x},${y}`
-  }).join(" ")
-  const lastPoint = points.split(" ").slice(-1)[0].split(",")
 
   const glowOpacity = pulse === "up" ? 0.35 : pulse === "down" ? 0.22 : 0.12
 
@@ -166,20 +139,6 @@ function BalanceAura({ total, formatAmount, children }: {
       <div className="relative inline-block">
         {children}
 
-        {particles.map(p => (
-          <span
-            key={p.id}
-            className="absolute text-sm pointer-events-none"
-            style={{
-              left: `${p.x}%`,
-              top: p.dir === "down" ? -2 : "45%",
-              animation: `${p.dir === "down" ? "kiriParticleDown" : "kiriParticleUp"} 1.1s ease-${p.dir === "down" ? "in" : "out"} ${p.delay}s forwards`,
-            }}
-          >
-            {p.icon}
-          </span>
-        ))}
-
         {delta && (
           <span
             key={delta.id}
@@ -190,19 +149,6 @@ function BalanceAura({ total, formatAmount, children }: {
           </span>
         )}
       </div>
-
-      {/* Mini gráfica de tendencia */}
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} className="mt-1 block mx-auto max-w-[220px]">
-        <polyline
-          points={points}
-          fill="none"
-          stroke="rgba(255,255,255,0.55)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx={lastPoint[0]} cy={lastPoint[1]} r="3" fill="white" />
-      </svg>
     </div>
   )
 }

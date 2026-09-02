@@ -185,9 +185,17 @@ function useFinanceDataInternal() {
 
   // ─── Deudas ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Devuelve la deuda creada, o `null` si no se pudo guardar (sin sesión activa
+   * todavía — puede pasar justo después de registrarse/iniciar sesión, antes de
+   * que `useAuth()` termine de cargar — o error del servidor). Antes esto
+   * resolvía "exitosamente" sin hacer nada si `userId` aún no estaba listo, así
+   * que quien llamaba (ej. el onboarding) no tenía forma de saber que la deuda
+   * nunca se guardó — revisa el valor de retorno.
+   */
   const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO' }) => {
-    if (!userId) return
-    await debtsApi.create({
+    if (!userId) return null
+    const { data: result, error } = await debtsApi.create({
       nombre: data.nombre,
       montoTotal: data.montoTotal,
       saldoRestante: data.saldoRestante,
@@ -200,7 +208,9 @@ function useFinanceDataInternal() {
       bankEntityId: data.bankEntityId,
       tipoDeuda: data.tipoDeuda,
     })
+    if (error || !result) return null
     await fetchAll()
+    return result.debt
   }
 
   const updateDebt = async (
@@ -279,9 +289,10 @@ function useFinanceDataInternal() {
 
   // ─── Gastos fijos ────────────────────────────────────────────────────────────
 
+  /** Devuelve el gasto fijo creado, o `null` si no se pudo guardar — ver nota en `addDebt`. */
   const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo" | "renovacionAuto" | "frecuencia" | "categoria" | "metodoPago"> & { categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean }) => {
-    if (!userId) return
-    await fixedExpensesApi.create({
+    if (!userId) return null
+    const { data: result, error } = await fixedExpensesApi.create({
       nombre: data.nombre,
       monto: data.monto,
       fechaCorte: data.fechaCorte,
@@ -290,7 +301,9 @@ function useFinanceDataInternal() {
       metodoPago: data.metodoPago,
       renovacionAuto: data.renovacionAuto,
     })
+    if (error || !result) return null
     await fetchAll()
+    return result.fixedExpense
   }
 
   const updateFixedExpense = async (

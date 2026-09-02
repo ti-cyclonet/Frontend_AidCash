@@ -13,12 +13,15 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
-import { api, userApi } from "@/lib/api-client"
+import { api, userApi, supportApi } from "@/lib/api-client"
+
+const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -34,10 +37,11 @@ export default function PerfilPage() {
   }
 
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, username: user.username, avatarUrl: user.avatarUrl, firstName: '', secondName: '', firstSurname: '', secondSurname: '', documentType: 'CC', documentNumber: '' })
+  const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, username: user.username, avatarUrl: user.avatarUrl, firstName: '', secondName: '', firstSurname: '', secondSurname: '' })
   const [avatarChanged, setAvatarChanged] = useState(false)
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
+  const [isSupportOpen, setIsSupportOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -69,8 +73,6 @@ export default function PerfilPage() {
       secondName: editForm.secondName,
       firstSurname: editForm.firstSurname,
       secondSurname: editForm.secondSurname,
-      documentType: editForm.documentType,
-      documentNumber: editForm.documentNumber,
     })
 
     if (error) {
@@ -95,8 +97,6 @@ export default function PerfilPage() {
       secondName: parts.length === 4 ? parts[1] : '',
       firstSurname: parts.length >= 3 ? parts[parts.length - 2] : (parts[1] || ''),
       secondSurname: parts.length >= 3 ? parts[parts.length - 1] : '',
-      documentType: 'CC',
-      documentNumber: '',
     })
     setAvatarChanged(false)
     setUsernameError(null)
@@ -240,7 +240,10 @@ export default function PerfilPage() {
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
-            <a href="mailto:notificaciones@cyclonet.com.co?subject=Soporte%20Kiri%20Finance" className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+            <button
+              onClick={() => setIsSupportOpen(true)}
+              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
+            >
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-cyclon-sky/20 flex items-center justify-center text-cyclon-sky">
                   <MessageCircle className="h-4 w-4" />
@@ -251,8 +254,8 @@ export default function PerfilPage() {
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </a>
-            <button className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+            </button>
+            <a href={FAQ_URL} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-cyclon-lavender/20 flex items-center justify-center text-cyclon-lavender">
                   <HelpCircle className="h-4 w-4" />
@@ -263,7 +266,7 @@ export default function PerfilPage() {
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
+            </a>
           </CardContent>
         </Card>
       </div>
@@ -373,31 +376,6 @@ export default function PerfilPage() {
               <p className="text-[10px] text-muted-foreground">Así te encuentran tus amigos en Social — @{editForm.username || 'usuario'}</p>
               {usernameError && <p className="text-[10px] text-destructive">{usernameError}</p>}
             </div>
-
-            <div className="grid grid-cols-[1fr_2fr] gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Tipo Doc. *</Label>
-                <select
-                  value={editForm.documentType}
-                  onChange={e => setEditForm(f => ({ ...f, documentType: e.target.value }))}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="CC">C.C.</option>
-                  <option value="CE">C.E.</option>
-                  <option value="PP">Pasaporte</option>
-                  <option value="TI">T.I.</option>
-                  <option value="NIT">NIT</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Número de Documento *</Label>
-                <Input
-                  value={editForm.documentNumber}
-                  onChange={e => setEditForm(f => ({ ...f, documentNumber: e.target.value }))}
-                  placeholder="Número de documento"
-                />
-              </div>
-            </div>
           </div>
 
           <DialogFooter className="gap-2">
@@ -415,7 +393,154 @@ export default function PerfilPage() {
 
       {/* Change Password Modal */}
       <ChangePasswordDialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen} />
+
+      {/* Support Modal */}
+      <SupportModal open={isSupportOpen} onOpenChange={setIsSupportOpen} />
     </div>
+  )
+}
+
+// ─── Support Modal ─────────────────────────────────────────────────────────
+
+function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [titulo, setTitulo] = useState("")
+  const [descripcion, setDescripcion] = useState("")
+  const [imagen, setImagen] = useState<string | null>(null)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const reset = () => {
+    setTitulo("")
+    setDescripcion("")
+    setImagen(null)
+    setError("")
+    setSuccess(false)
+  }
+
+  const handleClose = (v: boolean) => {
+    if (!v) reset()
+    onOpenChange(v)
+  }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => setImagen(ev.target?.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = async () => {
+    setError("")
+    if (!titulo.trim() || !descripcion.trim()) {
+      setError("Completa el título y la descripción.")
+      return
+    }
+
+    setLoading(true)
+    const { error: apiError } = await supportApi.create({
+      titulo: titulo.trim(),
+      descripcion: descripcion.trim(),
+      imagenBase64: imagen ?? undefined,
+    })
+    setLoading(false)
+
+    if (apiError) {
+      setError(apiError)
+      return
+    }
+
+    setSuccess(true)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Soporte</DialogTitle>
+        </DialogHeader>
+
+        {success ? (
+          <div className="py-6 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+              <MessageCircle className="h-5 w-5 text-green-600" />
+            </div>
+            <p className="text-sm font-medium">¡Listo! Ya recibimos tu mensaje.</p>
+            <Button onClick={() => handleClose(false)} className="mt-2">Cerrar</Button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input
+                  value={titulo}
+                  onChange={e => setTitulo(e.target.value)}
+                  placeholder="Resume tu problema o pregunta"
+                  maxLength={150}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Descripción</Label>
+                <Textarea
+                  value={descripcion}
+                  onChange={e => setDescripcion(e.target.value)}
+                  placeholder="Cuéntanos con detalle qué pasó"
+                  rows={4}
+                  maxLength={5000}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Imagen (opcional)</Label>
+                {imagen ? (
+                  <div className="relative w-fit">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imagen} alt="Adjunto" className="h-24 rounded-lg border border-border object-cover" />
+                    <button
+                      onClick={() => setImagen(null)}
+                      className="absolute -top-2 -right-2 h-6 w-6 bg-destructive rounded-full flex items-center justify-center shadow-lg"
+                    >
+                      <X className="h-3.5 w-3.5 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="gap-2"
+                  >
+                    <ImageIcon className="h-4 w-4" /> Agregar imagen
+                  </Button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                />
+              </div>
+              {error && (
+                <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-2">{error}</p>
+              )}
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => handleClose(false)}>Cancelar</Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={loading || !titulo.trim() || !descripcion.trim()}
+                className="bg-cyclon-lavender text-white font-bold rounded-xl px-8"
+              >
+                {loading ? "Enviando..." : "Enviar"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 

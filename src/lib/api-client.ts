@@ -533,6 +533,17 @@ export const missionsApi = {
   },
 }
 
+// ─── Support API ────────────────────────────────────────────────────────────
+
+export const supportApi = {
+  async create(data: { titulo: string; descripcion: string; imagenBase64?: string }) {
+    return api<{ message: string }>('/support', {
+      method: 'POST',
+      body: data,
+    })
+  },
+}
+
 // ─── Reports API ──────────────────────────────────────────────────────────────
 
 export type Timeframe = 'week' | 'month' | 'year' | 'all'

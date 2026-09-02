@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { Flame, Lock, Check, Gift, ChevronLeft, Sparkles } from "lucide-react"
+import { Flame, Lock, Check, Gift, ChevronLeft, Sparkles, Sprout } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -26,7 +26,8 @@ const MILESTONES = [
 export default function MisionesPage() {
   const { incomeFrequency } = useAppContext()
   const { streakActual, badgesDesbloqueados, xpFromMissions, loading: streakLoading, refetch: refetchStreaks } = useStreaks(incomeFrequency)
-  const { daily, weekly, loading: missionsLoading, claim } = useMissions()
+  const { daily, weekly, onboarding, loading: missionsLoading, claim } = useMissions()
+  const pendingOnboarding = onboarding.filter(m => !m.claimed)
 
   const [claiming, setClaiming] = useState<string | null>(null)
   const [reward, setReward] = useState<{ missionKey: string; result: RewardResult } | null>(null)
@@ -88,6 +89,53 @@ export default function MisionesPage() {
         </Card>
       ) : (
         <>
+          {/* ═══ PRIMEROS PASOS — misiones de una sola vez ═══ */}
+          {pendingOnboarding.length > 0 && (
+            <Card className="border border-emerald-500/30 bg-emerald-500/5 rounded-2xl">
+              <CardContent className="p-5 space-y-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <p className="text-sm font-bold">Primeros pasos</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-3">Completa esto una sola vez para arrancar con todo</p>
+
+                <div className="space-y-4">
+                  {pendingOnboarding.map((m) => {
+                    const done = m.progress >= m.target
+                    return (
+                      <div key={m.key} className="flex items-center gap-3">
+                        <div className={cn(
+                          "h-9 w-9 rounded-xl flex items-center justify-center text-base shrink-0",
+                          done ? "bg-emerald-500/15" : "bg-muted"
+                        )}>
+                          {m.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold">{m.title}</p>
+                          <p className="text-[10px] text-muted-foreground">{m.desc}</p>
+                        </div>
+                        <div className="shrink-0">
+                          {done ? (
+                            <Button
+                              size="sm"
+                              onClick={() => handleClaim(m.key)}
+                              disabled={claiming === m.key}
+                              className="h-8 gap-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-bold px-3"
+                            >
+                              <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : "Reclamar"}
+                            </Button>
+                          ) : (
+                            <Lock className="h-4 w-4 text-muted-foreground/40" />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* ═══ MISIÓN SEMANAL ═══ */}
           {weekly && (
             <Card className="border border-amber-500/30 bg-amber-500/5 rounded-2xl">

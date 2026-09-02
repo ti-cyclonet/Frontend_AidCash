@@ -4,21 +4,24 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import {
   X, Send, Mic, MicOff, Loader2, Sparkles, CheckCircle2,
   AlertTriangle, ScanLine, Camera, Upload, Store, Calendar,
-  DollarSign, Tag, Calculator,
+  DollarSign, Tag, Calculator, TrendingUp, TrendingDown, PiggyBank, Coffee,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useAppContext } from "@/lib/app-context"
-import { useFinanceData } from "@/hooks/use-finance-data"
+import { useFinanceData, SavingsEntry } from "@/hooks/use-finance-data"
+import { useStreaks } from "@/hooks/use-streaks"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { getPeriodData } from "@/lib/period-filter"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
 import { userApi } from "@/lib/api-client"
 import type { VoiceExtractOutput } from "@/app/api/ai/voice-extract/route"
 import type { ReceiptScannerOutput } from "@/ai/flows/receipt-scanner-flow"
+import type { ProactiveCoachInput } from "@/ai/types"
 
 interface Message {
   id: string
@@ -26,64 +29,291 @@ interface Message {
   content: string
 }
 
-// ─── Confirm panel para extracción de voz ────────────────────────────────────
-function VoiceExtractConfirm({
-  result, onConfirm, onCancel, onDictateMore, formatAmount,
-}: {
-  result: VoiceExtractOutput
-  onConfirm: () => void
-  onCancel: () => void
-  onDictateMore: () => void
-  formatAmount: (n: number) => string
-}) {
+// ─── Dictado por voz: fases + tarjetas editables ─────────────────────────────
+type VoicePhase = "idle" | "listening" | "processing" | "review" | "done"
+
+type HormigaCategoria = VoiceExtractOutput["gastosHormiga"][number]["categoria"]
+
+interface DraftItem {
+  id: string
+  kind: "ingreso" | "deuda" | "gastoFijo" | "ahorro" | "hormiga"
+  nombre: string
+  monto: number
+  when?: string
+  // Datos que el AI detectó pero que no se editan en la tarjeta — se
+  // preservan tal cual para guardarlos junto con nombre/monto.
+  frecuencia?: VoiceExtractOutput["ingreso"]["frecuencia"]
+  cuota?: number | null
+  diaCorte?: number | null
+  fechaVencimiento?: string | null
+  fechaCorte?: string | null
+  categoriaHormiga?: HormigaCategoria
+}
+
+function buildDraftItems(result: VoiceExtractOutput): DraftItem[] {
+  const items: DraftItem[] = []
+  if (result.ingreso.monto) {
+    items.push({
+      id: "ingreso",
+      kind: "ingreso",
+      nombre: "Ingreso",
+      monto: result.ingreso.monto,
+      when: result.ingreso.frecuencia === "quincenal" ? "Quincenal" : "Mensual",
+      frecuencia: result.ingreso.frecuencia,
+    })
+  }
+  result.deudas.forEach((d, i) => items.push({
+    id: `deuda-${i}`, kind: "deuda", nombre: d.nombre, monto: d.monto,
+    when: d.diaCorte ? `Vence el día ${d.diaCorte}` : undefined,
+    cuota: d.cuota, diaCorte: d.diaCorte, fechaVencimiento: d.fechaVencimiento,
+  }))
+  result.gastosFijos.forEach((g, i) => items.push({
+    id: `gastoFijo-${i}`, kind: "gastoFijo", nombre: g.nombre, monto: g.monto,
+    when: g.diaCorte ? `Corte el día ${g.diaCorte}` : undefined,
+    diaCorte: g.diaCorte, fechaCorte: g.fechaCorte,
+  }))
+  ;(result.ahorro ?? []).forEach((a, i) => items.push({
+    id: `ahorro-${i}`, kind: "ahorro", nombre: a.nombre, monto: a.monto,
+  }))
+  result.gastosHormiga.forEach((h, i) => items.push({
+    id: `hormiga-${i}`, kind: "hormiga", nombre: h.nombre, monto: h.monto,
+    categoriaHormiga: h.categoria,
+  }))
+  return items
+}
+
+const KIND_META: Record<DraftItem["kind"], { icon: LucideIcon; color: string; label: string }> = {
+  ingreso:   { icon: TrendingUp,   color: "text-kiri-emerald",      label: "Ingreso detectado" },
+  deuda:     { icon: TrendingDown, color: "text-cyclon-pink",       label: "Deuda detectada" },
+  gastoFijo: { icon: Calendar,     color: "text-cyclon-sky",        label: "Gasto fijo detectado" },
+  ahorro:    { icon: PiggyBank,    color: "text-cyclon-lavender",   label: "Ahorro detectado" },
+  hormiga:   { icon: Coffee,       color: "text-cyclon-periwinkle", label: "Gasto hormiga" },
+}
+
+const BURST_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315]
+
+function VoiceWaveform() {
+  const bars = useRef(Array.from({ length: 20 }, (_, i) => i)).current
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-border bg-kiri-emerald/5 flex items-center gap-3">
-        <div className="h-9 w-9 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0">
-          <Sparkles className="h-5 w-5 text-white" />
-        </div>
-        <div><p className="text-sm font-bold">Kiri entendió esto</p><p className="text-[10px] text-muted-foreground">Confirma antes de guardar</p></div>
+    <div className="flex items-center justify-center gap-[3px] h-10">
+      {bars.map(i => (
+        <span key={i}
+          className="w-[3px] h-8 rounded-full bg-kiri-emerald origin-bottom animate-[kiriWaveBar_1s_ease-in-out_infinite]"
+          style={{ animationDelay: `${(i % 7) * 70}ms`, animationDuration: `${700 + (i % 5) * 100}ms` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function VoiceReviewCard({ item, onDiscard, onChange }: {
+  item: DraftItem
+  onDiscard: () => void
+  onChange: (patch: Partial<DraftItem>) => void
+}) {
+  const meta = KIND_META[item.kind]
+  const Icon = meta.icon
+  return (
+    <div className="flex items-start gap-2.5 bg-card border border-border rounded-2xl p-3">
+      <div className={cn("h-8 w-8 rounded-lg bg-muted/60 flex items-center justify-center shrink-0", meta.color)}>
+        <Icon className="h-4 w-4" />
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        <div className="bg-kiri-mint/10 rounded-2xl p-3">
-          <p className="text-xs text-foreground/85 leading-relaxed">{result.resumenKiri}</p>
-          <span className={cn("mt-1.5 inline-block text-[9px] font-bold px-2 py-0.5 rounded-full",
-            result.confianza === "alta" ? "bg-kiri-emerald/20 text-kiri-emerald" :
-            result.confianza === "media" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600")}>
-            Confianza {result.confianza}
-          </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className={cn("text-[10px] font-bold uppercase tracking-wide truncate", meta.color)}>{meta.label}</span>
+          <button onClick={onDiscard} className="text-muted-foreground hover:text-destructive transition-colors shrink-0" aria-label="Descartar">
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
-        {result.ingreso.monto && <ExtractItem icon="💰" label="Ingreso" value={`${formatAmount(result.ingreso.monto)} / ${result.ingreso.frecuencia ?? "mensual"}`} color="text-kiri-emerald" />}
-        {result.deudas.map((d, i) => <ExtractItem key={i} icon="💳" label={`Deuda: ${d.nombre}`} value={`${formatAmount(d.monto)}${d.cuota ? ` · Cuota: ${formatAmount(d.cuota)}` : ""}${d.diaCorte ? ` · Día ${d.diaCorte}` : ""}`} color="text-cyclon-pink" />)}
-        {result.gastosFijos.map((g, i) => <ExtractItem key={i} icon="📅" label={`Gasto fijo: ${g.nombre}`} value={`${formatAmount(g.monto)}${g.diaCorte ? ` · Día ${g.diaCorte}` : ""}`} color="text-cyclon-sky" />)}
-        {(result.ahorro ?? []).map((a, i) => <ExtractItem key={i} icon="🐷" label={`Ahorro: ${a.nombre}`} value={formatAmount(a.monto)} color="text-cyclon-lavender" />)}
-        {result.gastosHormiga.map((h, i) => <ExtractItem key={i} icon="🐜" label={h.nombre} value={formatAmount(h.monto)} color="text-cyclon-pink" />)}
-      </div>
-      <div className="border-t border-border px-4 py-3 space-y-2">
-        {/* Botón para dictar más */}
-        <Button variant="outline" size="sm" onClick={onDictateMore} className="w-full rounded-xl h-9 text-xs font-bold gap-1.5 border-dashed">
-          <Mic className="h-3.5 w-3.5" /> Dictar algo más
-        </Button>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 rounded-xl h-10 text-xs font-bold">Cancelar</Button>
-          <Button size="sm" onClick={onConfirm} className="flex-1 rounded-xl h-10 bg-kiri-emerald text-white font-bold text-xs gap-1.5">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Guardar todo
-          </Button>
+        <div className="flex gap-2 mt-2">
+          <Input value={item.nombre} onChange={e => onChange({ nombre: e.target.value })}
+            className="flex-1 h-8 text-xs rounded-lg" />
+          <div className="relative w-24 shrink-0">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground pointer-events-none">$</span>
+            <Input value={item.monto ? String(item.monto) : ""} inputMode="numeric"
+              onChange={e => onChange({ monto: Number(e.target.value.replace(/\D/g, "")) || 0 })}
+              className="h-8 text-xs rounded-lg pl-5" />
+          </div>
         </div>
+        {item.when && <p className="text-[10px] text-muted-foreground mt-1.5">{item.when}</p>}
       </div>
     </div>
   )
 }
 
-function ExtractItem({ icon, label, value, color }: { icon: string; label: string; value: string; color: string }) {
-  return (
-    <div className="flex items-start gap-2.5 bg-card rounded-xl p-3 shadow-sm">
-      <span className="text-base">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold text-muted-foreground truncate">{label}</p>
-        <p className={cn("text-sm font-black truncate", color)}>{value}</p>
+function VoiceDictationPanel({
+  phase, transcript, error, resumenKiri, confianza, draftItems, saving, savedCount,
+  onStartOrRetry, onStopListening, onDiscardItem, onUpdateItem, onConfirm, onDictateMore, onCancel, onClose,
+}: {
+  phase: VoicePhase
+  transcript: string
+  error: string | null
+  resumenKiri?: string
+  confianza?: VoiceExtractOutput["confianza"]
+  draftItems: DraftItem[]
+  saving: boolean
+  savedCount: number
+  onStartOrRetry: () => void
+  onStopListening: () => void
+  onDiscardItem: (id: string) => void
+  onUpdateItem: (id: string, patch: Partial<DraftItem>) => void
+  onConfirm: () => void
+  onDictateMore: () => void
+  onCancel: () => void
+  onClose: () => void
+}) {
+  if (phase === "review") {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-xl bg-kiri-emerald/15 flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-kiri-emerald" />
+            </div>
+            Kiri entendió esto
+          </DialogTitle>
+          <DialogDescription>Revisa, ajusta si hace falta, y confirma antes de guardar.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {resumenKiri && (
+            <div className="bg-kiri-mint/10 rounded-2xl p-3">
+              <p className="text-xs text-foreground/85 leading-relaxed">{resumenKiri}</p>
+              {confianza && (
+                <span className={cn("mt-1.5 inline-block text-[9px] font-bold px-2 py-0.5 rounded-full",
+                  confianza === "alta" ? "bg-kiri-emerald/20 text-kiri-emerald" :
+                  confianza === "media" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400" :
+                  "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400")}>
+                  Confianza {confianza}
+                </span>
+              )}
+            </div>
+          )}
+          {draftItems.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">Descartaste todo — no hay nada que guardar.</p>
+          ) : (
+            <div className="space-y-2">
+              {draftItems.map(item => (
+                <VoiceReviewCard key={item.id} item={item}
+                  onDiscard={() => onDiscardItem(item.id)}
+                  onChange={patch => onUpdateItem(item.id, patch)} />
+              ))}
+            </div>
+          )}
+          {error && <p className="text-[11px] text-destructive font-bold bg-destructive/10 rounded-lg p-2 text-center">{error}</p>}
+        </div>
+        <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+          <Button variant="outline" size="sm" onClick={onDictateMore} disabled={saving} className="w-full rounded-xl h-9 text-xs font-bold gap-1.5 border-dashed">
+            <Mic className="h-3.5 w-3.5" /> Dictar algo más
+          </Button>
+          <div className="flex gap-2 w-full">
+            <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving} className="flex-1 rounded-xl h-10 text-xs font-bold">Cancelar</Button>
+            <Button size="sm" onClick={onConfirm} disabled={saving || draftItems.length === 0} className="flex-1 rounded-xl h-10 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs gap-1.5">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              {saving ? "Guardando..." : `Guardar todo (${draftItems.length})`}
+            </Button>
+          </div>
+        </DialogFooter>
+      </>
+    )
+  }
+
+  if (phase === "done") {
+    return (
+      <div className="py-4 text-center">
+        <div className="relative inline-block">
+          <div className="h-16 w-16 rounded-full bg-kiri-emerald/15 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="h-8 w-8 text-kiri-emerald" />
+          </div>
+          {BURST_ANGLES.map((deg, i) => {
+            const rad = (deg * Math.PI) / 180
+            const tx = Math.round(Math.cos(rad) * 46)
+            const ty = Math.round(Math.sin(rad) * 46)
+            return (
+              <span key={i} className="absolute left-1/2 top-1/2 text-sm animate-[kiriBurstOut_0.7s_ease-out_forwards]"
+                style={{ "--tx": `${tx}px`, "--ty": `${ty}px`, animationDelay: `${i * 30}ms` } as React.CSSProperties}>
+                ✨
+              </span>
+            )
+          })}
+        </div>
+        <p className="text-base font-bold mt-4">¡Listo! 🌿</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Guardamos {savedCount} movimiento{savedCount !== 1 ? "s" : ""} en tu app.
+        </p>
+        <div className="flex gap-2 mt-5">
+          <Button variant="outline" size="sm" onClick={onDictateMore} className="flex-1 rounded-xl h-9 text-xs font-bold gap-1.5">
+            <Mic className="h-3.5 w-3.5" /> Dictar otro
+          </Button>
+          <Button size="sm" onClick={onClose} className="flex-1 rounded-xl h-9 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs">
+            Listo
+          </Button>
+        </div>
       </div>
-    </div>
+    )
+  }
+
+  // idle / listening / processing
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <div className={cn("h-8 w-8 rounded-xl flex items-center justify-center",
+            phase === "listening" ? "bg-kiri-emerald/20 text-kiri-emerald animate-pulse" : "bg-muted/50 text-muted-foreground")}>
+            <Mic className="h-4 w-4" />
+          </div>
+          Dictado inteligente
+        </DialogTitle>
+        <DialogDescription>Habla y Kiri clasificará tus datos financieros automáticamente.</DialogDescription>
+      </DialogHeader>
+      <div className="py-4 space-y-4 text-center">
+        {phase === "listening" && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              <span className="absolute inset-0 rounded-full bg-kiri-emerald/25 animate-ping" />
+              <span className="absolute inset-0 rounded-full bg-kiri-emerald/15 animate-ping [animation-delay:300ms]" />
+              <button onClick={onStopListening} className="relative h-16 w-16 rounded-full bg-kiri-emerald flex items-center justify-center cursor-pointer">
+                <Mic className="h-7 w-7 text-white" />
+              </button>
+            </div>
+            <VoiceWaveform />
+            <p className="text-sm font-bold text-kiri-emerald">Escuchando...</p>
+            <p className="text-xs text-muted-foreground min-h-[1.5rem] px-2">
+              {transcript || "Toca el micrófono para detener"}
+            </p>
+          </div>
+        )}
+        {phase === "processing" && (
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-10 w-10 text-kiri-emerald animate-spin" />
+            <p className="text-sm font-bold">Analizando lo que dijiste...</p>
+            {transcript && (
+              <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 px-4 py-3">
+                <p className="text-xs text-foreground/80 italic leading-relaxed relative z-10">&ldquo;{transcript}&rdquo;</p>
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-kiri-emerald/20 to-transparent bg-[length:200%_100%] animate-[kiriShimmer_1.4s_ease-in-out_infinite]" />
+              </div>
+            )}
+          </div>
+        )}
+        {phase === "idle" && error && (
+          <div className="flex flex-col items-center gap-3">
+            <AlertTriangle className="h-10 w-10 text-destructive" />
+            <p className="text-sm text-destructive font-bold">{error}</p>
+            <Button size="sm" onClick={onStartOrRetry} className="rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white">Intentar de nuevo</Button>
+          </div>
+        )}
+        {phase === "idle" && !error && (
+          <div className="flex flex-col items-center gap-3">
+            <button onClick={onStartOrRetry} className="h-20 w-20 rounded-full bg-kiri-emerald/10 border-2 border-kiri-emerald/30 flex items-center justify-center hover:bg-kiri-emerald/20 transition-colors">
+              <Mic className="h-9 w-9 text-kiri-emerald" />
+            </button>
+            <p className="text-sm text-muted-foreground">Toca para hablar</p>
+          </div>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCancel} className="rounded-xl w-full">Cancelar</Button>
+      </DialogFooter>
+    </>
   )
 }
 
@@ -163,10 +393,13 @@ export function CoachFab() {
   // ── Modo voz inteligente ──────────────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState(false)
   const [voiceModalOpen, setVoiceModalOpen] = useState(false)
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle")
   const [voiceTranscript, setVoiceTranscript] = useState("")
-  const [extracting, setExtracting] = useState(false)
   const [extractResult, setExtractResult] = useState<VoiceExtractOutput | null>(null)
+  const [draftItems, setDraftItems] = useState<DraftItem[]>([])
   const [extractError, setExtractError] = useState<string | null>(null)
+  const [savingExtract, setSavingExtract] = useState(false)
+  const [savedCount, setSavedCount] = useState(0)
 
   // ── Modo escáner ──────────────────────────────────────────────────────────
   const [scanModalOpen, setScanModalOpen] = useState(false)
@@ -184,8 +417,9 @@ export function CoachFab() {
   // ── Simulador ─────────────────────────────────────────────────────────────
   const [simOpen, setSimOpen] = useState(false)
 
-  const { income, incomeFrequency, formatAmount, setIncome } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes, totalAhorrado, totalImpulseThisPeriod, addDebt, addFixedExpense, addImpulseExpense, refetch } = useFinanceData()
+  const { income, incomeFrequency, formatAmount, setIncome, user, metaAhorro } = useAppContext()
+  const { debts, fixedExpenses, extraIncomes, totalAhorrado, totalImpulseThisPeriod, savingsHistory, addDebt, addFixedExpense, addImpulseExpense, refetch } = useFinanceData()
+  const { streakActual } = useStreaks(incomeFrequency)
 
   const periodData = getPeriodData(
     income,
@@ -201,17 +435,55 @@ export function CoachFab() {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])
 
   // ── Speech ────────────────────────────────────────────────────────────────
-  const startListening = (onTranscript: (t: string) => void) => {
+  // onInterim recibe texto parcial mientras el usuario sigue hablando (para
+  // mostrarlo creciendo en vivo). onStopWithoutResult se llama exactamente
+  // una vez si el reconocimiento termina SIN transcripción final — por error,
+  // por el timeout de seguridad, o porque el navegador lo cortó solo — para
+  // que el que llama pueda volver a un estado "idle" en vez de quedarse
+  // colgado esperando algo que nunca va a llegar.
+  const startListening = (
+    onFinal: (t: string) => void,
+    onInterim?: (t: string) => void,
+    onStopWithoutResult?: () => void,
+  ) => {
     const SR = (window as unknown as Record<string, unknown>).SpeechRecognition ||
       (window as unknown as Record<string, unknown>).webkitSpeechRecognition
-    if (!SR) { alert("Tu navegador no soporta reconocimiento de voz"); return }
+    if (!SR) { alert("Tu navegador no soporta reconocimiento de voz"); onStopWithoutResult?.(); return }
     const r = new (SR as new () => SpeechRecognition)()
-    r.lang = "es-ES"; r.continuous = false; r.interimResults = false
+    r.lang = "es-ES"; r.continuous = false; r.interimResults = true
+    let settled = false
     // Timeout de seguridad: si no se detecta voz en 8 segundos, detener
     const timeout = setTimeout(() => { r.stop() }, 8000)
-    r.onresult = (e: SpeechRecognitionEvent) => { clearTimeout(timeout); onTranscript(e.results[0][0].transcript); setIsListening(false) }
-    r.onerror = () => { clearTimeout(timeout); setIsListening(false) }
-    r.onend = () => { clearTimeout(timeout); setIsListening(false) }
+    r.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = ""
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript
+        if (e.results[i].isFinal) {
+          settled = true
+          clearTimeout(timeout)
+          setIsListening(false)
+          onFinal(transcript)
+          return
+        }
+        interim += transcript
+      }
+      if (interim) onInterim?.(interim)
+    }
+    r.onerror = (e: SpeechRecognitionErrorEvent) => {
+      clearTimeout(timeout)
+      setIsListening(false)
+      if (e.error !== 'aborted' && e.error !== 'no-speech') {
+        alert(e.error === 'not-allowed' || e.error === 'service-not-allowed'
+          ? "Kiri necesita permiso para usar el micrófono."
+          : "No se pudo reconocer tu voz. Intenta de nuevo.")
+      }
+      if (!settled) { settled = true; onStopWithoutResult?.() }
+    }
+    r.onend = () => {
+      clearTimeout(timeout)
+      setIsListening(false)
+      if (!settled) { settled = true; onStopWithoutResult?.() }
+    }
     recognitionRef.current = r; r.start(); setIsListening(true)
   }
 
@@ -227,68 +499,95 @@ export function CoachFab() {
     setIsListening(false)
     setShowSatellites(false)
     setVoiceModalOpen(true)
-    setVoiceTranscript(""); setExtractResult(null); setExtractError(null)
+    setVoicePhase("listening")
+    setVoiceTranscript(""); setExtractResult(null); setDraftItems([]); setExtractError(null)
     // Iniciar nueva escucha con delay para evitar conflicto
     setTimeout(() => {
-      startListening(async t => {
-        setVoiceTranscript(t); setExtracting(true); setExtractError(null)
-        try {
-          const res = await fetch("/api/ai/voice-extract", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcripcion: t }),
-          })
-          if (!res.ok) throw new Error("Error del servidor")
-          setExtractResult(await res.json())
-        } catch { setExtractError("No pude procesar el audio. Intenta de nuevo.") }
-        finally { setExtracting(false) }
-      })
+      startListening(
+        async t => {
+          setVoiceTranscript(t)
+          setVoicePhase("processing")
+          try {
+            const res = await fetch("/api/ai/voice-extract", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transcripcion: t }),
+            })
+            if (!res.ok) throw new Error("Error del servidor")
+            const data: VoiceExtractOutput = await res.json()
+            setExtractResult(data)
+            setDraftItems(buildDraftItems(data))
+            setVoicePhase("review")
+          } catch {
+            setExtractError("No pude procesar el audio. Intenta de nuevo.")
+            setVoicePhase("idle")
+          }
+        },
+        interim => setVoiceTranscript(interim),
+        () => setVoicePhase("idle"),
+      )
     }, 300)
   }
 
   const handleVoiceExtractStart = () => handleVoiceSatellite()
 
-  const handleConfirmExtract = async () => {
-    if (!extractResult) return
-    try {
-      // Ingreso → distinguir entre sueldo base y extra
-      if (extractResult.ingreso.monto) {
-        const montoDetectado = extractResult.ingreso.monto
-        const esSueldo = montoDetectado === income ||
-          montoDetectado === Math.round(income / 2) // quincena
+  const closeVoiceModal = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null }
+    setVoiceModalOpen(false)
+    setVoicePhase("idle")
+    setVoiceTranscript(""); setExtractResult(null); setDraftItems([]); setExtractError(null)
+  }
 
-        if (esSueldo) {
-          // Es el sueldo normal → registrar en wallet como salario (NO cambiar el ingreso base)
-          await userApi.walletIncome(montoDetectado, 'salario')
-        } else {
-          // Es un ingreso extra → registrar como extra y luego meter al wallet
-          await userApi.walletIncome(montoDetectado, 'extra')
+  const handleConfirmExtract = async () => {
+    if (draftItems.length === 0) return
+    setExtractError(null)
+    setSavingExtract(true)
+    // addDebt/addFixedExpense/addImpulseExpense NUNCA lanzan — devuelven `null`
+    // si no se pudo guardar (ver nota en use-finance-data.tsx). Antes este
+    // handler ignoraba ese valor: si un ítem fallaba, el modal se cerraba
+    // igual como si todo se hubiera guardado. Ahora se cuentan los fallos y,
+    // si hay alguno, el modal se queda abierto con un aviso en vez de darlo
+    // por hecho.
+    const failed: string[] = []
+    try {
+      for (const item of draftItems) {
+        if (item.kind === "ingreso") {
+          // Distinguir entre sueldo base y un ingreso extra
+          const esSueldo = item.monto === income || item.monto === Math.round(income / 2) // quincena
+          const { error } = await userApi.walletIncome(item.monto, esSueldo ? "salario" : "extra")
+          if (error) failed.push(`Ingreso de ${formatAmount(item.monto)}`)
+        } else if (item.kind === "deuda") {
+          const saved = await addDebt({ nombre: item.nombre, montoTotal: item.monto, cuotaPeriodo: item.cuota ?? item.monto, diasPago: String(item.diaCorte ?? "1") })
+          if (!saved) failed.push(`Deuda: ${item.nombre}`)
+        } else if (item.kind === "gastoFijo") {
+          const saved = await addFixedExpense({ nombre: item.nombre, monto: item.monto, fechaCorte: item.fechaCorte ?? new Date().toISOString().split("T")[0] })
+          if (!saved) failed.push(`Gasto fijo: ${item.nombre}`)
+        } else if (item.kind === "ahorro") {
+          try {
+            const raw = localStorage.getItem("kiri_saving_pockets")
+            const pockets = raw ? JSON.parse(raw) : []
+            pockets.push({ id: String(Date.now()) + Math.random(), nombre: item.nombre, meta: item.monto, acumulado: 0, icono: "piggybank", color: "mint", createdAt: new Date().toISOString() })
+            localStorage.setItem("kiri_saving_pockets", JSON.stringify(pockets))
+          } catch { failed.push(`Ahorro: ${item.nombre}`) }
+        } else if (item.kind === "hormiga") {
+          const saved = await addImpulseExpense({ nombre: item.nombre, monto: item.monto, categoria: item.categoriaHormiga ?? "otro" })
+          if (!saved) failed.push(item.nombre)
         }
       }
-      // Deudas → registrar como deuda
-      for (const d of extractResult.deudas)
-        await addDebt({ nombre: d.nombre, montoTotal: d.monto, cuotaPeriodo: d.cuota ?? d.monto, diasPago: String(d.diaCorte ?? '1') })
-      // Gastos Fijos → registrar como gasto fijo
-      for (const g of extractResult.gastosFijos)
-        await addFixedExpense({ nombre: g.nombre, monto: g.monto, fechaCorte: g.fechaCorte ?? new Date().toISOString().split("T")[0] })
-      // Ahorro → crear bolsillo de ahorro en localStorage
-      if (extractResult.ahorro?.length) {
-        try {
-          const raw = localStorage.getItem("kiri_saving_pockets")
-          const pockets = raw ? JSON.parse(raw) : []
-          for (const a of extractResult.ahorro) {
-            pockets.push({ id: String(Date.now()) + Math.random(), nombre: a.nombre, meta: a.monto, acumulado: 0, icono: "piggybank", color: "mint", createdAt: new Date().toISOString() })
-          }
-          localStorage.setItem("kiri_saving_pockets", JSON.stringify(pockets))
-        } catch {}
-      }
-      // Gastos Hormiga → registrar como gasto hormiga
-      for (const h of extractResult.gastosHormiga)
-        await addImpulseExpense({ nombre: h.nombre, monto: h.monto, categoria: h.categoria })
       refetch()
       // Disparar evento para que la billetera refresque el wallet
       window.dispatchEvent(new Event("kiri:wallet-updated"))
-      setVoiceModalOpen(false); setExtractResult(null); setVoiceTranscript("")
-    } catch { /* silent */ }
+
+      if (failed.length > 0) {
+        setExtractError(`No se pudo guardar: ${failed.join(", ")}. Intenta de nuevo.`)
+        return
+      }
+      setSavedCount(draftItems.length)
+      setVoicePhase("done")
+    } catch {
+      setExtractError("No se pudo guardar. Intenta de nuevo.")
+    } finally {
+      setSavingExtract(false)
+    }
   }
 
   // ── Satélite: Simulador ───────────────────────────────────────────────────
@@ -327,16 +626,71 @@ export function CoachFab() {
   const handleSaveScan = async () => {
     if (!scanResult) return
     setSavingScan(true)
+    setScanError(null)
     try {
-      if (scanResult.categoria === "gasto_fijo") await addFixedExpense({ nombre: scanResult.establecimiento, monto: scanResult.montoTotal, fechaCorte: scanResult.fecha })
-      else if (scanResult.categoria === "deuda") await addDebt({ nombre: scanResult.establecimiento, montoTotal: scanResult.montoTotal, cuotaPeriodo: scanResult.montoTotal, diasPago: '1' })
-      else await addFixedExpense({ nombre: `${scanResult.establecimiento} (${scanResult.fecha})`, monto: scanResult.montoTotal, fechaCorte: scanResult.fecha })
+      const saved = scanResult.categoria === "gasto_fijo"
+        ? await addFixedExpense({ nombre: scanResult.establecimiento, monto: scanResult.montoTotal, fechaCorte: scanResult.fecha })
+        : scanResult.categoria === "deuda"
+          ? await addDebt({ nombre: scanResult.establecimiento, montoTotal: scanResult.montoTotal, cuotaPeriodo: scanResult.montoTotal, diasPago: '1' })
+          : await addFixedExpense({ nombre: `${scanResult.establecimiento} (${scanResult.fecha})`, monto: scanResult.montoTotal, fechaCorte: scanResult.fecha })
+
+      if (!saved) {
+        setScanError("No se pudo guardar. Intenta de nuevo.")
+        return
+      }
       setScanModalOpen(false); resetScan()
     } catch { setScanError("No se pudo guardar. Intenta de nuevo.") }
     finally { setSavingScan(false) }
   }
 
   // ── Chat ──────────────────────────────────────────────────────────────────
+  // El payload tiene que calzar con ProactiveCoachInputSchema (src/ai/flows/
+  // proactive-coach-flow.ts) — antes se mandaban nombres de campo distintos
+  // (mensaje/ingresoMensual/totalDeudas/...) que no calzaban con NINGUNO de
+  // los campos que el flow espera (nombreUsuario/ingresoActual/historial/
+  // deudasActivas/...). Como el flow nunca valida el input con zod en runtime,
+  // esto no fallaba con un error claro: `input.historial.map(...)` explotaba
+  // con `historial` undefined, la ruta atrapaba esa excepción y devolvía el
+  // mensaje genérico "No pude conectar con el coach ahora mismo" — SIEMPRE,
+  // para cualquier pregunta. El chat nunca llegó a llamar a Gemini de verdad.
+  const buildCoachInput = (mensajeUsuario?: string): ProactiveCoachInput => {
+    const totalExtraIncome = extraIncomes.reduce((a, e) => a + e.monto, 0)
+    const totalIncome = income + totalExtraIncome
+    const totalObligations = debts.reduce((a, d) => a + d.cuotaPeriodo, 0) +
+                             fixedExpenses.reduce((a, f) => a + f.monto, 0)
+    const allocation = totalIncome > 0 ? calculateBudgetAllocation(totalIncome, totalObligations) : null
+
+    const deudasActivas = debts
+      .filter(d => d.estado === "activa" && d.cuotaPeriodo > 0)
+      .map(d => ({
+        nombre: d.nombre,
+        montoTotal: d.montoTotal,
+        cuotaPeriodo: d.cuotaPeriodo,
+        mesesRestantes: d.cuotaPeriodo > 0 ? Math.ceil(d.montoTotal / d.cuotaPeriodo) : 99,
+      }))
+
+    const historialChat = messages.slice(-6).map(m => ({
+      rol: (m.role === "assistant" ? "coach" : "usuario") as "usuario" | "coach",
+      mensaje: m.content,
+    }))
+
+    return {
+      nombreUsuario: user.nombre || "amigo",
+      ingresoActual: totalIncome,
+      frecuencia: incomeFrequency,
+      obligacionesPct: allocation ? Math.round(allocation.obligationsPct) : 0,
+      ahorroPct: allocation ? Math.round(allocation.savingsPct) : 0,
+      capacidadLibre: allocation?.debtCapacityAmount ?? 0,
+      metaAhorro,
+      ahorroAcumulado: totalAhorrado,
+      streakSemanas: streakActual,
+      historial: buildCoachHistorial(savingsHistory, totalIncome, totalObligations),
+      deudasActivas,
+      mensajeUsuario,
+      historialChat: historialChat.length > 0 ? historialChat : undefined,
+    }
+  }
+
   const handleSend = async () => {
     if (!input.trim() || loading) return
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: input.trim() }
@@ -344,7 +698,7 @@ export function CoachFab() {
     try {
       const res = await fetch("/api/ai/coach", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensaje: userMsg.content, ingresoMensual: income, frecuencia: incomeFrequency, totalDeudas: debts.reduce((a, d) => a + d.montoTotal, 0), totalGastosFijos: fixedExpenses.reduce((a, f) => a + f.monto, 0), ahorroAcumulado: totalAhorrado, gastosHormigaPeriodo: totalImpulseThisPeriod, historialConversacion: messages.slice(-6).map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify(buildCoachInput(userMsg.content)),
       })
       const data = await res.json()
       setMessages(p => [...p, { id: (Date.now() + 1).toString(), role: "assistant", content: data.respuesta || "No pude procesar tu consulta." }])
@@ -490,60 +844,26 @@ export function CoachFab() {
       {/* ══════════════════════════════════════════
           MODAL: Voz inteligente
       ══════════════════════════════════════════ */}
-      <Dialog open={voiceModalOpen} onOpenChange={v => { if (!v) { setVoiceModalOpen(false); setExtractResult(null); setVoiceTranscript("") } }}>
+      <Dialog open={voiceModalOpen} onOpenChange={v => { if (!v) closeVoiceModal() }}>
         <DialogContent>
-          {extractResult ? (
-            <VoiceExtractConfirm result={extractResult} formatAmount={formatAmount} onConfirm={handleConfirmExtract} onDictateMore={() => { setExtractResult(null); handleVoiceSatellite() }} onCancel={() => { setVoiceModalOpen(false); setExtractResult(null) }} />
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <div className={cn("h-8 w-8 rounded-xl flex items-center justify-center", isListening ? "bg-kiri-emerald/20 text-kiri-emerald animate-pulse" : "bg-muted/50 text-muted-foreground")}>
-                    <Mic className="h-4 w-4" />
-                  </div>
-                  Dictado inteligente
-                </DialogTitle>
-                <DialogDescription>Habla y Kiri clasificará tus datos financieros automáticamente.</DialogDescription>
-              </DialogHeader>
-              <div className="py-4 space-y-4 text-center">
-                {isListening && (
-                  <div className="flex flex-col items-center gap-3">
-                    <button onClick={() => { recognitionRef.current?.stop(); setIsListening(false) }}
-                      className="h-16 w-16 rounded-full bg-kiri-emerald/20 flex items-center justify-center hover:bg-kiri-emerald/30 transition-colors cursor-pointer">
-                      <Mic className="h-8 w-8 text-kiri-emerald animate-pulse" />
-                    </button>
-                    <p className="text-sm font-bold text-kiri-emerald">Escuchando...</p>
-                    <p className="text-xs text-muted-foreground">Toca el microfono para detener</p>
-                  </div>
-                )}
-                {extracting && (
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="h-10 w-10 text-kiri-emerald animate-spin" />
-                    <p className="text-sm font-bold">Procesando...</p>
-                    {voiceTranscript && <p className="text-xs text-muted-foreground italic">"{voiceTranscript}"</p>}
-                  </div>
-                )}
-                {extractError && (
-                  <div className="flex flex-col items-center gap-3">
-                    <AlertTriangle className="h-10 w-10 text-destructive" />
-                    <p className="text-sm text-destructive font-bold">{extractError}</p>
-                    <Button size="sm" onClick={handleVoiceExtractStart} className="rounded-xl bg-kiri-emerald text-white">Intentar de nuevo</Button>
-                  </div>
-                )}
-                {!isListening && !extracting && !extractError && !extractResult && (
-                  <div className="flex flex-col items-center gap-3">
-                    <button onClick={handleVoiceExtractStart} className="h-20 w-20 rounded-full bg-kiri-emerald/10 border-2 border-kiri-emerald/30 flex items-center justify-center hover:bg-kiri-emerald/20 transition-colors">
-                      <Mic className="h-9 w-9 text-kiri-emerald" />
-                    </button>
-                    <p className="text-sm text-muted-foreground">Toca para hablar</p>
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setVoiceModalOpen(false)} className="rounded-xl w-full">Cancelar</Button>
-              </DialogFooter>
-            </>
-          )}
+          <VoiceDictationPanel
+            phase={voicePhase}
+            transcript={voiceTranscript}
+            error={extractError}
+            resumenKiri={extractResult?.resumenKiri}
+            confianza={extractResult?.confianza}
+            draftItems={draftItems}
+            saving={savingExtract}
+            savedCount={savedCount}
+            onStartOrRetry={handleVoiceExtractStart}
+            onStopListening={() => recognitionRef.current?.stop()}
+            onDiscardItem={id => setDraftItems(prev => prev.filter(i => i.id !== id))}
+            onUpdateItem={(id, patch) => setDraftItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))}
+            onConfirm={handleConfirmExtract}
+            onDictateMore={handleVoiceSatellite}
+            onCancel={closeVoiceModal}
+            onClose={closeVoiceModal}
+          />
         </DialogContent>
       </Dialog>
 
@@ -626,6 +946,9 @@ export function CoachFab() {
                     )}
                   </CardContent>
                 </Card>
+                {scanError && (
+                  <p className="text-xs text-destructive font-bold bg-destructive/10 rounded-lg p-2 text-center">{scanError}</p>
+                )}
               </div>
             )}
             {/* Error */}
@@ -754,4 +1077,38 @@ export function CoachFab() {
       )}
     </>
   )
+}
+
+// ─── Helper: construir historial de 3 meses para el contexto del coach ────────
+// Mismo cálculo que usaba el componente AiCoachChat (ahora reemplazado por
+// esta integración directa en el FAB) — el flow de IA espera 3 meses de
+// tendencia, así que se simulan variaciones sobre el ingreso/obligaciones
+// actuales cuando no hay más historial real disponible.
+function buildCoachHistorial(savingsHistory: SavingsEntry[], currentIncome: number, currentObligations: number) {
+  const now = new Date()
+  const meses = []
+
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const mesNombre = d.toLocaleDateString("es-ES", { month: "long", year: "numeric" })
+
+    const ahorroDelMes = savingsHistory
+      .filter(s => s.tipo === "ahorro" && s.periodo.toLowerCase().includes(d.toLocaleDateString("es-ES", { month: "long" })))
+      .reduce((acc, s) => acc + s.monto, 0)
+
+    const variacion = i === 0 ? 1 : (0.95 + Math.random() * 0.1)
+    const ingresoMes = Math.round(currentIncome * variacion)
+    const obligacionesMes = Math.round(currentObligations * (0.9 + Math.random() * 0.2))
+
+    meses.push({
+      mes: mesNombre,
+      ingresoTotal: ingresoMes,
+      totalObligaciones: obligacionesMes,
+      totalAhorro: ahorroDelMes || Math.round(ingresoMes * 0.15),
+      gastoLibre: Math.max(0, ingresoMes - obligacionesMes - (ahorroDelMes || ingresoMes * 0.15)),
+      deudasActivas: Math.max(1, Math.floor(Math.random() * 4) + 1),
+    })
+  }
+
+  return meses
 }

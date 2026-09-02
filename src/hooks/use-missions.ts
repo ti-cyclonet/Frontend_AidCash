@@ -8,6 +8,7 @@ import type { Mission, RewardResult } from "@/lib/types"
 export interface MissionsState {
   daily: Mission[]
   weekly: Mission | null
+  onboarding: Mission[]
   loading: boolean
 }
 
@@ -18,6 +19,7 @@ export function useMissions() {
   const [data, setData] = useState<MissionsState>({
     daily: [],
     weekly: null,
+    onboarding: [],
     loading: true,
   })
 
@@ -27,7 +29,7 @@ export function useMissions() {
     try {
       const { data: result } = await missionsApi.getMissions()
       if (result) {
-        setData({ daily: result.daily, weekly: result.weekly, loading: false })
+        setData({ daily: result.daily, weekly: result.weekly, onboarding: result.onboarding, loading: false })
       } else {
         setData(prev => ({ ...prev, loading: false }))
       }
@@ -48,6 +50,7 @@ export function useMissions() {
     setData(prev => ({
       daily: prev.daily.map(m => m.key === missionKey ? { ...m, claimed: true } : m),
       weekly: prev.weekly?.key === missionKey ? { ...prev.weekly, claimed: true } : prev.weekly,
+      onboarding: prev.onboarding.map(m => m.key === missionKey ? { ...m, claimed: true } : m),
       loading: prev.loading,
     }))
 
