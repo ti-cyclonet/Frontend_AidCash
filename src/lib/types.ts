@@ -236,7 +236,9 @@ export interface BudgetAllocation {
 
 // ─── Fase 3: Misiones diarias/semanales ────────────────────────────────────────
 
-export type MissionKey = 'gasto_hormiga' | 'pagar_obligacion' | 'categorizar' | 'racha_semanal';
+export type MissionKey =
+  | 'gasto_hormiga' | 'pagar_obligacion' | 'categorizar' | 'racha_semanal'
+  | 'registrar_obligacion' | 'registrar_ingreso_real' | 'registrar_ahorro' | 'invitar_amigo';
 export type RewardType = 'xp' | 'boost';
 
 export interface Mission {
@@ -252,6 +254,7 @@ export interface Mission {
 export interface MissionsResponse {
   daily: Mission[];
   weekly: Mission;
+  onboarding: Mission[];
 }
 
 export interface RewardResult {

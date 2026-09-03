@@ -42,6 +42,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
   const [canAffordAny, setCanAffordAny] = useState(true)
   const [selected, setSelected] = useState<number | null>(null)
   const [accepting, setAccepting] = useState(false)
+  const [acceptError, setAcceptError] = useState<string | null>(null)
 
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
   const totalIncome = income + totalExtraIncome
@@ -63,6 +64,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
     setAmount("")
     setOptions(null)
     setSelected(null)
+    setAcceptError(null)
   }
 
   // ── Escenario "what-if": calcula el impacto de la opción seleccionada ────
@@ -121,19 +123,31 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
   }, [selected, options, totalIncome, totalObligations, debts, amount, productName, incomeFrequency])
 
   // ── Aceptar escenario: convierte la simulación en deuda real ──────────────
+  // `diasPago` es el día del mes en que se cobra (ej. "15", "1,16" para
+  // quincenal) — NUNCA una fecha completa. Antes esto mandaba una fecha ISO
+  // ("2027-03-15", calculada como "hoy + opt.months meses") en ese campo: en
+  // cualquier otro lugar que lo lee como día del mes (getNextPaymentInfo,
+  // period-filter.ts) el parseo fallaba (2027 > 31) y la deuda quedaba sin
+  // día de pago válido — nunca aparecía en recordatorios ni en el filtrado
+  // por periodo. Como este simulador no conoce un día real de cobro, usa el
+  // mismo default ("1") que el resto de flujos sin ese dato (dictado por voz,
+  // escáner de recibos).
   const handleAccept = async () => {
     if (!scenarioData || selected === null || !options) return
     const opt = options[selected]
     setAccepting(true)
-    await addDebt({
+    setAcceptError(null)
+    const saved = await addDebt({
       nombre: productName || 'Nueva compra',
       montoTotal: Number(amount),
       cuotaPeriodo: opt.quota,
-      diasPago: new Date(
-        Date.now() + opt.months * 30 * 24 * 60 * 60 * 1000
-      ).toISOString().split('T')[0],
+      diasPago: '1',
     })
     setAccepting(false)
+    if (!saved) {
+      setAcceptError('No se pudo guardar la deuda. Intenta de nuevo.')
+      return
+    }
     handleClose()
   }
 
@@ -269,17 +283,22 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
 
           {/* ── Footer con botón Aceptar ── */}
           {scenarioData && (
-            <DialogFooter className="gap-2 pt-3 border-t border-border">
-              <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
-              <Button
-                onClick={handleAccept}
-                disabled={accepting}
-                className="bg-cyclon-lavender text-white font-bold rounded-xl px-6 gap-2"
-              >
-                {accepting ? "Guardando..." : "Aceptar escenario"}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </DialogFooter>
+            <div className="pt-3 border-t border-border space-y-2">
+              {acceptError && (
+                <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-2 text-center">{acceptError}</p>
+              )}
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
+                <Button
+                  onClick={handleAccept}
+                  disabled={accepting}
+                  className="bg-cyclon-lavender text-white font-bold rounded-xl px-6 gap-2"
+                >
+                  {accepting ? "Guardando..." : "Aceptar escenario"}
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </DialogFooter>
+            </div>
           )}
         </DialogContent>
       </Dialog>

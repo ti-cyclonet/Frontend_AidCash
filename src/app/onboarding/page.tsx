@@ -64,6 +64,7 @@ export default function OnboardingPage() {
     diasPago: "",
   })
   const [savingObligation, setSavingObligation] = useState(false)
+  const [obligationError, setObligationError] = useState<string | null>(null)
 
   const totalSteps = STEPS.length
   const isFirst = step === 0
@@ -120,26 +121,35 @@ export default function OnboardingPage() {
   }
 
   // ── Guardar obligación individual ─────────────────────────────────────────
+  // addDebt/addFixedExpense devuelven `null` si no se pudo guardar (ej. justo
+  // después de registrarse, antes de que la sesión termine de cargar) — antes
+  // este flujo no revisaba eso, así que el wizard marcaba la obligación como
+  // "registrada" en pantalla aunque nunca se hubiera guardado de verdad.
   const handleSaveObligation = async () => {
     if (!currentObligation.nombre || !currentObligation.monto) return
     setSavingObligation(true)
+    setObligationError(null)
 
     try {
-      if (currentObligation.tipo === "deuda") {
-        await addDebt({
-          nombre: currentObligation.nombre,
-          montoTotal: Number(currentObligation.monto),
-          cuotaPeriodo: Number(currentObligation.monto),
-          diasPago: currentObligation.diasPago || "1",
-          frecuenciaPago: frecuencia,
-        })
-      } else {
-        await addFixedExpense({
-          nombre: currentObligation.nombre,
-          monto: Number(currentObligation.monto),
-          fechaCorte: currentObligation.diasPago || "1",
-          frecuencia,
-        })
+      const saved = currentObligation.tipo === "deuda"
+        ? await addDebt({
+            nombre: currentObligation.nombre,
+            montoTotal: Number(currentObligation.monto),
+            cuotaPeriodo: Number(currentObligation.monto),
+            diasPago: currentObligation.diasPago || "1",
+            frecuenciaPago: frecuencia,
+          })
+        : await addFixedExpense({
+            nombre: currentObligation.nombre,
+            monto: Number(currentObligation.monto),
+            fechaCorte: currentObligation.diasPago || "1",
+            frecuencia,
+          })
+
+      if (!saved) {
+        setObligationError("No se pudo guardar. Espera un momento e intenta de nuevo.")
+        setSavingObligation(false)
+        return
       }
 
       setObligations(prev => [...prev, currentObligation])
@@ -152,7 +162,7 @@ export default function OnboardingPage() {
         diasPago: "",
       })
     } catch (e) {
-      // silently handle
+      setObligationError("No se pudo guardar. Espera un momento e intenta de nuevo.")
     }
     setSavingObligation(false)
   }
@@ -229,7 +239,7 @@ export default function OnboardingPage() {
 
                 <div className="space-y-2">
                   <h1 className="text-2xl font-black">¡Bienvenido a Kiri! 🌱</h1>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px]">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     Este test inicial nos ayudará a conocerte mejor para ofrecerte una experiencia personalizada y consejos que realmente te servirán.
                   </p>
                 </div>
@@ -576,6 +586,10 @@ export default function OnboardingPage() {
                       </Button>
                     </div>
 
+                    {obligationError && (
+                      <p className="text-[11px] text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-2 text-center">{obligationError}</p>
+                    )}
+
                     {/* Botón para continuar */}
                     <button
                       onClick={() => setStep(5)}
@@ -599,7 +613,7 @@ export default function OnboardingPage() {
 
                 <div className="space-y-2">
                   <h1 className="text-2xl font-black">¡Listo, Kiri te conoce mejor! 🎉</h1>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px]">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     Con esta información personalizaremos tu experiencia y te ayudaremos a hacer crecer tu jardín financiero.
                   </p>
                 </div>
