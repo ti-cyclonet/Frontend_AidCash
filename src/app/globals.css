@@ -177,6 +177,17 @@
   100% { transform: translateY(-24px); opacity: 0; }
 }
 
+/* Mensajito flotante de "fulano regó tu árbol" — aparece con un pequeño
+   rebote, se mantiene legible y luego sube y se desvanece, para que dé
+   tiempo a leerlo antes de que caiga la lluvia. */
+@keyframes kiriWateredPop {
+  0%   { opacity: 0; transform: translate(-50%, 10px) scale(0.9); }
+  15%  { opacity: 1; transform: translate(-50%, 0) scale(1.04); }
+  25%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  78%  { opacity: 1; transform: translate(-50%, -2px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -26px) scale(0.96); }
+}
+
 /* Dictado por voz: onda del micrófono, shimmer de "analizando" y ráfaga de éxito */
 @keyframes kiriWaveBar {
   0%, 100% { transform: scaleY(0.25); opacity: .7; }

@@ -4,15 +4,19 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   X, PiggyBank, Coins, Loader2, ChevronRight, ArrowLeft,
-  Heart, Users, Home, MessageCircle, Lock, Sparkles,
+  Heart, Users, Home, MessageCircle, Sparkles, ArrowRightLeft, Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { connectionsApi } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
 import { useToast } from "@/hooks/use-toast"
 import { UserAvatar } from "@/components/social/UserAvatar"
+import type { ConnectionSharedResponse, ConnectionRole } from "@/lib/types"
+
+const ROLE_LABEL: Record<ConnectionRole, string> = { FRIEND: "Amigo", FAMILY: "Familia", PARTNER: "Pareja" }
 
 /**
  * ConnectionProfileCard — Tarjeta de presentación completa de una conexión
@@ -26,40 +30,64 @@ import { UserAvatar } from "@/components/social/UserAvatar"
 
 interface Props {
   connectionId: string
+  /** Id del usuario actual — necesario para saber si la solicitud de cambio
+   * de rol pendiente (si hay una) la mandé yo o la mandó la otra persona. */
+  myId: string
   open: boolean
   onClose: () => void
+  /** Se llama después de pedir/responder un cambio de rol, para que la lista
+   * de conexiones que abrió esta tarjeta también se refresque. */
+  onChanged?: () => void
 }
 
-export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
+export function ConnectionProfileCard({ connectionId, myId, open, onClose, onChanged }: Props) {
   const { formatAmount } = useAppContext()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [updatingRole, setUpdatingRole] = useState(false)
-  const [data, setData] = useState<{
-    peer: { id: string; nombre: string; correo: string; avatarUrl?: string | null }
-    connection: { id: string; role: string; createdAt: string }
-    pockets: { id: string; nombre: string; balance: number; meta: number }[]
-    loans: { id: string; amount: number; remainingAmount: number; status: string; descripcion?: string; lenderId: string; borrowerId: string; createdAt: string }[]
-  } | null>(null)
+  const [data, setData] = useState<ConnectionSharedResponse | null>(null)
+  // El cambio de rol nunca es instantáneo: elegir una opción abre esta modal
+  // de confirmación primero — es la que realmente manda la solicitud.
+  const [roleConfirmTarget, setRoleConfirmTarget] = useState<ConnectionRole | null>(null)
+
+  const load = () => {
+    setLoading(true)
+    connectionsApi.getShared(connectionId).then(({ data: res }) => {
+      if (res) setData(res)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }
 
   useEffect(() => {
     if (!open || !connectionId) return
-    setLoading(true)
-    connectionsApi.getShared(connectionId).then(({ data: res }) => {
-      if (res) setData(res as any)
-    }).catch(() => {}).finally(() => setLoading(false))
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, connectionId])
 
-  const handleRoleChange = async (newRole: 'FRIEND' | 'FAMILY' | 'PARTNER') => {
-    if (!data) return
+  const confirmRoleRequest = async () => {
+    if (!roleConfirmTarget) return
     setUpdatingRole(true)
-    const { error } = await connectionsApi.updateRole(connectionId, newRole)
+    const { error } = await connectionsApi.requestRole(connectionId, roleConfirmTarget)
     setUpdatingRole(false)
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      setData(prev => prev ? { ...prev, connection: { ...prev.connection, role: newRole } } : null)
-      toast({ title: "Rol actualizado" })
+      toast({ title: `Solicitud enviada — ${data?.peer.nombre} debe aprobarla` })
+      setRoleConfirmTarget(null)
+      load()
+      onChanged?.()
+    }
+  }
+
+  const handleRoleRespond = async (accept: boolean) => {
+    setUpdatingRole(true)
+    const { error } = await connectionsApi.respondRole(connectionId, accept)
+    setUpdatingRole(false)
+    if (error) {
+      toast({ title: error, variant: "destructive" })
+    } else {
+      toast({ title: accept ? "Cambio de rol aceptado ✓" : "Cambio de rol rechazado" })
+      load()
+      onChanged?.()
     }
   }
 
@@ -90,6 +118,7 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
   })() : 0
 
   return (
+    <>
     <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="w-full max-w-md lg:max-w-xl max-h-[90vh] overflow-y-auto bg-card rounded-3xl shadow-2xl">
         {/* Header con fondo */}
@@ -132,7 +161,10 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
             </div>
           </div>
 
-          {/* Rol en tu vida */}
+          {/* Rol en tu vida — cambiar de opción NUNCA aplica al instante: abre
+              la modal de confirmación, que es la que manda la solicitud. La
+              otra persona tiene que aprobarla antes de que el rol cambie de
+              verdad (mismo patrón que la tasa de interés de un préstamo). */}
           <Card className="border-none bg-card rounded-2xl shadow-sm">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-3">
@@ -145,6 +177,30 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
                 </div>
               </div>
 
+              {data.connection.pendingRole && data.connection.roleChangeRequestedBy === myId && (
+                <div className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-2">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Esperando que {data.peer.nombre} apruebe el cambio a <strong>{ROLE_LABEL[data.connection.pendingRole]}</strong>
+                  </p>
+                </div>
+              )}
+              {data.connection.pendingRole && data.connection.roleChangeRequestedBy && data.connection.roleChangeRequestedBy !== myId && (
+                <div className="flex items-center justify-between gap-2 bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-xl px-3 py-2">
+                  <p className="text-[11px] text-cyclon-lavender font-medium">
+                    {data.peer.nombre} propone cambiar a <strong>{ROLE_LABEL[data.connection.pendingRole]}</strong>
+                  </p>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button size="icon" disabled={updatingRole} onClick={() => handleRoleRespond(true)} className="h-7 w-7 rounded-lg bg-kiri-emerald text-white">
+                      {updatingRole ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    </Button>
+                    <Button size="icon" variant="ghost" disabled={updatingRole} onClick={() => handleRoleRespond(false)} className="h-7 w-7 rounded-lg text-destructive hover:bg-destructive/10">
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { value: 'FRIEND', label: 'Amigo', icon: <Users className="h-3.5 w-3.5" /> },
@@ -155,10 +211,10 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
                   return (
                     <button
                       key={r.value}
-                      onClick={() => handleRoleChange(r.value)}
-                      disabled={updatingRole}
+                      onClick={() => { if (r.value !== data.connection.role) setRoleConfirmTarget(r.value) }}
+                      disabled={updatingRole || !!data.connection.pendingRole}
                       className={cn(
-                        "flex items-center justify-center gap-1.5 h-10 rounded-xl text-xs font-bold border-2 transition-all",
+                        "flex items-center justify-center gap-1.5 h-10 rounded-xl text-xs font-bold border-2 transition-all disabled:opacity-50",
                         isActive
                           ? "bg-kiri-emerald text-white border-kiri-emerald shadow-sm shadow-kiri-emerald/20"
                           : "border-muted text-muted-foreground hover:border-kiri-emerald/30"
@@ -170,8 +226,8 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
                 })}
               </div>
 
-              <p className="text-[8px] text-muted-foreground flex items-center gap-1">
-                <Lock className="h-3 w-3" /> Esta información es privada y solo tú puedes verla.
+              <p className="text-[8px] text-muted-foreground">
+                Cambiar el rol le manda una solicitud a {data.peer.nombre} — solo se aplica si la acepta.
               </p>
             </CardContent>
           </Card>
@@ -333,5 +389,45 @@ export function ConnectionProfileCard({ connectionId, open, onClose }: Props) {
       )}
       </div>
     </div>
+
+      {/* ── Confirmar solicitud de cambio de rol ──
+          Esta modal solo explica que se va a mandar una solicitud — el rol
+          real no cambia hasta que {data?.peer.nombre} la aprueba. */}
+      <Dialog open={!!roleConfirmTarget} onOpenChange={(v) => { if (!v) setRoleConfirmTarget(null) }}>
+        {/* La tarjeta de perfil es su propio overlay a z-[80] — el Dialog
+            comparte el mismo componente en toda la app con z-50 por defecto,
+            así que sin este override quedaba abierto pero invisible y sin
+            poder hacerle clic, detrás del backdrop de la tarjeta. */}
+        <DialogContent className="max-w-sm z-[90]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5 text-cyclon-lavender" /> Solicitar cambio de rol
+            </DialogTitle>
+          </DialogHeader>
+          {roleConfirmTarget && data && (
+            <div className="py-1 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Vas a proponerle a <strong className="text-foreground">{data.peer.nombre}</strong> cambiar esta conexión
+                de <strong className="text-foreground">{ROLE_LABEL[data.connection.role]}</strong> a{" "}
+                <strong className="text-foreground">{ROLE_LABEL[roleConfirmTarget]}</strong>.
+              </p>
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
+                Le enviaremos una solicitud — el rol de la conexión solo cambiará si {data.peer.nombre} la acepta.
+              </p>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setRoleConfirmTarget(null)} className="rounded-xl">Cancelar</Button>
+            <Button
+              disabled={updatingRole}
+              onClick={confirmRoleRequest}
+              className="rounded-xl bg-cyclon-lavender text-white font-bold px-6"
+            >
+              {updatingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar solicitud"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

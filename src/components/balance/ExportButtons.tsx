@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, type RefObject } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { FileText, Loader2, Calendar, Download } from "lucide-react"
-import { exportToPdf, type PdfChartImages } from "@/lib/export-utils"
+import { exportToPdf } from "@/lib/export-utils"
 import { reportsApi, type BalanceReport } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
@@ -17,29 +17,17 @@ import { cn } from "@/lib/utils"
  *   1. Descargar el PDF del periodo actual (rápido)
  *   2. Abrir modal para seleccionar meses específicos
  *   3. Descargar varios meses en un solo archivo
+ *
+ * Las gráficas del PDF se dibujan con los datos reales del reporte (ver
+ * export-utils.ts) en vez de capturar con html2canvas los gráficos ya
+ * renderizados en pantalla — así funcionan igual para el periodo actual que
+ * para cualquier mes pasado elegido en "Elegir meses", donde nunca hay nada
+ * en pantalla que capturar.
  */
 
 interface ExportButtonsProps {
   report: BalanceReport | null
   className?: string
-  /** Contenedores de los gráficos ya renderizados en pantalla — se capturan como
-   * imagen (html2canvas) al exportar, para que el PDF se vea igual que la app. */
-  chartRefs?: {
-    evolution?: RefObject<HTMLDivElement | null>
-    category?: RefObject<HTMLDivElement | null>
-  }
-}
-
-/** Convierte un contenedor de gráfico ya renderizado en un PNG data URL. */
-async function captureChart(ref?: RefObject<HTMLDivElement | null>): Promise<string | undefined> {
-  if (!ref?.current) return undefined
-  try {
-    const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(ref.current, { scale: 2, backgroundColor: null, logging: false })
-    return canvas.toDataURL('image/png')
-  } catch {
-    return undefined
-  }
 }
 
 // Genera los últimos 12 meses como opciones
@@ -66,7 +54,7 @@ function getLast12Months(): { value: string; label: string; from: string; to: st
   return months
 }
 
-export function ExportButtons({ report, className, chartRefs }: ExportButtonsProps) {
+export function ExportButtons({ report, className }: ExportButtonsProps) {
   const [loadingPdf, setLoadingPdf] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
@@ -74,19 +62,12 @@ export function ExportButtons({ report, className, chartRefs }: ExportButtonsPro
 
   const months = getLast12Months()
 
-  // Descarga rápida del periodo actual — incluye los gráficos tal como se ven
-  // en pantalla ahora mismo (por eso solo aplica acá, no en "Elegir meses":
-  // ese flujo trae datos de OTRO mes, y los gráficos en pantalla no le
-  // corresponderían).
+  // Descarga rápida del periodo actual
   const handleQuickPdf = async () => {
     if (!report) return
     setLoadingPdf(true)
     try {
-      const images: PdfChartImages = {
-        evolution: await captureChart(chartRefs?.evolution),
-        category: await captureChart(chartRefs?.category),
-      }
-      await exportToPdf(report, `kiri-balance-${report.timeframe}`, images)
+      await exportToPdf(report, `kiri-balance-${report.timeframe}`)
     } finally {
       setLoadingPdf(false)
     }
@@ -106,35 +87,29 @@ export function ExportButtons({ report, className, chartRefs }: ExportButtonsPro
   const selectAll = () => setSelectedMonths(new Set(months.map(m => m.value)))
   const selectNone = () => setSelectedMonths(new Set())
 
-  // Descargar meses seleccionados
+  // Descargar meses seleccionados — antes esto SIEMPRE traía el mes/año
+  // calendario ACTUAL sin importar qué mes(es) se hubieran marcado (nunca se
+  // le mandaban al backend los `from`/`to` que este mismo componente ya
+  // calculaba en getLast12Months). Ahora sí se piden con timeframe=custom.
   const handleDownloadSelected = async () => {
     if (selectedMonths.size === 0) return
     setDownloading(true)
 
     try {
-      // Si es un solo mes, obtener ese reporte específico
-      if (selectedMonths.size === 1) {
-        const monthKey = [...selectedMonths][0]
-        const monthData = months.find(m => m.value === monthKey)
-        if (!monthData) return
+      const sortedMonths = [...selectedMonths].sort()
+      const earliest = months.find(m => m.value === sortedMonths[0])
+      const latest = months.find(m => m.value === sortedMonths[sortedMonths.length - 1])
+      if (!earliest || !latest) return
 
-        // Usar el timeframe "month" que trae el mes actual por defecto
-        // Para meses específicos necesitamos el endpoint con fechas
-        const { data } = await reportsApi.getBalance('month')
-        if (data) {
-          const monthLabel = monthData.label.replace(/ /g, '-')
-          await exportToPdf(data, `kiri-balance-${monthLabel}`)
-        }
-      } else {
-        // Varios meses: descargar con timeframe "year" que incluye todos los datos históricos
-        const { data } = await reportsApi.getBalance('year')
-        if (data) {
-          const sortedMonths = [...selectedMonths].sort()
-          const firstMonth = months.find(m => m.value === sortedMonths[sortedMonths.length - 1])
-          const lastMonth = months.find(m => m.value === sortedMonths[0])
-          const label = `${firstMonth?.label ?? ''} a ${lastMonth?.label ?? ''}`
-          await exportToPdf(data, `kiri-balance-${label.replace(/ /g, '-')}`)
-        }
+      // El rango real cubre desde el primer día del mes más antiguo elegido
+      // hasta el último día del más reciente — funciona igual para uno o
+      // varios meses, incluso si no son consecutivos.
+      const { data } = await reportsApi.getBalance('custom', { from: earliest.from, to: latest.to })
+      if (data) {
+        const label = selectedMonths.size === 1
+          ? latest.label.replace(/ /g, '-')
+          : `${earliest.label.replace(/ /g, '-')}-a-${latest.label.replace(/ /g, '-')}`
+        await exportToPdf(data, `kiri-balance-${label}`)
       }
     } finally {
       setDownloading(false)

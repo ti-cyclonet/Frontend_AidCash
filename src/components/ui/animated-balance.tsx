@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Eye, EyeOff } from "lucide-react"
+import { OdometerAmount } from "@/components/ui/odometer-amount"
 
 interface AnimatedBalanceProps {
   value: number
@@ -14,73 +15,44 @@ interface AnimatedBalanceProps {
 
 /**
  * AnimatedBalance — Badge de saldo con efectos dinámicos
- * - Efecto de conteo al cambiar el valor
+ * - El monto rueda dígito por dígito (OdometerAmount) al cambiar el valor
  * - Brilla verde cuando sube
  * - Brilla rojo cuando baja
  * - Muestra la diferencia brevemente (+$50,000 / -$100,000)
  */
 export function AnimatedBalance({ value, formatAmount, label = "Saldo total", showToggle = true, className }: AnimatedBalanceProps) {
-  const [displayValue, setDisplayValue] = useState(value)
   const [hidden, setHidden] = useState(false)
   const [flash, setFlash] = useState<"up" | "down" | null>(null)
   const [diff, setDiff] = useState<number | null>(null)
   const prevValue = useRef(value)
-  const animRef = useRef<number | null>(null)
+  // El saldo arranca en 0 mientras carga y recién después salta al valor
+  // real — sin este guard, ESE salto disparaba el brillo + el globito de
+  // diferencia cada vez que se entraba o refrescaba la página, como si
+  // fuera un movimiento real. Se absorbe en silencio el primer cambio.
+  const skipNextRef = useRef(true)
 
   useEffect(() => {
     const prev = prevValue.current
     if (prev === value) return
+    prevValue.current = value
 
-    // Determinar dirección
-    const direction = value > prev ? "up" : "down"
-    const difference = value - prev
-    setFlash(direction)
-    setDiff(difference)
-
-    // Animación de conteo
-    const duration = 800 // ms
-    const startTime = performance.now()
-    const startVal = prev
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime
-      const progress = Math.min(elapsed / duration, 1)
-      // Easing: ease-out cubic
-      const eased = 1 - Math.pow(1 - progress, 3)
-      const current = Math.round(startVal + (value - startVal) * eased)
-      setDisplayValue(current)
-
-      if (progress < 1) {
-        animRef.current = requestAnimationFrame(animate)
-      } else {
-        setDisplayValue(value)
-      }
+    if (skipNextRef.current) {
+      skipNextRef.current = false
+      return
     }
 
-    if (animRef.current) cancelAnimationFrame(animRef.current)
-    animRef.current = requestAnimationFrame(animate)
+    const direction = value > prev ? "up" : "down"
+    setFlash(direction)
+    setDiff(value - prev)
 
-    // Quitar flash después de 1.5s
     const flashTimeout = setTimeout(() => setFlash(null), 1500)
-    // Quitar diff después de 2s
     const diffTimeout = setTimeout(() => setDiff(null), 2000)
-
-    prevValue.current = value
 
     return () => {
       clearTimeout(flashTimeout)
       clearTimeout(diffTimeout)
-      if (animRef.current) cancelAnimationFrame(animRef.current)
     }
   }, [value])
-
-  // Sincronizar si el componente se monta con un valor diferente
-  useEffect(() => {
-    if (prevValue.current !== value) {
-      prevValue.current = value
-      setDisplayValue(value)
-    }
-  }, [])
 
   return (
     <div className={cn(
@@ -104,14 +76,20 @@ export function AnimatedBalance({ value, formatAmount, label = "Saldo total", sh
       </div>
 
       {/* Monto animado */}
-      <p className={cn(
-        "text-sm font-black mt-0.5 transition-colors duration-300",
-        flash === "up" && "text-emerald-600 dark:text-emerald-400",
-        flash === "down" && "text-red-600 dark:text-red-400",
-        !flash && "text-foreground",
-      )}>
-        {hidden ? "••••••" : formatAmount(displayValue)}
-      </p>
+      {hidden ? (
+        <p className="text-sm font-black mt-0.5 text-foreground">••••••</p>
+      ) : (
+        <OdometerAmount
+          value={value}
+          formatAmount={formatAmount}
+          className={cn(
+            "text-sm font-black mt-0.5 transition-colors duration-300",
+            flash === "up" && "text-emerald-600 dark:text-emerald-400",
+            flash === "down" && "text-red-600 dark:text-red-400",
+            !flash && "text-foreground",
+          )}
+        />
+      )}
 
       {/* Indicador de diferencia */}
       {diff !== null && !hidden && (

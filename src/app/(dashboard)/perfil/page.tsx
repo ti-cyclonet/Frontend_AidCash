@@ -23,6 +23,40 @@ import { api, userApi, supportApi } from "@/lib/api-client"
 
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
 
+// El backend guarda avatarUrl como texto plano (base64) con un tope de
+// 700.000 caracteres — una foto real de celular sin comprimir (2-8MB) lo
+// supera fácil y el guardado fallaba con un error de "imagen demasiado
+// grande" sin que el usuario supiera qué pasó. Se reescala al lado más largo
+// y se recomprime a JPEG antes de guardarla, así cualquier foto entra sin
+// que el usuario tenga que hacer nada distinto.
+const AVATAR_MAX_DIM = 512
+const AVATAR_QUALITY = 0.85
+
+function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, quality = AVATAR_QUALITY): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error("El archivo no es una imagen válida"))
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement("canvas")
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext("2d")
+        if (!ctx) { reject(new Error("No se pudo procesar la imagen")); return }
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL("image/jpeg", quality))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function PerfilPage() {
   const router = useRouter()
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout } = useAppContext()
@@ -39,21 +73,29 @@ export default function PerfilPage() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ nombre: user.nombre, correo: user.correo, username: user.username, avatarUrl: user.avatarUrl, firstName: '', secondName: '', firstSurname: '', secondSurname: '' })
   const [avatarChanged, setAvatarChanged] = useState(false)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const [isSupportOpen, setIsSupportOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = "" // permite volver a elegir el mismo archivo si falla
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      setEditForm(f => ({ ...f, avatarUrl: ev.target?.result as string }))
-      setAvatarChanged(true)
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Selecciona un archivo de imagen.")
+      return
     }
-    reader.readAsDataURL(file)
+    try {
+      const resized = await resizeImageToDataUrl(file)
+      setEditForm(f => ({ ...f, avatarUrl: resized }))
+      setAvatarChanged(true)
+      setAvatarError(null)
+    } catch {
+      setAvatarError("No se pudo procesar la imagen. Intenta con otra.")
+    }
   }
 
   const handleSaveProfile = async () => {
@@ -99,6 +141,7 @@ export default function PerfilPage() {
       secondSurname: parts.length >= 3 ? parts[parts.length - 1] : '',
     })
     setAvatarChanged(false)
+    setAvatarError(null)
     setUsernameError(null)
     setIsEditOpen(true)
   }
@@ -316,6 +359,7 @@ export default function PerfilPage() {
                 onChange={handleAvatarChange}
               />
               <p className="text-xs text-muted-foreground">Toca el ícono para cambiar la foto</p>
+              {avatarError && <p className="text-xs text-destructive font-medium">{avatarError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -402,10 +446,12 @@ export default function PerfilPage() {
 
 // ─── Support Modal ─────────────────────────────────────────────────────────
 
+const SUPPORT_MAX_IMAGES = 3
+
 function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [titulo, setTitulo] = useState("")
   const [descripcion, setDescripcion] = useState("")
-  const [imagen, setImagen] = useState<string | null>(null)
+  const [imagenes, setImagenes] = useState<string[]>([])
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -414,7 +460,7 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
   const reset = () => {
     setTitulo("")
     setDescripcion("")
-    setImagen(null)
+    setImagenes([])
     setError("")
     setSuccess(false)
   }
@@ -424,13 +470,23 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
     onOpenChange(v)
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => setImagen(ev.target?.result as string)
-    reader.readAsDataURL(file)
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = ""
+    if (files.length === 0) return
+    const remaining = SUPPORT_MAX_IMAGES - imagenes.length
+    if (remaining <= 0) return
+    const toAdd = files.slice(0, remaining)
+    try {
+      const resized = await Promise.all(toAdd.map(f => resizeImageToDataUrl(f, 1024, 0.85)))
+      setImagenes(prev => [...prev, ...resized])
+      setError("")
+    } catch {
+      setError("No se pudo procesar una de las imágenes.")
+    }
   }
+
+  const removeImage = (i: number) => setImagenes(prev => prev.filter((_, idx) => idx !== i))
 
   const handleSubmit = async () => {
     setError("")
@@ -443,7 +499,7 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
     const { error: apiError } = await supportApi.create({
       titulo: titulo.trim(),
       descripcion: descripcion.trim(),
-      imagenBase64: imagen ?? undefined,
+      imagenesBase64: imagenes.length > 0 ? imagenes : undefined,
     })
     setLoading(false)
 
@@ -493,32 +549,37 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                 />
               </div>
               <div className="space-y-2">
-                <Label>Imagen (opcional)</Label>
-                {imagen ? (
-                  <div className="relative w-fit">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imagen} alt="Adjunto" className="h-24 rounded-lg border border-border object-cover" />
-                    <button
-                      onClick={() => setImagen(null)}
-                      className="absolute -top-2 -right-2 h-6 w-6 bg-destructive rounded-full flex items-center justify-center shadow-lg"
+                <Label>Imágenes (opcional, hasta {SUPPORT_MAX_IMAGES})</Label>
+                <div className="flex flex-wrap gap-2">
+                  {imagenes.map((img, i) => (
+                    <div key={i} className="relative w-fit">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img} alt={`Adjunto ${i + 1}`} className="h-24 w-24 rounded-lg border border-border object-cover" />
+                      <button
+                        onClick={() => removeImage(i)}
+                        className="absolute -top-2 -right-2 h-6 w-6 bg-destructive rounded-full flex items-center justify-center shadow-lg"
+                      >
+                        <X className="h-3.5 w-3.5 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  {imagenes.length < SUPPORT_MAX_IMAGES && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-2 h-24 w-24 flex-col"
                     >
-                      <X className="h-3.5 w-3.5 text-white" />
-                    </button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="gap-2"
-                  >
-                    <ImageIcon className="h-4 w-4" /> Agregar imagen
-                  </Button>
-                )}
+                      <ImageIcon className="h-5 w-5" />
+                      <span className="text-[10px]">Agregar</span>
+                    </Button>
+                  )}
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
                   onChange={handleImageChange}
                 />

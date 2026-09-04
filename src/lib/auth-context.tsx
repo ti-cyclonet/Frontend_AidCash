@@ -78,9 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    // Capturar el userId ANTES de que logout() borre los tokens de los que
+    // sale — si no, clearAvatar ya no sabría qué slot de IndexedDB limpiar.
+    const userId = getUserId()
     await authApi.logout()
     setUser(null)
-    clearAvatar().catch(() => {})
+    if (userId) clearAvatar(userId).catch(() => {})
     // Limpiar TODO el caché del perfil
     localStorage.removeItem("kiri_income")
     localStorage.removeItem("kiri_frequency")

@@ -15,6 +15,16 @@
 
 declare const self: ServiceWorkerGlobalScope
 
+// next-pwa registra ESTE service worker (compilado a partir de este archivo)
+// en el scope "/" — el mismo scope que usaba sw-push.js. Dos registros de SW
+// distintos no pueden coexistir en el mismo scope: el navegador reemplaza uno
+// con el otro en cada carga, así que las notificaciones push a veces llegaban
+// (cuando sw-push.js era el activo) y a veces no (cuando ganaba este sw.js,
+// que no tenía listener de 'push'). La solución es un solo SW: importamos la
+// lógica de push aquí para que quede fusionada en el mismo worker que ya
+// registra next-pwa, en vez de competir por el control de la página.
+importScripts('/sw-push.js')
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const SYNC_TAG = 'kiri-background-sync'

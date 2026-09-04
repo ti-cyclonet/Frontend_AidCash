@@ -3,7 +3,7 @@
 import { CreditCard } from "lucide-react"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
-import type { Debt } from "@/lib/types"
+import { isCreditCard } from "@/lib/debt-utils"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -19,25 +19,6 @@ import type { Debt } from "@/lib/types"
 interface Props {
   value?: string | null
   onChange: (tarjetaId: string | null) => void
-}
-
-/**
- * Determina si una deuda es una tarjeta de crédito.
- * Usa el campo `tipoDeuda` del modelo, con fallback a detección por nombre.
- */
-function isCreditCard(debt: Debt): boolean {
-  // Priorizar el campo del modelo
-  if (debt.tipoDeuda === 'TARJETA_CREDITO') return true
-
-  // Fallback: detección por nombre (para datos legacy sin tipoDeuda)
-  const lower = debt.nombre.toLowerCase()
-  return (
-    lower.includes('tarjeta') ||
-    lower.includes('tc ') ||
-    lower.includes('visa') ||
-    lower.includes('mastercard') ||
-    lower.includes('amex')
-  )
 }
 
 export function CreditCardSelector({ value, onChange }: Props) {

@@ -16,65 +16,61 @@ export interface BadgeDefinition {
   minStreak: number
 }
 
-const periodoLabel = (freq: IncomeFrequency, n: number) =>
-  freq === 'quincenal'
-    ? `${n} quincena${n > 1 ? 's' : ''}`
-    : `${n} ${n === 1 ? 'mes' : 'meses'}`
-
+// streakActual es una racha de DÍAS consecutivos con alguna acción financiera
+// real (ver recordDailyStreak en el backend) — igual que ya la trata la
+// misión semanal "Racha perfecta" (tope en 7) y como siempre la etiquetó la
+// UI de Jardín/Misiones ("X días"). Estos tramos antes hablaban de "meses"/
+// "quincenas" — una racha de días real los habría desbloqueado en cuestión
+// de días, contradiciendo su propia descripción. Se alinean con los mismos
+// hitos de 7/30/100 días que ya usa la pantalla de Misiones.
 export const BADGES: BadgeDefinition[] = [
   {
     id: 'primer_periodo',
-    nombre: '¡Primer Periodo!',
-    getDescripcion: (f) => `Cumpliste tu presupuesto ${periodoLabel(f, 1)} entero.`,
+    nombre: 'Primer Paso',
+    getDescripcion: () => 'Usaste Kiri hoy — tu racha empezó.',
     icono: '🌱',
-    getCondicion: (f) => `1 ${f === 'quincenal' ? 'quincena' : 'mes'} en racha`,
+    getCondicion: () => '1 día en racha',
     minStreak: 1,
   },
   {
     id: 'dos_periodos',
-    nombre: 'Constancia',
-    getDescripcion: (f) => `${periodoLabel(f, 2)} seguidos dentro del presupuesto.`,
+    nombre: 'Vas Bien',
+    getDescripcion: () => '3 días seguidos usando Kiri.',
     icono: '🌿',
-    getCondicion: (f) => `${periodoLabel(f, 2)} en racha`,
-    minStreak: 2,
-  },
-  {
-    id: 'tres_periodos',
-    nombre: 'Hábito Formado',
-    getDescripcion: (f) => `${periodoLabel(f, 3)} consecutivos con tus finanzas en orden.`,
-    icono: '🌻',
-    getCondicion: (f) => `${periodoLabel(f, 3)} en racha`,
+    getCondicion: () => '3 días en racha',
     minStreak: 3,
   },
   {
+    id: 'tres_periodos',
+    nombre: 'Racha de una Semana',
+    getDescripcion: () => '7 días consecutivos con tus finanzas en orden.',
+    icono: '🌻',
+    getCondicion: () => '7 días en racha',
+    minStreak: 7,
+  },
+  {
     id: 'cuatro_periodos',
-    nombre: 'Disciplina Real',
-    getDescripcion: (f) => f === 'quincenal'
-      ? '2 meses (4 quincenas) cumpliendo tu plan financiero.'
-      : '4 meses completos sin romper la racha.',
+    nombre: 'Hábito Formado',
+    getDescripcion: () => '14 días sin romper la racha.',
     icono: '🌳',
-    getCondicion: (f) => `${periodoLabel(f, 4)} en racha`,
-    minStreak: 4,
+    getCondicion: () => '14 días en racha',
+    minStreak: 14,
   },
   {
     id: 'seis_periodos',
     nombre: 'Disciplina de Acero',
-    getDescripcion: (f) => f === 'quincenal'
-      ? '3 meses (6 quincenas) consecutivos.'
-      : '6 meses sin fallar. Tu jardín florece.',
+    getDescripcion: () => '30 días seguidos. Tu jardín florece.',
     icono: '🏆',
-    getCondicion: (f) => `${periodoLabel(f, 6)} en racha`,
-    minStreak: 6,
+    getCondicion: () => '30 días en racha',
+    minStreak: 30,
   },
   {
     id: 'doce_periodos',
     nombre: 'Leyenda Financiera',
-    getDescripcion: (f) => f === 'quincenal'
-      ? '6 meses (12 quincenas). Tu jardín está en plena floración.'
-      : 'Un año completo. Eres un ejemplo.',
+    getDescripcion: () => '100 días. Eres un ejemplo.',
     icono: '👑',
-    getCondicion: (f) => `${periodoLabel(f, 12)} en racha`,
-    minStreak: 12,
+    getCondicion: () => '100 días en racha',
+    minStreak: 100,
   },
   {
     id: 'fin_semana_sin_gastos',
@@ -146,6 +142,11 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
   useEffect(() => { fetchStreaks() }, [fetchStreaks])
 
   // ── Verifica si la racha debe reiniciarse por inactividad ─────────────────
+  // streakActual es una racha de DÍAS: si falta más de un día completo desde
+  // el último check-in (ni hoy ni ayer), ya está rota — mostrarla en 0 antes
+  // de que el usuario haga alguna acción nueva, en vez de seguir enseñando un
+  // número que ya no es cierto. (Antes toleraba hasta 60 días de inactividad,
+  // heredado de cuando esto se pensaba como una racha de PERIODOS de pago.)
   useEffect(() => {
     if (data.loading || !data.ultimoCheck || data.streakActual === 0) return
 
@@ -153,49 +154,21 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
     const now = new Date()
     const daysSince = Math.floor((now.getTime() - lastCheck.getTime()) / (1000 * 60 * 60 * 24))
 
-    if (daysSince > periodDays * 2) {
+    if (daysSince > 1) {
       breakStreak()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.loading, data.ultimoCheck, periodDays])
-
-  // ── Incrementar racha ─────────────────────────────────────────────────────
-  const incrementStreak = useCallback(async () => {
-    if (!userId) return
-    const newStreak = data.streakActual + 1
-    const newBest = Math.max(newStreak, data.streakMejor)
-
-    await gamificationApi.updateStreak(newStreak, newBest)
-
-    // Desbloquear badges por racha
-    const newBadges: string[] = []
-    for (const badge of BADGES) {
-      if (badge.minStreak > 0 && newStreak >= badge.minStreak) {
-        if (!data.badgesDesbloqueados.includes(badge.id)) {
-          newBadges.push(badge.id)
-          await gamificationApi.unlockBadge(badge.id)
-        }
-      }
-    }
-
-    const today = new Date().toISOString().split('T')[0]
-    setData(prev => ({
-      ...prev,
-      streakActual: newStreak,
-      streakMejor: newBest,
-      ultimoCheck: today,
-      badgesDesbloqueados: [...prev.badgesDesbloqueados, ...newBadges],
-    }))
-
-    return { newStreak, newBadges }
-  }, [userId, data])
+  }, [data.loading, data.ultimoCheck])
 
   // ── Romper racha ──────────────────────────────────────────────────────────
+  // OJO: no toca `ultimoCheck` — ni aquí ni en el backend (ver PATCH
+  // /gamification/streak). Si lo estampara como "hoy", una acción real que el
+  // usuario haga más tarde el mismo día no incrementaría la racha (el backend
+  // la vería como "ya contada hoy") en vez de arrancar una racha nueva en 1.
   const breakStreak = useCallback(async () => {
     if (!userId) return
     await gamificationApi.updateStreak(0)
-    const today = new Date().toISOString().split('T')[0]
-    setData(prev => ({ ...prev, streakActual: 0, ultimoCheck: today }))
+    setData(prev => ({ ...prev, streakActual: 0 }))
   }, [userId])
 
   // ── Desbloquear badge manual ──────────────────────────────────────────────
@@ -213,7 +186,6 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
     ...data,
     periodDays,
     incomeFrequency,
-    incrementStreak,
     breakStreak,
     unlockBadge,
     refetch: fetchStreaks,

@@ -4,7 +4,8 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 
 function initials(nombre: string) {
-  return nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+  const letters = nombre.trim().split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase()
+  return letters || "?"
 }
 
 interface UserAvatarProps {

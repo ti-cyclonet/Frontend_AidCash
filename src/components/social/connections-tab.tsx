@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { UserCheck, UserX, Loader2, Users, Trash2, Clock, Heart, Home, UsersRound, ChevronDown, ChevronUp } from "lucide-react"
+import { UserCheck, UserX, Loader2, Users, Trash2, Clock, Heart, Home, UsersRound, ChevronDown, ChevronUp, ArrowRightLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -111,13 +111,19 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
   useEffect(() => {
     if (!socket) return
     const refresh = () => load()
-    socket.on(SOCKET_EVENTS.NEW_INVITE,      refresh)
-    socket.on(SOCKET_EVENTS.INVITE_ACCEPTED, refresh)
-    socket.on(SOCKET_EVENTS.INVITE_REJECTED, refresh)
+    socket.on(SOCKET_EVENTS.NEW_INVITE,          refresh)
+    socket.on(SOCKET_EVENTS.INVITE_ACCEPTED,     refresh)
+    socket.on(SOCKET_EVENTS.INVITE_REJECTED,     refresh)
+    socket.on(SOCKET_EVENTS.ROLE_CHANGE_REQUESTED, refresh)
+    socket.on(SOCKET_EVENTS.ROLE_CHANGE_ACCEPTED,  refresh)
+    socket.on(SOCKET_EVENTS.ROLE_CHANGE_REJECTED,  refresh)
     return () => {
-      socket.off(SOCKET_EVENTS.NEW_INVITE,      refresh)
-      socket.off(SOCKET_EVENTS.INVITE_ACCEPTED, refresh)
-      socket.off(SOCKET_EVENTS.INVITE_REJECTED, refresh)
+      socket.off(SOCKET_EVENTS.NEW_INVITE,          refresh)
+      socket.off(SOCKET_EVENTS.INVITE_ACCEPTED,     refresh)
+      socket.off(SOCKET_EVENTS.INVITE_REJECTED,     refresh)
+      socket.off(SOCKET_EVENTS.ROLE_CHANGE_REQUESTED, refresh)
+      socket.off(SOCKET_EVENTS.ROLE_CHANGE_ACCEPTED,  refresh)
+      socket.off(SOCKET_EVENTS.ROLE_CHANGE_REJECTED,  refresh)
     }
   }, [socket, load])
 
@@ -275,51 +281,54 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
           data.accepted.map(conn => {
             const peer = getPeer(conn, myId)!
             const busy = actionLoading === conn.id
-            const role = (conn as any).role as string | undefined
+            const role = conn.role as string | undefined
+            const hasPendingRoleChange = !!conn.pendingRole
             return (
               <Card key={conn.id} className="border-none bg-card rounded-2xl shadow-sm">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div onClick={() => setProfileCardConnId(conn.id)} className="cursor-pointer">
-                    <UserAvatar nombre={peer.nombre} avatarUrl={peer.avatarUrl} className="h-12 w-12 shrink-0 border-2 border-kiri-emerald/20" fallbackClassName="bg-kiri-mint text-kiri-emerald text-sm" />
-                  </div>
-                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setProfileCardConnId(conn.id)}>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-sm truncate">{peer.nombre}</p>
-                      {role && getRoleBadge(role)}
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div onClick={() => setProfileCardConnId(conn.id)} className="cursor-pointer">
+                      <UserAvatar nombre={peer.nombre} avatarUrl={peer.avatarUrl} className="h-12 w-12 shrink-0 border-2 border-kiri-emerald/20" fallbackClassName="bg-kiri-mint text-kiri-emerald text-sm" />
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setProfileCardConnId(conn.id)}>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm truncate">{peer.nombre}</p>
+                        {/* El rol solo se cambia desde la tarjeta de perfil
+                            (ConnectionProfileCard) — acá es de solo lectura. */}
+                        {role && getRoleBadge(role)}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-kiri-emerald shrink-0" title="Conectado" />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => handleRemove(conn.id)}
+                        className="h-8 w-8 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
+                        title="Eliminar conexión"
+                      >
+                        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {/* Cambiar rol */}
-                    <select
-                      value={role ?? 'FRIEND'}
-                      onChange={async (e) => {
-                        const newRole = e.target.value as 'FRIEND' | 'FAMILY' | 'PARTNER'
-                        setActionLoading(conn.id)
-                        const { error } = await connectionsApi.updateRole(conn.id, newRole)
-                        setActionLoading(null)
-                        if (error) toast({ title: error, variant: "destructive" })
-                        else load()
-                      }}
-                      disabled={busy}
-                      className="h-8 rounded-lg bg-muted/50 border-none text-[10px] font-bold px-2 cursor-pointer appearance-none"
+
+                  {/* Aviso de solicitud de cambio de rol pendiente — la acción
+                      (aceptar/rechazar/solicitar) vive solo en la tarjeta. */}
+                  {hasPendingRoleChange && (
+                    <button
+                      onClick={() => setProfileCardConnId(conn.id)}
+                      className="w-full flex items-center gap-2 bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-xl px-3 py-2 text-left hover:bg-cyclon-lavender/10 transition-colors"
                     >
-                      <option value="FRIEND">Amigo</option>
-                      <option value="FAMILY">Familia</option>
-                      <option value="PARTNER">Pareja</option>
-                    </select>
-                    <span className="h-2 w-2 rounded-full bg-kiri-emerald shrink-0" title="Conectado" />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => handleRemove(conn.id)}
-                      className="h-8 w-8 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
-                      title="Eliminar conexión"
-                    >
-                      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                    </Button>
-                  </div>
+                      <ArrowRightLeft className="h-3.5 w-3.5 text-cyclon-lavender shrink-0" />
+                      <p className="text-[11px] text-cyclon-lavender font-medium flex-1">
+                        {conn.roleChangeRequestedBy === myId
+                          ? `Esperando que ${peer.nombre} apruebe el cambio de rol`
+                          : `${peer.nombre} propone cambiar el rol — toca para responder`}
+                      </p>
+                    </button>
+                  )}
                 </CardContent>
               </Card>
             )
@@ -383,9 +392,12 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
       {/* Tarjeta de perfil de conexión */}
       <ConnectionProfileCard
         connectionId={profileCardConnId ?? ""}
+        myId={myId}
         open={!!profileCardConnId}
         onClose={() => setProfileCardConnId(null)}
+        onChanged={load}
       />
+
     </div>
   )
 }

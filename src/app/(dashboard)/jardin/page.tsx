@@ -13,17 +13,20 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
-import { userApi, WalletState } from "@/lib/api-client"
+import { userApi, loansApi, connectionsApi, WalletState } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth-context"
+import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 import { getNextPaymentInfo } from "@/lib/payment-schedule"
 import { calculateGardenXP } from "@/lib/garden-xp"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
-import type { Debt, FixedExpense } from "@/lib/types"
+import type { Debt, FixedExpense, Loan } from "@/lib/types"
 
 // ─── Niveles del jardín ───────────────────────────────────────────────────────
 
@@ -206,6 +209,7 @@ export default function JardinPage() {
   const router = useRouter()
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("jardin")
   const { formatAmount, incomeFrequency, user, onboardingDone } = useAppContext()
+  const { user: authUser } = useAuth()
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
   const { streakActual, badgesDesbloqueados, xpFromMissions, loading: streakLoading } = useStreaks(incomeFrequency)
   const { allocation } = usePeriodBudget()
@@ -297,8 +301,72 @@ export default function JardinPage() {
     }
   }, [totalAhorrado, financeLoading])
 
+  // ── "Fulano regó tu árbol" — mensajito flotante + lluvia después ──────────
+  // Antes de esto, regar el jardín de un amigo no dejaba NADA visible para
+  // quien lo recibía salvo un push genérico ("alguien regó tu jardín") — acá
+  // nunca aparecía nada dentro de la app. Ahora, si estás viendo el jardín
+  // justo cuando te riegan, sale el aviso con el nombre real y, cuando
+  // termina de aparecer y desvanecerse, arranca la lluvia (mismo estado que
+  // ya usa la celebración de ahorro).
+  const [wateredMessage, setWateredMessage] = useState<string | null>(null)
+  const { socket } = useSocket()
+
+  const celebrateWatered = (message: string) => {
+    setWateredMessage(message)
+    setTimeout(() => {
+      setWateredMessage(null)
+      setShowRainCelebration(true)
+      setTimeout(() => setShowRainCelebration(false), 8000)
+    }, 3200)
+  }
+
+  useEffect(() => {
+    if (!socket) return
+    const onWatered = (data: Record<string, unknown>) => {
+      celebrateWatered(`${(data.fromName as string) ?? "Un amigo"} regó tu árbol`)
+    }
+    socket.on(SOCKET_EVENTS.GARDEN_WATERED, onWatered)
+    return () => { socket.off(SOCKET_EVENTS.GARDEN_WATERED, onWatered) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket])
+
+  // Si te regaron hoy pero no tenías la app abierta en ese momento (el caso
+  // más común), el aviso no se pierde: al entrar se muestra una sola vez por
+  // día — justo el empujoncito para que vuelvas a revisar tu jardín aunque
+  // te lo hayan perdido en vivo.
+  useEffect(() => {
+    connectionsApi.getFriendsGarden().then(({ data }) => {
+      if (!data || data.friendsWhoWateredYouToday <= 0) return
+      const LS_KEY = "kiri_garden_watered_seen"
+      const today = new Date().toISOString().split("T")[0]
+      if (localStorage.getItem(LS_KEY) === today) return
+      localStorage.setItem(LS_KEY, today)
+      const count = data.friendsWhoWateredYouToday
+      celebrateWatered(count === 1 ? "Un amigo regó tu árbol hoy" : `${count} amigos regaron tu árbol hoy`)
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Préstamos sociales (solo ACTIVE donde soy borrower) — antes quedaban
+  //    fuera de "deuda total" acá y en cualquier otro lugar que mostrara esta
+  //    cifra: alguien con un préstamo activo con un amigo veía su jardín (y
+  //    su % de libertad financiera) como si esa deuda no existiera.
+  const [socialLoansOwed, setSocialLoansOwed] = useState<Loan[]>([])
+  useEffect(() => {
+    if (!authUser?.id) return
+    loansApi.list().then(({ data }) => {
+      if (data?.loans) {
+        const active = (data.loans as unknown as Loan[]).filter(
+          l => l.status === "ACTIVE" && l.borrowerId === authUser.id
+        )
+        setSocialLoansOwed(active)
+      }
+    }).catch(() => {})
+  }, [authUser?.id])
+
   // ── Métricas del jardín ───────────────────────────────────────────────────
-  const totalDeuda = debts.reduce((a, d) => a + Number(d.saldoRestante ?? d.montoTotal), 0)
+  const totalDeudaPrestamos = socialLoansOwed.reduce((a, l) => a + Number(l.remainingAmount), 0)
+  const totalDeuda = debts.reduce((a, d) => a + Number(d.saldoRestante ?? d.montoTotal), 0) + totalDeudaPrestamos
 
   // Verificar si tiene categorías de presupuesto configuradas
   const hasBudgetCategories = budgetCategories.length > 0
@@ -433,6 +501,7 @@ export default function JardinPage() {
                   showLevelUpGlow={showLevelUpGlow}
                   healthLabel={getHealthLabel(gardenHealth)}
                   sizeClass="w-[220px] h-[220px]"
+                  wateredMessage={wateredMessage}
                 />
               ) : (
                 <div className="w-[220px] h-[220px] rounded-full bg-muted/30 animate-pulse" />
@@ -531,6 +600,7 @@ export default function JardinPage() {
                   showLevelUpGlow={showLevelUpGlow}
                   healthLabel={getHealthLabel(gardenHealth)}
                   sizeClass="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px]"
+                  wateredMessage={wateredMessage}
                 />
               ) : (
                 <div className="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px] rounded-full bg-muted/30 animate-pulse" />
@@ -552,7 +622,7 @@ export default function JardinPage() {
                     </div>
                     <span className="text-[10px] text-muted-foreground">{salaryCoverage}%</span>
                   </div>
-                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatAmount(wallet.cashBalance)}</p>
+                  <OdometerAmount value={wallet.cashBalance} formatAmount={formatAmount} className="text-sm font-black text-emerald-600 dark:text-emerald-400" />
                   <Progress value={salaryCoverage} className="h-1.5" indicatorClassName="bg-emerald-500" />
                 </div>
                 {/* Ahorros */}
@@ -802,6 +872,7 @@ function GardenTreeVisual({
   showLevelUpGlow,
   healthLabel,
   sizeClass,
+  wateredMessage,
 }: {
   currentLevelIdx: number
   currentLevel: GardenLevel
@@ -811,6 +882,10 @@ function GardenTreeVisual({
   showLevelUpGlow: boolean
   healthLabel: string
   sizeClass: string
+  /** "Fulano regó tu árbol" — null cuando no hay nada que mostrar. Se anima
+   * una vez sola con `kiriWateredPop` (ver globals.css); el padre es quien
+   * decide cuándo aparece y la quita después con un timeout. */
+  wateredMessage?: string | null
 }) {
   const [leaves, setLeaves] = useState<{ id: number; x: number; delay: number }[]>([])
   const leafIdRef = useRef(0)
@@ -876,6 +951,23 @@ function GardenTreeVisual({
     return () => clearInterval(t)
   }, [showFallingLeaves])
 
+  // Gotas de lluvia — antes eran 6 gotas repartidas en línea con `justify-between`
+  // y un delay proporcional a su índice (i * 0.18s). Como el índice también fija
+  // la posición horizontal, todas terminaban encendiéndose en el mismo orden
+  // izquierda→derecha en cada ciclo: se veía como una ola/zigzag barriendo la
+  // pantalla, no como lluvia real. Ahora son más gotas, cada una con su propia
+  // posición y temporización sorteadas al azar (una sola vez por montaje), sin
+  // ninguna relación entre índice y posición — no hay patrón que seguir.
+  const rainDrops = useMemo(() =>
+    Array.from({ length: 22 }, () => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 1.6,
+      duration: 0.85 + Math.random() * 0.55,
+      height: 8 + Math.random() * 7,
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  [])
+
   const filterStyle = moodFilter(gardenHealth)
   const imgClass = cn(sizeClass, "object-contain")
 
@@ -898,6 +990,20 @@ function GardenTreeVisual({
       {/* pt-6 baja el árbol un poco y le da aire arriba para que las nubes
           asomen sin quedar cortadas por el overflow-hidden de la Card. */}
       <div className="relative flex items-center justify-center pt-6">
+        {/* "Fulano regó tu árbol" — arriba de todo (z-20, por encima del
+            clima y del árbol) para que se lea claro mientras aparece y
+            desaparece; la lluvia (gardenWeather) empieza justo después,
+            controlada por el padre. */}
+        {wateredMessage && (
+          <div
+            key={wateredMessage}
+            className="absolute -top-2 left-1/2 z-20 whitespace-nowrap pointer-events-none flex items-center gap-1.5 bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg shadow-sky-500/30"
+            style={{ animation: "kiriWateredPop 3.2s ease-out forwards" }}
+          >
+            <Droplets className="h-3.5 w-3.5 shrink-0" />
+            {wateredMessage}
+          </div>
+        )}
         {/* Aura dorada de level-up */}
         {showLevelUpGlow && (
           <motion.div
@@ -935,12 +1041,17 @@ function GardenTreeVisual({
           />
         )}
         {gardenWeather === "lluvia" && (
-          <div className="absolute top-1 inset-x-6 z-10 flex justify-between pointer-events-none">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="absolute top-1 inset-x-0 h-24 overflow-hidden z-10 pointer-events-none">
+            {rainDrops.map((d, i) => (
               <span
                 key={i}
-                className="block w-[2px] h-3 rounded-full bg-sky-400"
-                style={{ opacity: 0, animation: `kiriRainFall 1.4s linear ${i * 0.18}s infinite` }}
+                className="absolute top-0 block w-[2px] rounded-full bg-sky-400"
+                style={{
+                  left: `${d.left}%`,
+                  height: `${d.height}px`,
+                  opacity: 0,
+                  animation: `kiriRainFall ${d.duration}s linear ${d.delay}s infinite`,
+                }}
               />
             ))}
           </div>

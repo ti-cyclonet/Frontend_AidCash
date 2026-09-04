@@ -16,6 +16,7 @@ import {
   Lightbulb, MapPin, Receipt, AlertTriangle, PiggyBank, CircleDollarSign, Trash2, Coffee,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useFinanceData } from "@/hooks/use-finance-data"
@@ -1067,40 +1068,34 @@ function AnimatedStatCard({ label, value, sub, formatAmount }: {
 }) {
   const prevRef = useRef(value)
   const idRef = useRef(0)
-  const frameRef = useRef<number>(0)
-  const [display, setDisplay] = useState(value)
   const [flash, setFlash] = useState<"up" | "down" | null>(null)
   const [delta, setDelta] = useState<{ amount: number; id: number } | null>(null)
   const [history, setHistory] = useState<number[]>([value])
+  // El presupuesto disponible arranca en 0 mientras carga y recién después
+  // salta al valor real — sin este guard, ESE salto disparaba el globito de
+  // diferencia y el brillo cada vez que se entraba o refrescaba la página,
+  // como si fuera un movimiento real. Se absorbe en silencio el primero.
+  const skipNextRef = useRef(true)
 
   useEffect(() => {
     const from = prevRef.current
     const to = value
     if (from === to) return
+    prevRef.current = to
+
+    if (skipNextRef.current) {
+      skipNextRef.current = false
+      setHistory([to])
+      return
+    }
+
     setHistory(h => [...h.slice(-9), to])
     setFlash(to > from ? "up" : "down")
 
     const deltaId = idRef.current++
     setDelta({ amount: to - from, id: deltaId })
     setTimeout(() => setDelta(d => (d?.id === deltaId ? null : d)), 1400)
-
-    const duration = 900
-    const startTime = performance.now()
-    const animate = (now: number) => {
-      const elapsed = now - startTime
-      const progress = Math.min(elapsed / duration, 1)
-      const eased = -(Math.cos(Math.PI * progress) - 1) / 2
-      setDisplay(Math.round(from + (to - from) * eased))
-      if (progress < 1) {
-        frameRef.current = requestAnimationFrame(animate)
-      } else {
-        setDisplay(to)
-        prevRef.current = to
-        setTimeout(() => setFlash(null), 700)
-      }
-    }
-    frameRef.current = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(frameRef.current)
+    setTimeout(() => setFlash(null), 1400)
   }, [value])
 
   const W = 64, H = 14
@@ -1118,14 +1113,16 @@ function AnimatedStatCard({ label, value, sub, formatAmount }: {
       <CardContent className="p-3">
         <p className="text-[8px] text-muted-foreground font-bold uppercase">{label}</p>
         <div className="relative inline-block">
-          <p className={cn(
-            "text-sm font-black mt-0.5 transition-colors duration-500",
-            flash === "up" && "text-emerald-600 dark:text-emerald-400",
-            flash === "down" && "text-red-600 dark:text-red-400",
-            !flash && "text-kiri-emerald"
-          )}>
-            {formatAmount(display)}
-          </p>
+          <OdometerAmount
+            value={value}
+            formatAmount={formatAmount}
+            className={cn(
+              "text-sm font-black mt-0.5 transition-colors duration-500",
+              flash === "up" && "text-emerald-600 dark:text-emerald-400",
+              flash === "down" && "text-red-600 dark:text-red-400",
+              !flash && "text-kiri-emerald"
+            )}
+          />
           {delta && (
             <span
               key={delta.id}
