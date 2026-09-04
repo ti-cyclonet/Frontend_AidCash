@@ -5,7 +5,7 @@ export type ExtraIncomeTemporality = 'una_vez' | 'definido' | 'indefinido';
 
 export type ConnectionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 export type ConnectionRole = 'FRIEND' | 'FAMILY' | 'PARTNER';
-export type LoanStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED' | 'PAID';
+export type LoanStatus = 'PENDING_APPROVAL' | 'PENDING_BORROWER_CONFIRMATION' | 'ACTIVE' | 'REJECTED' | 'PAID';
 export type LoanPaymentStatus = 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'REJECTED';
 
 export interface SocialUser {
@@ -22,6 +22,10 @@ export interface Connection {
   addresseeId: string;
   status: ConnectionStatus;
   role: ConnectionRole;
+  /** Rol propuesto por roleChangeRequestedBy, esperando que la OTRA persona
+   * lo apruebe — null cuando no hay ninguna solicitud de cambio pendiente. */
+  pendingRole?: ConnectionRole | null;
+  roleChangeRequestedBy?: string | null;
   createdAt: string;
   updatedAt: string;
   requester?: SocialUser;
@@ -74,7 +78,10 @@ export interface ConnectionSharedLoan {
 }
 
 export interface ConnectionSharedResponse {
-  connection: { id: string; role: ConnectionRole; createdAt: string };
+  connection: {
+    id: string; role: ConnectionRole; createdAt: string;
+    pendingRole?: ConnectionRole | null; roleChangeRequestedBy?: string | null;
+  };
   peer: SocialUser;
   pockets: ConnectionSharedPocket[];
   loans: ConnectionSharedLoan[];
@@ -123,6 +130,12 @@ export interface Loan {
   descripcion?: string;
   dueDate?: string;
   status: LoanStatus;
+  /** Tasa de interés que el prestamista propuso (0-100). Solo tiene sentido
+   * junto con montoOriginal mientras el préstamo espera confirmación del
+   * deudor (PENDING_BORROWER_CONFIRMATION). */
+  tasaInteres?: number | null;
+  /** Monto original solicitado, antes de sumarle el interés propuesto. */
+  montoOriginal?: number | null;
   createdAt: string;
   updatedAt: string;
   lender?: SocialUser;

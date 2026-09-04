@@ -102,11 +102,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setMounted(true)
 
-    // Carga avatar desde IndexedDB (no va en localStorage)
-    loadAvatar().then(url => {
-      if (url) setUserState(prev => ({ ...prev, avatarUrl: url }))
-    }).catch(() => {})
-
     if (!isAuthenticated() || !authUser) {
       profileLoadedRef.current = true
       setProfileLoading(false)
@@ -114,6 +109,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const userId = authUser.id
+
+    // Carga avatar desde IndexedDB, cacheado por userId — antes era un slot
+    // único y global (sin userId), así que en el mismo navegador la foto de
+    // la última persona que inició sesión se le mostraba a la SIGUIENTE
+    // cuenta que iniciara sesión ahí hasta que esa cuenta resubiera la suya.
+    loadAvatar(userId).then(url => {
+      if (url) setUserState(prev => ({ ...prev, avatarUrl: url }))
+    }).catch(() => {})
 
     // Carga caché local si pertenece al mismo usuario
     const cachedUserId = localStorage.getItem(LS.cachedUserId)
@@ -155,6 +158,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const nombre       = (u.nombre as string) ?? ""
       const correo       = (u.correo as string) ?? ""
       const username     = (u.username as string) ?? ""
+      // El backend SÍ tiene el avatar guardado (columna avatar_url), pero
+      // antes este fetch lo ignoraba por completo — IndexedDB era la única
+      // fuente para mostrarlo, así que en un navegador/dispositivo nuevo
+      // (sin nada cacheado localmente) la foto que el usuario ya había
+      // subido antes simplemente nunca aparecía, aunque estuviera guardada.
+      const avatarUrl    = (u.avatarUrl as string) ?? ""
       const ingreso_base = Number(u.ingresoBase ?? 0)
       const frecuencia   = (u.frecuenciaIngreso as IncomeFrequency) ?? "mensual"
       const onboarding   = (u.onboardingDone as boolean) ?? false
@@ -163,7 +172,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const diasPagoArr  = (u.diasPago as number[] | undefined) ?? []
       const dias_cobro   = diasPagoArr.length > 0 ? diasPagoArr.join(",") : (localStorage.getItem("kiri_dias_cobro") || "1,16")
 
-      setUserState(prev => ({ ...prev, nombre, correo, username }))
+      setUserState(prev => ({ ...prev, nombre, correo, username, avatarUrl: avatarUrl || prev.avatarUrl }))
+      if (avatarUrl && userId) saveAvatar(userId, avatarUrl).catch(() => {})
       setIncomeState(ingreso_base)
       setIncomeFrequencyState(frecuencia)
       setDiasCobroState(dias_cobro)
@@ -213,9 +223,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setUser = useCallback((u: UserProfile) => {
     const { avatarUrl, ...rest } = u
     setUserState(u)
-    // Guardar avatar en IndexedDB (evita QuotaExceededError en localStorage)
-    if (avatarUrl) {
-      saveAvatar(avatarUrl).catch(() => {})
+    // Guardar avatar en IndexedDB (evita QuotaExceededError en localStorage),
+    // en el slot del usuario actual — nunca en uno global compartido.
+    const userId = getUserId()
+    if (avatarUrl && userId) {
+      saveAvatar(userId, avatarUrl).catch(() => {})
     }
     // En localStorage solo se guarda nombre y correo, nunca el avatar
     localStorage.setItem(LS.user, JSON.stringify({ ...rest, avatarUrl: "" }))

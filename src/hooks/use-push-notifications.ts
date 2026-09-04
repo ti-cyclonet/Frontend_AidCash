@@ -38,13 +38,16 @@ export function usePushNotifications() {
     }
   }, [])
 
-  // Register SW on mount
+  // El SW ya lo registra next-pwa (sw.js, scope "/") al cargar la app, con la
+  // lógica de push fusionada — ver worker/index.ts. Registrar aquí un segundo
+  // SW distinto en el mismo scope lo reemplazaría (dos SW no pueden coexistir
+  // en el mismo scope), así que solo esperamos a que esté listo.
   useEffect(() => {
     if (!supported) return
-    navigator.serviceWorker.register("/sw-push.js").then((reg) => {
+    navigator.serviceWorker.ready.then((reg) => {
       setSwRegistration(reg)
     }).catch((err) => {
-      console.warn("[PushNotifications] SW registration failed:", err)
+      console.warn("[PushNotifications] SW not ready:", err)
     })
   }, [supported])
 

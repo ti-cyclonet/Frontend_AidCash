@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Debt, FixedExpense } from "@/lib/types"
+import { Debt, FixedExpense, Loan } from "@/lib/types"
 
 export interface ObligationsMetrics {
   totalDeudasActivas: number
@@ -15,13 +15,19 @@ export interface ObligationsMetrics {
  * - Total de deudas activas (cantidad)
  * - Pago mensual comprometido (suma cuotas + gastos fijos mensualizados)
  * - Total de gastos fijos mensuales
- * - Total de deuda viva (suma montoTotal)
+ * - Total de deuda viva (suma montoTotal + préstamos activos donde soy quien debe)
+ *
+ * `activeLoansOwed` son los préstamos de Social donde el usuario es el
+ * borrower y siguen ACTIVE — opcional porque no todo consumidor los tiene a
+ * mano, pero omitirlos entero es lo que hacía que "cuánto debo" subestimara
+ * la deuda real de alguien con préstamos activos con amigos.
  */
-export function useObligationsMetrics(debts: Debt[], fixedExpenses: FixedExpense[]): ObligationsMetrics {
+export function useObligationsMetrics(debts: Debt[], fixedExpenses: FixedExpense[], activeLoansOwed: Pick<Loan, 'remainingAmount'>[] = []): ObligationsMetrics {
   return useMemo(() => {
     const activeDebts = debts.filter(d => d.estado === 'activa')
     const totalDeudasActivas = activeDebts.length
-    const totalDeudaViva = activeDebts.reduce((a, d) => a + d.montoTotal, 0)
+    const totalDeudaPrestamos = activeLoansOwed.reduce((a, l) => a + Number(l.remainingAmount), 0)
+    const totalDeudaViva = activeDebts.reduce((a, d) => a + d.montoTotal, 0) + totalDeudaPrestamos
 
     const totalCuotas = activeDebts.reduce((a, d) => a + d.cuotaPeriodo, 0)
 
@@ -38,7 +44,7 @@ export function useObligationsMetrics(debts: Debt[], fixedExpenses: FixedExpense
     const pagoMensualComprometido = totalCuotas + totalGastosFijosMensuales
 
     return { totalDeudasActivas, pagoMensualComprometido, totalGastosFijosMensuales, totalDeudaViva }
-  }, [debts, fixedExpenses])
+  }, [debts, fixedExpenses, activeLoansOwed])
 }
 
 /**

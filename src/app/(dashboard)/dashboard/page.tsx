@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
 import { usePlan } from "@/lib/plan-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
@@ -134,9 +135,7 @@ export default function DashboardPage() {
               <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
                 Saldo total <Eye className="h-3 w-3" />
               </span>
-              <p className="text-xl sm:text-2xl font-black text-foreground">
-                {formatAmount(saldoTotal)}
-              </p>
+              <OdometerAmount value={saldoTotal} formatAmount={formatAmount} className="text-xl sm:text-2xl font-black text-foreground" />
               <span className="text-[9px] text-muted-foreground">Actualizado hoy</span>
             </div>
           </CardContent>
@@ -241,7 +240,7 @@ export default function DashboardPage() {
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[9px] text-muted-foreground font-medium">Total</span>
-                    <span className="text-sm font-black">{formatAmount(saldoTotal)}</span>
+                    <OdometerAmount value={saldoTotal} formatAmount={formatAmount} className="text-sm font-black" />
                   </div>
                 </div>
                 <div className="space-y-3">

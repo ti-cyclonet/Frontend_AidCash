@@ -26,17 +26,19 @@ function initials(name: string) {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDING_APPROVAL: "Esperando aprobación",
-  ACTIVE:           "Activo",
-  REJECTED:         "Rechazado",
-  PAID:             "Pagado",
+  PENDING_APPROVAL:              "Esperando aprobación",
+  PENDING_BORROWER_CONFIRMATION: "Con interés propuesto",
+  ACTIVE:                        "Activo",
+  REJECTED:                      "Rechazado",
+  PAID:                          "Pagado",
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  PENDING_APPROVAL: "text-yellow-600 bg-yellow-100",
-  ACTIVE:           "text-kiri-emerald bg-kiri-mint/30",
-  REJECTED:         "text-destructive bg-destructive/10",
-  PAID:             "text-muted-foreground bg-muted",
+  PENDING_APPROVAL:              "text-yellow-600 bg-yellow-100",
+  PENDING_BORROWER_CONFIRMATION: "text-cyclon-lavender bg-cyclon-lavender/10",
+  ACTIVE:                        "text-kiri-emerald bg-kiri-mint/30",
+  REJECTED:                      "text-destructive bg-destructive/10",
+  PAID:                          "text-muted-foreground bg-muted",
 }
 
 const PAYMENT_STATUS_LABEL: Record<string, string> = {
@@ -145,6 +147,19 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
       toast({ title: error, variant: "destructive" })
     } else {
       toast({ title: "Préstamo aprobado ✓" })
+      load()
+    }
+  }
+
+  // ── Borrower responde a la contraoferta con interés ────────────────────────
+  const handleBorrowerConfirm = async (loanId: string, accept: boolean) => {
+    setActionId(loanId)
+    const { error } = await loansApi.borrowerConfirm(loanId, accept)
+    setActionId(null)
+    if (error) {
+      toast({ title: error, variant: "destructive" })
+    } else {
+      toast({ title: accept ? "Préstamo aceptado — ya tienes el dinero disponible" : "Oferta rechazada" })
       load()
     }
   }
@@ -279,6 +294,9 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                       {pendingPayments.length > 0 && (
                         <AlertCircle className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                       )}
+                      {isBorrower && loan.status === "PENDING_BORROWER_CONFIRMATION" && (
+                        <AlertCircle className="h-3.5 w-3.5 text-cyclon-lavender shrink-0" />
+                      )}
                     </div>
                     {loan.descripcion && (
                       <p className="text-xs text-muted-foreground truncate">{loan.descripcion}</p>
@@ -412,6 +430,46 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                           <XCircle className="h-3 w-3" />
                           Cancelar solicitud
                         </Button>
+                      )}
+
+                      {/* Borrower: responder a la contraoferta de interés del prestamista —
+                          antes esta pantalla no existía en ningún lado: el préstamo quedaba
+                          en PENDING_BORROWER_CONFIRMATION para siempre, con el backend listo
+                          para aceptar/rechazar pero sin ningún botón que lo llamara. */}
+                      {isBorrower && loan.status === "PENDING_BORROWER_CONFIRMATION" && (
+                        <div className="w-full space-y-2">
+                          <div className="bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-2xl p-3 space-y-1">
+                            <p className="text-xs font-bold text-cyclon-lavender">
+                              {peer?.nombre} quiere prestarte con {loan.tasaInteres ?? 0}% de interés
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Pediste {formatAmount(loan.montoOriginal ?? loan.amount)} — con ese interés
+                              tendrías que devolver {formatAmount(loan.amount)}
+                              {loan.tasaInteres ? ` (+${formatAmount(loan.amount - (loan.montoOriginal ?? loan.amount))} de interés)` : ""}.
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={actionId === loan.id}
+                              onClick={() => handleBorrowerConfirm(loan.id, true)}
+                              className="h-8 px-4 rounded-xl bg-kiri-emerald text-white font-bold text-xs gap-1"
+                            >
+                              {actionId === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                              Aceptar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={actionId === loan.id}
+                              onClick={() => handleBorrowerConfirm(loan.id, false)}
+                              className="h-8 px-4 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 font-bold text-xs gap-1"
+                            >
+                              <XCircle className="h-3 w-3" />
+                              Me parece mucho, rechazar
+                            </Button>
+                          </div>
+                        </div>
                       )}
 
                       {/* Borrower: registrar abono si está ACTIVE */}

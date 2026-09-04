@@ -31,6 +31,7 @@ import { debtsApi, fixedExpensesApi, impulseApi, budgetCategoriesApi } from "@/l
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
 import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
+import { isCreditCard } from "@/lib/debt-utils"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -161,6 +162,9 @@ export default function ObligacionesPage() {
   // ── Saldo insuficiente modal ───────────────────────────────────────────────
   const [insufficientOpen, setInsufficientOpen] = useState(false)
   const [insufficientTarget, setInsufficientTarget] = useState<{ type: "debt" | "fixed"; id: string; nombre: string; monto: number } | null>(null)
+  const [insufficientSelectedTC, setInsufficientSelectedTC] = useState<string | null>(null)
+  const [insufficientTcCuotas, setInsufficientTcCuotas] = useState("1")
+  const [payingInsufficientTC, setPayingInsufficientTC] = useState(false)
   const [quickIncomeOpen, setQuickIncomeOpen] = useState(false)
   const [quickIncomeMonto, setQuickIncomeMonto] = useState("")
   const [savingsSourceOpen, setSavingsSourceOpen] = useState(false)
@@ -247,17 +251,15 @@ export default function ObligacionesPage() {
 
   // ── Handlers Pay ──────────────────────────────────────────────────────────
   const openPay = (debt: Debt) => {
-    // Check if there are credit cards available to pay with
-    const tarjetas = debts.filter(d => d.estado === 'activa' && d.id !== debt.id && (
-      d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
-      d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
-      d.nombre.toLowerCase().includes('credito')
-    ))
-
-    // If no cash AND no credit cards available, show insufficient funds
+    // Si el saldo no alcanza, SIEMPRE mostrar el aviso de saldo insuficiente
+    // (con sus alternativas: abono parcial, ahorros, tarjeta, nuevo ingreso)
+    // — antes solo se mostraba si además no había ninguna tarjeta disponible,
+    // así que cualquier usuario con una tarjeta (incluso sin relación con
+    // este pago) saltaba directo al modal normal, cuyo botón "Pagar" no
+    // valida saldo suficiente: podía dejar cashBalance en negativo sin aviso.
     // (comparar contra lo que REALMENTE falta, no la cuota completa si ya hubo un abono)
     const restante = Math.max(0, debt.cuotaPeriodo - (debt.montoPagadoEstePeriodo ?? 0))
-    if (wallet.cashBalance < restante && tarjetas.length === 0) {
+    if (wallet.cashBalance < restante) {
       setInsufficientTarget({ type: "debt", id: debt.id, nombre: debt.nombre, monto: restante })
       setInsufficientOpen(true)
       return
@@ -287,16 +289,11 @@ export default function ObligacionesPage() {
 
   // ── Handlers Pay Fixed ────────────────────────────────────────────────────
   const openPayFixed = (fe: FixedExpense) => {
-    // Check if there are credit cards available
-    const tarjetas = debts.filter(d => d.estado === 'activa' && (
-      d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
-      d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
-      d.nombre.toLowerCase().includes('credito')
-    ))
-
+    // Mismo criterio que openPay: el aviso de saldo insuficiente se muestra
+    // siempre que el saldo no alcance, sin importar si hay tarjetas.
     const montoPorPeriodo = fe.frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
     const restante = Math.max(0, montoPorPeriodo - ((fe as any).montoPagadoEstePeriodo ?? 0))
-    if (wallet.cashBalance < restante && tarjetas.length === 0) {
+    if (wallet.cashBalance < restante) {
       setInsufficientTarget({ type: "fixed", id: fe.id, nombre: fe.nombre, monto: restante })
       setInsufficientOpen(true)
       return
@@ -513,33 +510,37 @@ export default function ObligacionesPage() {
     <>
       {showTutorial && <TutorialSlider module="obligaciones" onClose={dismissTutorial} />}
     <div className="space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start">
-        <div>
-          <h1 className="text-2xl font-bold text-cyclon-periwinkle">Obligaciones</h1>
-          <p className="text-muted-foreground text-sm">Gestiona tus compromisos y gastos.</p>
+      <header className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-bold text-cyclon-periwinkle truncate">Obligaciones</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm truncate">Gestiona tus compromisos y gastos.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Saldo en tiempo real con efecto */}
-          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" />
+        {/* Cluster de acciones: siempre en la misma fila que el título, pegado
+            a la derecha de la pantalla — en mobile los botones se comprimen a
+            solo ícono para que quepan sin empujar el título ni saltar de fila. */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" showToggle={false} className="scale-90 sm:scale-100 origin-right" />
           {/* Botón Registrar gasto — abre modal de presupuesto */}
           <Button
             size="sm"
             variant="outline"
-            className="rounded-xl border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5 font-bold text-xs gap-1"
+            className="rounded-xl border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5 font-bold text-xs gap-1 px-2.5 sm:px-3"
             onClick={() => { setAddType("gasto_fijo"); setExpenseModalOpen(true) }}
+            aria-label="Registrar gasto"
           >
-            <ReceiptText className="h-3.5 w-3.5" /> Registrar gasto
+            <ReceiptText className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Registrar gasto</span>
           </Button>
           {(activeTab === "gastos_fijos" || activeTab === "deudas") && (
             <Button
               size="sm"
-              className="rounded-xl bg-cyclon-periwinkle shadow-sm font-bold text-xs gap-1"
+              className="rounded-xl bg-cyclon-periwinkle shadow-sm font-bold text-xs gap-1 px-2.5 sm:px-3"
               onClick={() => {
                 setAddType(activeTab === "deudas" ? "deuda" : "gasto_fijo")
                 setIsAddOpen(true)
               }}
+              aria-label={activeTab === "deudas" ? "Nueva deuda" : "Nuevo gasto fijo"}
             >
-              <Plus className="h-4 w-4" /> {activeTab === "deudas" ? "Nueva deuda" : "Nuevo gasto fijo"}
+              <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{activeTab === "deudas" ? "Nueva deuda" : "Nuevo gasto fijo"}</span>
             </Button>
           )}
         </div>
@@ -787,11 +788,7 @@ export default function ObligacionesPage() {
 
             {/* Opción: Pagar con tarjeta de crédito */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && d.id !== payDebt?.id && (
-                d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
-                d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
-                d.nombre.toLowerCase().includes('credito')
-              ))
+              const tarjetas = debts.filter(d => d.estado === 'activa' && d.id !== payDebt?.id && isCreditCard(d))
               if (tarjetas.length === 0) return null
               return (
                 <>
@@ -900,11 +897,7 @@ export default function ObligacionesPage() {
 
             {/* Opción 2: Pagar con tarjeta de crédito */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && (
-                d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
-                d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
-                d.nombre.toLowerCase().includes('credito')
-              ))
+              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
               if (tarjetas.length === 0) return null
               return (
                 <>
@@ -1046,50 +1039,89 @@ export default function ObligacionesPage() {
               </button>
             )}
 
-            {/* Opción 3: Pagar con tarjeta de crédito */}
+            {/* Opción 3: Pagar con tarjeta de crédito — mismo endpoint atómico
+                (payWithCard) que usan los botones "oficiales" de pagar deuda
+                y pagar gasto fijo con TC. Antes esto hacía un debtsApi.update
+                manual con el saldo leído del cliente (condición de carrera),
+                nunca creaba el plan de cuotas de la tarjeta, y para una deuda
+                nunca registraba el pago original — la deuda quedaba sin
+                pagar mientras el saldo de la tarjeta subía igual. Para un
+                gasto fijo, el PATCH que mandaba ni siquiera pasaba la
+                validación del backend (montoPagadoEstePeriodo no es un campo
+                editable ahí) y siempre fallaba con 400. */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && (
-                d.nombre.toLowerCase().includes('tarjeta') || d.nombre.toLowerCase().includes('tc ') ||
-                d.nombre.toLowerCase().includes('visa') || d.nombre.toLowerCase().includes('mastercard') ||
-                d.nombre.toLowerCase().includes('credito')
-              ))
+              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
               if (tarjetas.length === 0) return null
+              const montoTarget = insufficientTarget?.monto ?? 0
               return (
                 <div className="space-y-2">
                   <p className="text-[9px] font-bold text-muted-foreground uppercase pl-1">Pagar con tarjeta de crédito</p>
                   {tarjetas.map(tc => {
                     const tasaMensual = tc.tasaInteres ? Number(tc.tasaInteres) : 1.85
-                    const montoTarget = insufficientTarget?.monto ?? 0
                     const interesMes = Math.round(montoTarget * (tasaMensual / 100))
+                    const selected = insufficientSelectedTC === tc.id
                     return (
-                      <button key={tc.id}
-                        onClick={async () => {
-                          if (!insufficientTarget) return
-                          // Sumar al saldo de la tarjeta (no descuenta cashBalance)
-                          await debtsApi.update(tc.id, { saldoRestante: tc.saldoRestante + montoTarget })
-                          // Marcar como pagado
-                          if (insufficientTarget.type === "fixed") {
-                            await fixedExpensesApi.update(insufficientTarget.id, { pagadoEstePeriodo: true, montoPagadoEstePeriodo: montoTarget })
-                          }
-                          setInsufficientOpen(false); setInsufficientTarget(null)
-                          const { data: w } = await userApi.getWallet(); if (w) setWallet(w.wallet)
-                          await (await import('@/hooks/use-finance-data')).useFinanceData ? null : null
-                          window.location.reload()
-                        }}
-                        className="w-full text-left p-4 rounded-2xl border-2 border-amber-500/40 bg-amber-500/5 hover:border-amber-500 transition-colors space-y-1"
-                      >
-                        <div className="flex items-center gap-2">
-                          <CircleDollarSign className="h-4 w-4 text-amber-500" />
-                          <p className="font-bold text-sm">Pagar con {tc.nombre}</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground pl-6">
-                          Se sumará {formatAmount(montoTarget)} al saldo de tu tarjeta.
-                        </p>
-                        <div className="pl-6 text-[9px] text-amber-500 space-y-0.5">
-                          <p>Interés mensual estimado: +{formatAmount(interesMes)} ({tasaMensual}%)</p>
-                          <p>Nuevo saldo tarjeta: {formatAmount(tc.saldoRestante + montoTarget)}</p>
-                        </div>
-                      </button>
+                      <div key={tc.id} className={cn("rounded-2xl border-2 transition-colors", selected ? "border-amber-500 bg-amber-500/5" : "border-amber-500/40 bg-amber-500/5")}>
+                        <button
+                          onClick={() => setInsufficientSelectedTC(selected ? null : tc.id)}
+                          className="w-full text-left p-4 space-y-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <CircleDollarSign className="h-4 w-4 text-amber-500" />
+                            <p className="font-bold text-sm">Pagar con {tc.nombre}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground pl-6">
+                            Se sumará {formatAmount(montoTarget)} al saldo de tu tarjeta.
+                          </p>
+                          <div className="pl-6 text-[9px] text-amber-500 space-y-0.5">
+                            <p>Interés mensual estimado: +{formatAmount(interesMes)} ({tasaMensual}%)</p>
+                            <p>Nuevo saldo tarjeta: {formatAmount(tc.saldoRestante + montoTarget)}</p>
+                          </div>
+                        </button>
+                        {selected && (
+                          <div className="px-4 pb-4 space-y-3 pt-1 border-t border-amber-500/20">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="48"
+                                value={insufficientTcCuotas}
+                                onChange={e => setInsufficientTcCuotas(e.target.value)}
+                                className="h-10 rounded-xl text-center font-bold"
+                              />
+                              <p className="text-[10px] text-muted-foreground">
+                                Se sumará <strong>{formatAmount(Math.round(montoTarget / (Number(insufficientTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {insufficientTcCuotas} {Number(insufficientTcCuotas) === 1 ? "mes" : "meses"}.
+                              </p>
+                            </div>
+                            <Button
+                              disabled={payingInsufficientTC}
+                              onClick={async () => {
+                                if (!insufficientTarget) return
+                                setPayingInsufficientTC(true)
+                                const { error } = await debtsApi.payWithCard({
+                                  tarjetaId: tc.id,
+                                  monto: montoTarget,
+                                  cuotas: Number(insufficientTcCuotas) || 1,
+                                  sourceType: insufficientTarget.type,
+                                  sourceId: insufficientTarget.id,
+                                })
+                                if (error) {
+                                  setPayingInsufficientTC(false)
+                                  toast({ title: "No se pudo registrar el pago con tarjeta", description: "Intenta de nuevo.", variant: "destructive" })
+                                  return
+                                }
+                                setInsufficientOpen(false); setInsufficientTarget(null)
+                                setInsufficientSelectedTC(null); setInsufficientTcCuotas("1")
+                                window.location.reload()
+                              }}
+                              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
+                            >
+                              {payingInsufficientTC ? "Procesando..." : "Confirmar pago con TC"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>

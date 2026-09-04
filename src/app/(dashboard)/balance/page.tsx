@@ -69,11 +69,6 @@ export default function BalancePage() {
   const [movementSearch, setMovementSearch] = useState("")
   const [expandedMovement, setExpandedMovement] = useState<string | null>(null)
 
-  // Referencias a los contenedores de gráficos — el PDF los captura como imagen
-  // (html2canvas) al exportar, para que se vean igual que en pantalla.
-  const evolutionChartRef = useRef<HTMLDivElement>(null)
-  const categoryChartRef = useRef<HTMLDivElement>(null)
-
   const handleResetBalance = async () => {
     // Solo borra el historial (income_records, savings_history, impulse_expenses)
     // NO toca el cashBalance ni el wallet
@@ -199,18 +194,21 @@ export default function BalancePage() {
       })
     }
 
-    for (const f of report.fixedExpenses) {
-      if (f.pagadoEstePeriodo as boolean) {
-        movements.push({
-          id: f.id as string,
-          fecha: (f.updatedAt as string) ?? (f.createdAt as string),
-          nombre: f.nombre as string,
-          tipo: "gastos_fijos",
-          tipoLabel: "Gasto fijo",
-          monto: (f as any).montoPagadoEstePeriodo ?? (f.monto as number),
-          estado: 'pagado',
-        })
-      }
+    // Ledger real de pagos (fixedExpensePayments), acotado por el rango
+    // pedido — antes esto se reconstruía desde fixedExpenses.pagadoEstePeriodo,
+    // que SIEMPRE refleja el periodo actual sin importar qué rango se esté
+    // viendo, así que un mes pasado mostraba "$0 en gastos fijos" aunque el
+    // total del resumen sí los hubiera sumado.
+    for (const p of (report.fixedExpensePayments ?? [])) {
+      movements.push({
+        id: (p.id as string) ?? `fep-${Math.random()}`,
+        fecha: p.createdAt as string,
+        nombre: p.nombre as string,
+        tipo: "gastos_fijos",
+        tipoLabel: "Gasto fijo",
+        monto: p.montoPagado as number,
+        estado: 'pagado',
+      })
     }
 
     for (const e of report.impulseExpenses) {
@@ -238,7 +236,8 @@ export default function BalancePage() {
     }
 
     for (const sv of report.savingsHistory) {
-      if ((sv.tipo as string) === 'ahorro') {
+      const tipoSv = sv.tipo as string
+      if (tipoSv === 'ahorro') {
         movements.push({
           id: sv.id as string,
           fecha: sv.createdAt as string,
@@ -247,6 +246,20 @@ export default function BalancePage() {
           tipoLabel: "Ahorro",
           monto: sv.monto as number,
           estado: 'pagado',
+        })
+      } else if (tipoSv === 'retiro') {
+        // Retirar de un bolsillo devuelve el dinero al saldo disponible —
+        // antes esto no dejaba ningún rastro en el historial (el retiro era
+        // real, pero invisible en Balance/PDF).
+        movements.push({
+          id: sv.id as string,
+          fecha: sv.createdAt as string,
+          nombre: `Retiro de ahorro — ${sv.periodo as string}`,
+          tipo: "ahorros",
+          tipoLabel: "Retiro de ahorro",
+          monto: sv.monto as number,
+          estado: 'pagado',
+          direccion: 'entrada',
         })
       }
     }
@@ -363,7 +376,7 @@ export default function BalancePage() {
               </div>
 
               {chartData.length > 0 ? (
-                <div ref={evolutionChartRef} className="h-[220px] lg:h-[280px] bg-card">
+                <div className="h-[220px] lg:h-[280px] bg-card">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
@@ -410,7 +423,7 @@ export default function BalancePage() {
               <CardContent className="p-5">
                 <h2 className="font-bold text-sm mb-3">Distribución por categoría</h2>
                 {categoryData.length > 0 ? (
-                  <div ref={categoryChartRef} className="grid grid-cols-2 gap-4 items-center bg-card">
+                  <div className="grid grid-cols-2 gap-4 items-center bg-card">
                     <div className="h-[150px] relative">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -617,7 +630,7 @@ export default function BalancePage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Historial de movimientos</h3>
-                <ExportButtons report={report} chartRefs={{ evolution: evolutionChartRef, category: categoryChartRef }} />
+                <ExportButtons report={report} />
               </div>
 
               <div className="relative">
@@ -648,7 +661,7 @@ export default function BalancePage() {
                 <div className="space-y-2">
                   {filteredMovements.map(m => {
                     const isExpanded = expandedMovement === m.id
-                    const isIngreso = m.tipo === 'ingresos'
+                    const isIngreso = m.tipo === 'ingresos' || m.direccion === 'entrada'
                     const hasDetail = m.tipo === 'deudas' && m.abonoCapital != null
                     const meta = MOVEMENT_META[m.tipo]
                     const Icon = meta.icon

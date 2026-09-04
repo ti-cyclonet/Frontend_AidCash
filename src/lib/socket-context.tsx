@@ -13,7 +13,7 @@ import {
   useState, useCallback, ReactNode,
 } from "react"
 import { io, Socket } from "socket.io-client"
-import { getAccessToken } from "@/lib/api-client"
+import { getAccessToken, notificationsApi } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 
 // ─── Nombres de eventos (espejo del backend) ──────────────────────────────────
@@ -23,12 +23,16 @@ export const SOCKET_EVENTS = {
   INVITE_ACCEPTED:         "notification:invite_accepted",
   INVITE_REJECTED:         "notification:invite_rejected",
   SHARED_DEPOSIT:          "social:shared_deposit",
+  GARDEN_WATERED:          "social:garden_watered",
   LOAN_REQUESTED:          "loan:requested",
   LOAN_APPROVED:           "loan:approved",
   LOAN_REJECTED:           "loan:rejected",
   LOAN_PAYMENT:            "loan:payment_submitted",
   LOAN_PAYMENT_CONFIRMED:  "loan:payment_confirmed",
   LOAN_PAYMENT_REJECTED:   "loan:payment_rejected",
+  ROLE_CHANGE_REQUESTED:   "connection:role_change_requested",
+  ROLE_CHANGE_ACCEPTED:    "connection:role_change_accepted",
+  ROLE_CHANGE_REJECTED:    "connection:role_change_rejected",
   // Alertas inteligentes (locales, no vienen del socket)
   ALERT_PAYMENT_PROXIMITY: "alert:payment_proximity",
   ALERT_INCOME_REMINDER:   "alert:income_reminder",
@@ -103,6 +107,10 @@ const NOTIFICATION_EVENTS: SocketEvent[] = [
   SOCKET_EVENTS.LOAN_PAYMENT,
   SOCKET_EVENTS.LOAN_PAYMENT_CONFIRMED,
   SOCKET_EVENTS.LOAN_PAYMENT_REJECTED,
+  SOCKET_EVENTS.ROLE_CHANGE_REQUESTED,
+  SOCKET_EVENTS.ROLE_CHANGE_ACCEPTED,
+  SOCKET_EVENTS.ROLE_CHANGE_REJECTED,
+  SOCKET_EVENTS.GARDEN_WATERED,
 ]
 
 export function SocketProvider({ children }: { children: ReactNode }) {
@@ -111,6 +119,25 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [connected, setConnected] = useState(false)
   const [notifications, setNotifications] = useState<KiriNotification[]>([])
+
+  // ── Cargar notificaciones persistidas al iniciar sesión ────────────────────
+  // Antes esto arrancaba siempre vacío: un refresh o volver a abrir la pestaña
+  // borraba todo lo que hubiera en la campana, aunque el evento real (una
+  // invitación, un préstamo) sí hubiera ocurrido mientras tanto.
+  useEffect(() => {
+    if (!authUser) { setNotifications([]); return }
+    notificationsApi.list().then(({ data }) => {
+      if (data?.notifications) {
+        setNotifications(data.notifications.map(n => ({
+          id: n.id,
+          event: n.event as SocketEvent,
+          data: n.data,
+          read: n.read,
+          createdAt: new Date(n.createdAt),
+        })))
+      }
+    }).catch(() => {})
+  }, [authUser])
 
   // ── Conectar / desconectar según sesión ────────────────────────────────────
   useEffect(() => {
@@ -177,10 +204,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   const markAllRead = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    notificationsApi.markAllRead().catch(() => {})
   }, [])
 
   const clearNotifications = useCallback(() => {
     setNotifications([])
+    notificationsApi.clear().catch(() => {})
   }, [])
 
   const addNotification = useCallback((event: SocketEvent, data: Record<string, unknown>) => {

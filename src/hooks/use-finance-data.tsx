@@ -233,12 +233,12 @@ function useFinanceDataInternal() {
     // montoPagado: si no se especifica, se paga la cuota completa
     const realPaid = montoPagado ?? debt.cuotaPeriodo
 
-    // Llamar al backend — él se encarga de acumular montoPagadoEstePeriodo
+    // Llamar al backend — él se encarga de acumular montoPagadoEstePeriodo Y de
+    // descontar la billetera, todo en una sola transacción atómica (antes era
+    // una segunda llamada aparte que, si fallaba, dejaba la deuda "pagada" sin
+    // que el saldo disponible bajara).
     const { data } = await debtsApi.pay(debtId, realPaid)
     if (!data) return
-
-    // Deducir del wallet el monto REAL pagado
-    await userApi.walletDeduct(realPaid, 'obligaciones')
 
     // Actualizar estado local DIRECTAMENTE con los datos del backend (fuente de verdad)
     const backendDebt = data.debt as Record<string, unknown>
@@ -327,13 +327,11 @@ function useFinanceDataInternal() {
     const montoPorPeriodo = (fe as any).frecuencia === "quincenal" ? Math.round(fe.monto / 2) : fe.monto
     const realPaid = montoPagado ?? montoPorPeriodo
 
-    // Usar el endpoint /pay — el backend maneja la acumulación correctamente
+    // Usar el endpoint /pay — el backend maneja la acumulación Y, si NO se pagó
+    // con tarjeta, el descuento de cashBalance, todo en una sola transacción
+    // atómica (antes el descuento era una segunda llamada aparte que, si
+    // fallaba, dejaba el gasto "pagado" sin que el saldo disponible bajara).
     const { data: payResult } = await fixedExpensesApi.pay(id, realPaid)
-
-    // Si NO se pagó con tarjeta, deducir del cashBalance
-    if (!payResult?.pagoConTarjeta) {
-      await userApi.walletDeduct(realPaid, 'obligaciones')
-    }
 
     // Actualizar estado local con datos del backend (fuente de verdad)
     if (payResult?.fixedExpense) {

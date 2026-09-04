@@ -199,6 +199,13 @@ const EVENT_MESSAGES: Record<string, (data: Record<string, unknown>) => Notifica
     tag: 'loan-pay-rejected',
     sound: 'warning',
   }),
+  [SOCKET_EVENTS.GARDEN_WATERED]: (data) => ({
+    title: `💧 ${(data.fromName as string) ?? 'Alguien'} regó tu árbol`,
+    body: 'Entra a Kiri y sigue cuidando tus finanzas para que siga creciendo.',
+    url: '/jardin',
+    tag: 'garden-watered',
+    sound: 'success',
+  }),
 }
 
 /**
@@ -242,9 +249,11 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
       return null
     }
 
-    // Registrar SW de push
-    const registration = await navigator.serviceWorker.register('/sw-push.js', { scope: '/' })
-    await navigator.serviceWorker.ready
+    // El Service Worker ya lo registra next-pwa (sw.js, scope "/") al cargar la
+    // app — incluye la lógica de push fusionada (ver worker/index.ts). Registrar
+    // aquí un segundo SW distinto en el mismo scope lo reemplazaría (dos SW no
+    // pueden coexistir en el mismo scope), así que solo esperamos a que esté listo.
+    const registration = await navigator.serviceWorker.ready
 
     // Verificar si ya está suscrito
     let subscription = await registration.pushManager.getSubscription()

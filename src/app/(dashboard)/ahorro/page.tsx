@@ -22,9 +22,10 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { EmergencyFundSection } from "@/components/recommendations/emergency-fund"
-import { emergencyFundApi, userApi, sharedPocketsApi } from "@/lib/api-client"
+import { emergencyFundApi, userApi, sharedPocketsApi, savingsPocketsApi, type SavingsPocket as ApiSavingsPocket } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
+import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
@@ -75,7 +76,24 @@ const POCKET_COLORS: { value: PocketColor; bg: string; text: string; bar: string
   { value: "teal",       bg: "bg-teal-500/20",       text: "text-teal-600 dark:text-teal-400",       bar: "bg-teal-500",       ring: "ring-teal-500/30" },
 ]
 
-const POCKETS_KEY = "kiri_saving_pockets"
+/** El backend guarda icono/color como texto libre y no tiene "acumulado" ni
+ * "descripcion"/"tipoMeta" garantizados — este mapeo es el único lugar que
+ * traduce la forma de la API a la forma que usa esta pantalla. */
+function mapApiPocket(p: ApiSavingsPocket): SavingPocket {
+  return {
+    id: p.id,
+    nombre: p.nombre,
+    meta: Number(p.meta),
+    acumulado: Number(p.montoActual),
+    icono: (p.icono as PocketIcon) || "piggybank",
+    color: (p.color as PocketColor) || "mint",
+    descripcion: p.descripcion ?? undefined,
+    pagoAutomatico: p.pagoAutomatico,
+    tipoMeta: p.tipoMeta,
+    fechaLimite: p.fechaLimite ?? undefined,
+    createdAt: p.createdAt,
+  }
+}
 
 function getPocketIcon(icon: PocketIcon, className = "h-5 w-5") {
   const found = POCKET_ICONS.find(i => i.value === icon)
@@ -144,6 +162,7 @@ function AhorroContent() {
   const { savingsHistory, totalAhorrado, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
   const { user: authUser } = useAuth()
   const { allocation } = usePeriodBudget()
+  const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState<"ahorro" | "emergencia">("ahorro")
   // Sub-tab dentro de Ahorro
@@ -177,14 +196,18 @@ function AhorroContent() {
       setInsufficientSavingsOpen(true)
       return
     }
-    // Descontar del wallet
-    await userApi.walletDeduct(monto, 'ahorro')
+    // Descontar del wallet — si falla, no registrar el aporte en el fondo
+    const { error: deductError } = await userApi.walletDeduct(monto, 'ahorro')
+    if (deductError) {
+      toast({ title: "No se pudo registrar el aporte", description: "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
+      return
+    }
     // Registrar en fondo de emergencia
     const { data } = await emergencyFundApi.transaction(monto, "aporte")
     if (data) setFondoActual(data.fondoActual)
     // Disparar evento para refrescar wallet en otros componentes
     window.dispatchEvent(new Event("kiri:wallet-updated"))
-  }, [authUser?.id])
+  }, [authUser?.id, toast])
 
   const handleRetiro = useCallback(async (monto: number) => {
     if (!authUser?.id) return
@@ -193,18 +216,29 @@ function AhorroContent() {
     const { data } = await emergencyFundApi.transaction(monto, "retiro")
     if (data) setFondoActual(data.fondoActual)
     // Sumar al wallet (regresa al disponible)
-    await userApi.walletWithdraw(monto, 'ahorro')
+    const { error: withdrawError } = await userApi.walletWithdraw(monto, 'ahorro')
+    if (withdrawError) {
+      toast({ title: "El retiro quedó registrado pero no se reflejó en tu saldo", description: "Contacta soporte si el monto no aparece disponible.", variant: "destructive" })
+      return
+    }
     window.dispatchEvent(new Event("kiri:wallet-updated"))
-  }, [authUser?.id, fondoActual])
+  }, [authUser?.id, fondoActual, toast])
 
-  // ── Bolsillos (persistidos en localStorage) ────────────────────────────────
-  const [pockets, setPockets] = useState<SavingPocket[]>(() => {
-    if (typeof window === "undefined") return []
-    try { return JSON.parse(localStorage.getItem(POCKETS_KEY) ?? "[]") } catch { return [] }
-  })
+  // ── Bolsillos (persistidos en el backend — ver savingsPocketsApi) ───────────
+  // Antes vivían solo en localStorage: el dinero se descontaba de verdad de la
+  // billetera pero el bolsillo que "lo contenía" desaparecía al cambiar de
+  // dispositivo o limpiar datos del sitio. Ahora el servidor es la única
+  // fuente de verdad (la migración de datos viejos de localStorage la hace
+  // DataSyncInitializer al iniciar sesión).
+  const [pockets, setPockets] = useState<SavingPocket[]>([])
+  const [pocketsLoading, setPocketsLoading] = useState(true)
   useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem(POCKETS_KEY, JSON.stringify(pockets))
-  }, [pockets])
+    if (!authUser?.id) return
+    savingsPocketsApi.list().then(({ data }) => {
+      if (data?.pockets) setPockets(data.pockets.map(mapApiPocket))
+      setPocketsLoading(false)
+    }).catch(() => setPocketsLoading(false))
+  }, [authUser?.id])
 
   // ── Modal: nuevo bolsillo ─────────────────────────────────────────────────
   const [newPocketOpen, setNewPocketOpen] = useState(false)
@@ -268,36 +302,73 @@ function AhorroContent() {
     : 0
 
   // ── Handlers bolsillos ────────────────────────────────────────────────────
-  const handleCreatePocket = () => {
+  const handleCreatePocket = async () => {
     setSavingPocket(true)
-    const pocket: SavingPocket = {
-      id: Date.now().toString(),
+    const { data, error } = await savingsPocketsApi.create({
       nombre: pocketForm.nombre,
       meta: Number(pocketForm.meta) || 0,
-      acumulado: Number(pocketForm.acumuladoInicial) || 0,
-      icono: pocketForm.icono,
       color: pocketForm.color,
+      icono: pocketForm.icono,
       descripcion: pocketForm.descripcion || undefined,
       tipoMeta: pocketForm.tipoMeta,
       fechaLimite: pocketForm.tipoMeta === 'fecha' && pocketForm.fechaLimite ? pocketForm.fechaLimite : undefined,
-      createdAt: new Date().toISOString(),
+    })
+    if (error || !data?.pocket) {
+      setSavingPocket(false)
+      toast({ title: "No se pudo crear el bolsillo", description: "Intenta de nuevo.", variant: "destructive" })
+      return
     }
+    let pocket = mapApiPocket(data.pocket)
+
+    // Saldo inicial: sale de verdad de la billetera disponible, no aparece de
+    // la nada — se aplica con el mismo endpoint atómico que un aporte normal.
+    const inicial = Number(pocketForm.acumuladoInicial) || 0
+    if (inicial > 0) {
+      const dep = await savingsPocketsApi.deposit(pocket.id, inicial)
+      if (dep.data?.pocket) {
+        pocket = mapApiPocket(dep.data.pocket)
+        window.dispatchEvent(new Event("kiri:wallet-updated"))
+      } else {
+        toast({ title: "Bolsillo creado sin saldo inicial", description: "No tenías saldo suficiente para aplicarlo — puedes aportarlo después.", variant: "destructive" })
+      }
+    }
+
     setPockets(p => [...p, pocket])
     setSavingPocket(false)
     setNewPocketOpen(false)
     setPocketForm({ nombre: "", meta: "", descripcion: "", icono: "piggybank", color: "mint", acumuladoInicial: "", tipoMeta: "libre", fechaLimite: "" })
   }
 
-  const handleDeletePocket = (id: string) => setPockets(p => p.filter(x => x.id !== id))
+  const handleDeletePocket = async (id: string) => {
+    const { data, error } = await savingsPocketsApi.delete(id)
+    if (error) {
+      toast({ title: "No se pudo eliminar el bolsillo", description: "Intenta de nuevo.", variant: "destructive" })
+      return
+    }
+    setPockets(p => p.filter(x => x.id !== id))
+    // Si el bolsillo tenía saldo, el backend ya lo devolvió a la billetera.
+    if (data?.devuelto) window.dispatchEvent(new Event("kiri:wallet-updated"))
+  }
 
   const openEditPocket = (pocket: SavingPocket) => {
     setEditPocket(pocket)
     setEditForm({ nombre: pocket.nombre, meta: String(pocket.meta || ""), descripcion: pocket.descripcion || "" })
   }
 
-  const handleSaveEditPocket = () => {
+  const handleSaveEditPocket = async () => {
     if (!editPocket) return
-    setPockets(p => p.map(x => x.id === editPocket.id ? { ...x, nombre: editForm.nombre || x.nombre, meta: editForm.meta === "" ? 0 : Number(editForm.meta), descripcion: editForm.descripcion || undefined } : x))
+    const patch = {
+      nombre: editForm.nombre || editPocket.nombre,
+      meta: editForm.meta === "" ? 0 : Number(editForm.meta),
+      descripcion: editForm.descripcion || undefined,
+    }
+    const { data, error } = await savingsPocketsApi.update(editPocket.id, patch)
+    if (error || !data?.pocket) {
+      toast({ title: "No se pudo guardar el bolsillo", description: "Intenta de nuevo.", variant: "destructive" })
+      return
+    }
+    const updated = mapApiPocket(data.pocket)
+    setPockets(p => p.map(x => x.id === editPocket.id ? updated : x))
     setEditPocket(null)
   }
 
@@ -311,7 +382,7 @@ function AhorroContent() {
     const amt = Number(txAmount)
 
     if (txType === "aporte") {
-      // Verificar que hay saldo disponible antes de descontar
+      // Verificar que hay saldo disponible antes de intentar el aporte
       const { data: walletData } = await userApi.getWallet()
       const available = walletData?.wallet?.cashBalance ?? 0
       if (available <= 0 || amt > available) {
@@ -319,20 +390,30 @@ function AhorroContent() {
         setInsufficientSavingsOpen(true)
         return
       }
-      // Aportar al bolsillo de ahorro → descontar del sueldo real (cashBalance)
-      await userApi.walletDeduct(amt, 'ahorro')
-      // Registrar en historial de ahorro (skip wallet deduct para evitar doble deducción)
-      await addSavingsEntry(amt, "ahorro", true)
+      // Aportar: el backend descuenta la billetera Y suma el bolsillo en una
+      // sola transacción atómica — si algo falla, ninguno de los dos cambia.
+      const { data, error } = await savingsPocketsApi.deposit(txPocket.id, amt)
+      if (error || !data?.pocket) {
+        setSavingTx(false)
+        toast({ title: "No se pudo registrar el aporte", description: "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
+        return
+      }
+      setPockets(p => p.map(x => x.id === txPocket.id ? mapApiPocket(data.pocket) : x))
+      // El backend ya registró el historial (SavingsHistory) dentro de la
+      // misma transacción del depósito — no hace falta una segunda llamada
+      // aquí (antes SÍ hacía falta porque el endpoint no dejaba ningún rastro).
     } else {
-      // Retirar del bolsillo de ahorro → sumar al sueldo real (cashBalance)
-      await userApi.walletWithdraw(amt, 'ahorro')
+      // Retirar: mismo principio — el backend devuelve el dinero a la
+      // billetera Y resta del bolsillo en una sola transacción.
+      const { data, error } = await savingsPocketsApi.withdraw(txPocket.id, amt)
+      if (error || !data?.pocket) {
+        setSavingTx(false)
+        toast({ title: "No se pudo registrar el retiro", description: "Intenta de nuevo.", variant: "destructive" })
+        return
+      }
+      setPockets(p => p.map(x => x.id === txPocket.id ? mapApiPocket(data.pocket) : x))
     }
 
-    setPockets(p => p.map(x => {
-      if (x.id !== txPocket.id) return x
-      const nuevo = txType === "aporte" ? x.acumulado + amt : Math.max(0, x.acumulado - amt)
-      return { ...x, acumulado: nuevo }
-    }))
     setSavingTx(false)
     setTxPocket(null)
     setTxAmount("")
@@ -478,7 +559,11 @@ function AhorroContent() {
           {/* ── Sub-tab: Bolsillos ── */}
           {ahorroSubTab === "bolsillos" && (
             <div className="space-y-3">
-              {pockets.length === 0 ? (
+              {pocketsLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-xs text-muted-foreground">Cargando tus bolsillos...</p>
+                </div>
+              ) : pockets.length === 0 ? (
                 <div className="text-center py-8 space-y-3">
                   <div className="h-16 w-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
                     <PiggyBank className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
@@ -516,8 +601,11 @@ function AhorroContent() {
                                 </div>
                                 <div className="flex gap-1 shrink-0">
                                   <button onClick={() => {
-                                    const updated = pockets.map(p => p.id === pocket.id ? { ...p, pagoAutomatico: !p.pagoAutomatico } : p)
-                                    setPockets(updated)
+                                    const next = !pocket.pagoAutomatico
+                                    setPockets(p => p.map(x => x.id === pocket.id ? { ...x, pagoAutomatico: next } : x))
+                                    savingsPocketsApi.update(pocket.id, { pagoAutomatico: next }).then(({ error }) => {
+                                      if (error) setPockets(p => p.map(x => x.id === pocket.id ? { ...x, pagoAutomatico: !next } : x))
+                                    })
                                   }} title={pocket.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
                                     className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                                       pocket.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>

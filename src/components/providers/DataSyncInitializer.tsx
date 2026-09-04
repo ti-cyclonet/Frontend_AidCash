@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { syncLocalDataToDB } from "@/lib/api-client"
 
@@ -11,16 +11,20 @@ import { syncLocalDataToDB } from "@/lib/api-client"
  * En el primer render tras login, migra los datos que estaban en localStorage
  * (bolsillos de ahorro y categorías de presupuesto) hacia la base de datos.
  *
- * Solo se ejecuta una vez gracias al flag `kiri_local_data_synced` en localStorage.
- * No afecta el render ni bloquea la UI.
+ * Solo se ejecuta una vez gracias al flag `kiri_local_data_synced` en localStorage
+ * — la propia syncLocalDataToDB() lo reclama de forma síncrona apenas decide
+ * seguir, así que es seguro dejar que este efecto se dispare más de una vez
+ * (p. ej. bajo el doble-render de Strict Mode en desarrollo): la segunda vez
+ * simplemente encuentra el flag ya puesto y no hace nada. Un `ref` local aquí
+ * NO sirve para esto — Strict Mode cancela el primer timeout en su ciclo de
+ * cleanup+remount, y un ref ya "gastado" bloquea el segundo (real) intento
+ * antes de que llegue a dispararse, dejando la migración sin ejecutarse nunca.
  */
 export function DataSyncInitializer() {
   const { user } = useAuth()
-  const synced = useRef(false)
 
   useEffect(() => {
-    if (!user || synced.current) return
-    synced.current = true
+    if (!user) return
 
     // Ejecutar sincronización después de 1s para no competir con el render inicial
     const timer = setTimeout(async () => {

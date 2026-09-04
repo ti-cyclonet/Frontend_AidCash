@@ -13,6 +13,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api-client"
+import { looksLikeCreditCardName } from "@/lib/debt-utils"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -192,9 +193,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         acreedor: (selectedBank?.nombre ?? searchQuery) || "",
         diasPago: diasPago || "1",
         frecuenciaPago,
-        tipoDeuda: nombre.toLowerCase().includes('tarjeta') || nombre.toLowerCase().includes('visa') || nombre.toLowerCase().includes('mastercard')
-          ? 'TARJETA_CREDITO'
-          : 'PRESTAMO',
+        tipoDeuda: looksLikeCreditCardName(nombre) ? 'TARJETA_CREDITO' : 'PRESTAMO',
       })
     }
   }

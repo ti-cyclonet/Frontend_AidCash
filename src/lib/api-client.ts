@@ -536,7 +536,9 @@ export const missionsApi = {
 // ─── Support API ────────────────────────────────────────────────────────────
 
 export const supportApi = {
-  async create(data: { titulo: string; descripcion: string; imagenBase64?: string }) {
+  /** `imagenesBase64` acepta hasta 3 imágenes — el backend las adjunta todas
+   * al correo de soporte. */
+  async create(data: { titulo: string; descripcion: string; imagenesBase64?: string[] }) {
     return api<{ message: string }>('/support', {
       method: 'POST',
       body: data,
@@ -546,7 +548,7 @@ export const supportApi = {
 
 // ─── Reports API ──────────────────────────────────────────────────────────────
 
-export type Timeframe = 'week' | 'month' | 'year' | 'all'
+export type Timeframe = 'week' | 'month' | 'year' | 'all' | 'custom'
 
 export interface BalanceReport {
   timeframe: Timeframe
@@ -582,6 +584,7 @@ export interface BalanceReport {
   fixedExpenses: Record<string, unknown>[]
   incomeRecords: Record<string, unknown>[]
   debtPayments: Record<string, unknown>[]
+  fixedExpensePayments: Record<string, unknown>[]
 }
 
 // ─── Movimiento unificado — Balance/Historial ─────────────────────────────────
@@ -605,11 +608,22 @@ export interface Movement {
   saldoPosterior?: number
   tasaInteres?: string
   acreedor?: string
+  /** 'entrada' para movimientos que devuelven dinero al saldo disponible (ej.
+   * retirar de un bolsillo de ahorro) aunque su `tipo` no sea "ingresos" —
+   * sin esto se mostrarían en rojo como un gasto, cuando en realidad el
+   * dinero está volviendo a estar disponible. */
+  direccion?: 'entrada' | 'salida'
 }
 
 export const reportsApi = {
-  async getBalance(timeframe: Timeframe = 'month') {
-    return api<BalanceReport>(`/reports/balance?timeframe=${timeframe}`)
+  /** `range` permite pedir un rango de fechas exacto (timeframe='custom') —
+   * usado por la exportación de PDF por mes elegido, que antes no tenía
+   * forma de pedirle al backend otro periodo que no fuera "el actual". */
+  async getBalance(timeframe: Timeframe = 'month', range?: { from: string; to: string }) {
+    const qs = timeframe === 'custom' && range
+      ? `timeframe=custom&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`
+      : `timeframe=${timeframe}`
+    return api<BalanceReport>(`/reports/balance?${qs}`)
   },
 
   async deleteIncomeRecord(id: string) {
@@ -649,9 +663,16 @@ export const connectionsApi = {
   async remove(id: string) {
     return api(`/connections/${id}`, { method: 'DELETE' })
   },
-  async updateRole(id: string, role: 'FRIEND' | 'FAMILY' | 'PARTNER') {
-    return api<{ connection: Record<string, unknown> }>(`/connections/${id}/role`, {
-      method: 'PATCH', body: { role },
+  /** Propone cambiar el rol de la conexión — NO aplica al instante, queda
+   * pendiente hasta que la otra persona lo aprueba (ver `respondRole`). */
+  async requestRole(id: string, role: 'FRIEND' | 'FAMILY' | 'PARTNER') {
+    return api<{ connection: Record<string, unknown> }>(`/connections/${id}/role-request`, {
+      method: 'POST', body: { role },
+    })
+  },
+  async respondRole(id: string, accept: boolean) {
+    return api<{ connection: Record<string, unknown> }>(`/connections/${id}/role-respond`, {
+      method: 'POST', body: { accept },
     })
   },
   async getShared(connectionId: string) {
@@ -818,6 +839,10 @@ export interface SavingsPocket {
   montoActual: number
   color: string
   icono: string
+  descripcion?: string | null
+  pagoAutomatico: boolean
+  tipoMeta: 'libre' | 'fecha'
+  fechaLimite?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -829,7 +854,7 @@ export const savingsPocketsApi = {
   },
 
   /** Crear un nuevo bolsillo de ahorro */
-  async create(data: { nombre: string; meta?: number; montoActual?: number; color?: string; icono?: string }) {
+  async create(data: { nombre: string; meta?: number; montoActual?: number; color?: string; icono?: string; descripcion?: string; pagoAutomatico?: boolean; tipoMeta?: 'libre' | 'fecha'; fechaLimite?: string }) {
     return api<{ pocket: SavingsPocket }>('/savings-pockets', {
       method: 'POST',
       body: data,
@@ -844,13 +869,29 @@ export const savingsPocketsApi = {
     })
   },
 
-  /** Eliminar un bolsillo */
+  /** Eliminar un bolsillo — si tenía saldo, el backend lo devuelve a la billetera antes de borrar */
   async delete(id: string) {
-    return api(`/savings-pockets/${id}`, { method: 'DELETE' })
+    return api<{ message: string; devuelto: number }>(`/savings-pockets/${id}`, { method: 'DELETE' })
+  },
+
+  /** Aportar al bolsillo — descuenta la billetera y suma el bolsillo, atómico en el backend */
+  async deposit(id: string, monto: number) {
+    return api<{ pocket: SavingsPocket }>(`/savings-pockets/${id}/deposit`, {
+      method: 'POST',
+      body: { monto },
+    })
+  },
+
+  /** Retirar del bolsillo — devuelve el dinero a la billetera, atómico en el backend */
+  async withdraw(id: string, monto: number) {
+    return api<{ pocket: SavingsPocket }>(`/savings-pockets/${id}/withdraw`, {
+      method: 'POST',
+      body: { monto },
+    })
   },
 
   /** Bulk insert — usado en la migración desde localStorage */
-  async bulkCreate(pockets: { nombre: string; meta?: number; montoActual?: number; color?: string; icono?: string }[]) {
+  async bulkCreate(pockets: { nombre: string; meta?: number; montoActual?: number; color?: string; icono?: string; descripcion?: string; pagoAutomatico?: boolean; tipoMeta?: 'libre' | 'fecha'; fechaLimite?: string }[]) {
     return api<{ count: number; message: string }>('/savings-pockets/bulk', {
       method: 'POST',
       body: { pockets },
@@ -911,7 +952,11 @@ export const budgetCategoriesApi = {
 // ─── Sincronización localStorage → Base de Datos ──────────────────────────────
 
 const SYNC_FLAG_KEY = 'kiri_local_data_synced'
-const LS_POCKETS_KEY = 'kiri_savings_pockets'
+// OJO: la página de Ahorro siempre guardó sus bolsillos bajo "kiri_saving_pockets"
+// (singular) — esta constante decía "kiri_savings_pockets" (plural) por error, así
+// que esta migración nunca encontraba nada real que migrar. Debe apuntar a la
+// llave que el frontend REALMENTE escribe, no a la que "debería" ser.
+const LS_POCKETS_KEY = 'kiri_saving_pockets'
 const LS_CATEGORIES_KEY = 'kiri_budget_categories'
 
 /**
@@ -922,9 +967,24 @@ const LS_CATEGORIES_KEY = 'kiri_budget_categories'
  * localStorage para evitar duplicidades.
  *
  * Debe llamarse UNA SOLA VEZ tras el primer login exitoso post-migración.
- * Usa un flag (kiri_local_data_synced) para no repetir la operación.
+ * Usa un flag (kiri_local_data_synced) para no repetir la operación entre
+ * sesiones — pero ese flag solo se escribe al TERMINAR, así que si dos
+ * llamadas caen casi al mismo tiempo dentro de la misma pestaña (p. ej. el
+ * doble-render de Strict Mode en desarrollo), ambas lo verían todavía sin
+ * poner y duplicarían el bulk-insert. `syncInFlight` cierra esa ventana:
+ * la segunda llamada reutiliza la promesa de la primera en vez de repetir
+ * el trabajo, sin sacrificar el reintento en una sesión futura si la
+ * primera falló de verdad.
  */
+let syncInFlight: Promise<{ pocketsSynced: number; categoriesSynced: number }> | null = null
+
 export async function syncLocalDataToDB(): Promise<{ pocketsSynced: number; categoriesSynced: number }> {
+  if (syncInFlight) return syncInFlight
+  syncInFlight = syncLocalDataToDBImpl().finally(() => { syncInFlight = null })
+  return syncInFlight
+}
+
+async function syncLocalDataToDBImpl(): Promise<{ pocketsSynced: number; categoriesSynced: number }> {
   if (typeof window === 'undefined') return { pocketsSynced: 0, categoriesSynced: 0 }
 
   // Si ya se sincronizó previamente, no repetir
@@ -941,16 +1001,25 @@ export async function syncLocalDataToDB(): Promise<{ pocketsSynced: number; cate
     if (rawPockets) {
       const localPockets = JSON.parse(rawPockets) as Array<{
         name?: string; nombre?: string; goal?: number; meta?: number;
-        currentAmount?: number; montoActual?: number; color?: string; icon?: string; icono?: string
+        // "acumulado" es el nombre real que usa (y siempre usó) la página de
+        // Ahorro — currentAmount/montoActual son alias de compatibilidad.
+        acumulado?: number; currentAmount?: number; montoActual?: number;
+        color?: string; icon?: string; icono?: string;
+        descripcion?: string; pagoAutomatico?: boolean;
+        tipoMeta?: 'libre' | 'fecha'; fechaLimite?: string
       }>
 
       if (localPockets.length > 0) {
         const pocketsPayload = localPockets.map(p => ({
           nombre: p.nombre || p.name || 'Sin nombre',
           meta: p.meta ?? p.goal ?? 0,
-          montoActual: p.montoActual ?? p.currentAmount ?? 0,
+          montoActual: p.acumulado ?? p.montoActual ?? p.currentAmount ?? 0,
           color: p.color || '#10B981',
           icono: p.icono || p.icon || 'piggy-bank',
+          descripcion: p.descripcion,
+          pagoAutomatico: p.pagoAutomatico,
+          tipoMeta: p.tipoMeta,
+          fechaLimite: p.fechaLimite,
         }))
 
         const res = await savingsPocketsApi.bulkCreate(pocketsPayload)
@@ -1112,5 +1181,29 @@ export const projectionsApi = {
   /** Obtiene la proyección de gasto actual del usuario */
   async getSpending() {
     return api<{ projection: SpendingProjection }>('/projections/spending')
+  },
+}
+
+// ─── Notificaciones (campana) — persistidas en el backend ─────────────────────
+// `event`/`data` tienen la misma forma que espera KiriNotification en
+// socket-context.tsx, para no tener que reescribir cómo se arma cada tipo.
+
+export interface StoredNotification {
+  id: string
+  event: string
+  data: Record<string, unknown>
+  read: boolean
+  createdAt: string
+}
+
+export const notificationsApi = {
+  async list() {
+    return api<{ notifications: StoredNotification[] }>('/notifications')
+  },
+  async markAllRead() {
+    return api('/notifications/read-all', { method: 'POST' })
+  },
+  async clear() {
+    return api('/notifications', { method: 'DELETE' })
   },
 }

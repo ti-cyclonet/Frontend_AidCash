@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { userApi, WalletState } from "@/lib/api-client"
@@ -45,59 +46,8 @@ function AnimatedAmount({ value, formatAmount, className }: { value: number; for
   )
 }
 
-// ─── Counting Animation (números que suben/bajan como odómetro) ───────────────
-
-function CountingAmount({ value, formatAmount, className, duration = 1600 }: {
-  value: number; formatAmount: (n: number) => string; className?: string; duration?: number
-}) {
-  const [display, setDisplay] = useState(value)
-  const prevRef = useRef(value)
-  const frameRef = useRef<number>(0)
-  const [flash, setFlash] = useState<"up" | "down" | null>(null)
-
-  useEffect(() => {
-    const from = prevRef.current
-    const to = value
-    if (from === to) return
-
-    setFlash(to > from ? "up" : "down")
-    const startTime = performance.now()
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime
-      const progress = Math.min(elapsed / duration, 1)
-      // Ease in-out sine para un efecto suave y agradable
-      const eased = -(Math.cos(Math.PI * progress) - 1) / 2
-      const current = Math.round(from + (to - from) * eased)
-      setDisplay(current)
-
-      if (progress < 1) {
-        frameRef.current = requestAnimationFrame(animate)
-      } else {
-        setDisplay(to)
-        prevRef.current = to
-        setTimeout(() => setFlash(null), 800)
-      }
-    }
-
-    frameRef.current = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(frameRef.current)
-  }, [value, duration])
-
-  return (
-    <span className={cn(
-      "inline-block transition-all duration-500",
-      flash === "up" && "text-emerald-300 drop-shadow-[0_0_12px_rgba(16,185,129,0.6)]",
-      flash === "down" && "text-red-300 drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]",
-      className
-    )}>
-      {formatAmount(display)}
-    </span>
-  )
-}
-
 // ─── Balance Aura (delta flotante) ─────────────────────────────────────────────
-// Envuelve el número real (CountingAmount, sin tocarlo) y reacciona a cambios
+// Envuelve el número real (OdometerAmount, sin tocarlo) y reacciona a cambios
 // reales del saldo — nada de botones "simular", la animación se dispara sola
 // cuando `total` cambia de verdad (registrar ingreso, pagar obligación, etc.).
 
@@ -109,12 +59,22 @@ function BalanceAura({ total, formatAmount, children }: {
   const pulseTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [pulse, setPulse] = useState<"up" | "down" | null>(null)
   const [delta, setDelta] = useState<{ amount: number; id: number } | null>(null)
+  // La billetera arranca en 0 mientras carga y recién después salta al saldo
+  // real — sin este guard, ESE salto disparaba el aura + el globito flotante
+  // cada vez que se entraba o refrescaba la página, como si el usuario
+  // acabara de recibir/gastar esa plata. Se absorbe en silencio el primero.
+  const skipNextRef = useRef(true)
 
   useEffect(() => {
     const prev = prevRef.current
     if (total === prev) return
     const amount = total - prev
     prevRef.current = total
+
+    if (skipNextRef.current) {
+      skipNextRef.current = false
+      return
+    }
 
     const direction: "up" | "down" = amount > 0 ? "up" : "down"
     setPulse(direction)
@@ -455,7 +415,7 @@ export function BilleteraTab() {
         <CardContent className="p-6 text-center space-y-2">
           <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Sueldo Real (disponible)</p>
           <BalanceAura total={total > 0 ? total : 0} formatAmount={formatAmount}>
-            <CountingAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white block" />
+            <OdometerAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white" />
           </BalanceAura>
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
           <div className="flex items-center justify-center gap-3 pt-3">
