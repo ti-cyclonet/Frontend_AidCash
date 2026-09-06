@@ -29,7 +29,7 @@ import { analyzeFinances } from "@/lib/recommendations"
 import { userApi, WalletState, loansApi } from "@/lib/api-client"
 import { debtsApi, fixedExpensesApi, impulseApi, budgetCategoriesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
-import { CreditCardSelector } from "@/components/obligaciones/CreditCardSelector"
+import { BudgetCategorySelector } from "@/components/obligaciones/BudgetCategorySelector"
 import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
 import { isCreditCard } from "@/lib/debt-utils"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
@@ -55,8 +55,9 @@ interface DebtForm {
   tipoPago: "unica" | "varias"
   fechaFinalProyectada: string
   numCuotas: string
+  budgetCategoryId?: string | null
 }
-interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string }
+interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string; yaPagoEstePeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }
 
 const emptyDebtForm: DebtForm = {
   nombre: "", montoTotal: "", saldoRestante: "", cuotaPeriodo: "", diasPago: "",
@@ -159,6 +160,10 @@ export default function ObligacionesPage() {
   const [debtTcCuotas, setDebtTcCuotas] = useState("1")
   const [selectedDebtTC, setSelectedDebtTC] = useState<string | null>(null)
 
+  // ── Modal "Configurar pago automático" (solo gastos fijos) ────────────────
+  const [autoPayTarget, setAutoPayTarget] = useState<FixedExpense | null>(null)
+  const [autoPaySelectedTC, setAutoPaySelectedTC] = useState<string | null>(null)
+
   // ── Saldo insuficiente modal ───────────────────────────────────────────────
   const [insufficientOpen, setInsufficientOpen] = useState(false)
   const [insufficientTarget, setInsufficientTarget] = useState<{ type: "debt" | "fixed"; id: string; nombre: string; monto: number } | null>(null)
@@ -231,6 +236,9 @@ export default function ObligacionesPage() {
   const [expMonto, setExpMonto] = useState("")
   const [expSaving, setExpSaving] = useState(false)
   const [expCategoria, setExpCategoria] = useState<string | null>(null)
+  const [expShowTCOptions, setExpShowTCOptions] = useState(false)
+  const [expSelectedTC, setExpSelectedTC] = useState<string | null>(null)
+  const [expTcCuotas, setExpTcCuotas] = useState("1")
   const [addDebtForm, setAddDebtForm] = useState<DebtForm>(emptyDebtForm)
   const [addFixedForm, setAddFixedForm] = useState<FixedForm>(emptyFixedForm)
   const [saving, setSaving] = useState(false)
@@ -423,7 +431,15 @@ export default function ObligacionesPage() {
         toast({ title: "Faltan datos", description: "Completa nombre, monto y día(s) de pago.", variant: "destructive" })
         return
       }
-      await addFixedExpense({ nombre: addFixedForm.nombre, monto: Number(addFixedForm.monto), fechaCorte: addFixedForm.diasPago, frecuencia: addFixedForm.frecuencia })
+      await addFixedExpense({
+        nombre: addFixedForm.nombre,
+        monto: Number(addFixedForm.monto),
+        fechaCorte: addFixedForm.diasPago,
+        frecuencia: addFixedForm.frecuencia,
+        yaPagoEstePeriodo: addFixedForm.yaPagoEstePeriodo,
+        tarjetaVinculadaId: addFixedForm.tarjetaVinculadaId,
+        budgetCategoryId: addFixedForm.budgetCategoryId,
+      })
       setAddFixedForm(emptyFixedForm)
     }
     setSaving(false)
@@ -444,6 +460,7 @@ export default function ObligacionesPage() {
       tipoPago: "unica",
       fechaFinalProyectada: "",
       numCuotas: "",
+      budgetCategoryId: debt.budgetCategoryId ?? null,
     })
   }
 
@@ -468,6 +485,7 @@ export default function ObligacionesPage() {
       saldoRestante: newSaldoRestante || newMontoTotal,
       diasPago: editDebtForm.diasPago,
       frecuenciaPago: editDebtForm.frecuencia,
+      budgetCategoryId: editDebtForm.budgetCategoryId ?? null,
     }
     if (scope === "permanente") patch.cuotaPeriodo = Number(editDebtForm.cuotaPeriodo)
     await updateDebt(editDebt.id, patch)
@@ -479,7 +497,14 @@ export default function ObligacionesPage() {
   // ── Handlers Edit Fixed ───────────────────────────────────────────────────
   const openEditFixed = (fe: FixedExpense) => {
     setEditFixed(fe)
-    setEditFixedForm({ nombre: fe.nombre, monto: String(fe.monto), frecuencia: (fe.frecuencia as "mensual" | "quincenal") ?? "mensual", diasPago: fe.fechaCorte })
+    setEditFixedForm({
+      nombre: fe.nombre,
+      monto: String(fe.monto),
+      frecuencia: (fe.frecuencia as "mensual" | "quincenal") ?? "mensual",
+      diasPago: fe.fechaCorte,
+      tarjetaVinculadaId: fe.tarjetaVinculadaId ?? null,
+      budgetCategoryId: fe.budgetCategoryId ?? null,
+    })
   }
 
   const handleEditFixed = async () => {
@@ -490,6 +515,8 @@ export default function ObligacionesPage() {
       monto: Number(editFixedForm.monto),
       fechaCorte: editFixedForm.diasPago,
       frecuencia: editFixedForm.frecuencia,
+      tarjetaVinculadaId: editFixedForm.tarjetaVinculadaId ?? null,
+      budgetCategoryId: editFixedForm.budgetCategoryId ?? null,
     })
     setSavingFixed(false)
     setEditFixed(null)
@@ -638,6 +665,7 @@ export default function ObligacionesPage() {
                 <FixedCard
                   key={fe.id}
                   item={fe}
+                  tarjetaNombre={debts.find(d => d.id === fe.tarjetaVinculadaId)?.nombre}
                   formatAmount={formatAmount}
                   onEdit={() => openEditFixed(fe)}
                   onDelete={() => setDeleteTarget({ type: "fixed", id: fe.id, nombre: fe.nombre })}
@@ -656,8 +684,9 @@ export default function ObligacionesPage() {
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
                   isPeriodPriority={periodPriorityIds.has(fe.id)}
-                  onToggleAutoPay={async () => {
-                    await updateFixedExpense(fe.id, { pagoAutomatico: !fe.pagoAutomatico })
+                  onToggleAutoPay={() => {
+                    setAutoPaySelectedTC(fe.tarjetaVinculadaId ?? null)
+                    setAutoPayTarget(fe)
                   }}
                 />
               ))}
@@ -1000,6 +1029,104 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ═══ MODAL CONFIGURAR PAGO AUTOMÁTICO (gastos fijos) ═══
+          Reemplaza el toggle instantáneo del botón ⚡: ahora pregunta si el pago
+          automático se hará con el disponible real o con una tarjeta de crédito
+          (y en ese caso, con cuál), y permite reabrir para cambiarlo o apagarlo. */}
+      <Dialog open={!!autoPayTarget} onOpenChange={v => { if (!v) { setAutoPayTarget(null); setAutoPaySelectedTC(null) } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pago automático</DialogTitle>
+            <DialogDescription>Gasto fijo: <strong>{autoPayTarget?.nombre}</strong></DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            {autoPayTarget?.pagoAutomatico && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
+                Activo, pagando con{" "}
+                <strong>
+                  {autoPayTarget.tarjetaVinculadaId
+                    ? debts.find(d => d.id === autoPayTarget.tarjetaVinculadaId)?.nombre ?? "una tarjeta"
+                    : "tu disponible"}
+                </strong>.
+              </p>
+            )}
+
+            <Button
+              type="button"
+              onClick={async () => {
+                if (!autoPayTarget) return
+                await updateFixedExpense(autoPayTarget.id, { pagoAutomatico: true, tarjetaVinculadaId: null })
+                setAutoPayTarget(null); setAutoPaySelectedTC(null)
+              }}
+              variant="outline"
+              className={cn("w-full h-12 rounded-2xl border-2 font-bold text-sm gap-2 justify-start px-4",
+                autoPayTarget?.pagoAutomatico && !autoPayTarget?.tarjetaVinculadaId
+                  ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald"
+                  : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+              )}
+            >
+              <WalletIcon className="h-4 w-4" /> Con tu disponible
+            </Button>
+
+            {(() => {
+              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+              if (tarjetas.length === 0) return null
+              return (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-muted-foreground px-1 uppercase tracking-wide">O con una tarjeta de crédito</p>
+                  {tarjetas.map(tc => (
+                    <button
+                      key={tc.id}
+                      type="button"
+                      onClick={() => setAutoPaySelectedTC(tc.id === autoPaySelectedTC ? null : tc.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
+                        autoPaySelectedTC === tc.id
+                          ? "border-amber-500 bg-amber-500/10"
+                          : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
+                      )}
+                    >
+                      <div>
+                        <p className="text-xs font-bold">{tc.nombre}</p>
+                        <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-500">{autoPaySelectedTC === tc.id ? "✓" : "Seleccionar"}</span>
+                    </button>
+                  ))}
+                  {autoPaySelectedTC && (
+                    <Button
+                      onClick={async () => {
+                        if (!autoPayTarget) return
+                        await updateFixedExpense(autoPayTarget.id, { pagoAutomatico: true, tarjetaVinculadaId: autoPaySelectedTC })
+                        setAutoPayTarget(null); setAutoPaySelectedTC(null)
+                      }}
+                      className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
+                    >
+                      Confirmar con esta tarjeta
+                    </Button>
+                  )}
+                </div>
+              )
+            })()}
+
+            {autoPayTarget?.pagoAutomatico && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={async () => {
+                  if (!autoPayTarget) return
+                  await updateFixedExpense(autoPayTarget.id, { pagoAutomatico: false, tarjetaVinculadaId: null })
+                  setAutoPayTarget(null); setAutoPaySelectedTC(null)
+                }}
+                className="w-full text-red-500 hover:text-red-600 hover:bg-red-500/5 font-bold h-10 rounded-xl"
+              >
+                Desactivar pago automático
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Saldo Insuficiente Modal */}
       <Dialog open={insufficientOpen} onOpenChange={v => { if (!v) { setInsufficientOpen(false); setInsufficientTarget(null) } }}>
         <DialogContent className="sm:max-w-lg">
@@ -1247,6 +1374,8 @@ export default function ObligacionesPage() {
                     saldoRestante: data.saldoActual,
                     bankEntityId: data.bankEntityId,
                     tipoDeuda: data.tipoDeuda,
+                    yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+                    budgetCategoryId: data.budgetCategoryId,
                   })
                   setSaving(false)
                   setIsAddOpen(false)
@@ -1254,7 +1383,7 @@ export default function ObligacionesPage() {
               />
             ) : (
               <>
-                <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} />
+                <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} showDueQuestion />
                 <DialogFooter className="gap-2 pt-2">
                   <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
                   <Button onClick={handleAdd} disabled={saving} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
@@ -1341,7 +1470,7 @@ export default function ObligacionesPage() {
       </Dialog>
 
       {/* ═══ MODAL REGISTRAR GASTO (directo desde Obligaciones) ═══ */}
-      <Dialog open={expenseModalOpen} onOpenChange={v => { if (!v) { setExpenseModalOpen(false); setExpNombre(""); setExpMonto(""); setExpCategoria(null) } }}>
+      <Dialog open={expenseModalOpen} onOpenChange={v => { if (!v) { setExpenseModalOpen(false); setExpNombre(""); setExpMonto(""); setExpCategoria(null); setExpShowTCOptions(false); setExpSelectedTC(null); setExpTcCuotas("1") } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1404,14 +1533,73 @@ export default function ObligacionesPage() {
                 </div>
               </div>
             )}
-            {/* Selector de tarjeta de crédito */}
-            <CreditCardSelector value={null} onChange={() => {}} />
+            {/* Pagar con tarjeta de crédito: es un consumo más, con la misma
+                lógica de tarjeta+cuotas que pagar una deuda/gasto fijo con TC. */}
+            {(() => {
+              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+              if (tarjetas.length === 0) return null
+              return (
+                <div className="space-y-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setExpShowTCOptions(v => !v); setExpSelectedTC(null); setExpTcCuotas("1") }}
+                    className="w-full h-11 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
+                  >
+                    <CircleDollarSign className="h-4 w-4" />
+                    Pagar con Tarjeta de Crédito
+                  </Button>
+                  {expShowTCOptions && (
+                    <div className="space-y-3 pl-2 pt-1">
+                      {tarjetas.map(tc => (
+                        <button
+                          key={tc.id}
+                          type="button"
+                          onClick={() => setExpSelectedTC(tc.id === expSelectedTC ? null : tc.id)}
+                          className={cn(
+                            "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
+                            expSelectedTC === tc.id
+                              ? "border-amber-500 bg-amber-500/10"
+                              : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
+                          )}
+                        >
+                          <div>
+                            <p className="text-xs font-bold">{tc.nombre}</p>
+                            <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)} · Cuota: {formatAmount(tc.cuotaPeriodo)}</p>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-500">{expSelectedTC === tc.id ? "✓" : "Seleccionar"}</span>
+                        </button>
+                      ))}
+                      {expSelectedTC && (
+                        <div className="space-y-1.5 pt-2 border-t border-border/50">
+                          <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="48"
+                            value={expTcCuotas}
+                            onChange={e => setExpTcCuotas(e.target.value)}
+                            className="h-10 rounded-xl text-center font-bold"
+                          />
+                          {Number(expMonto) > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Se sumará <strong>{formatAmount(Math.round(Number(expMonto) / (Number(expTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {expTcCuotas} {Number(expTcCuotas) === 1 ? "mes" : "meses"}.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
           <DialogFooter className="gap-2 pt-2">
             <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>Cancelar</Button>
             <Button
               onClick={async () => {
                 if (!expNombre || !expMonto || Number(expMonto) <= 0) return
+                if (expShowTCOptions && !expSelectedTC) return
                 setExpSaving(true)
                 const hormigaKeywords = ['café', 'cafe', 'starbucks', 'uber', 'taxi', 'cerveza', 'bar', 'snack', 'helado', 'domicilio', 'rappi', 'pizza', 'hamburguesa', 'cine']
                 const isHormiga = hormigaKeywords.some(k => expNombre.toLowerCase().includes(k))
@@ -1425,7 +1613,10 @@ export default function ObligacionesPage() {
                 // se etiqueta en el nombre (así la reconoce budget-category-spend.ts para
                 // el gasto por categoría), y a la API se le manda siempre 'otro'.
                 const nombre = expCategoria ? `${withHormiga} [${expCategoria}]` : withHormiga
-                const result = await addImpulseExpense({ nombre, monto: Number(expMonto), categoria: 'otro' })
+                const result = await addImpulseExpense({
+                  nombre, monto: Number(expMonto), categoria: 'otro',
+                  ...(expSelectedTC ? { tarjetaId: expSelectedTC, cuotas: Number(expTcCuotas) || 1 } : {}),
+                })
                 setExpSaving(false)
                 if (!result) {
                   toast({ title: "No se pudo registrar el gasto", description: "Intenta de nuevo.", variant: "destructive" })
@@ -1433,10 +1624,11 @@ export default function ObligacionesPage() {
                 }
                 setExpenseModalOpen(false)
                 setExpNombre(""); setExpMonto(""); setExpCategoria(null)
+                setExpShowTCOptions(false); setExpSelectedTC(null); setExpTcCuotas("1")
                 const { data } = await userApi.getWallet()
                 if (data) setWallet(data.wallet)
               }}
-              disabled={expSaving || !expNombre || !expMonto || Number(expMonto) <= 0}
+              disabled={expSaving || !expNombre || !expMonto || Number(expMonto) <= 0 || (expShowTCOptions && !expSelectedTC)}
               className="bg-kiri-emerald text-white font-bold rounded-xl px-6"
             >
               {expSaving ? "Guardando..." : "Registrar"}
@@ -1645,8 +1837,8 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
-  item: FixedExpense; formatAmount: (n: number) => string
+function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
+  item: FixedExpense; tarjetaNombre?: string; formatAmount: (n: number) => string
   onEdit: () => void; onDelete: () => void; onTogglePaid: () => void; onUndoPay: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
@@ -1689,14 +1881,22 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoP
                 <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
                   {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
                   {" · "}{item.frecuencia === 'quincenal' ? 'Quincenal' : 'Mensual'}
-                  {item.pagoAutomatico && <span className="ml-1.5 text-amber-500">⚡ Auto</span>}
+                  {item.pagoAutomatico && (
+                    <span className="ml-1.5 text-amber-500">⚡ Auto{tarjetaNombre ? " con TC" : ""}</span>
+                  )}
                 </p>
               )}
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
             {item.frecuencia !== 'quincenal' && (
-            <button onClick={onToggleAutoPay} title={item.pagoAutomatico ? "Pago automático activado: se paga solo al registrar tu sueldo en Billetera" : "Pagarlo solo al registrar tu sueldo en Billetera"}
+            <button onClick={onToggleAutoPay} title={
+              item.pagoAutomatico
+                ? tarjetaNombre
+                  ? `Pago automático con ${tarjetaNombre}. Toca para cambiarlo.`
+                  : "Pago automático con tu disponible. Toca para cambiarlo."
+                : "Configurar pago automático"
+            }
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 item.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
@@ -1716,7 +1916,14 @@ function FixedCard({ item, formatAmount, onEdit, onDelete, onTogglePaid, onUndoP
 
         {!hidden ? (
           <div>
-            <p className="text-xl font-black">{formatAmount(item.monto)}</p>
+            <p className="text-xl font-black">
+              {item.pagadoEstePeriodo && montoPagado > 0 ? formatAmount(montoPagado) : formatAmount(item.monto)}
+            </p>
+            {/* Si pagó más (o menos) que la cuota configurada, que quede claro cuál
+                era la cuota — antes esto se ocultaba en cuanto quedaba "pagado". */}
+            {item.pagadoEstePeriodo && montoPagado > 0 && montoPagado !== item.monto && (
+              <p className="text-[9px] text-muted-foreground mt-0.5">Cuota: {formatAmount(item.monto)}</p>
+            )}
             {isPartiallyPaid && (
               <p className="text-[10px] text-amber-500 font-bold mt-0.5">
                 Pagado: {formatAmount(montoPagado)} · Falta: {formatAmount(remaining)}
@@ -1854,6 +2061,8 @@ function DebtFormFields({
         </p>
       </div>
 
+      <BudgetCategorySelector value={form.budgetCategoryId} onChange={v => set({ budgetCategoryId: v })} />
+
       {/* Cálculo reactivo */}
       {cuotasEstimadas && cuotasEstimadas > 0 && (
         <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-2xl p-3 flex items-center gap-3">
@@ -1876,11 +2085,31 @@ function DebtFormFields({
 function FixedFormFields({
   form,
   onChange,
+  showDueQuestion,
 }: {
   form: FixedForm
   onChange: (f: FixedForm) => void
+  /** Solo tiene sentido al crear — al editar, "pagado este periodo" ya se
+   * calcula solo a partir de pagos reales, no de esta pregunta. */
+  showDueQuestion?: boolean
 }) {
   const set = (patch: Partial<FixedForm>) => onChange({ ...form, ...patch })
+
+  // Mismo criterio que en DebtRegistrationForm: si el día (o alguno de los
+  // dos días, en quincenal) ya pasó este periodo o es hoy, preguntar si esa
+  // cuota ya está paga — si no, el gasto nace marcado "vencido" con una
+  // fecha que en realidad ya se resolvió.
+  const dueQuestion = useMemo(() => {
+    if (!showDueQuestion || !form.diasPago) return null
+    const info = getNextPaymentInfo(form.diasPago, false)
+    if (info.status === "vencido") return "vencido" as const
+    if (info.status === "proximo" && info.daysUntil === 0) return "hoy" as const
+    return null
+  }, [showDueQuestion, form.diasPago])
+
+  useEffect(() => {
+    if (!dueQuestion && form.yaPagoEstePeriodo) set({ yaPagoEstePeriodo: false })
+  }, [dueQuestion])
 
   return (
     <div className="space-y-4">
@@ -1950,11 +2179,41 @@ function FixedFormFields({
         </p>
       </div>
 
-      {/* Tarjeta vinculada */}
-      <CreditCardSelector
-        value={(form as any).tarjetaVinculadaId ?? null}
-        onChange={v => set({ tarjetaVinculadaId: v } as any)}
-      />
+      {dueQuestion && (
+        <div className="rounded-2xl border-2 border-amber-400/30 bg-amber-500/5 p-3 space-y-2">
+          <p className="text-xs font-bold">
+            {dueQuestion === "hoy"
+              ? "Esta cuota vence hoy. ¿Ya pagaste?"
+              : "El día de pago de este periodo ya pasó. ¿Ya pagaste esta cuota?"}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => set({ yaPagoEstePeriodo: true })}
+              className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+                form.yaPagoEstePeriodo ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+              )}
+            >
+              {dueQuestion === "hoy" ? "Sí, ya pagué" : "Sí, ya la pagué"}
+            </button>
+            <button
+              type="button"
+              onClick={() => set({ yaPagoEstePeriodo: false })}
+              className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+                !form.yaPagoEstePeriodo ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
+              )}
+            >
+              {dueQuestion === "hoy" ? "No, vence hoy" : "No, está vencida"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* La tarjeta vinculada para pago automático ya no se elige aquí: se
+          configura desde el botón ⚡ de la lista, junto con activar/cambiar
+          el pago automático (ver modal "Configurar pago automático"). */}
+
+      <BudgetCategorySelector value={form.budgetCategoryId} onChange={v => set({ budgetCategoryId: v })} />
     </div>
   )
 }

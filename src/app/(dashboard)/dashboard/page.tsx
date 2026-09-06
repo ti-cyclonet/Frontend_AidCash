@@ -73,29 +73,23 @@ export default function DashboardPage() {
   // Saldo total real
   const saldoTotal = wallet.cashBalance
 
-  // ═══ DISTRIBUCIÓN REAL basada en Sueldo Real (cashBalance) vs Obligaciones del periodo ═══
-  // Si cashBalance es 0, no hay nada que distribuir. Solo se muestran obligaciones pendientes.
-  const realIncome = saldoTotal
-  const realObligations = totalPending
-
-  const realAlloc = useMemo(() => {
-    if (realIncome <= 0) return { obligPct: 0, savPct: 0, freePct: 0, debtPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtAmt: 0 }
-    const obligPct = Math.min(100, (realObligations / realIncome) * 100)
-    const isOverloaded = realObligations >= realIncome
-    const remanente = Math.max(0, realIncome - realObligations)
-    if (isOverloaded) return { obligPct, savPct: 0, freePct: 0, debtPct: 0, obligAmt: realObligations, savAmt: 0, freeAmt: 0, debtAmt: 0 }
-    const remPct = (remanente / realIncome) * 100
-    const tgtSav = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
-    const savAmt = Math.min((tgtSav / 100) * realIncome, remanente)
-    const savPct = (savAmt / realIncome) * 100
-    const afterSav = remanente - savAmt
-    const maxFree = (15 / 100) * realIncome
-    const freeAmt = Math.min(afterSav, maxFree)
-    const freePct = (freeAmt / realIncome) * 100
-    const debtAmt = afterSav - freeAmt
-    const debtPct = (debtAmt / realIncome) * 100
-    return { obligPct, savPct, freePct, debtPct, obligAmt: realObligations, savAmt, freeAmt, debtAmt }
-  }, [realIncome, realObligations])
+  // La distribución que se muestra acá DEBE ser la misma `allocation` de
+  // usePeriodBudget() que ya usan Ahorro/Presupuesto/Obligaciones — antes este
+  // componente recalculaba su propia versión ("realAlloc") a partir de
+  // wallet.cashBalance en vez del ingreso del periodo, así que el "Ahorro"
+  // que mostraba el dashboard nunca coincidía con el "Sugerido este periodo"
+  // de un bolsillo de ahorro (que sí lee de usePeriodBudget()), aunque ambos
+  // decían representar lo mismo.
+  const realAlloc = {
+    obligPct: allocation?.obligationsPct ?? 0,
+    savPct: allocation?.savingsPct ?? 0,
+    freePct: allocation?.dailyFreePct ?? 0,
+    debtPct: allocation?.debtCapacityPct ?? 0,
+    obligAmt: allocation?.obligationsAmount ?? totalPending,
+    savAmt: allocation?.savingsAmount ?? 0,
+    freeAmt: allocation?.dailyFreeAmount ?? 0,
+    debtAmt: allocation?.debtCapacityAmount ?? 0,
+  }
 
   const pieData = [
     { name: "Ahorro", value: Math.round(realAlloc.savPct), color: "#B9FBC0", amount: Math.round(realAlloc.savAmt) },

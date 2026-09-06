@@ -42,18 +42,25 @@ export interface SpendCategoryInput {
 }
 
 export interface ImpulseLike { nombre: string; monto: number }
-export interface FixedLike { id: string; monto: number; pagadoEstePeriodo: boolean }
+export interface FixedLike { id: string; monto: number; pagadoEstePeriodo: boolean; budgetCategoryId?: string | null; montoPagadoEstePeriodo?: number | null }
+export interface DebtLike { id: string; budgetCategoryId?: string | null; montoPagadoEstePeriodo?: number | null }
 
 /**
  * Cuánto se gastó en una categoría: gastos hormiga que calzan por keyword/tag +
- * gastos fijos vinculados que ya se pagaron este periodo. Misma regla que usa
- * `PresupuestoTab.tsx` para "spent" — se replica acá en vez de importarla porque
- * esa función vive mezclada con el estado del componente; esta versión es pura.
+ * gastos fijos vinculados desde la propia categoría (legacy, `linkedFixedIds`)
+ * que ya se pagaron este periodo + deudas y gastos fijos vinculados desde SU
+ * propio formulario de creación/edición (`budgetCategoryId`), sumando el pago
+ * REAL de este periodo (`montoPagadoEstePeriodo`) en vez del monto configurado
+ * completo — así una cuota parcial o quincenal también cuenta bien. Misma regla
+ * que usa `PresupuestoTab.tsx` para "spent" — se replica acá en vez de
+ * importarla porque esa función vive mezclada con el estado del componente;
+ * esta versión es pura.
  */
 export function computeCategorySpend(
   cat: SpendCategoryInput,
   impulseExpenses: ImpulseLike[],
   fixedExpenses: FixedLike[],
+  debts: DebtLike[] = [],
 ): number {
   const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === cat.name.toLowerCase())
   const keys = [...(sug?.keys ?? []), cat.name.toLowerCase()]
@@ -64,11 +71,20 @@ export function computeCategorySpend(
     return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
   })
 
-  const linkedFixedPaid = (cat.linkedFixedIds ?? [])
+  const legacyIds = new Set(cat.linkedFixedIds ?? [])
+  const linkedFixedPaid = [...legacyIds]
     .map(id => fixedExpenses.find(f => f.id === id))
     .filter((f): f is FixedLike => !!f && f.pagadoEstePeriodo)
 
+  // Vinculados desde el formulario de la propia deuda/gasto fijo — sin contar
+  // dos veces algo que ya venga por el mecanismo legacy de arriba.
+  const linkedByOwnCategory = [
+    ...fixedExpenses.filter(f => f.budgetCategoryId === cat.id && !legacyIds.has(f.id)),
+    ...debts.filter(d => d.budgetCategoryId === cat.id),
+  ]
+
   const spentFromImpulse = matchedImpulse.reduce((a, e) => a + e.monto, 0)
-  const spentFromFixed = linkedFixedPaid.reduce((a, f) => a + f.monto, 0)
-  return spentFromImpulse + spentFromFixed
+  const spentFromLegacyFixed = linkedFixedPaid.reduce((a, f) => a + f.monto, 0)
+  const spentFromOwnCategory = linkedByOwnCategory.reduce((a, x) => a + (x.montoPagadoEstePeriodo ?? 0), 0)
+  return spentFromImpulse + spentFromLegacyFixed + spentFromOwnCategory
 }

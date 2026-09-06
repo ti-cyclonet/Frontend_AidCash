@@ -58,6 +58,7 @@ interface SocketContextValue {
   connected:     boolean
   notifications: KiriNotification[]
   unreadCount:   number
+  socialUnreadCount: number
   markAllRead:   () => void
   clearNotifications: () => void
   addNotification: (event: SocketEvent, data: Record<string, unknown>) => void
@@ -68,6 +69,7 @@ const SocketContext = createContext<SocketContextValue>({
   connected:     false,
   notifications: [],
   unreadCount:   0,
+  socialUnreadCount: 0,
   markAllRead:   () => {},
   clearNotifications: () => {},
   addNotification: () => {},
@@ -95,8 +97,12 @@ function getSocketConfig(): { url: string; path?: string } {
 
 const socketConfig = getSocketConfig()
 
-// Eventos que generan notificaciones persistentes en la UI
-const NOTIFICATION_EVENTS: SocketEvent[] = [
+// Eventos que generan notificaciones persistentes en la UI — todos genuinamente
+// de Social (invitaciones, préstamos, cambios de rol, jardines compartidos).
+// Exportado para que el ícono de Social cuente SOLO estos, no alertas locales
+// no-sociales (ALERT_PAYMENT_PROXIMITY, ALERT_PERIOD_ASSIGNED) que comparten
+// el mismo arreglo `notifications` — ver `socialUnreadCount` más abajo.
+export const NOTIFICATION_EVENTS: SocketEvent[] = [
   SOCKET_EVENTS.NEW_INVITE,
   SOCKET_EVENTS.INVITE_ACCEPTED,
   SOCKET_EVENTS.INVITE_REJECTED,
@@ -224,6 +230,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const unreadCount = notifications.filter(n => !n.read).length
+  // Solo eventos de Social/conexiones — así el ícono de Social no se enciende
+  // por un recordatorio de pago u otra alerta que no tiene nada que ver con él.
+  const socialUnreadCount = notifications.filter(n => !n.read && NOTIFICATION_EVENTS.includes(n.event)).length
 
   return (
     <SocketContext.Provider value={{
@@ -231,6 +240,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       connected,
       notifications,
       unreadCount,
+      socialUnreadCount,
       markAllRead,
       clearNotifications,
       addNotification,

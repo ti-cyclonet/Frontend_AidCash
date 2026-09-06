@@ -454,7 +454,7 @@ export default function OnboardingPage() {
                       </button>
 
                       <button
-                        onClick={() => setQuiereRegistrar(false)}
+                        onClick={() => { setQuiereRegistrar(false); setStep(5) }}
                         className={cn(
                           "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
                           "border-muted hover:border-kiri-emerald/30"

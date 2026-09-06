@@ -51,6 +51,7 @@ function mapDebt(row: Record<string, unknown>): Debt {
     estado: (row.estado as Debt["estado"]) ?? 'activa',
     prioridad: (row.prioridad as Debt["prioridad"]) ?? 'media',
     pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
+    budgetCategoryId: (row.budgetCategoryId ?? row.budget_category_id ?? null) as string | null,
   }
 }
 
@@ -66,7 +67,10 @@ function mapFixed(row: Record<string, unknown>): FixedExpense {
     metodoPago: (row.metodoPago ?? row.metodo_pago) as string | null ?? null,
     renovacionAuto: (row.renovacionAuto ?? row.renovacion_auto ?? false) as boolean,
     pagadoEstePeriodo: (row.pagadoEstePeriodo ?? row.pagado_este_periodo ?? false) as boolean,
+    montoPagadoEstePeriodo: row.montoPagadoEstePeriodo != null ? Number(row.montoPagadoEstePeriodo) : (row.monto_pagado_este_periodo != null ? Number(row.monto_pagado_este_periodo) : null),
     pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
+    tarjetaVinculadaId: (row.tarjetaVinculadaId ?? row.tarjeta_vinculada_id ?? null) as string | null,
+    budgetCategoryId: (row.budgetCategoryId ?? row.budget_category_id ?? null) as string | null,
   }
 }
 
@@ -193,7 +197,7 @@ function useFinanceDataInternal() {
    * que quien llamaba (ej. el onboarding) no tenía forma de saber que la deuda
    * nunca se guardó — revisa el valor de retorno.
    */
-  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO' }) => {
+  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; budgetCategoryId?: string | null }) => {
     if (!userId) return null
     const { data: result, error } = await debtsApi.create({
       nombre: data.nombre,
@@ -207,6 +211,8 @@ function useFinanceDataInternal() {
       prioridad: data.prioridad as 'alta' | 'media' | 'baja' | undefined,
       bankEntityId: data.bankEntityId,
       tipoDeuda: data.tipoDeuda,
+      yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+      budgetCategoryId: data.budgetCategoryId,
     })
     if (error || !result) return null
     await fetchAll()
@@ -284,13 +290,19 @@ function useFinanceDataInternal() {
         estado: 'activa' as const,
       } : d
     ))
+    // Si el pago se hizo con tarjeta, el backend ya revirtió el saldo de esa
+    // OTRA deuda (la tarjeta) — pero acá arriba solo tocamos `debtId`. Sin este
+    // refetch, la tarjeta se queda mostrando el saldo inflado hasta recargar.
+    if (data.revertidoDeTarjeta) {
+      await fetchAll()
+    }
     return data.wallet
   }
 
   // ─── Gastos fijos ────────────────────────────────────────────────────────────
 
   /** Devuelve el gasto fijo creado, o `null` si no se pudo guardar — ver nota en `addDebt`. */
-  const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo" | "renovacionAuto" | "frecuencia" | "categoria" | "metodoPago"> & { categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean }) => {
+  const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo" | "renovacionAuto" | "frecuencia" | "categoria" | "metodoPago"> & { categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean; pagoAutomatico?: boolean; yaPagoEstePeriodo?: boolean }) => {
     if (!userId) return null
     const { data: result, error } = await fixedExpensesApi.create({
       nombre: data.nombre,
@@ -300,6 +312,10 @@ function useFinanceDataInternal() {
       frecuencia: data.frecuencia as 'mensual' | 'quincenal' | 'semanal' | 'anual' | undefined,
       metodoPago: data.metodoPago,
       renovacionAuto: data.renovacionAuto,
+      pagoAutomatico: data.pagoAutomatico,
+      yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+      tarjetaVinculadaId: data.tarjetaVinculadaId,
+      budgetCategoryId: data.budgetCategoryId,
     })
     if (error || !result) return null
     await fetchAll()
@@ -308,7 +324,7 @@ function useFinanceDataInternal() {
 
   const updateFixedExpense = async (
     id: string,
-    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto' | 'pagoAutomatico'>>
+    data: Partial<Pick<FixedExpense, 'nombre' | 'monto' | 'fechaCorte' | 'frecuencia' | 'categoria' | 'metodoPago' | 'renovacionAuto' | 'pagoAutomatico' | 'tarjetaVinculadaId' | 'budgetCategoryId'>>
   ) => {
     await fixedExpensesApi.update(id, data)
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, ...data } : f))
@@ -373,6 +389,11 @@ function useFinanceDataInternal() {
     const { data } = await fixedExpensesApi.undoPay(id)
     if (!data) return
     setFixedExpenses(prev => prev.map(f => f.id === id ? { ...f, pagadoEstePeriodo: false, montoPagadoEstePeriodo: null } : f))
+    // Mismo caso que undoPayDebt: si se pagó con tarjeta, esa tarjeta (otra
+    // Debt) ya se revirtió en el backend pero no en este estado local.
+    if (data.revertidoDeTarjeta) {
+      await fetchAll()
+    }
     return data.wallet
   }
 
@@ -417,18 +438,27 @@ function useFinanceDataInternal() {
 
   // ─── Gastos hormiga ───────────────────────────────────────────────────────────
 
-  const addImpulseExpense = async (data: { nombre: string; monto: number; categoria: ImpulseCategory }) => {
+  const addImpulseExpense = async (data: { nombre: string; monto: number; categoria: ImpulseCategory; tarjetaId?: string; cuotas?: number }) => {
     if (!userId) return null
     const { data: result } = await impulseApi.create({
       nombre: data.nombre,
       monto: data.monto,
       categoria: data.categoria,
+      tarjetaId: data.tarjetaId,
+      cuotas: data.cuotas,
     })
     if (result?.expense) {
       const mapped = mapImpulse(result.expense)
       setImpulseExpenses(prev => [mapped, ...prev])
-      // Deducir del bolsillo "libre"
-      await userApi.walletDeduct(data.monto, 'libre')
+      if (data.tarjetaId) {
+        // Pagado con tarjeta: es un cupo de crédito consumido, no plata del
+        // disponible — refrescamos todo para traer el saldo actualizado de la
+        // tarjeta en vez de descontar del bolsillo "libre".
+        await fetchAll()
+      } else {
+        // Deducir del bolsillo "libre"
+        await userApi.walletDeduct(data.monto, 'libre')
+      }
       return mapped
     }
     return null

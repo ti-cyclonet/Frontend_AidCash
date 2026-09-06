@@ -14,6 +14,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api-client"
 import { looksLikeCreditCardName } from "@/lib/debt-utils"
+import { getNextPaymentInfo } from "@/lib/payment-schedule"
+import { BudgetCategorySelector } from "@/components/obligaciones/BudgetCategorySelector"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -48,6 +50,11 @@ export interface DebtFormData {
   diasPago: string
   frecuenciaPago?: string
   tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'
+  /** El usuario confirmó que la cuota del periodo actual ya la pagó (por fuera
+   * de Kiri) — evita que la deuda nazca marcada "vencida" cuando el día de
+   * pago ingresado ya pasó este periodo. */
+  yaPagoEstePeriodo?: boolean
+  budgetCategoryId?: string | null
 }
 
 interface Props {
@@ -71,6 +78,8 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
   const [frecuenciaPago, setFrecuenciaPago] = useState<"mensual" | "quincenal">("mensual")
   const [yaPagando, setYaPagando] = useState(false)
   const [saldoActualNormal, setSaldoActualNormal] = useState("")
+  const [yaPagoEstePeriodo, setYaPagoEstePeriodo] = useState(false)
+  const [budgetCategoryId, setBudgetCategoryId] = useState<string>("")
 
   // Campos exclusivos del modo banco
   const [banks, setBanks] = useState<BankOption[]>([])
@@ -86,6 +95,25 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // El día de pago ingresado ya pasó este mes (o es HOY) — sin aclarar si esa
+  // cuota está paga, la deuda nacería marcada "vencida" con una fecha que en
+  // realidad ya se resolvió (ver getNextPaymentInfo, misma lógica que ya usa
+  // el listado de obligaciones para decidir "vencido" vs "vence hoy").
+  const dueQuestion = useMemo(() => {
+    const day = parseInt(diasPago, 10)
+    if (isNaN(day) || day < 1 || day > 31) return null
+    const info = getNextPaymentInfo(diasPago, false)
+    if (info.status === "vencido") return "vencido" as const
+    if (info.status === "proximo" && info.daysUntil === 0) return "hoy" as const
+    return null
+  }, [diasPago])
+
+  // Si el usuario cambia el día a uno que ya no aplica, no dejar una
+  // respuesta "ya pagué" colgada de un día distinto.
+  useEffect(() => {
+    if (!dueQuestion) setYaPagoEstePeriodo(false)
+  }, [dueQuestion])
 
   // Cargar bancos al entrar en modo banco
   useEffect(() => {
@@ -138,24 +166,35 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
 
   // ─── Gráfico de amortización (modo banco) ──────────────────────────────────
 
+  // La tasa que devuelve el banco/usuario es mensual — si la deuda se paga
+  // quincenal, cada cuota cae cada medio mes, así que el interés de cada
+  // periodo es la mitad del mensual (misma simplificación que usa el resto
+  // de la app para repartir montos quincenales, ver getMontoPorPeriodo).
+  const periodLabel = frecuenciaPago === "quincenal" ? "Q" : "M"
   const amortizationData = useMemo(() => {
     const saldo = Number(saldoActual) || Number(montoInicial) || Number(montoTotal)
-    const tasa = Number(tasaInteres) / 100
+    const tasaMensual = Number(tasaInteres) / 100
+    const tasa = frecuenciaPago === "quincenal" ? tasaMensual / 2 : tasaMensual
     const cuota = Number(cuotaPeriodo)
 
     if (!saldo || !tasa || !cuota || cuota <= saldo * tasa) return []
 
     const data = []
     let remaining = saldo
-    const maxMonths = Math.min(24, Math.ceil(saldo / (cuota - saldo * tasa)) + 2)
+    // 24 meses de proyección — el doble de periodos si es quincenal, porque
+    // cada quincena es medio mes.
+    const maxPeriods = Math.min(
+      frecuenciaPago === "quincenal" ? 48 : 24,
+      Math.ceil(saldo / (cuota - saldo * tasa)) + 2
+    )
 
-    for (let i = 1; i <= maxMonths && remaining > 0; i++) {
+    for (let i = 1; i <= maxPeriods && remaining > 0; i++) {
       const interes = Math.round(remaining * tasa)
       const capital = Math.min(Math.round(cuota - interes), remaining)
       remaining = Math.max(0, remaining - capital)
 
       data.push({
-        mes: `M${i}`,
+        mes: `${periodLabel}${i}`,
         interes,
         capital,
         saldo: remaining,
@@ -165,7 +204,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
     }
 
     return data
-  }, [saldoActual, montoInicial, montoTotal, tasaInteres, cuotaPeriodo])
+  }, [saldoActual, montoInicial, montoTotal, tasaInteres, cuotaPeriodo, frecuenciaPago, periodLabel])
 
   // ─── Submit ─────────────────────────────────────────────────────────────────
 
@@ -179,6 +218,8 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         diasPago: diasPago || "1",
         frecuenciaPago,
         acreedor: "",
+        yaPagoEstePeriodo: dueQuestion ? yaPagoEstePeriodo : undefined,
+        budgetCategoryId: budgetCategoryId || null,
       })
     } else {
       const mInicial = Number(montoInicial) || Number(montoTotal)
@@ -194,6 +235,8 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         diasPago: diasPago || "1",
         frecuenciaPago,
         tipoDeuda: looksLikeCreditCardName(nombre) ? 'TARJETA_CREDITO' : 'PRESTAMO',
+        yaPagoEstePeriodo: dueQuestion ? yaPagoEstePeriodo : undefined,
+        budgetCategoryId: budgetCategoryId || null,
       })
     }
   }
@@ -442,6 +485,41 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         <p className="text-[8px] text-muted-foreground">Día del mes en que debes pagar (1-31)</p>
       </div>
 
+      <BudgetCategorySelector value={budgetCategoryId} onChange={v => setBudgetCategoryId(v ?? "")} />
+
+      {/* Si el día de pago ingresado ya pasó este mes (o es hoy), preguntar si
+          esa cuota ya está paga — si no se pregunta, la deuda nace marcada
+          "vencida" con una fecha que en realidad ya se resolvió. */}
+      {dueQuestion && (
+        <div className="rounded-2xl border-2 border-amber-400/30 bg-amber-500/5 p-3 space-y-2">
+          <p className="text-xs font-bold">
+            {dueQuestion === "hoy"
+              ? "Esta cuota vence hoy. ¿Ya pagaste?"
+              : `El día ${diasPago} de este mes ya pasó. ¿Ya pagaste la cuota de este periodo?`}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setYaPagoEstePeriodo(true)}
+              className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+                yaPagoEstePeriodo ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
+              )}
+            >
+              {dueQuestion === "hoy" ? "Sí, ya pagué" : "Sí, ya la pagué"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setYaPagoEstePeriodo(false)}
+              className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+                !yaPagoEstePeriodo ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
+              )}
+            >
+              {dueQuestion === "hoy" ? "No, vence hoy" : "No, está vencida"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ═══ Preview primera cuota (modo banco con tasa) ═══ */}
       {mode === "banco" && Number(tasaInteres) > 0 && Number(cuotaPeriodo) > 0 && (Number(saldoActual) > 0 || Number(montoTotal) > 0) && (
         <Card className="border-none bg-muted/20 rounded-xl">
@@ -449,7 +527,8 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             <p className="text-[8px] font-bold text-muted-foreground uppercase">Preview primera cuota</p>
             {(() => {
               const saldo = Number(saldoActual) || Number(montoInicial) || Number(montoTotal)
-              const tasa = Number(tasaInteres) / 100
+              const tasaMensual = Number(tasaInteres) / 100
+              const tasa = frecuenciaPago === "quincenal" ? tasaMensual / 2 : tasaMensual
               const cuota = Number(cuotaPeriodo)
               const interes = Math.round(saldo * tasa)
               const capital = Math.max(0, cuota - interes)
@@ -470,7 +549,9 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         <Card className="border-none bg-muted/10 rounded-xl overflow-hidden">
           <CardContent className="p-3 space-y-2">
             <p className="text-[8px] font-bold text-muted-foreground uppercase">Proyección de amortización</p>
-            <p className="text-[9px] text-muted-foreground">Así se distribuirá tu cuota mes a mes (interés ↓ · capital ↑)</p>
+            <p className="text-[9px] text-muted-foreground">
+              Así se distribuirá tu cuota {frecuenciaPago === "quincenal" ? "quincena a quincena" : "mes a mes"} (interés ↓ · capital ↑)
+            </p>
             <div className="h-[140px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={amortizationData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
@@ -508,7 +589,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             </div>
             {amortizationData.length > 0 && (
               <p className="text-[9px] text-center text-kiri-emerald font-bold">
-                ≈ {amortizationData.length} meses para liquidar
+                ≈ {frecuenciaPago === "quincenal" ? Math.ceil(amortizationData.length / 2) : amortizationData.length} meses para liquidar
               </p>
             )}
           </CardContent>

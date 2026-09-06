@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,7 +11,6 @@ import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
-  const router = useRouter()
   const { signIn } = useAuth()
 
   const [email, setEmail] = useState("")
@@ -59,7 +57,8 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.replace("/jardin")
+    // AuthGuard hace la redirección real según onboardingDone; no forzamos
+    // aquí un destino fijo para no pisarle la decisión.
   }
 
   return (

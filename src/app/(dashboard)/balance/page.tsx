@@ -150,11 +150,11 @@ export default function BalancePage() {
     return budgetCategories
       .map(cat => ({
         name: cat.name,
-        value: computeCategorySpend(cat, impulseThisBudgetPeriod, fixedExpenses),
+        value: computeCategorySpend(cat, impulseThisBudgetPeriod, fixedExpenses, debts),
         color: cat.color,
       }))
       .filter(c => c.value > 0)
-  }, [budgetCategories, impulseThisBudgetPeriod, fixedExpenses])
+  }, [budgetCategories, impulseThisBudgetPeriod, fixedExpenses, debts])
   const categoryTotal = categoryData.reduce((a, c) => a + c.value, 0)
 
   // Rango de fechas legible
@@ -191,6 +191,7 @@ export default function BalancePage() {
         saldoPosterior: p.saldoPosterior as number,
         tasaInteres: p.tasaAplicada ? `${Number(p.tasaAplicada).toFixed(2)}% M.V.` : undefined,
         acreedor: p.acreedor as string | undefined,
+        tarjetaNombre: p.tarjetaNombre as string | null | undefined,
       })
     }
 
@@ -208,6 +209,7 @@ export default function BalancePage() {
         tipoLabel: "Gasto fijo",
         monto: p.montoPagado as number,
         estado: 'pagado',
+        tarjetaNombre: p.tarjetaNombre as string | null | undefined,
       })
     }
 
@@ -220,6 +222,7 @@ export default function BalancePage() {
         tipoLabel: `Gasto hormiga · ${e.categoria as string}`,
         monto: e.monto as number,
         estado: 'pagado',
+        tarjetaNombre: e.tarjetaNombre as string | null | undefined,
       })
     }
 
@@ -683,6 +686,7 @@ export default function BalancePage() {
                               <p className="text-[10px] text-muted-foreground">
                                 {m.tipoLabel}
                                 {m.acreedor && ` · ${m.acreedor}`}
+                                {m.tarjetaNombre && ` · 💳 pagado con ${m.tarjetaNombre}`}
                                 {' · '}
                                 {m.fecha ? new Date(m.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                               </p>

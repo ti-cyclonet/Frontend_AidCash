@@ -88,7 +88,7 @@ function mapToImpulseCategory(budgetCatName: string): ImpulseCategory {
 export function PresupuestoTab() {
   const { formatAmount, incomeFrequency, diasCobro } = useAppContext()
   const { allocation } = usePeriodBudget()
-  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, fixedExpenses } = useFinanceData()
+  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, fixedExpenses, debts } = useFinanceData()
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [walletError, setWalletError] = useState(false)
@@ -150,17 +150,27 @@ export function PresupuestoTab() {
       return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
     })
 
-    // Gastos fijos vinculados que ya fueron pagados este periodo
-    const linkedFixedPaid = (cat.linkedFixedIds ?? [])
+    // Gastos fijos vinculados desde ESTA categoría (legacy) que ya fueron pagados este periodo
+    const legacyIds = new Set(cat.linkedFixedIds ?? [])
+    const linkedFixedPaid = [...legacyIds]
       .map(id => fixedExpenses.find(f => f.id === id))
       .filter((f): f is NonNullable<typeof f> => !!f && f.pagadoEstePeriodo)
 
+    // Deudas y gastos fijos vinculados desde SU PROPIO formulario de creación/
+    // edición (budgetCategoryId) — cuentan el pago real de este periodo, no el
+    // monto configurado, y no duplican lo que ya viene por el mecanismo legacy.
+    const linkedByOwnCategory = [
+      ...fixedExpenses.filter(f => f.budgetCategoryId === cat.id && !legacyIds.has(f.id)),
+      ...debts.filter(d => d.budgetCategoryId === cat.id),
+    ]
+
     const spentFromImpulse = matchedImpulse.reduce((a, e) => a + e.monto, 0)
     const spentFromFixed = linkedFixedPaid.reduce((a, f) => a + f.monto, 0)
+    const spentFromOwnCategory = linkedByOwnCategory.reduce((a, x) => a + (x.montoPagadoEstePeriodo ?? 0), 0)
 
     return {
       ...cat,
-      spent: spentFromImpulse + spentFromFixed,
+      spent: spentFromImpulse + spentFromFixed + spentFromOwnCategory,
       expenses: matchedImpulse,
       linkedFixedPaid,
     }
