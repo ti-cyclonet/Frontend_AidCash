@@ -318,7 +318,7 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO' }) {
+  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; budgetCategoryId?: string | null }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,
@@ -344,7 +344,7 @@ export const debtsApi = {
   },
 
   async undoPay(id: string) {
-    return api<{ debt: Record<string, unknown>; montoDevuelto: number; wallet: WalletState }>(`/debts/${id}/undo-pay`, {
+    return api<{ debt: Record<string, unknown>; montoDevuelto: number; revertidoDeTarjeta: { tarjetaId: string; monto: number }[] | null; wallet: WalletState }>(`/debts/${id}/undo-pay`, {
       method: 'POST',
     })
   },
@@ -364,7 +364,7 @@ export const fixedExpensesApi = {
     return api<{ fixedExpenses: Record<string, unknown>[] }>('/fixed-expenses')
   },
 
-  async create(data: { nombre: string; monto: number; fechaCorte: string; categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean }) {
+  async create(data: { nombre: string; monto: number; fechaCorte: string; categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean; pagoAutomatico?: boolean; yaPagoEstePeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }) {
     return api<{ fixedExpense: Record<string, unknown> }>('/fixed-expenses', {
       method: 'POST',
       body: data,
@@ -390,7 +390,7 @@ export const fixedExpensesApi = {
   },
 
   async undoPay(id: string) {
-    return api<{ fixedExpense: Record<string, unknown>; montoDevuelto: number; wallet: WalletState }>(`/fixed-expenses/${id}/undo-pay`, {
+    return api<{ fixedExpense: Record<string, unknown>; montoDevuelto: number; revertidoDeTarjeta: { tarjetaId: string; monto: number }[] | null; wallet: WalletState }>(`/fixed-expenses/${id}/undo-pay`, {
       method: 'POST',
     })
   },
@@ -444,7 +444,7 @@ export const impulseApi = {
     return api<{ expenses: Record<string, unknown>[]; totalThisPeriod: number; currentPeriodo: string }>(`/impulse-expenses?limit=${limit}`)
   },
 
-  async create(data: { nombre: string; monto: number; categoria: string }) {
+  async create(data: { nombre: string; monto: number; categoria: string; tarjetaId?: string; cuotas?: number }) {
     return api<{ expense: Record<string, unknown> }>('/impulse-expenses', {
       method: 'POST',
       body: data,
@@ -608,6 +608,9 @@ export interface Movement {
   saldoPosterior?: number
   tasaInteres?: string
   acreedor?: string
+  /** Si el pago se hizo con tarjeta de crédito, el nombre de esa tarjeta —
+   * null/undefined significa que salió del disponible en efectivo. */
+  tarjetaNombre?: string | null
   /** 'entrada' para movimientos que devuelven dinero al saldo disponible (ej.
    * retirar de un bolsillo de ahorro) aunque su `tipo` no sea "ingresos" —
    * sin esto se mostrarían en rojo como un gasto, cuando en realidad el

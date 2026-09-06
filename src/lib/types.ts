@@ -192,6 +192,7 @@ export interface Debt {
   estado: DebtStatus;
   prioridad: DebtPriority;
   pagoAutomatico?: boolean;
+  budgetCategoryId?: string | null;
 }
 
 export interface FixedExpense {
@@ -205,7 +206,10 @@ export interface FixedExpense {
   metodoPago?: string | null;
   renovacionAuto: boolean;
   pagadoEstePeriodo: boolean;
+  montoPagadoEstePeriodo?: number | null;
   pagoAutomatico?: boolean;
+  tarjetaVinculadaId?: string | null;
+  budgetCategoryId?: string | null;
 }
 
 export type ImpulseCategory = 'cafe' | 'comida' | 'transporte' | 'antojo' | 'salida' | 'otro';

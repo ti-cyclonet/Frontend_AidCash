@@ -11,7 +11,7 @@ import { useAppContext } from "@/lib/app-context"
 export function PlanWelcomeModal() {
   const { welcomePackage, welcomePlanPrice, dismissWelcome } = usePlan()
   const { addFixedExpense } = useFinanceData()
-  const { formatAmount, incomeFrequency } = useAppContext()
+  const { formatAmount } = useAppContext()
   const registeredRef = useRef(false)
 
   // Registrar el gasto fijo del plan automáticamente al activarse
@@ -26,9 +26,14 @@ export function PlanWelcomeModal() {
       nombre: `Kiri Finance ${welcomePackage}`,
       monto: welcomePlanPrice,
       fechaCorte: diaPago,
-      frecuencia: incomeFrequency || "mensual",
+      // La suscripción de Kiri se cobra mensual siempre — no depende de con
+      // qué frecuencia le pagan a el usuario (quincenal/semanal rompería el
+      // cálculo de montoPorPeriodo si se atara a incomeFrequency).
+      frecuencia: "mensual",
+      pagoAutomatico: true,
+      renovacionAuto: true,
     })
-  }, [welcomePackage, welcomePlanPrice, addFixedExpense, incomeFrequency])
+  }, [welcomePackage, welcomePlanPrice, addFixedExpense])
 
   if (!welcomePackage) return null
 

@@ -46,7 +46,7 @@ export function Sidebar() {
   const router = useRouter()
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
   const { signOut, user: authUser } = useAuth()
-  const { unreadCount, notifications, markAllRead, clearNotifications } = useSocket()
+  const { unreadCount, socialUnreadCount, notifications, markAllRead, clearNotifications } = useSocket()
 
   const [collapsed, setCollapsed] = useState(false)
   const [notifsOpen, setNotifsOpen] = useState(false)
@@ -202,7 +202,7 @@ export function Sidebar() {
         <nav className="flex-1 px-2 py-4 space-y-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href
-            const showBadge = item.href === "/social" && unreadCount > 0
+            const showBadge = item.href === "/social" && socialUnreadCount > 0
             return (
               <Tooltip key={item.href} disableHoverableContent={!collapsed}>
                 <TooltipTrigger asChild>
@@ -223,7 +223,7 @@ export function Sidebar() {
                         "h-4 min-w-4 px-1 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white",
                         collapsed ? "absolute top-0.5 right-0.5" : "ml-auto"
                       )}>
-                        {unreadCount > 9 ? "9+" : unreadCount}
+                        {socialUnreadCount > 9 ? "9+" : socialUnreadCount}
                       </span>
                     )}
                   </Link>

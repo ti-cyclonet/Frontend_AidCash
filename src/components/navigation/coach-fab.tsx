@@ -336,8 +336,6 @@ export function CoachFab() {
   // ── Satélites FAB ──────────────────────────────────────────────────────────
   // showSatellites: hover en desktop / long-press en mobile
   const [showSatellites, setShowSatellites] = useState(false)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressTriggered = useRef(false)
 
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -375,19 +373,11 @@ export function CoachFab() {
     setShowSatellites(false)
   }
 
-  const handleFabTouchStart = () => {
-    // En móvil: tap simple abre el chat, no los satélites
-    longPressTriggered.current = false
-    if (!isMobile) {
-      longPressTimer.current = setTimeout(() => {
-        longPressTriggered.current = true
-        setShowSatellites(true)
-      }, 400)
-    }
-  }
   const handleFabTouchEnd = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current)
-    if (!longPressTriggered.current) setIsOpen(true)
+    // Un tap (en móvil o escritorio táctil) siempre abre el chat.
+    // Los satélites de escritorio son exclusivos del hover con mouse
+    // (un long-press aquí los dejaba abiertos sin ningún "mouseleave" que los cerrara).
+    setIsOpen(true)
   }
 
   // ── Modo voz inteligente ──────────────────────────────────────────────────
@@ -804,7 +794,6 @@ export function CoachFab() {
           <div className="relative">
             <button
               onClick={() => setIsOpen(true)}
-              onTouchStart={handleFabTouchStart}
               onTouchEnd={(e) => { e.preventDefault(); handleFabTouchEnd() }}
               className={cn(
                 "relative h-14 w-14 lg:h-16 lg:w-16 rounded-full bg-kiri-emerald",

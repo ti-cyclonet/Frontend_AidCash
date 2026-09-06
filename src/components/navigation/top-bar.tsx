@@ -62,7 +62,7 @@ function notifRoute(n: KiriNotification): string {
 export function TopBar() {
   const [notifsOpen, setNotifsOpen] = useState(false)
   const router = useRouter()
-  const { unreadCount, notifications, markAllRead, clearNotifications, connected } = useSocket()
+  const { unreadCount, socialUnreadCount, notifications, markAllRead, clearNotifications, connected } = useSocket()
   const { user } = useAppContext()
 
   const initials = user.nombre
@@ -83,9 +83,9 @@ export function TopBar() {
           <Link href="/social"
             className="h-9 w-9 rounded-xl flex items-center justify-center text-foreground hover:bg-muted/50 transition-colors relative">
             <Users className="h-5 w-5" />
-            {unreadCount > 0 && (
+            {socialUnreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-0.5 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white">
-                {unreadCount > 9 ? "9+" : unreadCount}
+                {socialUnreadCount > 9 ? "9+" : socialUnreadCount}
               </span>
             )}
           </Link>

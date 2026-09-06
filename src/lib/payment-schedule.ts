@@ -28,6 +28,19 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean)
   if (days.length === 0) days.push(1)
 
   if (pagadoEstePeriodo) {
+    // Quincenal son DOS cuotas independientes por mes (ej. "10,25") — si ya se
+    // pagó la que le tocaba a hoy pero la otra sigue por delante este mismo
+    // mes, esa es la próxima. Antes esto siempre saltaba un mes completo (ej.
+    // pagar el día 10 hacía que el día 25 del MISMO mes desapareciera y el
+    // "próximo cobro" se fuera directo a octubre).
+    const upcomingThisMonth = days.filter(d => d > todayDay)
+    if (upcomingThisMonth.length > 0) {
+      const day = Math.min(...upcomingThisMonth)
+      const daysUntil = day - todayDay
+      const label = dateForDay(currentYear, currentMonth, day).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+      if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? 'Vence hoy' : `Vence en ${daysUntil}d`, statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
+      return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
+    }
     const nextDate = dateForDay(currentYear, currentMonth + 1, Math.min(...days))
     const label = nextDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
     return { nextDate: label, daysUntil: 999, status: 'pagado', statusLabel: 'Pagado ✓', statusColor: 'text-emerald-600', cardRing: '' }

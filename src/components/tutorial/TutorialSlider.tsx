@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { MODULE_GUIDES, type ModuleGuideData, type GuideItem } from "@/lib/module-guide-content"
+import { getUserId } from "@/lib/api-client"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -237,12 +238,23 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
 
 const LS_TUTORIAL_PREFIX = "kiri_tutorial_seen_"
 
+// La llave incluye el userId para que el estado "ya vi este módulo" sea por
+// cuenta: así no se borra al cerrar sesión (debe verse una sola vez, siempre)
+// ni se hereda entre cuentas distintas que compartan el mismo navegador.
+function tutorialKey(moduleId: string): string | null {
+  const userId = getUserId()
+  if (!userId) return null
+  return `${LS_TUTORIAL_PREFIX}${userId}_${moduleId}`
+}
+
 export function useTutorialFirstTime(moduleId: string) {
   const [show, setShow] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const seen = localStorage.getItem(`${LS_TUTORIAL_PREFIX}${moduleId}`)
+    const key = tutorialKey(moduleId)
+    if (!key) return
+    const seen = localStorage.getItem(key)
     if (!seen) {
       setShow(true)
     }
@@ -250,7 +262,8 @@ export function useTutorialFirstTime(moduleId: string) {
 
   const dismiss = () => {
     setShow(false)
-    localStorage.setItem(`${LS_TUTORIAL_PREFIX}${moduleId}`, "true")
+    const key = tutorialKey(moduleId)
+    if (key) localStorage.setItem(key, "true")
   }
 
   return { showTutorial: show, dismissTutorial: dismiss }

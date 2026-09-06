@@ -77,27 +77,31 @@ export function ProyeccionesTab() {
       {/* ═══ RESUMEN: Patrimonio actual vs proyectado ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-4">
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-kiri-emerald/10 flex items-center justify-center shrink-0">
-              <Target className="h-5 w-5 text-kiri-emerald" />
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-xl bg-kiri-emerald/10 flex items-center justify-center shrink-0">
+                <Target className="h-5 w-5 text-kiri-emerald" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm">Tu futuro financiero en {meses} meses</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Proyecciones según tu comportamiento actual vs. el plan optimizado de Kiri.</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm">Tu futuro financiero en {meses} meses</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Proyecciones según tu comportamiento actual vs. el plan optimizado de Kiri.</p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-[9px] text-muted-foreground">Patrimonio neto actual</p>
-              <p className={cn("text-lg font-black", patrimonioActual >= 0 ? "text-emerald-500" : "text-red-500")}>
-                {patrimonioActual >= 0 ? "+" : ""}{formatAmount(patrimonioActual)}
-              </p>
-              <p className="text-[8px] text-muted-foreground">{patrimonioActual < 0 ? "(Deudas > Ahorros)" : ""}</p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-[9px] text-muted-foreground">Patrimonio proyectado (Kiri)</p>
-              <p className={cn("text-lg font-black", projection.kiriFinal.patrimonio >= 0 ? "text-emerald-500" : "text-red-500")}>
-                {projection.kiriFinal.patrimonio >= 0 ? "+" : ""}{formatAmount(projection.kiriFinal.patrimonio)}
-              </p>
-              <p className="text-[8px] text-muted-foreground">En {meses} meses</p>
+            <div className="flex items-start gap-4 sm:shrink-0 pl-[52px] sm:pl-0">
+              <div className="text-right">
+                <p className="text-[9px] text-muted-foreground">Patrimonio neto actual</p>
+                <p className={cn("text-lg font-black", patrimonioActual >= 0 ? "text-emerald-500" : "text-red-500")}>
+                  {patrimonioActual >= 0 ? "+" : ""}{formatAmount(patrimonioActual)}
+                </p>
+                <p className="text-[8px] text-muted-foreground">{patrimonioActual < 0 ? "(Deudas > Ahorros)" : ""}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] text-muted-foreground">Patrimonio proyectado (Kiri)</p>
+                <p className={cn("text-lg font-black", projection.kiriFinal.patrimonio >= 0 ? "text-emerald-500" : "text-red-500")}>
+                  {projection.kiriFinal.patrimonio >= 0 ? "+" : ""}{formatAmount(projection.kiriFinal.patrimonio)}
+                </p>
+                <p className="text-[8px] text-muted-foreground">En {meses} meses</p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -179,9 +183,15 @@ export function ProyeccionesTab() {
               {/* Ruta actual */}
               <div className="bg-muted/30 rounded-xl p-3 space-y-2">
                 <p className="text-[9px] font-bold text-muted-foreground">Ruta actual (sin cambios)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><p className="text-[8px] text-muted-foreground">Ahorro acumulado</p><p className="text-xs font-black">{formatAmount(projection.actualFinal.ahorro)}</p></div>
-                  <div><p className="text-[8px] text-muted-foreground">Deuda total</p><p className="text-xs font-black text-red-500">-{formatAmount(projection.actualFinal.deuda)}</p></div>
+                <div className="space-y-1.5">
+                  <div>
+                    <p className="text-[8px] text-muted-foreground">Ahorro acumulado</p>
+                    <p className="text-xs font-black">{formatAmount(projection.actualFinal.ahorro)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] text-muted-foreground">Deuda total</p>
+                    <p className="text-xs font-black text-red-500">{projection.actualFinal.deuda > 0 ? "-" : ""}{formatAmount(projection.actualFinal.deuda)}</p>
+                  </div>
                 </div>
                 <div className="pt-1 border-t border-border">
                   <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", projection.actualFinal.patrimonio >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>
@@ -194,9 +204,15 @@ export function ProyeccionesTab() {
               {/* Ruta Kiri */}
               <div className="bg-kiri-emerald/5 border border-kiri-emerald/20 rounded-xl p-3 space-y-2">
                 <p className="text-[9px] font-bold text-kiri-emerald">Ruta Kiri (plan optimizado)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div><p className="text-[8px] text-muted-foreground">Ahorro acumulado</p><p className="text-xs font-black text-emerald-600">{formatAmount(projection.kiriFinal.ahorro)}</p></div>
-                  <div><p className="text-[8px] text-muted-foreground">Deuda total</p><p className="text-xs font-black text-red-500">-{formatAmount(projection.kiriFinal.deuda)}</p></div>
+                <div className="space-y-1.5">
+                  <div>
+                    <p className="text-[8px] text-muted-foreground">Ahorro acumulado</p>
+                    <p className="text-xs font-black text-emerald-600">{formatAmount(projection.kiriFinal.ahorro)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] text-muted-foreground">Deuda total</p>
+                    <p className="text-xs font-black text-red-500">{projection.kiriFinal.deuda > 0 ? "-" : ""}{formatAmount(projection.kiriFinal.deuda)}</p>
+                  </div>
                 </div>
                 <div className="pt-1 border-t border-kiri-emerald/20">
                   <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full", projection.kiriFinal.patrimonio >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>

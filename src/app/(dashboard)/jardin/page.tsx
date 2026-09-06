@@ -21,7 +21,6 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { userApi, loansApi, connectionsApi, WalletState } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
-import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 import { getNextPaymentInfo } from "@/lib/payment-schedule"
 import { calculateGardenXP } from "@/lib/garden-xp"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
@@ -208,22 +207,12 @@ function useCyclePhrase(list: string[], intervalMs = 4500): string {
 export default function JardinPage() {
   const router = useRouter()
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("jardin")
-  const { formatAmount, incomeFrequency, user, onboardingDone } = useAppContext()
+  const { formatAmount, incomeFrequency, user } = useAppContext()
   const { user: authUser } = useAuth()
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
   const { streakActual, badgesDesbloqueados, xpFromMissions, loading: streakLoading } = useStreaks(incomeFrequency)
   const { allocation } = usePeriodBudget()
   const { budgetCategories } = useBudgetCategories()
-
-  // ── Welcome onboarding ──
-  const [showWelcome, setShowWelcome] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return !localStorage.getItem('kiri_welcome_seen')
-  })
-  const handleWelcomeComplete = () => {
-    setShowWelcome(false)
-    localStorage.setItem('kiri_welcome_seen', 'true')
-  }
 
   const [wallet, setWallet] = useState<WalletState>({
     cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0,
@@ -439,11 +428,6 @@ export default function JardinPage() {
     <>
       {showTutorial && <TutorialSlider module="jardin" onClose={dismissTutorial} />}
     <div className="space-y-5 pb-8">
-
-      {/* ═══ WELCOME ONBOARDING ═══ */}
-      {showWelcome && onboardingDone && (
-        <WelcomeOnboarding onComplete={handleWelcomeComplete} />
-      )}
 
       {/* ═══ HEADER ═══ */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
