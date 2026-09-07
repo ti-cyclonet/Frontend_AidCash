@@ -15,7 +15,7 @@
  */
 
 import type { LucideIcon } from "lucide-react"
-import { Sprout, Wallet, Building2, BarChart3, Users, PiggyBank } from "lucide-react"
+import { Sprout, Wallet, Building2, BarChart3, Users, PiggyBank, Mic } from "lucide-react"
 
 export interface GuideItem {
   icon: string
@@ -155,6 +155,23 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
       { icon: "💵", title: "Registrar depósitos", description: "Añade dinero y mira cómo crecen tus metas. Estima el tiempo necesario para alcanzar cada objetivo." },
       { icon: "🛡️", title: "Fondo de emergencia", description: "Mantén tu colchón de seguridad. La app te guiará hasta alcanzar la meta ideal de 6 meses de gastos fijos." },
       { icon: "👥", title: "Bolsillos compartidos", description: "Los ahorros que crees en Social también aparecen aquí para que no los pierdas de vista." },
+    ],
+  },
+  {
+    id: "registro-rapido",
+    number: 7,
+    title: "Registro Rápido",
+    Icon: Mic,
+    navBlurb: "Voz y escáner: registra sin escribir",
+    subtitle: "¡Sin formularios! Dicta o toma una foto y Kiri hace el resto.",
+    description: "No siempre hay tiempo de abrir un formulario. Desde el botón flotante de Kiri Coach 🌱 (o el + de la barra inferior en el celular) puedes registrar lo que sea con solo hablar o tomar una foto.",
+    textColor: "text-cyan-600 dark:text-cyan-400",
+    badgeSolid: "bg-cyan-600",
+    bgGradient: "from-cyan-500/10 to-cyan-900/5",
+    borderColor: "border-cyan-500/20",
+    items: [
+      { icon: "🎙️", title: "Dictado por voz", description: "Toca el micrófono junto a Kiri Coach y di algo como \"gasté 20 mil en el almuerzo\" o \"me pagaron 2 millones\". Kiri entiende gastos, ingresos, deudas y ahorros, y los guarda cada uno en su lugar." },
+      { icon: "📷", title: "Escáner de recibos", description: "Toca el ícono de escáner, toma o sube una foto de un recibo o factura, y Kiri extrae el monto y lo registra como gasto automáticamente." },
     ],
   },
 ]
