@@ -21,7 +21,7 @@ import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { analyzeFinances } from "@/lib/recommendations"
 import { DebtStrategyPanel } from "@/components/recommendations/debt-strategy-panel"
-import { userApi, WalletState } from "@/lib/api-client"
+import { userApi, WalletState, getUserId } from "@/lib/api-client"
 import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 import { SpendingStatsGrid } from "@/components/gestion/SpendingStatsGrid"
 import { TopConsumosSection } from "@/components/gestion/TopConsumosSection"
@@ -34,14 +34,24 @@ export default function DashboardPage() {
   const router = useRouter()
 
   // ── Welcome onboarding: se muestra una sola vez después del primer onboarding ──
+  // La llave incluye el userId (mismo criterio que el tour de módulos en
+  // TutorialSlider.tsx) — antes era un solo flag global en localStorage, así
+  // que en cualquier dispositivo donde YA se hubiera completado el onboarding
+  // con OTRA cuenta, una cuenta nueva registrada ahí jamás veía la bienvenida.
+  const welcomeSeenKey = () => {
+    const userId = getUserId()
+    return userId ? `kiri_welcome_seen_${userId}` : null
+  }
   const [showWelcome, setShowWelcome] = useState(() => {
     if (typeof window === 'undefined') return false
-    return !localStorage.getItem('kiri_welcome_seen')
+    const key = welcomeSeenKey()
+    return key ? !localStorage.getItem(key) : false
   })
 
   const handleWelcomeComplete = () => {
     setShowWelcome(false)
-    localStorage.setItem('kiri_welcome_seen', 'true')
+    const key = welcomeSeenKey()
+    if (key) localStorage.setItem(key, 'true')
   }
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })

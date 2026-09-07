@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
   Wallet, ReceiptText, PieChart,
   ArrowRight, Sparkles, X, ChevronLeft, Info, ShieldCheck,
+  Mic, ScanLine, Bot,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -50,6 +51,16 @@ const steps = [
     cardExplanation: "Así tendrás control total y sabrás exactamente a dónde va cada centavo.",
     icon: <PieChart className="h-6 w-6" />,
     accentColor: "from-blue-500/20 to-blue-600/5",
+  },
+  {
+    id: 4,
+    label: "Registro rápido",
+    title: "Registra sin",
+    titleHighlight: "escribir nada",
+    description: "Dile a Kiri qué gastaste, cuánto ganaste o qué deuda tienes — por voz o con una foto — y él lo ubica solo.",
+    cardExplanation: "Todo esto vive en el botón de Kiri Coach 🌱 (abajo a la derecha, o el + de la barra inferior en el celular).",
+    icon: <Mic className="h-6 w-6" />,
+    accentColor: "from-kiri-emerald/20 to-kiri-forest/5",
   },
 ]
 
@@ -328,6 +339,65 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
                 </div>
               )}
+
+              {/* Step 4: Registro rápido — voz, escáner y Kiri Coach */}
+              {currentStep === 3 && (
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Left: text */}
+                  <div className="flex flex-col justify-center space-y-3">
+                    <div className="h-14 w-14 rounded-2xl bg-kiri-emerald/10 flex items-center justify-center">
+                      <span className="text-3xl">🌱</span>
+                    </div>
+                    <h2 className="text-xl font-black leading-tight">
+                      {step.title}{" "}
+                      <span className="text-kiri-emerald">{step.titleHighlight}</span>
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {step.description}
+                    </p>
+                    <p className="text-xs text-emerald-700/80 dark:text-emerald-300/70 leading-relaxed">
+                      {step.cardExplanation}
+                    </p>
+                  </div>
+
+                  {/* Right: 3 quick-input methods */}
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2.5 shadow-lg flex flex-col justify-center">
+                    <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                        <Mic className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">Dictar por voz</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                          Di algo como &quot;gasté 20 mil en el almuerzo&quot; o &quot;me pagaron 2 millones&quot; — Kiri entiende gastos, ingresos, deudas y ahorros, y los guarda solo.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-xl px-3 py-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-cyclon-periwinkle flex items-center justify-center text-white shrink-0">
+                        <ScanLine className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">Escanear un recibo</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                          Tómale foto a un recibo o factura y Kiri extrae el monto y lo registra como gasto por ti.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-600/40 rounded-xl px-3 py-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-slate-700 dark:bg-slate-600 flex items-center justify-center text-white shrink-0">
+                        <Bot className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">Pregúntale a Kiri Coach</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                          El mismo botón te abre un chat para resolver dudas y darte recomendaciones sobre tus finanzas.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
 
@@ -400,7 +470,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
               className="mt-3 text-center"
             >
               <p className="text-[10px] text-muted-foreground">
-                👆 Tu primer paso: Haz clic en &quot;<span className="text-emerald-600 dark:text-emerald-400 font-bold">+ Registrar Ingreso</span>&quot; para añadir tu Sueldo Real (Disponible).
+                👆 Tu primer paso: registra tu Sueldo Real con &quot;<span className="text-emerald-600 dark:text-emerald-400 font-bold">+ Registrar Ingreso</span>&quot;, o simplemente dile a Kiri Coach cuánto ganas.
               </p>
             </motion.div>
           )}
