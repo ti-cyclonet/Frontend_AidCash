@@ -19,7 +19,7 @@ import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
-import { api, userApi, supportApi } from "@/lib/api-client"
+import { api, userApi, supportApi, uploadAvatarToAuthoriza } from "@/lib/api-client"
 
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
 
@@ -88,14 +88,22 @@ export default function PerfilPage() {
       setAvatarError("Selecciona un archivo de imagen.")
       return
     }
+    // La foto se sube al endpoint CENTRAL de Authoriza (avatar compartido por
+    // todas las apps) y se usa la URL alojada que devuelve — ya no se guarda
+    // como base64 en el backend de Kiri. Muestra un preview local mientras sube.
+    setAvatarError(null)
     try {
-      const resized = await resizeImageToDataUrl(file)
-      setEditForm(f => ({ ...f, avatarUrl: resized }))
-      setAvatarChanged(true)
-      setAvatarError(null)
-    } catch {
-      setAvatarError("No se pudo procesar la imagen. Intenta con otra.")
+      const preview = await resizeImageToDataUrl(file)
+      setEditForm(f => ({ ...f, avatarUrl: preview }))
+    } catch { /* preview opcional */ }
+
+    const { url, error } = await uploadAvatarToAuthoriza(file)
+    if (error || !url) {
+      setAvatarError(error || "No se pudo subir la foto. Intenta con otra.")
+      return
     }
+    setEditForm(f => ({ ...f, avatarUrl: url }))
+    setAvatarChanged(true)
   }
 
   const handleSaveProfile = async () => {
