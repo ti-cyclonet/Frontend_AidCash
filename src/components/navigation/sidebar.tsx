@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
-import { useSocket, KiriNotification, SOCKET_EVENTS } from "@/lib/socket-context"
+import { useSocket } from "@/lib/socket-context"
+import { notifIcon, notifTitle, notifRoute } from "@/lib/notification-display"
 import { userApi } from "@/lib/api-client"
 
 const navItems = [
@@ -26,20 +27,6 @@ const navItems = [
   { label: "Social",       icon: Users,      href: "/social" },
   { label: "Ahorro",       icon: PiggyBank,  href: "/ahorro" },
 ]
-
-function notifTitleSidebar(n: KiriNotification): string {
-  const d = n.data
-  switch (n.event) {
-    case SOCKET_EVENTS.NEW_INVITE: return `${(d.from as { nombre?: string })?.nombre ?? "Alguien"} te invitó`
-    case SOCKET_EVENTS.INVITE_ACCEPTED: return `Invitación aceptada`
-    case SOCKET_EVENTS.SHARED_DEPOSIT: return `Depósito en bolsillo compartido`
-    case SOCKET_EVENTS.LOAN_REQUESTED: return `Solicitud de préstamo`
-    case SOCKET_EVENTS.LOAN_APPROVED: return `Préstamo aprobado`
-    case SOCKET_EVENTS.LOAN_PAYMENT: return `Abono recibido`
-    case SOCKET_EVENTS.LOAN_PAYMENT_CONFIRMED: return `Abono confirmado`
-    default: return "Nueva notificación"
-  }
-}
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -170,13 +157,13 @@ export function Sidebar() {
                         </div>
                       ) : (
                         notifications.slice(0, 10).map(n => (
-                          <button key={n.id} onClick={() => { setNotifsOpen(false); router.push((n.data.route as string) || "/social") }}
+                          <button key={n.id} onClick={() => { setNotifsOpen(false); router.push(notifRoute(n)) }}
                             className={cn("w-full flex items-start gap-2.5 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0", !n.read && "bg-cyclon-lavender/5")}>
                             <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">
-                              <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                              {notifIcon(n.event)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className={cn("text-xs leading-snug", !n.read && "font-semibold")}>{notifTitleSidebar(n)}</p>
+                              <p className={cn("text-xs leading-snug", !n.read && "font-semibold")}>{notifTitle(n)}</p>
                             </div>
                             {!n.read && <div className="h-2 w-2 rounded-full bg-cyclon-lavender shrink-0 mt-1.5" />}
                           </button>

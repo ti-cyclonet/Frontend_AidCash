@@ -3,61 +3,15 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { X, Bell, Sprout, Users, CheckCheck, Trash2, UserPlus, UserCheck, UserX, Coins, Check, XCircle, CalendarClock, Wallet } from "lucide-react"
+import { X, Bell, Sprout, Users, CheckCheck, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useSocket, SOCKET_EVENTS, KiriNotification } from "@/lib/socket-context"
+import { useSocket, KiriNotification } from "@/lib/socket-context"
+import { notifIcon, notifTitle, notifRoute } from "@/lib/notification-display"
 import { useAppContext } from "@/lib/app-context"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
-
-function notifIcon(event: KiriNotification["event"]) {
-  switch (event) {
-    case SOCKET_EVENTS.NEW_INVITE:        return <UserPlus className="h-3.5 w-3.5 text-cyclon-lavender" />
-    case SOCKET_EVENTS.INVITE_ACCEPTED:   return <UserCheck className="h-3.5 w-3.5 text-kiri-emerald" />
-    case SOCKET_EVENTS.INVITE_REJECTED:   return <UserX className="h-3.5 w-3.5 text-destructive" />
-    case SOCKET_EVENTS.LOAN_REQUESTED:    return <Coins className="h-3.5 w-3.5 text-cyclon-sky" />
-    case SOCKET_EVENTS.LOAN_APPROVED:     return <Check className="h-3.5 w-3.5 text-kiri-emerald" />
-    case SOCKET_EVENTS.LOAN_REJECTED:     return <XCircle className="h-3.5 w-3.5 text-destructive" />
-    // Alertas inteligentes
-    case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY: return <CalendarClock className="h-3.5 w-3.5 text-amber-500" />
-    case SOCKET_EVENTS.ALERT_INCOME_REMINDER:   return <Wallet className="h-3.5 w-3.5 text-kiri-emerald" />
-    case SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED:   return <CalendarClock className="h-3.5 w-3.5 text-cyclon-sky" />
-    default: return <Bell className="h-3.5 w-3.5 text-muted-foreground" />
-  }
-}
-
-function notifTitle(n: KiriNotification): string {
-  const d = n.data
-  switch (n.event) {
-    case SOCKET_EVENTS.NEW_INVITE: return `${(d.from as { nombre?: string })?.nombre ?? "Alguien"} te invitó`
-    case SOCKET_EVENTS.INVITE_ACCEPTED: return `${(d.by as { nombre?: string })?.nombre ?? "Contacto"} aceptó tu invitación`
-    case SOCKET_EVENTS.INVITE_REJECTED: return "Tu invitación fue rechazada"
-    case SOCKET_EVENTS.SHARED_DEPOSIT: return `Depósito en "${d.pocketName ?? d.nombre}"`
-    case SOCKET_EVENTS.LOAN_REQUESTED: return `${(d.borrower as { nombre?: string })?.nombre ?? "Alguien"} solicita préstamo`
-    case SOCKET_EVENTS.LOAN_APPROVED: return "Préstamo aprobado"
-    case SOCKET_EVENTS.LOAN_REJECTED: return "Préstamo rechazado"
-    case SOCKET_EVENTS.LOAN_PAYMENT: return "Abono recibido"
-    case SOCKET_EVENTS.LOAN_PAYMENT_CONFIRMED: return "Tu abono fue confirmado"
-    case SOCKET_EVENTS.LOAN_PAYMENT_REJECTED: return "Tu abono fue rechazado"
-    // Alertas inteligentes
-    case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY: return (d.message as string) ?? "Se acerca tu fecha de pago"
-    case SOCKET_EVENTS.ALERT_INCOME_REMINDER: return (d.message as string) ?? "¿Ya registraste tu ingreso?"
-    case SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED: return (d.message as string) ?? "Ingreso asignado al periodo"
-    default: return "Nueva notificación"
-  }
-}
-
-function notifRoute(n: KiriNotification): string {
-  const d = n.data
-  // Si la notificación trae una ruta específica, usarla
-  if (d.route && typeof d.route === 'string') return d.route
-  // Las alertas inteligentes van a la billetera
-  if (n.event.startsWith("alert:")) return "/gestion?tab=billetera"
-  // Social notifications
-  return "/social"
-}
 
 export function TopBar() {
   const [notifsOpen, setNotifsOpen] = useState(false)
