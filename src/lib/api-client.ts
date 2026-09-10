@@ -14,6 +14,9 @@
 import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+// Authoriza es la identidad central: la foto de perfil se sube allí y se
+// refleja en todas las apps del ecosistema.
+const AUTHORIZA_API_URL = process.env.NEXT_PUBLIC_AUTHORIZA_API_URL || 'http://localhost:3000/api'
 
 // ─── Storage Keys ─────────────────────────────────────────────────────────────
 
@@ -301,6 +304,35 @@ export const userApi = {
   async searchUser(method: 'username' | 'correo', value: string) {
     return api<{ user: SocialUser | null }>(`/users/search?method=${method}&value=${encodeURIComponent(value)}`)
   },
+}
+
+/**
+ * Sube la foto de perfil al endpoint CENTRAL de Authoriza (multipart, campo
+ * 'file') y devuelve la URL alojada. El avatar vive en Authoriza y se refleja
+ * en todas las apps. Usa el access token de Kiri (Authoriza valida el token
+ * federado). El api() normal solo maneja JSON, por eso este helper es aparte.
+ */
+export async function uploadAvatarToAuthoriza(file: File): Promise<{ url: string | null; error: string | null }> {
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    // Base normalizada: quita un '/auth' final por si el env lo trae (prod Kiri
+    // ya es '.../api' sin /auth, pero se protege por consistencia).
+    const base = AUTHORIZA_API_URL.replace(/\/auth\/?$/, '')
+    const headers: Record<string, string> = {}
+    const token = getAccessToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    // NO fijar Content-Type: el navegador pone el boundary del multipart.
+    const res = await fetch(`${base}/users/me/avatar`, { method: 'POST', headers, body: form })
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}))
+      return { url: null, error: e.message || `Error ${res.status}` }
+    }
+    const data = await res.json()
+    return { url: data.url as string, error: null }
+  } catch {
+    return { url: null, error: 'Error de conexión al subir la foto' }
+  }
 }
 
 export interface WalletState {
