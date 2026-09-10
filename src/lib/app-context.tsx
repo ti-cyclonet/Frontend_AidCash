@@ -213,6 +213,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!profileLoadedRef.current) return
       if (!isAuthenticated()) return
 
+      // El backend guarda esto como "diasPago" (array de números, ej. [10, 25]),
+      // no como "diasCobro" (string "10,25") — mandar el campo tal cual hacía
+      // que Zod lo descartara en silencio (no es un campo reconocido por el
+      // schema), así que el PATCH llegaba vacío: el cambio solo vivía acá y en
+      // localStorage, nunca se guardaba de verdad en la base de datos.
+      if (field === "diasCobro") {
+        const dias = String(value).split(",").map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d) && d >= 1 && d <= 31)
+        await userApi.updateProfile({ diasPago: dias })
+        return
+      }
+
       await userApi.updateProfile({ [field]: value })
     },
     []

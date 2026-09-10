@@ -32,6 +32,13 @@ export function PlanWelcomeModal() {
       frecuencia: "mensual",
       pagoAutomatico: true,
       renovacionAuto: true,
+      // El usuario acaba de activar/pagar el plan AHORA — ese pago cubre el
+      // periodo actual, así que no debe nacer "vencido". Sin esto, apenas
+      // pasaba un día (o incluso el mismo día, según el momento del webhook
+      // de Authoriza vs. cuándo el usuario abre la app) el gasto quedaba
+      // marcado como vencido de forma automática, sin que el usuario hubiera
+      // hecho nada mal — el próximo cobro real es el mes siguiente.
+      yaPagoEstePeriodo: true,
     })
   }, [welcomePackage, welcomePlanPrice, addFixedExpense])
 

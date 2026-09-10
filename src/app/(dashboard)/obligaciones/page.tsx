@@ -186,13 +186,23 @@ export default function ObligacionesPage() {
   }, [])
 
   useEffect(() => {
-    // Cargar bolsillos de ahorro y fondo de emergencia
-    try {
-      const raw = localStorage.getItem("kiri_saving_pockets")
-      if (raw) setSavingsPockets(JSON.parse(raw))
-    } catch {}
-    import("@/lib/api-client").then(({ emergencyFundApi }) => {
+    // Cargar bolsillos de ahorro y fondo de emergencia — bolsillos vienen del
+    // backend (savingsPocketsApi), no de localStorage: ese `kiri_saving_pockets`
+    // es la clave legacy que la página de Ahorro dejó de escribir hace tiempo
+    // (ver comentario en ahorro/page.tsx), así que acá siempre quedaba vacía o
+    // desactualizada aunque el usuario sí tuviera plata ahorrada de verdad.
+    import("@/lib/api-client").then(({ emergencyFundApi, savingsPocketsApi }) => {
       emergencyFundApi.get().then(({ data }) => { if (data?.fondoActual != null) setFondoEmergencia(data.fondoActual) })
+      savingsPocketsApi.list().then(({ data }) => {
+        // `montoActual` llega como STRING desde el backend (Decimal de Prisma
+        // serializado en JSON) — sin este Number(), sumar dos bolsillos con
+        // `+` hacía concatenación de texto en vez de suma ("500000"+"0" =
+        // "0500000"), inflando el total mostrado en "Usar Ahorros" muy por
+        // encima del dinero real (mostraba $5,000,000 cuando solo había
+        // $500,000 — cada bolsillo individual se veía bien porque ese caso sí
+        // formateaba el valor crudo sin sumarlo primero).
+        if (data?.pockets) setSavingsPockets(data.pockets.map(p => ({ id: p.id, nombre: p.nombre, acumulado: Number(p.montoActual) })))
+      })
     })
   }, [])
 
@@ -354,13 +364,16 @@ export default function ObligacionesPage() {
     const pocket = savingsPockets.find(p => p.id === pocketId)
     if (!pocket || pocket.acumulado < needed) return
 
-    // Retirar del bolsillo local
-    const updated = savingsPockets.map(p => p.id === pocketId ? { ...p, acumulado: p.acumulado - needed } : p)
-    setSavingsPockets(updated)
-    localStorage.setItem("kiri_saving_pockets", JSON.stringify(updated))
-
-    // Retirar del wallet → suma a cashBalance
-    await userApi.walletWithdraw(needed, 'ahorro')
+    // Retirar del bolsillo de verdad (backend) — antes esto solo tocaba un
+    // estado local + localStorage que la página de Ahorro ya no lee ni
+    // escribe, así que el bolsillo real nunca bajaba y quedaba desincronizado
+    // del saldo que sí se le devolvía a la billetera. El endpoint ya acredita
+    // cashBalance/walletAhorro atómicamente, así que no hace falta un
+    // walletWithdraw aparte.
+    const { savingsPocketsApi } = await import("@/lib/api-client")
+    const { error } = await savingsPocketsApi.withdraw(pocketId, needed)
+    if (error) return
+    setSavingsPockets(prev => prev.map(p => p.id === pocketId ? { ...p, acumulado: p.acumulado - needed } : p))
 
     // Ahora pagar la obligación
     if (insufficientTarget.type === "debt") {
@@ -1653,8 +1666,11 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
 }) {
   const [showStrategyInfo, setShowStrategyInfo] = useState(false)
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
-  const progreso = debt.montoTotal > 0 ? Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100) : 0
-  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo)
+  // Clamp a [0, 100] — en una tarjeta de crédito el saldo puede SUBIR por
+  // encima de `montoTotal` (el monto con el que se creó) al hacer nuevas
+  // compras con ella, lo que sin este límite mostraba un "% pagado" negativo.
+  const progreso = debt.montoTotal > 0 ? Math.max(0, Math.min(100, Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100))) : 0
+  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo, debt.frecuenciaPago === 'quincenal')
   const obligIcon = getObligationIcon(debt.nombre)
 
   // Yellow highlight for period priority (pending in current period)
@@ -1755,6 +1771,16 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
           </div>
         </div>
 
+        {/* Deuda compartida — solo informativo, no cambia cómo se paga */}
+        {!hidden && debt.esCompartida && debt.nombreParticipanteB && (
+          <div className="flex items-center justify-between bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-xl px-3 py-2 text-[10px]">
+            <span className="font-bold text-cyclon-lavender">Compartida con {debt.nombreParticipanteB}</span>
+            <span className="text-muted-foreground">
+              Tú: {formatAmount(debt.montoParticipanteA ?? 0)} · {debt.nombreParticipanteB}: {formatAmount(debt.montoParticipanteB ?? 0)}
+            </span>
+          </div>
+        )}
+
         {/* Montos */}
         {!hidden ? (
           <div className="flex items-end justify-between">
@@ -1843,7 +1869,7 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
 }) {
-  const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo)
+  const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo, item.frecuencia === 'quincenal')
   const montoPagado = (item as any).montoPagadoEstePeriodo ?? 0
   const isPartiallyPaid = montoPagado > 0 && !item.pagadoEstePeriodo
   const remaining = item.monto - montoPagado
@@ -1980,9 +2006,12 @@ function DebtFormFields({
 
   return (
     <div className="space-y-4">
-      {/* Acreedor */}
+      {/* Nombre de la deuda — este campo es `nombre`, no `acreedor` (esta
+          pantalla no expone ese campo por separado); estaba mal etiquetado
+          como "Acreedor", lo que hacía parecer que el nombre real de la
+          deuda no se podía editar desde acá. */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Acreedor</Label>
+        <Label className="text-xs font-bold">Nombre de la deuda</Label>
         <Input placeholder="Ej: Banco Falabella" value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
       </div>
 

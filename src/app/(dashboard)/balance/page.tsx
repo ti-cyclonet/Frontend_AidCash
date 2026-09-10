@@ -94,16 +94,18 @@ export default function BalancePage() {
   useEffect(() => { fetchReport(timeframe) }, [timeframe, fetchReport])
   useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
 
-  // Meta real de ahorro: suma de metas de los bolsillos de ahorro
+  // Meta real de ahorro: suma de metas de los bolsillos de ahorro — venía de
+  // una clave de localStorage ("kiri_saving_pockets") que la página de Ahorro
+  // dejó de escribir hace tiempo (ver comentario en ahorro/page.tsx), así que
+  // para cualquier usuario con bolsillos reales esto siempre quedaba en $0 y
+  // la tarjeta "Meta de ahorro" ni siquiera se mostraba (se oculta si meta<=0).
   const [realSavingsMeta, setRealSavingsMeta] = useState(0)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("kiri_saving_pockets")
-      if (raw) {
-        const pockets = JSON.parse(raw) as { meta: number }[]
-        setRealSavingsMeta(pockets.reduce((a, p) => a + (p.meta || 0), 0))
-      }
-    } catch {}
+    import("@/lib/api-client").then(({ savingsPocketsApi }) => {
+      savingsPocketsApi.list().then(({ data }) => {
+        if (data?.pockets) setRealSavingsMeta(data.pockets.reduce((a, p) => a + (Number(p.meta) || 0), 0))
+      })
+    })
   }, [])
 
   // Filtro de la gráfica: qué líneas mostrar

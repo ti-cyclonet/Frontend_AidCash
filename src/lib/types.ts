@@ -193,6 +193,32 @@ export interface Debt {
   prioridad: DebtPriority;
   pagoAutomatico?: boolean;
   budgetCategoryId?: string | null;
+  // Deuda compartida (Social > Deudas, solo pareja/familia) — informativo,
+  // no cambia cómo se paga esta deuda.
+  esCompartida?: boolean;
+  connectionId?: string | null;
+  montoParticipanteA?: number | null;
+  montoParticipanteB?: number | null;
+  nombreParticipanteB?: string | null;
+}
+
+// Fila de Social > Deudas — visible tanto para el dueño de la deuda como
+// para su pareja/familiar, siempre relativa a quién la está viendo.
+export interface SharedDebt {
+  id: string;
+  nombre: string;
+  montoTotal: number;
+  tipoDeuda: DebtType;
+  tasaInteres: number | null;
+  estado: DebtStatus;
+  connectionRole: 'PARTNER' | 'FAMILY';
+  isOwner: boolean;
+  ownerName: string;
+  peerName: string;
+  ownerShare: number;
+  peerShare: number;
+  myShare: number;
+  createdAt: string;
 }
 
 export interface FixedExpense {
@@ -222,6 +248,7 @@ export interface ImpulseExpense {
   categoria: ImpulseCategory;
   periodo: string;
   createdAt: string;
+  tarjetaId?: string | null;
 }
 
 export interface BudgetAllocation {

@@ -14,7 +14,7 @@ import {
   ChevronRight, ChevronLeft, Clock, Shield,
   Calendar, CalendarDays, Wallet, PiggyBank,
   CheckCircle2, XCircle, Sparkles, Rocket, Target, Brain,
-  Plus, Trash2, ReceiptText, Landmark,
+  Plus, Trash2, ReceiptText, Landmark, Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +24,7 @@ const STEPS = [
   "Bienvenida",
   "Frecuencia de ingresos",
   "Sueldo base",
+  "Ingreso extra",
   "Situación de deudas",
   "Registrar deudas",         // nuevo paso intermedio
   "Finalización",
@@ -40,8 +41,8 @@ interface OnboardingObligation {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { setIncome, setOnboardingDone, setUser, user, setIncomeFrequency } = useAppContext()
-  const { updateUserProfile, addDebt, addFixedExpense } = useFinanceData()
+  const { setIncome, setOnboardingDone, setUser, user, setIncomeFrequency, setDiasCobro } = useAppContext()
+  const { updateUserProfile, addDebt, addFixedExpense, addExtraIncome } = useFinanceData()
   const { user: authUser } = useAuth()
 
   const [step, setStep] = useState(0)
@@ -49,8 +50,15 @@ export default function OnboardingPage() {
 
   // Form data
   const [frecuencia, setFrecuencia] = useState<"mensual" | "quincenal">("mensual")
+  const [diaPago1, setDiaPago1] = useState("")
+  const [diaPago2, setDiaPago2] = useState("")
   const [incomeValue, setIncomeValue] = useState("")
   const [metaAhorro, setMetaAhorro] = useState("")
+  const [tieneIngresoExtra, setTieneIngresoExtra] = useState<boolean | null>(null)
+  const [extraNombre, setExtraNombre] = useState("")
+  const [extraMonto, setExtraMonto] = useState("")
+  const [extraTemp, setExtraTemp] = useState<"una_vez" | "definido" | "indefinido">("una_vez")
+  const [extraMeses, setExtraMeses] = useState("")
   const [tieneDeudas, setTieneDeudas] = useState<boolean | null>(null)
   const [quiereRegistrar, setQuiereRegistrar] = useState<boolean | null>(null)
 
@@ -75,18 +83,20 @@ export default function OnboardingPage() {
     if (isLast) {
       handleFinish()
     } else {
-      // Si no tiene deudas o no quiere registrar, saltar el paso de registro
-      if (step === 3) {
+      // Si no quiere contar un ingreso extra, no hay nada más que pedirle en
+      // este paso — pero SÍ sigue al de deudas normalmente (no se salta nada).
+      if (step === 4) {
+        // Si no tiene deudas o no quiere registrar, saltar el paso de registro
         if (tieneDeudas === false) {
-          setStep(5) // saltar a finalización
+          setStep(6) // saltar a finalización
           return
         }
-        // Si tiene deudas, va al paso 4 (pregunta de registrar)
-        setStep(4)
+        // Si tiene deudas, va al paso 5 (pregunta de registrar)
+        setStep(5)
         return
       }
-      if (step === 4 && quiereRegistrar === false) {
-        setStep(5) // saltar a finalización
+      if (step === 5 && quiereRegistrar === false) {
+        setStep(6) // saltar a finalización
         return
       }
       setStep(s => s + 1)
@@ -96,27 +106,39 @@ export default function OnboardingPage() {
   const goPrev = () => {
     if (!isFirst) {
       // Ajustar navegación hacia atrás
-      if (step === 5) {
+      if (step === 6) {
         if (tieneDeudas === false) {
-          setStep(3)
-          return
-        }
-        if (quiereRegistrar === false) {
           setStep(4)
           return
         }
-        setStep(4)
+        if (quiereRegistrar === false) {
+          setStep(5)
+          return
+        }
+        setStep(5)
         return
       }
       setStep(s => s - 1)
     }
   }
 
+  // Días de pago según la frecuencia elegida: 1 para mensual, 2 para quincenal.
+  const diasPagoValidos = () => {
+    const d1 = Number(diaPago1)
+    if (!d1 || d1 < 1 || d1 > 31) return false
+    if (frecuencia === "quincenal") {
+      const d2 = Number(diaPago2)
+      if (!d2 || d2 < 1 || d2 > 31) return false
+    }
+    return true
+  }
+
   const canNext = () => {
-    if (step === 1) return true
+    if (step === 1) return diasPagoValidos()
     if (step === 2) return !!incomeValue && Number(incomeValue) > 0
-    if (step === 3) return tieneDeudas !== null
-    if (step === 4) return quiereRegistrar !== null
+    if (step === 3) return tieneIngresoExtra !== null && (tieneIngresoExtra === false || (!!extraNombre && !!extraMonto))
+    if (step === 4) return tieneDeudas !== null
+    if (step === 5) return quiereRegistrar !== null
     return true
   }
 
@@ -173,15 +195,35 @@ export default function OnboardingPage() {
     try {
       const rawIncome = Number(incomeValue) || 0
       const parsedIncome = frecuencia === "quincenal" ? rawIncome * 2 : rawIncome
+      const diasPago = frecuencia === "quincenal"
+        ? [Number(diaPago1), Number(diaPago2)].sort((a, b) => a - b)
+        : [Number(diaPago1)]
 
       await updateUserProfile({
         ingreso_base: parsedIncome,
         frecuencia_ingreso: frecuencia,
         onboarding_done: true,
+        diasPago,
       })
+
+      // El ingreso extra se guarda hasta el final, junto con todo lo demás —
+      // no apenas se llena el formulario en el paso 3 (mismo patrón que ya
+      // usa el resto del test: nada se persiste hasta "Comenzar mi viaje").
+      if (tieneIngresoExtra && extraNombre && extraMonto) {
+        await addExtraIncome({
+          nombre: extraNombre,
+          monto: Number(extraMonto),
+          temporalidad: extraTemp,
+          mesesRestantes: extraTemp === "definido" ? (Number(extraMeses) || 1) : null,
+        })
+      }
 
       if (parsedIncome > 0) setIncome(parsedIncome)
       setIncomeFrequency(frecuencia)
+      // Mismo campo que ya usa PaydaySelector en Gestión (diasCobro) — así el
+      // día(s) de pago elegidos acá quedan reflejados ahí de inmediato, sin
+      // que el usuario tenga que volver a configurarlos.
+      setDiasCobro(diasPago.join(","))
       setOnboardingDone(true)
       router.replace("/dashboard")
     } catch {
@@ -190,8 +232,8 @@ export default function OnboardingPage() {
   }
 
   // Calcula el paso visual (para la progress bar)
-  const visualStep = step >= 5 ? 4 : step >= 4 ? 3 : step
-  const visualTotalSteps = 5
+  const visualStep = step >= 6 ? 5 : step >= 5 ? 4 : step
+  const visualTotalSteps = 6
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -210,7 +252,7 @@ export default function OnboardingPage() {
         </div>
         {step > 0 && step < totalSteps - 1 && (
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            Paso {Math.min(visualStep, 3)} de 3
+            Paso {Math.min(visualStep, 4)} de 4
           </p>
         )}
       </div>
@@ -314,6 +356,41 @@ export default function OnboardingPage() {
                   </button>
                 </div>
 
+                {/* Fecha(s) de pago — un cuadro si es mensual, dos si es
+                    quincenal. Se guardan junto con todo lo demás al terminar
+                    el test y quedan reflejadas de inmediato en Gestión
+                    (mismo campo que usa el selector de días de pago ahí). */}
+                <div className="space-y-2 pt-1">
+                  <Label className="text-xs font-bold">
+                    {frecuencia === "quincenal" ? "¿Qué días te pagan?" : "¿Qué día te pagan?"}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      placeholder="Ej: 15"
+                      value={diaPago1}
+                      onChange={e => setDiaPago1(e.target.value)}
+                      className="h-11 rounded-xl w-24 text-center font-bold"
+                    />
+                    {frecuencia === "quincenal" && (
+                      <>
+                        <span className="text-xs text-muted-foreground font-bold">y</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="31"
+                          placeholder="Ej: 30"
+                          value={diaPago2}
+                          onChange={e => setDiaPago2(e.target.value)}
+                          className="h-11 rounded-xl w-24 text-center font-bold"
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
                   <Sparkles className="h-3 w-3 text-kiri-emerald" />
                   Podrás cambiar esto cuando quieras desde configuración.
@@ -354,8 +431,126 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 3: Situación de deudas ═══ */}
+            {/* ═══ PASO 3: Ingreso extra (opcional) ═══ */}
             {step === 3 && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black">¿Tienes algún ingreso extra?</h2>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Freelance, comisiones, un negocio aparte — cualquier plata que te entre además de tu sueldo base.
+                </p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setTieneIngresoExtra(true)}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
+                      tieneIngresoExtra === true
+                        ? "border-kiri-emerald bg-kiri-emerald/5"
+                        : "border-muted hover:border-kiri-emerald/30"
+                    )}
+                  >
+                    <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      tieneIngresoExtra === true ? "border-kiri-emerald" : "border-muted-foreground"
+                    )}>
+                      {tieneIngresoExtra === true && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
+                    </div>
+                    <CheckCircle2 className="h-5 w-5 text-kiri-emerald shrink-0" />
+                    <p className="text-sm font-bold">Sí, tengo un ingreso extra</p>
+                  </button>
+
+                  <button
+                    onClick={() => { setTieneIngresoExtra(false); setExtraNombre(""); setExtraMonto("") }}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
+                      tieneIngresoExtra === false
+                        ? "border-kiri-emerald bg-kiri-emerald/5"
+                        : "border-muted hover:border-kiri-emerald/30"
+                    )}
+                  >
+                    <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                      tieneIngresoExtra === false ? "border-kiri-emerald" : "border-muted-foreground"
+                    )}>
+                      {tieneIngresoExtra === false && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
+                    </div>
+                    <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <p className="text-sm font-bold">No, solo mi sueldo base</p>
+                  </button>
+                </div>
+
+                {/* Mismo formulario/campos que "Ingreso Extra" en Billetera —
+                    se guarda hasta el final del test, junto con todo lo demás. */}
+                {tieneIngresoExtra === true && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold">Nombre</Label>
+                      <Input
+                        placeholder="Ej: Freelance, comisiones, venta..."
+                        value={extraNombre}
+                        onChange={e => setExtraNombre(e.target.value)}
+                        className="h-10 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold">Monto aproximado</Label>
+                      <MoneyInput
+                        value={extraMonto}
+                        onChange={v => setExtraMonto(v)}
+                        className="h-11 rounded-xl font-bold"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold">¿Con qué frecuencia te entra?</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button type="button" onClick={() => setExtraTemp("una_vez")}
+                          className={cn("h-9 rounded-xl text-[10px] font-bold border-2 transition-colors",
+                            extraTemp === "una_vez" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Una vez
+                        </button>
+                        <button type="button" onClick={() => setExtraTemp("definido")}
+                          className={cn("h-9 rounded-xl text-[10px] font-bold border-2 transition-colors",
+                            extraTemp === "definido" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Por un tiempo
+                        </button>
+                        <button type="button" onClick={() => setExtraTemp("indefinido")}
+                          className={cn("h-9 rounded-xl text-[10px] font-bold border-2 transition-colors",
+                            extraTemp === "indefinido" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          Siempre
+                        </button>
+                      </div>
+                    </div>
+                    {extraTemp === "definido" && (
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold">¿Por cuántos periodos?</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="Ej: 3"
+                          value={extraMeses}
+                          onChange={e => setExtraMeses(e.target.value)}
+                          className="h-10 rounded-xl w-24"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
+                  Podrás registrar más ingresos extra cuando quieras desde Gestión.
+                </p>
+              </div>
+            )}
+
+            {/* ═══ PASO 4: Situación de deudas ═══ */}
+            {step === 4 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
@@ -418,8 +613,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 4: Registrar deudas/gastos fijos ═══ */}
-            {step === 4 && (
+            {/* ═══ PASO 5: Registrar deudas/gastos fijos ═══ */}
+            {step === 5 && (
               <div className="space-y-5">
                 {/* Si aún no eligió si quiere registrar */}
                 {quiereRegistrar === null && (
@@ -454,7 +649,7 @@ export default function OnboardingPage() {
                       </button>
 
                       <button
-                        onClick={() => { setQuiereRegistrar(false); setStep(5) }}
+                        onClick={() => { setQuiereRegistrar(false); setStep(6) }}
                         className={cn(
                           "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
                           "border-muted hover:border-kiri-emerald/30"
@@ -592,7 +787,7 @@ export default function OnboardingPage() {
 
                     {/* Botón para continuar */}
                     <button
-                      onClick={() => setStep(5)}
+                      onClick={() => setStep(6)}
                       className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
                     >
                       {obligations.length > 0 ? "Continuar →" : "Continuar después →"}
@@ -602,8 +797,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 5: Finalización ═══ */}
-            {step === 5 && (
+            {/* ═══ PASO 6: Finalización ═══ */}
+            {step === 6 && (
               <div className="flex flex-col items-center text-center space-y-6">
                 <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center relative">
                   <span className="text-7xl">🌱</span>
@@ -664,7 +859,7 @@ export default function OnboardingPage() {
           >
             Comenzar test
           </Button>
-        ) : step === 5 ? (
+        ) : step === 6 ? (
           <Button
             onClick={handleFinish}
             disabled={saving}
@@ -672,7 +867,7 @@ export default function OnboardingPage() {
           >
             {saving ? "Guardando..." : "Comenzar mi viaje en Kiri 🚀"}
           </Button>
-        ) : step === 4 && quiereRegistrar === true ? (
+        ) : step === 5 && quiereRegistrar === true ? (
           // No mostrar footer de navegación estándar cuando está en modo registro
           null
         ) : (

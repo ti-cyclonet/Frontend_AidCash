@@ -72,9 +72,14 @@ export function computeCategorySpend(
   })
 
   const legacyIds = new Set(cat.linkedFixedIds ?? [])
+  // Si el gasto YA tiene su propia categoría asignada (budgetCategoryId) y no
+  // es esta misma, esa es la fuente de verdad — contarlo también acá por el
+  // mecanismo legacy lo duplicaría en dos categorías distintas a la vez. Esto
+  // puede pasar con datos guardados antes de que el formulario bloqueara
+  // vincular por ambos mecanismos a la vez (ver PresupuestoTab).
   const linkedFixedPaid = [...legacyIds]
     .map(id => fixedExpenses.find(f => f.id === id))
-    .filter((f): f is FixedLike => !!f && f.pagadoEstePeriodo)
+    .filter((f): f is FixedLike => !!f && f.pagadoEstePeriodo && (!f.budgetCategoryId || f.budgetCategoryId === cat.id))
 
   // Vinculados desde el formulario de la propia deuda/gasto fijo — sin contar
   // dos veces algo que ya venga por el mecanismo legacy de arriba.

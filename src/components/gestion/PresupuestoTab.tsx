@@ -150,11 +150,16 @@ export function PresupuestoTab() {
       return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
     })
 
-    // Gastos fijos vinculados desde ESTA categoría (legacy) que ya fueron pagados este periodo
+    // Gastos fijos vinculados desde ESTA categoría (legacy) que ya fueron pagados
+    // este periodo — si el gasto YA tiene su propia categoría asignada
+    // (budgetCategoryId) y no es esta misma, esa es la fuente de verdad; contarlo
+    // también acá lo duplicaría en dos categorías a la vez (mismo fix que en
+    // computeCategorySpend, para datos guardados antes de que el formulario
+    // bloqueara vincular por ambos mecanismos al mismo tiempo).
     const legacyIds = new Set(cat.linkedFixedIds ?? [])
     const linkedFixedPaid = [...legacyIds]
       .map(id => fixedExpenses.find(f => f.id === id))
-      .filter((f): f is NonNullable<typeof f> => !!f && f.pagadoEstePeriodo)
+      .filter((f): f is NonNullable<typeof f> => !!f && f.pagadoEstePeriodo && (!f.budgetCategoryId || f.budgetCategoryId === cat.id))
 
     // Deudas y gastos fijos vinculados desde SU PROPIO formulario de creación/
     // edición (budgetCategoryId) — cuentan el pago real de este periodo, no el
@@ -168,11 +173,23 @@ export function PresupuestoTab() {
     const spentFromFixed = linkedFixedPaid.reduce((a, f) => a + f.monto, 0)
     const spentFromOwnCategory = linkedByOwnCategory.reduce((a, x) => a + (x.montoPagadoEstePeriodo ?? 0), 0)
 
+    // Desglose para mostrarle al usuario "en qué se fue" el total — antes solo
+    // incluía los gastos hormiga (matchedImpulse); un gasto fijo o deuda
+    // vinculado a la categoría SÍ sumaba al total de arriba pero desaparecía
+    // del desglose, así que el usuario veía "$3.797.000 gastados" con una
+    // lista que solo sumaba $20.000 — sin forma de ver a dónde se fue el resto.
+    const breakdownItems: { nombre: string; monto: number }[] = [
+      ...matchedImpulse.map(e => ({ nombre: e.nombre, monto: e.monto })),
+      ...linkedFixedPaid.map(f => ({ nombre: f.nombre, monto: f.monto })),
+      ...linkedByOwnCategory.map(x => ({ nombre: x.nombre, monto: x.montoPagadoEstePeriodo ?? 0 })),
+    ]
+
     return {
       ...cat,
       spent: spentFromImpulse + spentFromFixed + spentFromOwnCategory,
       expenses: matchedImpulse,
       linkedFixedPaid,
+      breakdownItems,
     }
   })
 
@@ -207,7 +224,14 @@ export function PresupuestoTab() {
 
   // Estadísticas de gastos hormiga — solo los marcados con 🐜
   const hormigaExpenses = impulseExpenses.filter(e => e.nombre.startsWith('🐜'))
-  const totalHormiga = hormigaExpenses.reduce((a, e) => a + e.monto, 0)
+  // Solo los pagados en efectivo consumen el "disponible libre" — los pagados
+  // con tarjeta no tocan cashBalance/walletLibre al registrarse (ver
+  // addImpulseExpense en use-finance-data.tsx), así que sumarlos acá inflaba
+  // el % de uso y las proyecciones de ahorro sin que hubiera salido plata real
+  // del bolsillo libre. Mismo bug que totalImpulseThisPeriod, repetido acá con
+  // su propia suma — el historial sigue mostrando todos los registros, solo el
+  // total que se compara contra `realFreeAmount` excluye los de tarjeta.
+  const totalHormiga = hormigaExpenses.reduce((a, e) => a + (e.tarjetaId ? 0 : e.monto), 0)
   const hormigaUsagePct = realFreeAmount > 0
     ? Math.min(100, Math.round((totalHormiga / realFreeAmount) * 100))
     : 0
@@ -480,7 +504,7 @@ export function PresupuestoTab() {
           <Card ref={selectedDetailRef} className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <CardContent className="p-5">
               <CategoryDetail
-                cat={{ ...cat, limit: cat.budget, ratio, items: (cat.expenses ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
+                cat={{ ...cat, limit: cat.budget, ratio, items: (cat.breakdownItems ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
                   const cleanName = e.nombre.replace(/^\[.*?\]\s*/, '').replace(/^🐜\s*/, '')
                   const existing = acc.find(a => a.name === cleanName)
                   if (existing) existing.amount += e.monto
@@ -773,8 +797,14 @@ export function PresupuestoTab() {
                     })
                     .map(f => {
                       const isLinked = linkedFixed.includes(f.id)
-                      // Check if already linked to another category
+                      // Ya vinculado a OTRA categoría — por el mecanismo viejo
+                      // (linkedFixedIds) o por el nuevo (el propio budgetCategoryId
+                      // del gasto fijo). Antes solo se revisaba el mecanismo viejo,
+                      // así que un gasto con su propia categoría asignada se podía
+                      // volver a marcar acá y terminaba contando el pago DOS VECES
+                      // — una vez en cada categoría — inflando el total general.
                       const linkedElsewhere = categories.find(c => c.id !== editingId && c.linkedFixedIds?.includes(f.id))
+                        ?? (f.budgetCategoryId && f.budgetCategoryId !== editingId ? categories.find(c => c.id === f.budgetCategoryId) : undefined)
                       return (
                         <button
                           key={f.id}
@@ -1217,16 +1247,19 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
   const hormigaPctOfFree = realFreeAmount > 0 ? Math.round((totalHormiga / realFreeAmount) * 100) : 0
 
   // Meta de ahorro del usuario (localStorage)
+  // Venía de una clave de localStorage ("kiri_saving_pockets") que la página
+  // de Ahorro dejó de escribir hace tiempo — para cualquier usuario con
+  // bolsillos reales esto siempre quedaba en null y la sugerencia nunca se
+  // mostraba. Ahora usa los bolsillos reales del backend.
   const [savingsMeta, setSavingsMeta] = useState<{ nombre: string; meta: number; acumulado: number } | null>(null)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('kiri_saving_pockets')
-      if (raw) {
-        const pockets = JSON.parse(raw) as { nombre: string; meta: number; acumulado: number }[]
-        const withMeta = pockets.filter(p => p.meta > 0 && p.acumulado < p.meta)
-        if (withMeta.length > 0) setSavingsMeta(withMeta[0])
-      }
-    } catch { /* ignore */ }
+    import("@/lib/api-client").then(({ savingsPocketsApi }) => {
+      savingsPocketsApi.list().then(({ data }) => {
+        const pockets = data?.pockets ?? []
+        const withMeta = pockets.filter(p => p.meta > 0 && p.montoActual < p.meta)
+        if (withMeta.length > 0) setSavingsMeta({ nombre: withMeta[0].nombre, meta: Number(withMeta[0].meta), acumulado: Number(withMeta[0].montoActual) })
+      })
+    })
   }, [])
 
   const percentages = [10, 20, 30, 50]

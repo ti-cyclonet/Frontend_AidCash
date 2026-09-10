@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
-import { Users, PiggyBank, Coins } from "lucide-react"
+import { Users, PiggyBank, Coins, HandCoins } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket } from "@/lib/socket-context"
@@ -10,19 +10,24 @@ import { connectionsApi } from "@/lib/api-client"
 import { ConnectionsTab } from "@/components/social/connections-tab"
 import { SharedPocketsTab } from "@/components/social/shared-pockets-tab"
 import { LoansTab } from "@/components/social/loans-tab"
+import { SocialDebtsTab } from "@/components/social/SocialDebtsTab"
 import type { Connection } from "@/lib/types"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { FeatureGate } from "@/components/plan/feature-gate"
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-const TABS = [
+const BASE_TABS = [
   { id: "connections",    label: "Conexiones",  icon: Users },
   { id: "pockets",        label: "Ahorros",     icon: PiggyBank },
   { id: "loans",          label: "Préstamos",   icon: Coins },
 ] as const
 
-type TabId = typeof TABS[number]["id"]
+// "Deudas" solo existe si el usuario tiene al menos una conexión de tipo
+// pareja o familia — para amigos no aplica (ver SocialDebtsTab / POST /debts).
+const DEBTS_TAB = { id: "debts", label: "Deudas", icon: HandCoins } as const
+
+type TabId = typeof BASE_TABS[number]["id"] | typeof DEBTS_TAB["id"]
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
@@ -40,10 +45,19 @@ function SocialContent() {
   const { connected, unreadCount } = useSocket()
   const searchParams = useSearchParams()
 
-  const initialTab = (TABS.find(t => t.id === searchParams.get("tab"))?.id ?? "connections") as TabId
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
   const [acceptedConnections, setAcceptedConnections] = useState<Connection[]>([])
   const [showInviteModal, setShowInviteModal] = useState(false)
+
+  // "Deudas" solo aparece si hay al menos una conexión pareja/familia aceptada
+  const hasPartnerOrFamily = acceptedConnections.some(c => c.role === "PARTNER" || c.role === "FAMILY")
+  const TABS = useMemo(
+    () => hasPartnerOrFamily ? [...BASE_TABS, DEBTS_TAB] : BASE_TABS,
+    [hasPartnerOrFamily]
+  )
+
+  const initialTab = (TABS.find(t => t.id === searchParams.get("tab"))?.id ?? "connections") as TabId
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
+
   // Cargar conexiones aceptadas para pasarlas a sub-tabs
   const loadAccepted = useCallback(async () => {
     const { data } = await connectionsApi.list()
@@ -58,6 +72,12 @@ function SocialContent() {
   useEffect(() => {
     if (activeTab !== "connections") loadAccepted()
   }, [activeTab, loadAccepted])
+
+  // Si la pestaña activa deja de existir (ej. se elimina la única conexión
+  // pareja/familia mientras se está viendo "Deudas"), volver a Conexiones.
+  useEffect(() => {
+    if (!TABS.some(t => t.id === activeTab)) setActiveTab("connections")
+  }, [TABS, activeTab])
 
   const myId = authUser?.id ?? ""
 
@@ -83,7 +103,7 @@ function SocialContent() {
       </header>
 
       {/* ── Tabs ── */}
-      <div className="grid grid-cols-3 gap-1.5 bg-muted/50 p-1.5 rounded-2xl">
+      <div className={cn("grid gap-1.5 bg-muted/50 p-1.5 rounded-2xl", TABS.length === 4 ? "grid-cols-4" : "grid-cols-3")}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.id
           const showBadge = tab.id === "connections" && unreadCount > 0
@@ -121,6 +141,9 @@ function SocialContent() {
         )}
         {activeTab === "loans" && (
           <LoansTab myId={myId} acceptedConnections={acceptedConnections} />
+        )}
+        {activeTab === "debts" && (
+          <SocialDebtsTab myId={myId} acceptedConnections={acceptedConnections} />
         )}
       </div>
     </div>

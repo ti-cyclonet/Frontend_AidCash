@@ -5,28 +5,35 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, Droplet, Flame } from "lucide-react"
 import { UserAvatar } from "@/components/social/UserAvatar"
+import { useToast } from "@/hooks/use-toast"
 import type { FriendGardenEntry } from "@/lib/types"
 
 interface NeighborGardensProps {
   friends: FriendGardenEntry[]
   friendsWhoWateredYouToday: number
-  onWater: (connectionId: string) => Promise<boolean>
+  onWater: (connectionId: string) => Promise<number | null>
 }
 
 /**
- * "Jardines vecinos" — visitar y regar el jardín de un amigo, un gesto social,
- * nunca dinero. Solo racha y salud del jardín se muestran acá (regla de diseño
- * intencional, ver connections.routes.ts GET /friends-garden).
+ * "Jardines vecinos" — visitar y regar el jardín de un amigo/pareja/familia,
+ * un gesto social, nunca dinero. Solo racha y salud del jardín se muestran
+ * acá, pero el riego sí suma XP real al árbol de la otra persona (ver
+ * connections.routes.ts POST /:id/water).
  */
 export function NeighborGardens({ friends, friendsWhoWateredYouToday, onWater }: NeighborGardensProps) {
   const [watering, setWatering] = useState<string | null>(null)
+  const { toast } = useToast()
 
   if (friends.length === 0) return null
 
   const handleWater = async (connectionId: string) => {
     setWatering(connectionId)
-    await onWater(connectionId)
+    const xpGiven = await onWater(connectionId)
     setWatering(null)
+    if (xpGiven != null) {
+      const peer = friends.find(f => f.connectionId === connectionId)?.peer.nombre ?? "su jardín"
+      toast({ title: `💧 Le diste +${xpGiven} XP al árbol de ${peer}` })
+    }
   }
 
   return (

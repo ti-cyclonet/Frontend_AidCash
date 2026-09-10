@@ -11,7 +11,7 @@ export interface FriendsGardenState {
   loading: boolean
 }
 
-/** Racha entre amigos + jardines vecinos — solo conexiones tipo amigo (nunca pareja/familia). */
+/** Racha entre amigos + jardines vecinos — cualquier conexión aceptada (amigo, pareja o familia). */
 export function useFriendsGarden() {
   const [state, setState] = useState<FriendsGardenState>({
     friends: [],
@@ -36,15 +36,17 @@ export function useFriendsGarden() {
 
   useEffect(() => { fetchGarden() }, [fetchGarden])
 
-  /** Riega el jardín de un amigo — el backend rechaza si ya se regó hoy. */
-  const water = useCallback(async (connectionId: string): Promise<boolean> => {
-    const { error } = await connectionsApi.water(connectionId)
-    if (error) return false
+  /** Riega el jardín de un amigo/pareja/familia — el backend rechaza si ya se
+   * regó hoy. Devuelve el XP real que se le sumó al árbol del otro (o null si
+   * falló), para que la UI pueda mostrarlo. */
+  const water = useCallback(async (connectionId: string): Promise<number | null> => {
+    const { data, error } = await connectionsApi.water(connectionId)
+    if (error || !data) return null
     setState(prev => ({
       ...prev,
       friends: prev.friends.map(f => f.connectionId === connectionId ? { ...f, wateredByMeToday: true } : f),
     }))
-    return true
+    return data.xpGiven
   }, [])
 
   return { ...state, water, refetch: fetchGarden }

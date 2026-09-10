@@ -11,7 +11,7 @@
  * - Tipado de respuestas
  */
 
-import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse } from './types'
+import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 // Authoriza es la identidad central: la foto de perfil se sube allí y se
@@ -350,11 +350,15 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; budgetCategoryId?: string | null }) {
+  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; budgetCategoryId?: string | null; esCompartida?: boolean; connectionId?: string; montoParticipanteA?: number; montoParticipanteB?: number }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,
     })
+  },
+
+  async listShared() {
+    return api<{ debts: SharedDebt[] }>('/debts/shared')
   },
 
   async update(id: string, data: Record<string, unknown>) {
@@ -529,7 +533,7 @@ export const emergencyFundApi = {
 
 export const gamificationApi = {
   async getStatus() {
-    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number }>('/gamification/status')
+    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number; xpFromWatering: number }>('/gamification/status')
   },
 
   async updateStreak(streakActual: number, streakMejor?: number) {
@@ -720,7 +724,7 @@ export const connectionsApi = {
     return api<FriendsGardenResponse>('/connections/friends-garden')
   },
   async water(connectionId: string) {
-    return api<{ watered: boolean }>(`/connections/${connectionId}/water`, { method: 'POST' })
+    return api<{ watered: boolean; xpGiven: number }>(`/connections/${connectionId}/water`, { method: 'POST' })
   },
 }
 
