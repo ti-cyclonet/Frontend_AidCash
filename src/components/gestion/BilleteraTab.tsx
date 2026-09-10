@@ -296,35 +296,32 @@ export function BilleteraTab() {
       } catch (err) { console.error(`[AutoPago] Error pagando gasto fijo "${fe.nombre}":`, err) }
     }
 
-    // 3. Bolsillos de ahorro con pagoAutomatico activo
+    // 3. Bolsillos de ahorro con pagoAutomatico activo — leían de una clave de
+    // localStorage ("kiri_saving_pockets") que la página de Ahorro dejó de
+    // escribir hace tiempo (ver comentario en ahorro/page.tsx): para cualquier
+    // usuario con bolsillos reales (del backend) esto siempre estaba vacío, así
+    // que el aporte automático nunca se ejecutaba de verdad. Ahora usa los
+    // bolsillos reales y el endpoint de depósito, que ya valida el cashBalance
+    // real y descuenta la billetera atómicamente — no hace falta un walletDeduct aparte.
     try {
-      const raw = localStorage.getItem("kiri_saving_pockets")
-      if (raw) {
-        const pockets = JSON.parse(raw) as { id: string; nombre: string; meta: number; acumulado: number; pagoAutomatico?: boolean }[]
-        const autoPockets = pockets.filter(p => p.pagoAutomatico && p.meta > 0 && p.acumulado < p.meta)
-        if (autoPockets.length > 0) {
-          // Calcular cuánto aportar a cada bolsillo (distribución equitativa del ahorro sugerido)
-          const savingsAmount = allocation?.savingsAmount ?? 0
-          const perPocket = autoPockets.length > 0 && savingsAmount > 0
-            ? Math.round(savingsAmount / autoPockets.length)
-            : 0
-          if (perPocket > 0) {
-            const updated = pockets.map(p => {
-              if (p.pagoAutomatico && p.meta > 0 && p.acumulado < p.meta) {
-                const toAdd = Math.min(perPocket, p.meta - p.acumulado)
-                return { ...p, acumulado: p.acumulado + toAdd }
-              }
-              return p
-            })
-            localStorage.setItem("kiri_saving_pockets", JSON.stringify(updated))
-            // Descontar del wallet el total aportado
-            const totalAported = autoPockets.reduce((a, p) => {
-              const toAdd = Math.min(perPocket, p.meta - p.acumulado)
-              return a + toAdd
-            }, 0)
-            if (totalAported > 0) {
-              await userApi.walletDeduct(totalAported, 'ahorro')
-            }
+      const { savingsPocketsApi } = await import("@/lib/api-client")
+      const { data: pocketsRes } = await savingsPocketsApi.list()
+      const pockets = pocketsRes?.pockets ?? []
+      const autoPockets = pockets.filter(p => p.pagoAutomatico && p.meta > 0 && p.montoActual < p.meta)
+      if (autoPockets.length > 0) {
+        // Distribución equitativa del ahorro sugerido del periodo entre los
+        // bolsillos con auto-aporte activo.
+        const savingsAmount = allocation?.savingsAmount ?? 0
+        const perPocket = savingsAmount > 0 ? Math.round(savingsAmount / autoPockets.length) : 0
+        if (perPocket > 0) {
+          for (const pocket of autoPockets) {
+            const toAdd = Math.min(perPocket, pocket.meta - pocket.montoActual)
+            if (toAdd <= 0) continue
+            try {
+              const { error } = await savingsPocketsApi.deposit(pocket.id, toAdd)
+              if (error) { console.error(`[AutoPago] No se pudo aportar a bolsillo "${pocket.nombre}":`, error); continue }
+              console.log(`[AutoPago] Bolsillo "${pocket.nombre}" recibió $${toAdd} automáticamente`)
+            } catch (err) { console.error(`[AutoPago] Error aportando a bolsillo "${pocket.nombre}":`, err) }
           }
         }
       }

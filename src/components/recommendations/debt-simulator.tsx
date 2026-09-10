@@ -129,9 +129,15 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
   // cualquier otro lugar que lo lee como día del mes (getNextPaymentInfo,
   // period-filter.ts) el parseo fallaba (2027 > 31) y la deuda quedaba sin
   // día de pago válido — nunca aparecía en recordatorios ni en el filtrado
-  // por periodo. Como este simulador no conoce un día real de cobro, usa el
-  // mismo default ("1") que el resto de flujos sin ese dato (dictado por voz,
-  // escáner de recibos).
+  // por periodo. Un intento anterior de arreglar eso lo cambió a un "1" fijo,
+  // lo cual solucionaba el parseo pero rompía la fecha en la práctica: si se
+  // aceptaba el escenario cualquier día después del 1, `getNextPaymentInfo`
+  // veía que el día 1 ya pasó este mes y la deuda nacía "Vencida" al instante.
+  // La compra se está haciendo HOY — el primer cobro real es el próximo
+  // periodo, no uno que ya pasó — así que usamos el día de HOY como
+  // `diasPago` (día válido) y `yaPagoEstePeriodo` para sembrar el periodo
+  // actual como cubierto, igual que hace el formulario manual de deudas
+  // cuando el usuario marca "ya venía pagando esta deuda".
   const handleAccept = async () => {
     if (!scenarioData || selected === null || !options) return
     const opt = options[selected]
@@ -141,7 +147,8 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
       nombre: productName || 'Nueva compra',
       montoTotal: Number(amount),
       cuotaPeriodo: opt.quota,
-      diasPago: '1',
+      diasPago: String(new Date().getDate()),
+      yaPagoEstePeriodo: true,
     })
     setAccepting(false)
     if (!saved) {

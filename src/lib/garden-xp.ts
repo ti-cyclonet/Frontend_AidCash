@@ -5,6 +5,6 @@
 export const XP_PER_STREAK = 250
 export const XP_PER_BADGE = 100
 
-export function calculateGardenXP(streakActual: number, badgeCount: number, xpFromMissions: number): number {
-  return streakActual * XP_PER_STREAK + badgeCount * XP_PER_BADGE + xpFromMissions
+export function calculateGardenXP(streakActual: number, badgeCount: number, xpFromMissions: number, xpFromWatering = 0): number {
+  return streakActual * XP_PER_STREAK + badgeCount * XP_PER_BADGE + xpFromMissions + xpFromWatering
 }

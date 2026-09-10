@@ -52,6 +52,11 @@ function mapDebt(row: Record<string, unknown>): Debt {
     prioridad: (row.prioridad as Debt["prioridad"]) ?? 'media',
     pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
     budgetCategoryId: (row.budgetCategoryId ?? row.budget_category_id ?? null) as string | null,
+    esCompartida: (row.esCompartida ?? row.es_compartida ?? false) as boolean,
+    connectionId: (row.connectionId ?? row.connection_id ?? null) as string | null,
+    montoParticipanteA: row.montoParticipanteA != null ? Number(row.montoParticipanteA) : null,
+    montoParticipanteB: row.montoParticipanteB != null ? Number(row.montoParticipanteB) : null,
+    nombreParticipanteB: (row.nombreParticipanteB ?? null) as string | null,
   }
 }
 
@@ -104,6 +109,7 @@ function mapImpulse(row: Record<string, unknown>): ImpulseExpense {
     categoria: ((row.categoria as ImpulseCategory) ?? 'otro'),
     periodo: row.periodo as string,
     createdAt: (row.createdAt ?? row.created_at) as string,
+    tarjetaId: (row.tarjetaId ?? row.tarjeta_id ?? null) as string | null,
   }
 }
 
@@ -252,25 +258,37 @@ function useFinanceDataInternal() {
       d.id === debtId ? {
         ...d,
         saldoRestante: Number(backendDebt.saldoRestante ?? d.saldoRestante),
+        // Para una tarjeta, este pago pudo saldar un plan de cuotas y bajar la
+        // cuota efectiva — el backend ya la recalcula, sin esto la tarjeta se
+        // quedaba mostrando la cuota vieja hasta el próximo refetch completo.
+        cuotaPeriodo: backendDebt.cuotaPeriodo != null ? Number(backendDebt.cuotaPeriodo) : d.cuotaPeriodo,
         pagadoEstePeriodo: (backendDebt.pagadoEstePeriodo ?? false) as boolean,
         montoPagadoEstePeriodo: backendDebt.montoPagadoEstePeriodo != null ? Number(backendDebt.montoPagadoEstePeriodo) : null,
         estado: (backendDebt.estado as 'activa' | 'saldada' | 'vencida') ?? d.estado,
       } : d
     ))
 
-    // ═══ AUTO-VINCULAR A CATEGORÍA "DEUDAS": Si existe esa categoría, registrar el pago ═══
+    // ═══ AUTO-VINCULAR A CATEGORÍA "DEUDAS" ═══
+    // Antes esto creaba un gasto hormiga espejo (`[Deudas] ... (pago deuda)`)
+    // cada vez que se cubría la cuota completa. Dos problemas: (1) si luego se
+    // deshacía el pago, ese gasto fantasma nunca se borraba — quedaba contando
+    // para siempre contra el presupuesto aunque el pago que lo originó ya no
+    // existiera; (2) si la deuda YA estaba vinculada a la categoría por su
+    // propio `budgetCategoryId`, el pago se contaba DOS veces (una vía el
+    // gasto hormiga por coincidencia de texto, otra vía `computeCategorySpend`
+    // sumando `montoPagadoEstePeriodo` directo). En vez de eso, vinculamos la
+    // deuda a la categoría UNA sola vez por su `budgetCategoryId` real — el
+    // mismo mecanismo que ya usan los gastos fijos (ver comentario en
+    // `markFixedPaid`) — así `computeCategorySpend` sigue el pago real de cada
+    // periodo sola, y deshacer el pago la vacía sola también, sin nada que limpiar.
     try {
-      const { budgetCategoriesApi, impulseApi: iApi } = await import('@/lib/api-client')
-      const { data: catsRes } = await budgetCategoriesApi.list()
-      const debtCat = catsRes?.categories.find(c => c.nombre.toLowerCase() === 'deudas' || c.nombre.toLowerCase() === 'deuda')
-      if (debtCat) {
-        // Solo registrar si el pago cubrió la cuota (pagadoEstePeriodo = true)
-        if (backendDebt.pagadoEstePeriodo) {
-          await iApi.create({
-            nombre: `[${debtCat.nombre}] ${debt.nombre} (pago deuda)`,
-            monto: realPaid,
-            categoria: 'otro',
-          })
+      if (!debt.budgetCategoryId) {
+        const { budgetCategoriesApi } = await import('@/lib/api-client')
+        const { data: catsRes } = await budgetCategoriesApi.list()
+        const debtCat = catsRes?.categories.find(c => c.nombre.toLowerCase() === 'deudas' || c.nombre.toLowerCase() === 'deuda')
+        if (debtCat) {
+          await debtsApi.update(debtId, { budgetCategoryId: debtCat.id })
+          setDebts(prev => prev.map(d => d.id === debtId ? { ...d, budgetCategoryId: debtCat.id } : d))
         }
       }
     } catch { /* No bloquear */ }
@@ -285,6 +303,11 @@ function useFinanceDataInternal() {
       d.id === debtId ? {
         ...d,
         saldoRestante: Number(backendDebt.saldoRestante ?? d.saldoRestante),
+        // Deshacer este pago pudo revivir un plan de cuotas que ya estaba
+        // saldado (se le devolvió su montoAbonado) — el backend ya recalcula
+        // la cuota efectiva; sin esto la tarjeta se quedaba mostrando una
+        // cuota más baja de lo real hasta el próximo refetch completo.
+        cuotaPeriodo: backendDebt.cuotaPeriodo != null ? Number(backendDebt.cuotaPeriodo) : d.cuotaPeriodo,
         pagadoEstePeriodo: false,
         montoPagadoEstePeriodo: null,
         estado: 'activa' as const,
@@ -467,13 +490,22 @@ function useFinanceDataInternal() {
   const removeImpulseExpense = async (id: string) => {
     await impulseApi.delete(id)
     setImpulseExpenses(prev => prev.filter(e => e.id !== id))
+    // El backend ya revirtió el saldo de la tarjeta (o del bolsillo "libre")
+    // según cómo se pagó — sin este refetch, la tarjeta se queda mostrando el
+    // saldo inflado hasta recargar (mismo caso que undoPayDebt/undoPayFixed).
+    await fetchAll()
   }
 
   // Total de gastos hormiga del periodo actual
   // El backend ya filtra por el periodo actual (quincena o mes según frecuencia del usuario).
   // impulseExpenses contiene SOLO los del periodo vigente.
   const impulseThisPeriod = impulseExpenses
-  const totalImpulseThisPeriod = impulseThisPeriod.reduce((acc, e) => acc + e.monto, 0)
+  // Solo los pagados en efectivo consumen el "disponible" — los pagados con
+  // tarjeta (tarjetaId) no tocan cashBalance/walletLibre al crearse (ver
+  // addImpulseExpense), así que incluirlos acá hacía ver el disponible más
+  // bajo de lo real mientras existían, y "recuperar" plata que nunca salió
+  // de la billetera al borrarlos.
+  const totalImpulseThisPeriod = impulseThisPeriod.reduce((acc, e) => acc + (e.tarjetaId ? 0 : e.monto), 0)
 
   // ─── Derivados ───────────────────────────────────────────────────────────────
 

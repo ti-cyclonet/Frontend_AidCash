@@ -210,7 +210,7 @@ export default function JardinPage() {
   const { formatAmount, incomeFrequency, user } = useAppContext()
   const { user: authUser } = useAuth()
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
-  const { streakActual, badgesDesbloqueados, xpFromMissions, loading: streakLoading } = useStreaks(incomeFrequency)
+  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, loading: streakLoading } = useStreaks(incomeFrequency)
   const { allocation } = usePeriodBudget()
   const { budgetCategories } = useBudgetCategories()
 
@@ -222,6 +222,20 @@ export default function JardinPage() {
     const refresh = () => userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
     window.addEventListener("kiri:wallet-updated", refresh)
     return () => window.removeEventListener("kiri:wallet-updated", refresh)
+  }, [])
+
+  // Meta total de los bolsillos de ahorro reales (para la barra de "Ahorro"
+  // del jardín) — antes leía de una clave de localStorage que la página de
+  // Ahorro dejó de escribir hace tiempo, así que para cualquier usuario con
+  // bolsillos reales siempre daba 0 y caía al fallback arbitrario de abajo.
+  const [realPocketsMeta, setRealPocketsMeta] = useState(0)
+  useEffect(() => {
+    import("@/lib/api-client").then(({ savingsPocketsApi }) => {
+      savingsPocketsApi.list().then(({ data }) => {
+        const withMeta = (data?.pockets ?? []).filter(p => p.meta > 0)
+        if (withMeta.length > 0) setRealPocketsMeta(withMeta.reduce((a, p) => a + Number(p.meta), 0))
+      })
+    })
   }, [])
 
   // ── Feedback del botón "Regar jardín" (splash + XP flotante antes de navegar) ──
@@ -240,7 +254,7 @@ export default function JardinPage() {
   // (Semilla) por un instante y se veía un parpadeo semilla→árbol real en cada
   // refresh. dataReady evita mostrar el árbol hasta tener el nivel real.
   const dataReady = !streakLoading && !financeLoading
-  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions)
+  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering)
   const currentLevelIdx = GARDEN_LEVELS.findIndex((l, i) =>
     i === GARDEN_LEVELS.length - 1 || currentXP < GARDEN_LEVELS[i + 1].xpRequired
   )
@@ -393,20 +407,13 @@ export default function JardinPage() {
   // Progreso por métrica (para barras)
   // Sueldo: si tiene ingreso registrado, barra al 100%; si no, 0%
   const salaryCoverage = wallet.cashBalance > 0 ? 100 : 0
-  // Ahorro: porcentaje de la meta global o relativo al ingreso
-  const savingsPct = (() => {
-    if (totalAhorrado <= 0) return 0
-    // Si hay bolsillos con meta, usar progreso del más alto
-    try {
-      const pockets = JSON.parse(localStorage.getItem("kiri_saving_pockets") ?? "[]")
-      const withMeta = pockets.filter((p: any) => p.meta > 0)
-      if (withMeta.length > 0) {
-        const totalMeta = withMeta.reduce((a: number, p: any) => a + p.meta, 0)
-        return Math.min(100, Math.round((totalAhorrado / totalMeta) * 100))
-      }
-    } catch { /* ignore */ }
-    return Math.min(100, Math.round((totalAhorrado / Math.max(totalAhorrado, 1000000)) * 100))
-  })()
+  // Ahorro: porcentaje de la meta real de los bolsillos, o relativo a un piso
+  // arbitrario si el usuario todavía no se ha puesto ninguna meta.
+  const savingsPct = totalAhorrado <= 0
+    ? 0
+    : realPocketsMeta > 0
+      ? Math.min(100, Math.round((totalAhorrado / realPocketsMeta) * 100))
+      : Math.min(100, Math.round((totalAhorrado / Math.max(totalAhorrado, 1000000)) * 100))
   // Deuda: porcentaje pagado (inverso - cuánto falta)
   const debtPct = (() => {
     if (debts.length === 0) return 0

@@ -552,12 +552,13 @@ export function CoachFab() {
           const saved = await addFixedExpense({ nombre: item.nombre, monto: item.monto, fechaCorte: item.fechaCorte ?? new Date().toISOString().split("T")[0] })
           if (!saved) failed.push(`Gasto fijo: ${item.nombre}`)
         } else if (item.kind === "ahorro") {
-          try {
-            const raw = localStorage.getItem("kiri_saving_pockets")
-            const pockets = raw ? JSON.parse(raw) : []
-            pockets.push({ id: String(Date.now()) + Math.random(), nombre: item.nombre, meta: item.monto, acumulado: 0, icono: "piggybank", color: "mint", createdAt: new Date().toISOString() })
-            localStorage.setItem("kiri_saving_pockets", JSON.stringify(pockets))
-          } catch { failed.push(`Ahorro: ${item.nombre}`) }
+          // Antes esto guardaba en una clave de localStorage ("kiri_saving_pockets")
+          // que la página de Ahorro dejó de leer hace tiempo — la meta creada
+          // por voz/foto no aparecía en ningún lado real de la app. Ahora crea
+          // el bolsillo de verdad en el backend.
+          const { savingsPocketsApi } = await import("@/lib/api-client")
+          const { error } = await savingsPocketsApi.create({ nombre: item.nombre, meta: item.monto, icono: "piggybank", color: "mint" })
+          if (error) failed.push(`Ahorro: ${item.nombre}`)
         } else if (item.kind === "hormiga") {
           const saved = await addImpulseExpense({ nombre: item.nombre, monto: item.monto, categoria: item.categoriaHormiga ?? "otro" })
           if (!saved) failed.push(item.nombre)

@@ -19,7 +19,7 @@ function dateForDay(year: number, month: number, day: number): Date {
   return new Date(year, month, Math.min(day, lastDayOfMonth))
 }
 
-export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean): NextPaymentInfo {
+export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean, isQuincenal = false): NextPaymentInfo {
   const today = new Date()
   const todayDay = today.getDate()
   const currentMonth = today.getMonth()
@@ -33,7 +33,11 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean)
     // mes, esa es la próxima. Antes esto siempre saltaba un mes completo (ej.
     // pagar el día 10 hacía que el día 25 del MISMO mes desapareciera y el
     // "próximo cobro" se fuera directo a octubre).
-    const upcomingThisMonth = days.filter(d => d > todayDay)
+    // Esta rama SOLO aplica a quincenales: uno mensual tiene un único día en
+    // `days`, así que "el próximo día > hoy" es SIEMPRE el mismo día que ya se
+    // pagó este periodo — sin este guard, una obligación mensual ya pagada
+    // volvía a mostrarse como "Pendiente"/"Vence en Xd" en vez de "Pagado ✓".
+    const upcomingThisMonth = isQuincenal ? days.filter(d => d > todayDay) : []
     if (upcomingThisMonth.length > 0) {
       const day = Math.min(...upcomingThisMonth)
       const daysUntil = day - todayDay
