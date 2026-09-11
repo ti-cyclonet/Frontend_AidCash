@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import {
   Plus, CheckCircle2, Pencil, Trash2, ReceiptText,
   AlertTriangle, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign, Users,
+  ChevronDown, ChevronUp, PartyPopper,
 } from "lucide-react"
 import { Debt, FixedExpense } from "@/lib/types"
 import {
@@ -33,6 +34,7 @@ import { BudgetCategorySelector } from "@/components/obligaciones/BudgetCategory
 import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
 import { isCreditCard } from "@/lib/debt-utils"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
+import { CelebrationModal } from "@/components/ui/celebration-modal"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -78,6 +80,24 @@ export default function ObligacionesPage() {
   const { formatAmount, income, incomeFrequency } = useAppContext()
   const { user: authUser } = useAuth()
   const { toast } = useToast()
+
+  // ── Celebración al liquidar una deuda por completo ──────────────────────────
+  // Antes esto pasaba en silencio: la tarjeta quedaba atenuada y luego
+  // desaparecía del todo en el próximo refetch (ver GET /debts, filtra por
+  // estado=activa) sin que la app dijera nada de "listo, la terminaste".
+  const [celebration, setCelebration] = useState<{ icon: string; title: string; subtitle: string } | null>(null)
+  const payAndCelebrate = async (debtId: string, monto?: number) => {
+    const result = await markPaid(debtId, monto)
+    if (result?.liquidada) {
+      setCelebration({
+        icon: "🎉",
+        title: `¡Terminaste de pagar "${result.nombre}"!`,
+        subtitle: "Una deuda menos, un paso más cerca de tu libertad financiera.",
+      })
+    }
+    return result
+  }
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const { budgetCategories } = useBudgetCategories()
@@ -108,6 +128,21 @@ export default function ObligacionesPage() {
 
   // ── Tab activa ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<Tab>("gastos_fijos")
+
+  // ── Deudas saldadas (pagadas por completo) ──────────────────────────────────
+  // GET /debts por defecto solo trae estado=activa (correcto para el saldo
+  // total y las cuentas de arriba) — sin esto, una deuda que se terminaba de
+  // pagar quedaba visible nada más hasta el próximo refetch y después
+  // desaparecía de Obligaciones por completo, sin dejar ningún rastro acá
+  // (solo seguía viéndose en el historial de Balance).
+  const [settledDebts, setSettledDebts] = useState<Record<string, unknown>[]>([])
+  const [showSettled, setShowSettled] = useState(false)
+  useEffect(() => {
+    if (activeTab !== "deudas") return
+    debtsApi.list('saldada').then(({ data }) => {
+      if (data?.debts) setSettledDebts(data.debts)
+    })
+  }, [activeTab, celebration])
 
   // ── Filtro de estado (Todas / Pendientes / Pagadas) ────────────────────────
   const [statusFilter, setStatusFilter] = useState<"todas" | "pendientes" | "pagadas">("todas")
@@ -290,7 +325,7 @@ export default function ObligacionesPage() {
     // Si ya hay un abono parcial este periodo, "pagar" debe cubrir solo lo que
     // falta — no la cuota completa de nuevo (si no, se paga de más).
     const restante = payDebt.cuotaPeriodo - (payDebt.montoPagadoEstePeriodo ?? 0)
-    await markPaid(payDebt.id, restante > 0 ? restante : undefined)
+    await payAndCelebrate(payDebt.id, restante > 0 ? restante : undefined)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayDebt(null)
@@ -299,7 +334,7 @@ export default function ObligacionesPage() {
   const confirmPartialPay = async () => {
     if (!payDebt || !partialAmount) return
     const amt = Number(partialAmount)
-    await markPaid(payDebt.id, amt)
+    await payAndCelebrate(payDebt.id, amt)
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayDebt(null)
@@ -344,7 +379,7 @@ export default function ObligacionesPage() {
     if (!insufficientTarget) return
     const amt = wallet.cashBalance
     if (insufficientTarget.type === "debt") {
-      await markPaid(insufficientTarget.id, amt)
+      await payAndCelebrate(insufficientTarget.id, amt)
     } else {
       await markFixedPaid(insufficientTarget.id, amt)
     }
@@ -377,7 +412,7 @@ export default function ObligacionesPage() {
 
     // Ahora pagar la obligación
     if (insufficientTarget.type === "debt") {
-      await markPaid(insufficientTarget.id)
+      await payAndCelebrate(insufficientTarget.id)
     } else {
       await markFixedPaid(insufficientTarget.id)
     }
@@ -401,7 +436,7 @@ export default function ObligacionesPage() {
 
     // Pagar la obligación
     if (insufficientTarget.type === "debt") {
-      await markPaid(insufficientTarget.id)
+      await payAndCelebrate(insufficientTarget.id)
     } else {
       await markFixedPaid(insufficientTarget.id)
     }
@@ -769,6 +804,38 @@ export default function ObligacionesPage() {
           <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">
             Ver historial completo en Balance →
           </Link>
+
+          {/* ── Deudas saldadas — pagadas por completo, ya no aparecen arriba ── */}
+          {settledDebts.length > 0 && (
+            <div className="pt-3 border-t border-border/50">
+              <button
+                onClick={() => setShowSettled(v => !v)}
+                className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider"
+              >
+                <span className="flex items-center gap-1.5">
+                  <PartyPopper className="h-3.5 w-3.5 text-emerald-500" /> Deudas saldadas ({settledDebts.length})
+                </span>
+                {showSettled ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+              {showSettled && (
+                <div className="space-y-2 mt-2">
+                  {settledDebts.map(d => (
+                    <Card key={d.id as string} className="border-none bg-emerald-500/5 rounded-2xl">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0 text-emerald-600">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold truncate">{d.nombre as string}</p>
+                          <p className="text-[10px] text-muted-foreground">Pagada por completo · {formatAmount(Number(d.montoTotal))}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Préstamos Sociales (P2P aprobados) ── */}
           {socialLoans.length > 0 && (
@@ -1649,6 +1716,14 @@ export default function ObligacionesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CelebrationModal
+        open={!!celebration}
+        onClose={() => setCelebration(null)}
+        icon={celebration?.icon ?? "🎉"}
+        title={celebration?.title ?? ""}
+        subtitle={celebration?.subtitle ?? ""}
+      />
 
     </div>
     </>

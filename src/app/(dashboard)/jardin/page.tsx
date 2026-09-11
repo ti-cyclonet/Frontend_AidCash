@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useState, useEffect, useRef } from "react"
-import { motion } from "framer-motion"
+import type { PointerEvent as ReactPointerEvent } from "react"
+import { motion, useAnimationControls } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -350,6 +351,25 @@ export default function JardinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Tormenta de "gasto hormiga" — reacción visual (rayo + nubes oscuras +
+  //    lluvia oscura + vibración), sin hormigas dibujadas. Se dispara desde
+  //    cualquier pantalla vía CustomEvent (ver addImpulseExpense en
+  //    use-finance-data.tsx) — si el usuario está viendo el árbol justo
+  //    cuando registra el gasto, lo ve reaccionar en el momento.
+  const [showStorm, setShowStorm] = useState(false)
+  const [stormMessage, setStormMessage] = useState<string | null>(null)
+  useEffect(() => {
+    const onImpulse = (e: Event) => {
+      const nombre = (e as CustomEvent<{ nombre?: string }>).detail?.nombre
+      setStormMessage(nombre ? `🐜 Registraste "${nombre}"` : "🐜 Gasto hormiga registrado")
+      setShowStorm(true)
+      const timer = setTimeout(() => { setShowStorm(false); setStormMessage(null) }, 4500)
+      return () => clearTimeout(timer)
+    }
+    window.addEventListener("kiri:impulse-registered", onImpulse)
+    return () => window.removeEventListener("kiri:impulse-registered", onImpulse)
+  }, [])
+
   // ── Préstamos sociales (solo ACTIVE donde soy borrower) — antes quedaban
   //    fuera de "deuda total" acá y en cualquier otro lugar que mostrara esta
   //    cifra: alguien con un préstamo activo con un amigo veía su jardín (y
@@ -493,6 +513,8 @@ export default function JardinPage() {
                   healthLabel={getHealthLabel(gardenHealth)}
                   sizeClass="w-[220px] h-[220px]"
                   wateredMessage={wateredMessage}
+                  showStorm={showStorm}
+                  stormMessage={stormMessage}
                 />
               ) : (
                 <div className="w-[220px] h-[220px] rounded-full bg-muted/30 animate-pulse" />
@@ -592,6 +614,8 @@ export default function JardinPage() {
                   healthLabel={getHealthLabel(gardenHealth)}
                   sizeClass="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px]"
                   wateredMessage={wateredMessage}
+                  showStorm={showStorm}
+                  stormMessage={stormMessage}
                 />
               ) : (
                 <div className="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px] rounded-full bg-muted/30 animate-pulse" />
@@ -845,6 +869,92 @@ export default function JardinPage() {
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 /**
+ * Sol del clima financiero — antes era un solo círculo de gradiente radial
+ * parpadeando (se veía como una mancha amarilla borrosa, sin forma real, muy
+ * por debajo del nivel de detalle de las nubes/lluvia que sí tienen capas e
+ * ilustración). Ahora es un disco con degradado nítido + 8 rayos que giran
+ * despacio alrededor (como un reloj de sol) + un resplandor suave detrás que
+ * respira — sin necesitar ningún asset nuevo en /garden/.
+ */
+function GardenSun() {
+  return (
+    <div className="absolute -top-4 -right-1 z-10 w-20 h-20 pointer-events-none">
+      {/* Resplandor ambiental, detrás de todo, respira suave */}
+      <motion.div
+        className="absolute inset-0 rounded-full"
+        style={{ background: "radial-gradient(circle, rgba(251,191,36,0.45) 0%, rgba(251,191,36,0) 70%)" }}
+        animate={{ opacity: [0.55, 1, 0.55], scale: [0.92, 1.1, 0.92] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+      />
+      {/* Disco central — quieto, con volumen (degradado + brillo lateral) */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className="w-9 h-9 rounded-full"
+          style={{
+            background: "radial-gradient(circle at 35% 30%, #fef3c7 0%, #fbbf24 45%, #f59e0b 100%)",
+            boxShadow: "0 0 16px 3px rgba(251,191,36,0.55)",
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Destello de partículas anclado al punto exacto (x, y) donde se tocó el
+ * árbol — no al centro. `special` (~30% de los toques, decidido por quien
+ * llama) agrega más partículas y un emoji que sube y se desvanece.
+ */
+function TapBurst({ x, y, special, emoji }: { x: number; y: number; special: boolean; emoji: string }) {
+  const particles = useMemo(() => {
+    const count = special ? 10 : 5
+    return Array.from({ length: count }, (_, i) => {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5
+      const dist = 16 + Math.random() * (special ? 28 : 16)
+      return {
+        id: i,
+        dx: Math.cos(angle) * dist,
+        dy: Math.sin(angle) * dist,
+        delay: Math.random() * 0.08,
+        size: 3 + Math.random() * (special ? 4 : 2),
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="absolute z-40 pointer-events-none" style={{ left: x, top: y }}>
+      {particles.map(p => (
+        <motion.span
+          key={p.id}
+          className="absolute rounded-full"
+          style={{
+            width: p.size,
+            height: p.size,
+            background: special ? "#fbbf24" : "#6ee7b7",
+            boxShadow: special ? "0 0 6px 1px rgba(251,191,36,0.8)" : "0 0 4px 1px rgba(110,231,183,0.7)",
+          }}
+          initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+          animate={{ x: p.dx, y: p.dy, opacity: 0, scale: 0.4 }}
+          transition={{ duration: 0.55, delay: p.delay, ease: "easeOut" }}
+        />
+      ))}
+      {special && (
+        <motion.span
+          className="absolute text-lg"
+          style={{ left: -8, top: -8 }}
+          initial={{ y: 0, opacity: 1, scale: 0.6 }}
+          animate={{ y: -34, opacity: 0, scale: 1.1 }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+        >
+          {emoji}
+        </motion.span>
+      )}
+    </div>
+  )
+}
+
+/**
  * Envuelve tu <img>/<motion.img> real (sin tocar tus assets de /garden/) con:
  * - filtro de ánimo (moodFilter) según salud
  * - clima financiero (sol / lluvia / nubes) como capas superpuestas
@@ -864,6 +974,8 @@ function GardenTreeVisual({
   healthLabel,
   sizeClass,
   wateredMessage,
+  showStorm,
+  stormMessage,
 }: {
   currentLevelIdx: number
   currentLevel: GardenLevel
@@ -877,9 +989,48 @@ function GardenTreeVisual({
    * una vez sola con `kiriWateredPop` (ver globals.css); el padre es quien
    * decide cuándo aparece y la quita después con un timeout. */
   wateredMessage?: string | null
+  /** Reacción de tormenta al registrar un gasto hormiga — nubes oscuras,
+   * rayo, vibración; el padre decide cuándo empieza/termina. */
+  showStorm?: boolean
+  stormMessage?: string | null
 }) {
   const [leaves, setLeaves] = useState<{ id: number; x: number; delay: number }[]>([])
   const leafIdRef = useRef(0)
+
+  // ── Reacción al tocar/clicar el árbol — pura personalidad, no toca XP ni
+  // salud del jardín. Rebote de resorte real (compresión + retorno
+  // subamortiguado, no un keyframe fijo) más un destello de partículas en el
+  // punto exacto de contacto; ~30% de las veces sale una reacción "especial"
+  // (más partículas + un emoji que flota y se desvanece). Convive con la
+  // lluvia/tormenta porque anima un elemento propio, independiente del clima.
+  const tapControls = useAnimationControls()
+  const [tapBursts, setTapBursts] = useState<{ id: number; x: number; y: number; special: boolean; emoji: string }[]>([])
+  const tapIdRef = useRef(0)
+  const TAP_EMOJIS = ["💚", "✨", "🌟"]
+
+  const handleTreeTap = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const special = Math.random() < 0.3
+    const id = tapIdRef.current++
+    const emoji = TAP_EMOJIS[Math.floor(Math.random() * TAP_EMOJIS.length)]
+
+    setTapBursts(prev => [...prev, { id, x, y, special, emoji }])
+    window.setTimeout(() => {
+      setTapBursts(prev => prev.filter(b => b.id !== id))
+    }, special ? 950 : 550)
+
+    // Resorte real: se fija instantáneamente en un estado "comprimido" y
+    // luego se suelta con un spring subamortiguado — oscila un par de veces
+    // con amplitud decreciente hasta reposar en 1, en vez de una animación
+    // lineal de ida y vuelta.
+    tapControls.set({ scale: special ? 0.82 : 0.9, rotate: special ? -4 : -2 })
+    tapControls.start(
+      { scale: 1, rotate: 0 },
+      { type: "spring", stiffness: special ? 420 : 480, damping: special ? 7 : 9, mass: 0.55 }
+    )
+  }
   // Solo nivel 3+ (Planta joven en adelante) tiene copa/follaje real de donde
   // puedan caer hojas — en Semilla/Brote no hay canopy, no tiene sentido mostrarlas.
   const showFallingLeaves = gardenHealth < 65 && currentLevelIdx >= 2
@@ -959,6 +1110,34 @@ function GardenTreeVisual({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   [])
 
+  // Chispas del aura de level-up — 8 puntos repartidos en círculo (no al azar
+  // puro) para que la ráfaga se vea pareja en todas direcciones, con un poco
+  // de jitter en distancia/retraso para que no se vea mecánica.
+  const levelUpSparkles = useMemo(() =>
+    Array.from({ length: 8 }, (_, i) => {
+      const angle = (i * 360) / 8 + (Math.random() * 20 - 10)
+      const dist = 55 + Math.random() * 25
+      return {
+        dx: Math.cos((angle * Math.PI) / 180) * dist,
+        dy: Math.sin((angle * Math.PI) / 180) * dist,
+        delay: (i / 8) * 1.4,
+      }
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  [])
+
+  // Gotas de lluvia oscuras de la tormenta — mismo patrón que rainDrops pero
+  // más numerosas y con color de tormenta, generadas una sola vez.
+  const stormRainDrops = useMemo(() =>
+    Array.from({ length: 28 }, () => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 1.2,
+      duration: 0.6 + Math.random() * 0.4,
+      height: 10 + Math.random() * 8,
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  [])
+
   const filterStyle = moodFilter(gardenHealth)
   const imgClass = cn(sizeClass, "object-contain")
 
@@ -979,8 +1158,13 @@ function GardenTreeVisual({
       </div>
 
       {/* pt-6 baja el árbol un poco y le da aire arriba para que las nubes
-          asomen sin quedar cortadas por el overflow-hidden de la Card. */}
-      <div className="relative flex items-center justify-center pt-6">
+          asomen sin quedar cortadas por el overflow-hidden de la Card.
+          La vibración de la tormenta va acá (mueve toda la escena, no solo
+          una capa) para que se sienta como un temblor real. */}
+      <div
+        className="relative flex items-center justify-center pt-6"
+        style={showStorm ? { animation: "kiriStormShake 0.5s ease-in-out 2" } : undefined}
+      >
         {/* "Fulano regó tu árbol" — arriba de todo (z-20, por encima del
             clima y del árbol) para que se lea claro mientras aparece y
             desaparece; la lluvia (gardenWeather) empieza justo después,
@@ -995,17 +1179,31 @@ function GardenTreeVisual({
             {wateredMessage}
           </div>
         )}
-        {/* Aura dorada de level-up */}
+        {/* Aura dorada de level-up + ráfaga de destellos radiales — antes era
+            solo un círculo de gradiente pulsando sin forma; ahora respira un
+            resplandor suave de fondo y además dispara chispas doradas hacia
+            afuera en bucle mientras dura la celebración. */}
         {showLevelUpGlow && (
-          <motion.div
-            className="absolute inset-0 rounded-full z-0"
-            style={{
-              background: "radial-gradient(circle, rgba(255,215,0,0.3) 0%, rgba(255,215,0,0.1) 40%, transparent 70%)",
-              filter: "blur(20px)",
-            }}
-            animate={{ scale: [1, 1.2, 1], opacity: [0.8, 1, 0.8] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          />
+          <>
+            <motion.div
+              className="absolute inset-0 rounded-full z-0"
+              style={{
+                background: "radial-gradient(circle, rgba(255,215,0,0.3) 0%, rgba(255,215,0,0.1) 40%, transparent 70%)",
+                filter: "blur(20px)",
+              }}
+              animate={{ scale: [1, 1.2, 1], opacity: [0.8, 1, 0.8] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
+            {levelUpSparkles.map((s, i) => (
+              <motion.span
+                key={i}
+                className="absolute left-1/2 top-1/2 z-30 w-1.5 h-1.5 rounded-full bg-amber-300 pointer-events-none"
+                style={{ boxShadow: "0 0 8px 3px rgba(253,224,71,0.85)" }}
+                animate={{ x: [0, s.dx], y: [0, s.dy], opacity: [0, 1, 0], scale: [0.4, 1, 0.4] }}
+                transition={{ duration: 1.4, repeat: Infinity, delay: s.delay, ease: "easeOut" }}
+              />
+            ))}
+          </>
         )}
 
         {/* Tierra/base del jardín — solo niveles 3+ (Planta joven en adelante), para que
@@ -1020,18 +1218,19 @@ function GardenTreeVisual({
           />
         )}
 
-        {/* Clima financiero — capa sol/lluvia/nubes, siempre detrás del árbol (z-10, mismo
-            nivel, el árbol pinta después y queda al frente). */}
-        {gardenWeather === "sol" && (
+        {/* Sombra simple para Semilla/Brote (niveles 1-2) — todavía no tienen
+            la tierra ilustrada de arriba, sin esto se ven flotando sin peso. */}
+        {currentLevelIdx < 2 && (
           <div
-            className="absolute -top-2 right-2 z-10 w-16 h-16 rounded-full pointer-events-none"
-            style={{
-              background: "radial-gradient(circle, rgba(251,191,36,0.5) 0%, rgba(251,191,36,0) 70%)",
-              animation: "kiriSunPulse 3s ease-in-out infinite",
-            }}
+            className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-[5] w-16 h-3 rounded-full pointer-events-none"
+            style={{ background: "radial-gradient(ellipse, rgba(0,0,0,0.18) 0%, transparent 75%)" }}
           />
         )}
-        {gardenWeather === "lluvia" && (
+
+        {/* Clima financiero — capa sol/lluvia/nubes, siempre detrás del árbol (z-10, mismo
+            nivel, el árbol pinta después y queda al frente). */}
+        {gardenWeather === "sol" && !showStorm && <GardenSun />}
+        {gardenWeather === "lluvia" && !showStorm && (
           <div className="absolute top-1 inset-x-0 h-24 overflow-hidden z-10 pointer-events-none">
             {rainDrops.map((d, i) => (
               <span
@@ -1047,7 +1246,7 @@ function GardenTreeVisual({
             ))}
           </div>
         )}
-        {gardenWeather === "nubes" && (
+        {gardenWeather === "nubes" && !showStorm && (
           <div className="absolute -top-4 inset-x-0 z-10 flex justify-center items-start gap-1 pointer-events-none">
             {[
               { w: "w-14", top: "mt-1", opacity: "opacity-70" },
@@ -1066,41 +1265,108 @@ function GardenTreeVisual({
           </div>
         )}
 
+        {/* ── Tormenta de gasto hormiga — nubes oscurecidas + rayo + flash +
+            lluvia oscura. Reemplaza cualquier clima normal mientras dura (4.5s),
+            sin hormigas dibujadas: el mensaje de abajo ya dice qué pasó. */}
+        {showStorm && (
+          <>
+            <div className="absolute -top-4 inset-x-0 z-10 flex justify-center items-start gap-1 pointer-events-none">
+              {[
+                { w: "w-16", top: "mt-1" },
+                { w: "w-24", top: "-mt-1" },
+                { w: "w-14", top: "mt-2" },
+              ].map((c, i) => (
+                <img
+                  key={i}
+                  src="/garden/nubes.png"
+                  alt=""
+                  aria-hidden="true"
+                  className={cn(c.w, c.top, "-mx-2 drop-shadow-lg")}
+                  style={{
+                    animation: `kiriCloudDrift ${2 + i}s ease-in-out infinite alternate`,
+                    filter: "brightness(0.55) saturate(0.7) contrast(1.15)",
+                  }}
+                />
+              ))}
+            </div>
+            <div
+              className="absolute top-1 inset-x-0 h-28 overflow-hidden z-10 pointer-events-none"
+            >
+              {stormRainDrops.map((d, i) => (
+                <span
+                  key={i}
+                  className="absolute top-0 block w-[2px] rounded-full bg-slate-400"
+                  style={{
+                    left: `${d.left}%`,
+                    height: `${d.height}px`,
+                    opacity: 0,
+                    animation: `kiriStormRainFall ${d.duration}s linear ${d.delay}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
+            <div
+              className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 text-2xl pointer-events-none"
+              style={{ animation: "kiriBoltFlash 2.2s ease-in-out 2" }}
+            >
+              ⚡
+            </div>
+            <div
+              className="absolute -inset-6 z-40 rounded-3xl bg-slate-100 pointer-events-none"
+              style={{ animation: "kiriLightningFlash 2.2s ease-out 2" }}
+            />
+          </>
+        )}
+
         {/* Árbol real — mismas 3 variantes de animación que ya tenías. z-10: va
             delante del clima (sol/lluvia/nubes) pero detrás de luciérnagas/hojas.
             El wrapper usa margin (no transform) para no chocar con el transform
             inline que Framer Motion ya aplica en el árbol animado. */}
-        <div className="relative z-10 -ml-4 lg:-ml-6">
-          {currentLevelIdx === 0 ? (
-            <motion.img
-              src={currentLevel.image}
-              alt={currentLevel.name}
-              className={imgClass}
-              style={{ filter: filterStyle, transition: "filter .6s ease" }}
-              animate={{ rotate: [0, -7, 6, -5, 4, -2, 0], y: [0, -3, 0, -2, 0] }}
-              transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 0.8, ease: "easeInOut" }}
-            />
-          ) : currentLevelIdx >= 2 ? (
-            <motion.img
-              src={currentLevel.image}
-              alt={currentLevel.name}
-              className={imgClass}
-              style={{ transformOrigin: "bottom center", filter: filterStyle, transition: "filter .6s ease" }}
-              animate={{
-                rotate: [0, 0.4, -0.3, 0.2, -0.2, 0.1, 0],
-                skewX: [0, 0.2, -0.15, 0.1, -0.1, 0],
-              }}
-              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            />
-          ) : (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={currentLevel.image}
-              alt={currentLevel.name}
-              className={imgClass}
-              style={{ filter: filterStyle, transition: "filter .6s ease" }}
-            />
-          )}
+        <div
+          key={currentLevelIdx}
+          className="relative z-10 -ml-4 lg:-ml-6 cursor-pointer select-none"
+          style={{ animation: "kiriTreeGrowIn .6s cubic-bezier(.34,1.56,.64,1) both" }}
+          onPointerDown={handleTreeTap}
+        >
+          {/* Rebote de resorte al tocar — elemento propio, no interfiere con
+              la animación de reposo (idle sway) del árbol de adentro. */}
+          <motion.div animate={tapControls} style={{ transformOrigin: "bottom center" }}>
+            {currentLevelIdx === 0 ? (
+              <motion.img
+                src={currentLevel.image}
+                alt={currentLevel.name}
+                className={imgClass}
+                style={{ filter: filterStyle, transition: "filter .6s ease" }}
+                animate={{ rotate: [0, -7, 6, -5, 4, -2, 0], y: [0, -3, 0, -2, 0] }}
+                transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 0.8, ease: "easeInOut" }}
+              />
+            ) : currentLevelIdx >= 2 ? (
+              <motion.img
+                src={currentLevel.image}
+                alt={currentLevel.name}
+                className={imgClass}
+                style={{ transformOrigin: "bottom center", filter: filterStyle, transition: "filter .6s ease" }}
+                animate={{
+                  rotate: [0, 0.4, -0.3, 0.2, -0.2, 0.1, 0],
+                  skewX: [0, 0.2, -0.15, 0.1, -0.1, 0],
+                }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={currentLevel.image}
+                alt={currentLevel.name}
+                className={imgClass}
+                style={{ filter: filterStyle, transition: "filter .6s ease" }}
+              />
+            )}
+          </motion.div>
+
+          {/* Destello de partículas en el punto exacto donde se tocó */}
+          {tapBursts.map(b => (
+            <TapBurst key={b.id} x={b.x} y={b.y} special={b.special} emoji={b.emoji} />
+          ))}
         </div>
 
         {/* Luciérnagas — racha ≥ 7 días. z-30: siempre visibles por delante del árbol.
@@ -1130,6 +1396,22 @@ function GardenTreeVisual({
             🍃
           </span>
         ))}
+
+        {/* Mensaje inferior con brillo — feedback de la tormenta de gasto
+            hormiga, siempre abajo del árbol para no chocar con la frase de
+            personalidad ni con "fulano regó tu árbol" (esas van arriba). */}
+        {stormMessage && (
+          <div
+            key={stormMessage}
+            className="absolute -bottom-3 left-1/2 z-40 whitespace-nowrap pointer-events-none rounded-full border border-amber-400/30 bg-slate-900/90 px-3.5 py-1.5 text-[11px] font-bold text-amber-200"
+            style={{
+              animation: "kiriToastPop 4.3s ease-out forwards",
+              boxShadow: "0 0 16px 2px rgba(251,191,36,0.35)",
+            }}
+          >
+            {stormMessage}
+          </div>
+        )}
       </div>
     </div>
   )

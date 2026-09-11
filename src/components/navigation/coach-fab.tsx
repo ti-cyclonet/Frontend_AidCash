@@ -348,6 +348,7 @@ export function CoachFab() {
     return () => window.removeEventListener("resize", check)
   }, [])
 
+
   // Escuchar eventos del BottomNav (+) para abrir modales
   useEffect(() => {
     const onSim = () => handleSimSatellite()
@@ -797,14 +798,19 @@ export function CoachFab() {
               onClick={() => setIsOpen(true)}
               onTouchEnd={(e) => { e.preventDefault(); handleFabTouchEnd() }}
               className={cn(
-                "relative h-14 w-14 lg:h-16 lg:w-16 rounded-full bg-kiri-emerald",
+                // Más chico en mobile de forma permanente — a tamaño completo
+                // (56px) quedaba tapando contenido real en pantallas angostas
+                // (ej. el botón "Historial" en Ahorro, un stat en Gestión).
+                // 44px sigue siendo un target táctil válido (mínimo recomendado)
+                // y deja más margen libre. En desktop hay más espacio, se queda igual.
+                "relative h-11 w-11 lg:h-16 lg:w-16 rounded-full bg-kiri-emerald",
                 "shadow-lg shadow-kiri-emerald/30 flex items-center justify-center",
                 "transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95",
                 showSatellites && "scale-95 shadow-xl"
               )}
               aria-label="Abrir Kiri Coach"
             >
-              <svg viewBox="0 0 40 40" className="h-9 w-9 lg:h-10 lg:w-10" fill="none">
+              <svg viewBox="0 0 40 40" className="h-7 w-7 lg:h-10 lg:w-10" fill="none">
                 <rect x="13" y="26" width="14" height="10" rx="3" fill="#D8F3DC" />
                 <path d="M20 26 C20 20 20 18 20 14" stroke="#B7E4C7" strokeWidth="2.5" strokeLinecap="round" />
                 <ellipse cx="16" cy="14" rx="4" ry="6" fill="#52B788" transform="rotate(-20 16 14)" />
