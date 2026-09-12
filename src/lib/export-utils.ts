@@ -356,7 +356,10 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'italic')
   doc.setTextColor(160, 160, 180)
-  doc.text('El detalle completo de deudas, ahorros y transacciones sigue en las páginas siguientes →', margin, 275)
+  // "→" (U+2192) no existe en las fuentes estándar de jsPDF (Helvetica) — se
+  // renderizaba como un glifo roto ("!'" ilegible), mismo problema que ya
+  // documentado arriba para los emojis. "->" en ASCII se ve igual de claro.
+  doc.text('El detalle completo de deudas, ahorros y transacciones sigue en las páginas siguientes ->', margin, 275)
 
   // ══════════════════════════════════════════════════════════════════════════
   // PÁGINAS SIGUIENTES — mismo detalle exhaustivo que ya existía
@@ -685,10 +688,10 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
       headStyles: { fillColor: DARK_GREEN, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
       alternateRowStyles: { fillColor: [248, 250, 248] },
       columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 24 },
-        2: { cellWidth: 90 },
-        3: { cellWidth: 28, halign: 'right' },
+        0: { cellWidth: 18 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 118 },
+        3: { cellWidth: 24, halign: 'right' },
       },
       margin: { left: margin, right: margin },
     })

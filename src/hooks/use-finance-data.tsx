@@ -240,7 +240,7 @@ function useFinanceDataInternal() {
 
   const markPaid = async (debtId: string, montoPagado?: number) => {
     const debt = debts.find(d => d.id === debtId)
-    if (!debt) return
+    if (!debt) return null
 
     // montoPagado: si no se especifica, se paga la cuota completa
     const realPaid = montoPagado ?? debt.cuotaPeriodo
@@ -250,7 +250,7 @@ function useFinanceDataInternal() {
     // una segunda llamada aparte que, si fallaba, dejaba la deuda "pagada" sin
     // que el saldo disponible bajara).
     const { data } = await debtsApi.pay(debtId, realPaid)
-    if (!data) return
+    if (!data) return null
 
     // Actualizar estado local DIRECTAMENTE con los datos del backend (fuente de verdad)
     const backendDebt = data.debt as Record<string, unknown>
@@ -292,6 +292,12 @@ function useFinanceDataInternal() {
         }
       }
     } catch { /* No bloquear */ }
+
+    // Para que quien llama pueda festejar el momento exacto en que una deuda
+    // queda saldada — antes esto se perdía silenciosamente: la tarjeta solo
+    // se veía atenuada (opacity-40) y desaparecía del todo en el próximo
+    // refetch, sin ningún "listo, terminaste de pagar esto".
+    return { liquidada: backendDebt.estado === 'saldada', nombre: debt.nombre }
   }
 
   const undoPayDebt = async (debtId: string) => {
@@ -473,6 +479,10 @@ function useFinanceDataInternal() {
     if (result?.expense) {
       const mapped = mapImpulse(result.expense)
       setImpulseExpenses(prev => [mapped, ...prev])
+      // Aviso para quien esté viendo el Árbol Kiri en ese momento (misma idea
+      // que kiri:wallet-updated) — dispara la reacción de "tormenta" sin
+      // acoplar este hook a la página del jardín.
+      window.dispatchEvent(new CustomEvent("kiri:impulse-registered", { detail: { nombre: data.nombre } }))
       if (data.tarjetaId) {
         // Pagado con tarjeta: es un cupo de crédito consumido, no plata del
         // disponible — refrescamos todo para traer el saldo actualizado de la

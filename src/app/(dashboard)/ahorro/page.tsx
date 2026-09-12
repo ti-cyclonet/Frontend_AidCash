@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
+import { CelebrationModal } from "@/components/ui/celebration-modal"
 import { FeatureGate } from "@/components/plan/feature-gate"
 import type { SharedPocket } from "@/lib/types"
 
@@ -165,6 +166,10 @@ function AhorroContent() {
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState<"ahorro" | "emergencia">("ahorro")
+
+  // Festejo al alcanzar la meta de un bolsillo — ver handleTx.
+  const [celebration, setCelebration] = useState<{ icon: string; title: string; subtitle: string } | null>(null)
+
   // Sub-tab dentro de Ahorro
   const [ahorroSubTab, setAhorroSubTab] = useState<"bolsillos" | "historial">("bolsillos")
 
@@ -398,10 +403,23 @@ function AhorroContent() {
         toast({ title: "No se pudo registrar el aporte", description: "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
         return
       }
-      setPockets(p => p.map(x => x.id === txPocket.id ? mapApiPocket(data.pocket) : x))
+      const updatedPocket = mapApiPocket(data.pocket)
+      setPockets(p => p.map(x => x.id === txPocket.id ? updatedPocket : x))
       // El backend ya registró el historial (SavingsHistory) dentro de la
       // misma transacción del depósito — no hace falta una segunda llamada
       // aquí (antes SÍ hacía falta porque el endpoint no dejaba ningún rastro).
+
+      // Festejar el momento exacto en que este aporte hace que se cruce la
+      // meta — antes esto pasaba en silencio, solo quedaba un "🎉 ¡Meta
+      // alcanzada!" estático que se veía nada más si volvías a entrar al
+      // bolsillo, sin ningún festejo en el momento real en que pasó.
+      if (updatedPocket.meta > 0 && txPocket.acumulado < txPocket.meta && updatedPocket.acumulado >= updatedPocket.meta) {
+        setCelebration({
+          icon: "🎉",
+          title: `¡Alcanzaste tu meta de "${updatedPocket.nombre}"!`,
+          subtitle: `Ahorraste ${formatAmount(updatedPocket.meta)}. ¡Bien hecho!`,
+        })
+      }
     } else {
       // Retirar: mismo principio — el backend devuelve el dinero a la
       // billetera Y resta del bolsillo en una sola transacción.
@@ -1131,6 +1149,14 @@ function AhorroContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CelebrationModal
+        open={!!celebration}
+        onClose={() => setCelebration(null)}
+        icon={celebration?.icon ?? "🎉"}
+        title={celebration?.title ?? ""}
+        subtitle={celebration?.subtitle ?? ""}
+      />
     </div>
     </>
   )

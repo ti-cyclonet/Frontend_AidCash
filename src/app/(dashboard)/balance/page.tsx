@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -295,7 +295,7 @@ export default function BalancePage() {
           </h1>
           <p className="text-muted-foreground text-sm">Todo lo que pasa con tu plata, en un solo lugar.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Filtro de tiempo */}
           <div className="flex bg-muted/30 rounded-xl p-1">
             {TIMEFRAMES.map(tf => (
@@ -480,8 +480,13 @@ export default function BalancePage() {
                         <XAxis dataKey="name" tick={{ fontSize: 9 }} className="text-muted-foreground" axisLine={false} tickLine={false} />
                         <YAxis hide />
                         <Tooltip content={<CustomTooltip formatAmount={formatAmount} />} />
-                        <Bar dataKey="ingresos" fill="#10b981" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="egresos" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                        {/* Sin esto, con un solo periodo de datos (ej. un único
+                            día con gastos y $0 de ingresos) la barra de egresos
+                            se ve como un bloque sólido sin ninguna referencia de
+                            qué representa cada color. */}
+                        <Legend wrapperStyle={{ fontSize: 10 }} iconSize={8} iconType="circle" />
+                        <Bar dataKey="ingresos" name="Ingresos" fill="#10b981" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="egresos" name="Egresos" fill="#ef4444" radius={[3, 3, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

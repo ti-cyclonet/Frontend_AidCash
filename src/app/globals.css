@@ -145,11 +145,6 @@
 }
 
 /* Sistema de ánimo/clima del jardín (Fase 2) */
-@keyframes kiriSunPulse {
-  0%, 100% { opacity: .5; transform: scale(1); }
-  50% { opacity: .9; transform: scale(1.08); }
-}
-
 @keyframes kiriRainFall {
   0% { transform: translateY(-6px); opacity: 0; }
   20% { opacity: 1; }
@@ -186,6 +181,65 @@
   25%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
   78%  { opacity: 1; transform: translate(-50%, -2px) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -26px) scale(0.96); }
+}
+
+/* ─── Tormenta de "gasto hormiga" ────────────────────────────────────────────
+   Reacción del árbol al registrar un gasto hormiga: nubes que se oscurecen,
+   un rayo, un flash breve y una vibración de la tarjeta — sin hormigas
+   dibujadas, el evento ya lo cuenta el mensaje de abajo. */
+@keyframes kiriStormShake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-3px); }
+  40%      { transform: translateX(3px); }
+  60%      { transform: translateX(-2px); }
+  80%      { transform: translateX(2px); }
+}
+
+@keyframes kiriBoltFlash {
+  0%, 100% { opacity: 0; }
+  5%       { opacity: 1; }
+  10%      { opacity: 0; }
+  13%      { opacity: 1; }
+  18%      { opacity: 0; }
+}
+
+@keyframes kiriLightningFlash {
+  0%, 100% { opacity: 0; }
+  4%       { opacity: .85; }
+  8%       { opacity: 0; }
+  11%      { opacity: .5; }
+  15%      { opacity: 0; }
+}
+
+@keyframes kiriStormRainFall {
+  0%   { transform: translateY(-6px); opacity: 0; }
+  15%  { opacity: .9; }
+  100% { transform: translateY(90px); opacity: 0; }
+}
+
+/* Mensaje inferior con brillo — usado por la tormenta de gasto hormiga.
+   Aparece con un rebote suave, se sostiene y se desvanece hacia abajo. */
+@keyframes kiriToastPop {
+  0%   { opacity: 0; transform: translate(-50%, 8px) scale(0.92); }
+  15%  { opacity: 1; transform: translate(-50%, 0) scale(1.02); }
+  25%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  85%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 6px) scale(0.96); }
+}
+
+/* Ráfaga de destellos del level-up — cada partícula recibe su propio
+   --dx/--dy inline (ángulo distinto) para que la ráfaga se vea radial. */
+@keyframes kiriSparkleBurst {
+  0%   { transform: translate(0, 0) scale(0); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
+}
+
+/* Entrada del árbol al cambiar de nivel (o al montar la primera vez) —
+   crece desde un poco más chico con un leve rebote, en vez de aparecer de
+   golpe con el corte seco de un simple cambio de `src`. */
+@keyframes kiriTreeGrowIn {
+  0%   { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 /* Dictado por voz: onda del micrófono, shimmer de "analizando" y ráfaga de éxito */

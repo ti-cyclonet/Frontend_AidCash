@@ -113,14 +113,21 @@ function SocialContent() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "relative flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl text-sm font-semibold transition-all",
+                "relative flex items-center justify-center rounded-xl font-semibold transition-all",
+                TABS.length === 4
+                  // 4 pestañas (aparece "Deudas") no caben en una fila horizontal
+                  // en pantallas chicas — ícono arriba, texto abajo, como un tab
+                  // bar de fondo, en vez de truncar "Conexiones"/"Préstamos" a
+                  // una o dos letras.
+                  ? "flex-col gap-0.5 h-14 px-1 text-[10px]"
+                  : "flex-row gap-1.5 h-10 px-3 text-sm",
                 isActive
                   ? "bg-card shadow-sm text-cyclon-lavender"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               <tab.icon className="h-4 w-4 shrink-0" strokeWidth={isActive ? 2.5 : 2} />
-              <span className="truncate">{tab.label}</span>
+              <span className="truncate max-w-full">{tab.label}</span>
               {showBadge && (
                 <span className="absolute -top-1 -right-1 h-4 w-4 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white">
                   {unreadCount > 9 ? "9+" : unreadCount}
