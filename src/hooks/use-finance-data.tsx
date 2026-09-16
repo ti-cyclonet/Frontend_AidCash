@@ -57,6 +57,7 @@ function mapDebt(row: Record<string, unknown>): Debt {
     montoParticipanteA: row.montoParticipanteA != null ? Number(row.montoParticipanteA) : null,
     montoParticipanteB: row.montoParticipanteB != null ? Number(row.montoParticipanteB) : null,
     nombreParticipanteB: (row.nombreParticipanteB ?? null) as string | null,
+    pendienteProximoPeriodo: (row.pendienteProximoPeriodo ?? row.pendiente_proximo_periodo ?? false) as boolean,
   }
 }
 
@@ -204,7 +205,7 @@ function useFinanceDataInternal() {
    * que quien llamaba (ej. el onboarding) no tenía forma de saber que la deuda
    * nunca se guardó — revisa el valor de retorno.
    */
-  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; budgetCategoryId?: string | null }) => {
+  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; budgetCategoryId?: string | null }) => {
     if (!userId) return null
     const { data: result, error } = await debtsApi.create({
       nombre: data.nombre,
@@ -219,6 +220,7 @@ function useFinanceDataInternal() {
       bankEntityId: data.bankEntityId,
       tipoDeuda: data.tipoDeuda,
       yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+      nuevaProximoPeriodo: data.nuevaProximoPeriodo,
       budgetCategoryId: data.budgetCategoryId,
     })
     if (error || !result) return null

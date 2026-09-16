@@ -397,6 +397,28 @@ export default function ObligacionesPage() {
     setPayFixed(null)
   }
 
+  // ── Abonar extra a un gasto fijo YA pagado este periodo ──────────────────────
+  // Mismo caso que abonoTarget/confirmAbono para deudas: una vez marcado
+  // "pagadoEstePeriodo" no había forma de meterle más plata sin deshacer el
+  // pago primero (útil, ej., cuando la cuota registrada fue un estimado y el
+  // cobro real salió más alto).
+  const [abonoFixedTarget, setAbonoFixedTarget] = useState<FixedExpense | null>(null)
+  const [abonoFixedAmount, setAbonoFixedAmount] = useState("")
+  const [abonoFixedSaving, setAbonoFixedSaving] = useState(false)
+
+  const confirmAbonoFixed = async () => {
+    if (!abonoFixedTarget || !abonoFixedAmount) return
+    const amt = Number(abonoFixedAmount)
+    if (amt <= 0 || amt > wallet.cashBalance) return
+    setAbonoFixedSaving(true)
+    await markFixedPaid(abonoFixedTarget.id, amt)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setAbonoFixedSaving(false)
+    setAbonoFixedTarget(null)
+    setAbonoFixedAmount("")
+  }
+
   // ── Handlers Saldo Insuficiente ───────────────────────────────────────────
   const handleInsufficientPartial = async () => {
     if (!insufficientTarget) return
@@ -760,6 +782,7 @@ export default function ObligacionesPage() {
                     const walletData = await undoPayFixed(fe.id)
                     if (walletData) setWallet(walletData)
                   }}
+                  onAbonar={() => { setAbonoFixedTarget(fe); setAbonoFixedAmount("") }}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
                   isPeriodPriority={periodPriorityIds.has(fe.id)}
@@ -1170,6 +1193,35 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Abonar extra a un gasto fijo ya pagado este periodo */}
+      <Dialog open={!!abonoFixedTarget} onOpenChange={v => { if (!v) { setAbonoFixedTarget(null); setAbonoFixedAmount("") } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Abonar a este gasto fijo</DialogTitle>
+            <DialogDescription>
+              <strong>{abonoFixedTarget?.nombre}</strong> · Ya pagado este periodo: {formatAmount((abonoFixedTarget as any)?.montoPagadoEstePeriodo ?? 0)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Monto a abonar</Label>
+              <MoneyInput value={abonoFixedAmount} onChange={v => setAbonoFixedAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus />
+              <p className="text-[10px] text-muted-foreground">Se descuenta de tu saldo disponible ({formatAmount(wallet.cashBalance)}) y se suma a lo ya pagado este periodo.</p>
+            </div>
+            {Number(abonoFixedAmount) > wallet.cashBalance && (
+              <p className="text-[10px] text-red-500 font-bold">No tienes saldo suficiente para este abono.</p>
+            )}
+            <Button
+              onClick={confirmAbonoFixed}
+              disabled={abonoFixedSaving || !abonoFixedAmount || Number(abonoFixedAmount) <= 0 || Number(abonoFixedAmount) > wallet.cashBalance}
+              className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl"
+            >
+              {abonoFixedSaving ? "Abonando..." : "Confirmar abono"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ═══ MODAL CONFIGURAR PAGO AUTOMÁTICO (gastos fijos) ═══
           Reemplaza el toggle instantáneo del botón ⚡: ahora pregunta si el pago
           automático se hará con el disponible real o con una tarjeta de crédito
@@ -1516,6 +1568,7 @@ export default function ObligacionesPage() {
                     bankEntityId: data.bankEntityId,
                     tipoDeuda: data.tipoDeuda,
                     yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+                    nuevaProximoPeriodo: data.nuevaProximoPeriodo,
                     budgetCategoryId: data.budgetCategoryId,
                   })
                   setSaving(false)
@@ -1806,7 +1859,7 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onEdit, onDe
   // encima de `montoTotal` (el monto con el que se creó) al hacer nuevas
   // compras con ella, lo que sin este límite mostraba un "% pagado" negativo.
   const progreso = debt.montoTotal > 0 ? Math.max(0, Math.min(100, Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100))) : 0
-  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo, debt.frecuenciaPago === 'quincenal')
+  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo, debt.frecuenciaPago === 'quincenal', debt.pendienteProximoPeriodo)
   const obligIcon = getObligationIcon(debt.nombre)
 
   // Yellow highlight for period priority (pending in current period)
@@ -2004,9 +2057,9 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onEdit, onDe
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
+function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, onAbonar, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
   item: FixedExpense; tarjetaNombre?: string; formatAmount: (n: number) => string
-  onEdit: () => void; onDelete: () => void; onTogglePaid: () => void; onUndoPay: () => void
+  onEdit: () => void; onDelete: () => void; onTogglePaid: () => void; onUndoPay: () => void; onAbonar: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
 }) {
@@ -2103,9 +2156,14 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
 
         {/* Botones de acción */}
         {item.pagadoEstePeriodo ? (
-          <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
-            Deshacer pago
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
+              Deshacer pago
+            </Button>
+            <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+              Abonar
+            </Button>
+          </div>
         ) : isPartiallyPaid ? (
           <div className="flex gap-2">
             <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
