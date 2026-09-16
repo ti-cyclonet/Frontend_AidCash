@@ -1340,7 +1340,11 @@ function GardenTreeVisual({
                 animate={{ rotate: [0, -7, 6, -5, 4, -2, 0], y: [0, -3, 0, -2, 0] }}
                 transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 0.8, ease: "easeInOut" }}
               />
-            ) : currentLevelIdx >= 2 ? (
+            ) : (
+              /* Nivel 1 en adelante — antes el nivel 1 (retoño mediano) se
+                 renderizaba como <img> plano, sin animación de reposo: se veía
+                 congelado al lado de los demás niveles, que sí tienen su
+                 propio sway. Misma brisa sutil que ya usan los niveles 2+. */
               <motion.img
                 src={currentLevel.image}
                 alt={currentLevel.name}
@@ -1351,14 +1355,6 @@ function GardenTreeVisual({
                   skewX: [0, 0.2, -0.15, 0.1, -0.1, 0],
                 }}
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-              />
-            ) : (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={currentLevel.image}
-                alt={currentLevel.name}
-                className={imgClass}
-                style={{ filter: filterStyle, transition: "filter .6s ease" }}
               />
             )}
           </motion.div>

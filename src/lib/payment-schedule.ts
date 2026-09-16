@@ -19,13 +19,25 @@ function dateForDay(year: number, month: number, day: number): Date {
   return new Date(year, month, Math.min(day, lastDayOfMonth))
 }
 
-export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean, isQuincenal = false): NextPaymentInfo {
+export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean, isQuincenal = false, pendienteProximoPeriodo = false): NextPaymentInfo {
   const today = new Date()
   const todayDay = today.getDate()
   const currentMonth = today.getMonth()
   const currentYear = today.getFullYear()
   const days = diasPago.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d) && d >= 1 && d <= 31)
   if (days.length === 0) days.push(1)
+
+  // Obligación marcada al crearla como "nueva, empieza el próximo periodo"
+  // (ver activoDesdePeriodo en el backend) — el día de pago pudo caer antes de
+  // hoy en el calendario, pero esta obligación todavía no le aplica a este
+  // mes: no es "vencida" ni "pagada", es simplemente "pendiente" con su
+  // primer cobro real más adelante. Se revisa ANTES que pagadoEstePeriodo:
+  // si el usuario terminó pagando igual este periodo, ese pago real manda.
+  if (pendienteProximoPeriodo && !pagadoEstePeriodo) {
+    const day = Math.min(...days)
+    const label = dateForDay(currentYear, currentMonth + 1, day).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+    return { nextDate: label, daysUntil: 999, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
+  }
 
   if (pagadoEstePeriodo) {
     // Quincenal son DOS cuotas independientes por mes (ej. "10,25") — si ya se

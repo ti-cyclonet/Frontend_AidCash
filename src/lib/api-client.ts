@@ -400,7 +400,7 @@ export const fixedExpensesApi = {
     return api<{ fixedExpenses: Record<string, unknown>[] }>('/fixed-expenses')
   },
 
-  async create(data: { nombre: string; monto: number; fechaCorte: string; categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean; pagoAutomatico?: boolean; yaPagoEstePeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }) {
+  async create(data: { nombre: string; monto: number; fechaCorte: string; categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean; pagoAutomatico?: boolean; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }) {
     return api<{ fixedExpense: Record<string, unknown> }>('/fixed-expenses', {
       method: 'POST',
       body: data,

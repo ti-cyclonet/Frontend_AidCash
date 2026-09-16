@@ -123,16 +123,21 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      {/* Header.
+          En mobile el nombre + los 2 botones ("Registrar gasto" y "Editar")
+          no cabían en una sola fila sin envolver — el botón "Editar" quedaba
+          empujado fuera del ancho de la pantalla en vez de bajar de línea.
+          `flex-wrap` deja que el cluster de botones baje a su propia fila
+          cuando no hay espacio, en vez de desbordar. */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${cat.color}22` }}>
           <IconComp size={18} color={cat.color} />
         </div>
-        <div className="flex-1">
-          <p className="text-foreground text-base font-bold">{cat.name}</p>
-          <p className="text-muted-foreground text-xs">Presupuesto de esta categoría</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-foreground text-base font-bold truncate">{cat.name}</p>
+          <p className="text-muted-foreground text-xs truncate">Presupuesto de esta categoría</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
           <button
             onClick={goRegisterExpense}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-kiri-emerald text-white text-sm font-semibold hover:bg-kiri-emerald/90 transition-colors"

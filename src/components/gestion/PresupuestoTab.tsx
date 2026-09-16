@@ -24,7 +24,7 @@ import { userApi, WalletState, budgetCategoriesApi } from "@/lib/api-client"
 import { analyzeBudgetCategories, BudgetInsight, getCategoryInsight } from "@/lib/budget-insights"
 import { detectBudgetCategory } from "@/hooks/use-budget-categories"
 import { getPeriodDateRange, getPeriodLabel } from "@/lib/period-filter"
-import { SUGGESTIONS } from "@/lib/budget-category-spend"
+import { SUGGESTIONS, extractCategoryTag } from "@/lib/budget-category-spend"
 import { ImpulseCategory } from "@/lib/types"
 import Link from "next/link"
 import { TopConsumosSection } from "./TopConsumosSection"
@@ -141,13 +141,19 @@ export function PresupuestoTab() {
   // Conectar gastos a categorias: impulseExpenses por keyword/tag + gastos fijos vinculados pagados
   const catsWithSpent = categories.map(cat => {
     const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === cat.name.toLowerCase())
-    const keys = [...(sug?.keys ?? []), cat.name.toLowerCase()]
-    const tagPattern = `[${cat.name.toLowerCase()}]`
+    const keys = sug?.keys ?? []
 
-    // Gastos hormiga/impulse del periodo actual que coincidan por keyword o tag
+    // Gastos hormiga/impulse del periodo actual que coincidan por keyword o tag.
+    // Si el gasto ya trae un tag explícito "[Categoría] ..." (el usuario la
+    // eligió al registrarlo), esa elección manda — sin esto, un gasto como
+    // "[Alimentación] pagué con tarjeta en el súper" también se sumaba a
+    // "Deudas" solo por contener la palabra "tarjeta" (mismo fix que en
+    // computeCategorySpend, ver ese comentario para el caso completo).
     const matchedImpulse = impulseThisBudgetPeriod.filter(e => {
       const expName = e.nombre.toLowerCase()
-      return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
+      const tag = extractCategoryTag(expName)
+      if (tag) return tag === cat.name.toLowerCase()
+      return keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
     })
 
     // Gastos fijos vinculados desde ESTA categoría (legacy) que ya fueron pagados

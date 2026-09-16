@@ -76,6 +76,7 @@ function mapFixed(row: Record<string, unknown>): FixedExpense {
     pagoAutomatico: (row.pagoAutomatico ?? row.pago_automatico ?? false) as boolean,
     tarjetaVinculadaId: (row.tarjetaVinculadaId ?? row.tarjeta_vinculada_id ?? null) as string | null,
     budgetCategoryId: (row.budgetCategoryId ?? row.budget_category_id ?? null) as string | null,
+    pendienteProximoPeriodo: (row.pendienteProximoPeriodo ?? row.pendiente_proximo_periodo ?? false) as boolean,
   }
 }
 
@@ -268,30 +269,14 @@ function useFinanceDataInternal() {
       } : d
     ))
 
-    // ═══ AUTO-VINCULAR A CATEGORÍA "DEUDAS" ═══
-    // Antes esto creaba un gasto hormiga espejo (`[Deudas] ... (pago deuda)`)
-    // cada vez que se cubría la cuota completa. Dos problemas: (1) si luego se
-    // deshacía el pago, ese gasto fantasma nunca se borraba — quedaba contando
-    // para siempre contra el presupuesto aunque el pago que lo originó ya no
-    // existiera; (2) si la deuda YA estaba vinculada a la categoría por su
-    // propio `budgetCategoryId`, el pago se contaba DOS veces (una vía el
-    // gasto hormiga por coincidencia de texto, otra vía `computeCategorySpend`
-    // sumando `montoPagadoEstePeriodo` directo). En vez de eso, vinculamos la
-    // deuda a la categoría UNA sola vez por su `budgetCategoryId` real — el
-    // mismo mecanismo que ya usan los gastos fijos (ver comentario en
-    // `markFixedPaid`) — así `computeCategorySpend` sigue el pago real de cada
-    // periodo sola, y deshacer el pago la vacía sola también, sin nada que limpiar.
-    try {
-      if (!debt.budgetCategoryId) {
-        const { budgetCategoriesApi } = await import('@/lib/api-client')
-        const { data: catsRes } = await budgetCategoriesApi.list()
-        const debtCat = catsRes?.categories.find(c => c.nombre.toLowerCase() === 'deudas' || c.nombre.toLowerCase() === 'deuda')
-        if (debtCat) {
-          await debtsApi.update(debtId, { budgetCategoryId: debtCat.id })
-          setDebts(prev => prev.map(d => d.id === debtId ? { ...d, budgetCategoryId: debtCat.id } : d))
-        }
-      }
-    } catch { /* No bloquear */ }
+    // NOTA: acá antes vinculábamos la deuda en automático a una categoría
+    // "Deudas" si no tenía `budgetCategoryId` propio — sin que el usuario lo
+    // pidiera. Eso pisaba la elección explícita "Sin categoría" del usuario y,
+    // si el nombre del gasto coincidía por palabra clave con OTRA categoría a
+    // la vez (ver fix en `computeCategorySpend`), el mismo pago terminaba
+    // sumando en dos categorías del presupuesto. La categoría de una deuda
+    // ahora SOLO se asigna cuando el usuario la elige explícitamente en el
+    // formulario (ver `BudgetCategorySelector`), nunca en automático al pagar.
 
     // Para que quien llama pueda festejar el momento exacto en que una deuda
     // queda saldada — antes esto se perdía silenciosamente: la tarjeta solo
@@ -331,7 +316,7 @@ function useFinanceDataInternal() {
   // ─── Gastos fijos ────────────────────────────────────────────────────────────
 
   /** Devuelve el gasto fijo creado, o `null` si no se pudo guardar — ver nota en `addDebt`. */
-  const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo" | "renovacionAuto" | "frecuencia" | "categoria" | "metodoPago"> & { categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean; pagoAutomatico?: boolean; yaPagoEstePeriodo?: boolean }) => {
+  const addFixedExpense = async (data: Omit<FixedExpense, "id" | "userId" | "pagadoEstePeriodo" | "renovacionAuto" | "frecuencia" | "categoria" | "metodoPago"> & { categoria?: string; frecuencia?: string; metodoPago?: string; renovacionAuto?: boolean; pagoAutomatico?: boolean; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean }) => {
     if (!userId) return null
     const { data: result, error } = await fixedExpensesApi.create({
       nombre: data.nombre,
@@ -343,6 +328,7 @@ function useFinanceDataInternal() {
       renovacionAuto: data.renovacionAuto,
       pagoAutomatico: data.pagoAutomatico,
       yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+      nuevaProximoPeriodo: data.nuevaProximoPeriodo,
       tarjetaVinculadaId: data.tarjetaVinculadaId,
       budgetCategoryId: data.budgetCategoryId,
     })
