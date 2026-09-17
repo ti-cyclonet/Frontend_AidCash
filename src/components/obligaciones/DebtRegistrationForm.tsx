@@ -54,6 +54,9 @@ export interface DebtFormData {
    * de Kiri) — evita que la deuda nazca marcada "vencida" cuando el día de
    * pago ingresado ya pasó este periodo. */
   yaPagoEstePeriodo?: boolean
+  /** La deuda es NUEVA y su primer cobro real es el próximo periodo — no
+   * pagada, no vencida. Mutuamente excluyente con yaPagoEstePeriodo. */
+  nuevaProximoPeriodo?: boolean
   budgetCategoryId?: string | null
 }
 
@@ -79,6 +82,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
   const [yaPagando, setYaPagando] = useState(false)
   const [saldoActualNormal, setSaldoActualNormal] = useState("")
   const [yaPagoEstePeriodo, setYaPagoEstePeriodo] = useState(false)
+  const [nuevaProximoPeriodo, setNuevaProximoPeriodo] = useState(false)
   const [budgetCategoryId, setBudgetCategoryId] = useState<string>("")
 
   // Campos exclusivos del modo banco
@@ -112,7 +116,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
   // Si el usuario cambia el día a uno que ya no aplica, no dejar una
   // respuesta "ya pagué" colgada de un día distinto.
   useEffect(() => {
-    if (!dueQuestion) setYaPagoEstePeriodo(false)
+    if (!dueQuestion) { setYaPagoEstePeriodo(false); setNuevaProximoPeriodo(false) }
   }, [dueQuestion])
 
   // Cargar bancos al entrar en modo banco
@@ -219,6 +223,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         frecuenciaPago,
         acreedor: "",
         yaPagoEstePeriodo: dueQuestion ? yaPagoEstePeriodo : undefined,
+        nuevaProximoPeriodo: dueQuestion ? nuevaProximoPeriodo : undefined,
         budgetCategoryId: budgetCategoryId || null,
       })
     } else {
@@ -236,6 +241,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         frecuenciaPago,
         tipoDeuda: looksLikeCreditCardName(nombre) ? 'TARJETA_CREDITO' : 'PRESTAMO',
         yaPagoEstePeriodo: dueQuestion ? yaPagoEstePeriodo : undefined,
+        nuevaProximoPeriodo: dueQuestion ? nuevaProximoPeriodo : undefined,
         budgetCategoryId: budgetCategoryId || null,
       })
     }
@@ -500,7 +506,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setYaPagoEstePeriodo(true)}
+              onClick={() => { setYaPagoEstePeriodo(true); setNuevaProximoPeriodo(false) }}
               className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
                 yaPagoEstePeriodo ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
               )}
@@ -509,14 +515,27 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => setYaPagoEstePeriodo(false)}
+              onClick={() => { setYaPagoEstePeriodo(false); setNuevaProximoPeriodo(false) }}
               className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-                !yaPagoEstePeriodo ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
+                (!yaPagoEstePeriodo && !nuevaProximoPeriodo) ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
               )}
             >
               {dueQuestion === "hoy" ? "No, vence hoy" : "No, está vencida"}
             </button>
           </div>
+          {/* 3ra opción — deuda genuinamente NUEVA (ej. un préstamo que arranca
+              el mes que viene): no está pagada, pero tampoco vencida porque
+              nunca debió cobrarse este periodo. No genera ningún movimiento y
+              corre la próxima fecha de pago al mismo día del mes siguiente. */}
+          <button
+            type="button"
+            onClick={() => { setYaPagoEstePeriodo(false); setNuevaProximoPeriodo(true) }}
+            className={cn("w-full h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+              nuevaProximoPeriodo ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
+            )}
+          >
+            Es una obligación nueva (inicia el próximo mes)
+          </button>
         </div>
       )}
 

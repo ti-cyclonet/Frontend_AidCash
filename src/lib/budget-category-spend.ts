@@ -46,6 +46,23 @@ export interface FixedLike { id: string; monto: number; pagadoEstePeriodo: boole
 export interface DebtLike { id: string; budgetCategoryId?: string | null; montoPagadoEstePeriodo?: number | null }
 
 /**
+ * Si el usuario eligió una categoría a mano al registrar el gasto, el nombre
+ * viene con esa categoría envuelta en corchetes — pero el formulario de
+ * Presupuesto la agrega al INICIO ("[Alimentacion] Mercado semanal") y el de
+ * Obligaciones la agrega al FINAL ("Mercado semanal [Alimentacion]"), dos
+ * formularios que nacieron por separado y nunca se unificaron. Hay que
+ * reconocer ambas posiciones — si solo se busca el prefijo, un gasto tageado
+ * desde Obligaciones nunca calza con su tag y cae al detector automático por
+ * palabra clave, pudiendo sumar el mismo gasto en 2 o 3 categorías a la vez
+ * aunque el usuario solo haya elegido una.
+ */
+export function extractCategoryTag(expNameLower: string): string | null {
+  return expNameLower.match(/^\[([^\]]+)\]/)?.[1]
+    ?? expNameLower.match(/\[([^\]]+)\]$/)?.[1]
+    ?? null
+}
+
+/**
  * Cuánto se gastó en una categoría: gastos hormiga que calzan por keyword/tag +
  * gastos fijos vinculados desde la propia categoría (legacy, `linkedFixedIds`)
  * que ya se pagaron este periodo + deudas y gastos fijos vinculados desde SU
@@ -63,12 +80,20 @@ export function computeCategorySpend(
   debts: DebtLike[] = [],
 ): number {
   const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === cat.name.toLowerCase())
-  const keys = [...(sug?.keys ?? []), cat.name.toLowerCase()]
-  const tagPattern = `[${cat.name.toLowerCase()}]`
+  const keys = sug?.keys ?? []
 
+  // Si el gasto ya trae un tag explícito "[Categoría] ..." (el usuario la
+  // eligió al registrarlo), esa elección es la ÚNICA fuente de verdad — antes
+  // un gasto como "[Alimentación] pagué con tarjeta en el súper" TAMBIÉN se
+  // sumaba a "Deudas" solo por contener la palabra "tarjeta", así un mismo
+  // gasto terminaba contando en 2 categorías aunque el usuario solo hubiera
+  // elegido una. La detección automática por palabra clave solo aplica a
+  // gastos SIN tag (gasto hormiga libre, sin categoría asignada a mano).
   const matchedImpulse = impulseExpenses.filter(e => {
     const expName = e.nombre.toLowerCase()
-    return expName.startsWith(tagPattern) || keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
+    const tag = extractCategoryTag(expName)
+    if (tag) return tag === cat.name.toLowerCase()
+    return keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
   })
 
   const legacyIds = new Set(cat.linkedFixedIds ?? [])

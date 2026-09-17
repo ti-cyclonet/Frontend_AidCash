@@ -200,6 +200,9 @@ export interface Debt {
   montoParticipanteA?: number | null;
   montoParticipanteB?: number | null;
   nombreParticipanteB?: string | null;
+  /** true si se creó como "obligación nueva, empieza el próximo periodo" y ese
+   * periodo todavía no llega — ver activoDesdePeriodo en el backend. */
+  pendienteProximoPeriodo?: boolean;
 }
 
 // Fila de Social > Deudas — visible tanto para el dueño de la deuda como
@@ -236,6 +239,9 @@ export interface FixedExpense {
   pagoAutomatico?: boolean;
   tarjetaVinculadaId?: string | null;
   budgetCategoryId?: string | null;
+  /** true si se creó como "obligación nueva, empieza el próximo periodo" y ese
+   * periodo todavía no llega — ver activoDesdePeriodo en el backend. */
+  pendienteProximoPeriodo?: boolean;
 }
 
 export type ImpulseCategory = 'cafe' | 'comida' | 'transporte' | 'antojo' | 'salida' | 'otro';

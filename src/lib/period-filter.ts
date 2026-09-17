@@ -183,7 +183,7 @@ function isOverdueThisMonth(days: number[], now: Date): boolean {
  *     vencida se muestra siempre, sin importar qué periodo se esté viendo.
  *   - Items sin día definido: se incluyen siempre (conservador).
  */
-export function filterByCurrentQuincena<T extends { diasPago?: string; fechaCorte?: string; pagadoEstePeriodo?: boolean; frecuenciaPago?: string; frecuencia?: string }>(
+export function filterByCurrentQuincena<T extends { diasPago?: string; fechaCorte?: string; pagadoEstePeriodo?: boolean; pendienteProximoPeriodo?: boolean; frecuenciaPago?: string; frecuencia?: string }>(
   items: T[],
   periodRange: { start: Date; end: Date },
   now: Date = new Date()
@@ -203,8 +203,14 @@ export function filterByCurrentQuincena<T extends { diasPago?: string; fechaCort
       if (nextDate >= periodRange.start && nextDate < periodRange.end) return true
     }
 
-    // Genuinamente vencida (todos sus días ya pasaron este mes) y sigue sin pagar
-    if ('pagadoEstePeriodo' in item && item.pagadoEstePeriodo === false && isOverdueThisMonth(days, now)) {
+    // Genuinamente vencida (todos sus días ya pasaron este mes) y sigue sin pagar.
+    // Una obligación marcada "nueva, empieza el próximo periodo" NO cuenta acá
+    // aunque su día ya haya pasado en el calendario — todavía no le toca a este
+    // mes, así que forzarla a la quincena/mes actual la mostraría como vencida
+    // sin haber arrancado nunca.
+    if ('pagadoEstePeriodo' in item && item.pagadoEstePeriodo === false
+      && !item.pendienteProximoPeriodo
+      && isOverdueThisMonth(days, now)) {
       return true
     }
 
@@ -218,21 +224,24 @@ export function filterByCurrentQuincena<T extends { diasPago?: string; fechaCort
  * — se pagan cada quincena, no tienen "vencido" en este sentido. Útil para la
  * UI (ej. mostrar una etiqueta "Vencido" en vez de "Pendiente").
  */
-export function isGenuinelyOverdue<T extends { diasPago?: string; fechaCorte?: string; pagadoEstePeriodo?: boolean; frecuenciaPago?: string; frecuencia?: string }>(
+export function isGenuinelyOverdue<T extends { diasPago?: string; fechaCorte?: string; pagadoEstePeriodo?: boolean; pendienteProximoPeriodo?: boolean; frecuenciaPago?: string; frecuencia?: string }>(
   item: T,
   now: Date = new Date()
 ): boolean {
   const itemFrequency = ('frecuenciaPago' in item ? item.frecuenciaPago : item.frecuencia) as string | undefined
   if (itemFrequency === 'quincenal') return false
   if (!('pagadoEstePeriodo' in item) || item.pagadoEstePeriodo !== false) return false
+  if (item.pendienteProximoPeriodo) return false
   return isOverdueThisMonth(itemDays(item), now)
 }
 
 /**
- * Excluye obligaciones ya pagadas.
+ * Excluye obligaciones ya pagadas Y las marcadas "nueva, empieza el próximo
+ * periodo" — ninguna de las dos corresponde al periodo actual, así que no
+ * deben sumar a `totalObligations` ni resaltarse como prioridad de este mes.
  */
-export function filterPendingOnly<T extends { pagadoEstePeriodo: boolean }>(items: T[]): T[] {
-  return items.filter(item => !item.pagadoEstePeriodo)
+export function filterPendingOnly<T extends { pagadoEstePeriodo: boolean; pendienteProximoPeriodo?: boolean }>(items: T[]): T[] {
+  return items.filter(item => !item.pagadoEstePeriodo && !item.pendienteProximoPeriodo)
 }
 
 // ─── Función principal ────────────────────────────────────────────────────────

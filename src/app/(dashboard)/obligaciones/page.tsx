@@ -59,7 +59,7 @@ interface DebtForm {
   numCuotas: string
   budgetCategoryId?: string | null
 }
-interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string; yaPagoEstePeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }
+interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }
 
 const emptyDebtForm: DebtForm = {
   nombre: "", montoTotal: "", saldoRestante: "", cuotaPeriodo: "", diasPago: "",
@@ -340,6 +340,29 @@ export default function ObligacionesPage() {
     setPayDebt(null)
   }
 
+  // ── Abonar extra a una deuda YA pagada este periodo ──────────────────────────
+  // Antes, una vez marcada "pagadoEstePeriodo", la tarjeta solo mostraba
+  // "Deshacer pago" — si el usuario quería meterle más plata a la deuda (ej.
+  // le llegó un bono y quiere adelantar capital) no tenía forma de hacerlo sin
+  // deshacer el pago de la cuota primero. El backend (payDebtServer) ya suma
+  // cualquier monto extra sin problema — solo faltaba la entrada en la UI.
+  const [abonoTarget, setAbonoTarget] = useState<Debt | null>(null)
+  const [abonoAmount, setAbonoAmount] = useState("")
+  const [abonoSaving, setAbonoSaving] = useState(false)
+
+  const confirmAbono = async () => {
+    if (!abonoTarget || !abonoAmount) return
+    const amt = Number(abonoAmount)
+    if (amt <= 0 || amt > wallet.cashBalance) return
+    setAbonoSaving(true)
+    await payAndCelebrate(abonoTarget.id, amt)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setAbonoSaving(false)
+    setAbonoTarget(null)
+    setAbonoAmount("")
+  }
+
   // ── Handlers Pay Fixed ────────────────────────────────────────────────────
   const openPayFixed = (fe: FixedExpense) => {
     // Mismo criterio que openPay: el aviso de saldo insuficiente se muestra
@@ -372,6 +395,28 @@ export default function ObligacionesPage() {
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayFixed(null)
+  }
+
+  // ── Abonar extra a un gasto fijo YA pagado este periodo ──────────────────────
+  // Mismo caso que abonoTarget/confirmAbono para deudas: una vez marcado
+  // "pagadoEstePeriodo" no había forma de meterle más plata sin deshacer el
+  // pago primero (útil, ej., cuando la cuota registrada fue un estimado y el
+  // cobro real salió más alto).
+  const [abonoFixedTarget, setAbonoFixedTarget] = useState<FixedExpense | null>(null)
+  const [abonoFixedAmount, setAbonoFixedAmount] = useState("")
+  const [abonoFixedSaving, setAbonoFixedSaving] = useState(false)
+
+  const confirmAbonoFixed = async () => {
+    if (!abonoFixedTarget || !abonoFixedAmount) return
+    const amt = Number(abonoFixedAmount)
+    if (amt <= 0 || amt > wallet.cashBalance) return
+    setAbonoFixedSaving(true)
+    await markFixedPaid(abonoFixedTarget.id, amt)
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setAbonoFixedSaving(false)
+    setAbonoFixedTarget(null)
+    setAbonoFixedAmount("")
   }
 
   // ── Handlers Saldo Insuficiente ───────────────────────────────────────────
@@ -485,6 +530,7 @@ export default function ObligacionesPage() {
         fechaCorte: addFixedForm.diasPago,
         frecuencia: addFixedForm.frecuencia,
         yaPagoEstePeriodo: addFixedForm.yaPagoEstePeriodo,
+        nuevaProximoPeriodo: addFixedForm.nuevaProximoPeriodo,
         tarjetaVinculadaId: addFixedForm.tarjetaVinculadaId,
         budgetCategoryId: addFixedForm.budgetCategoryId,
       })
@@ -595,15 +641,22 @@ export default function ObligacionesPage() {
             solo ícono para que quepan sin empujar el título ni saltar de fila. */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" showToggle={false} className="scale-90 sm:scale-100 origin-right" />
-          {/* Botón Registrar gasto — abre modal de presupuesto */}
+          {/* Botón Registrar gasto — abre modal de presupuesto.
+              En mobile antes quedaba como puro ícono de recibo sin ningún
+              texto (el label completo se ocultaba con `hidden sm:inline`) —
+              al lado del botón "+" (también verde) era imposible saber para
+              qué servía. Se le agrega un label corto SIEMPRE visible (ícono
+              arriba, texto abajo) en vez de ocultarlo del todo. */}
           <Button
             size="sm"
             variant="outline"
-            className="rounded-xl border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5 font-bold text-xs gap-1 px-2.5 sm:px-3"
+            className="flex-col h-auto py-1.5 gap-0.5 rounded-xl border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5 font-bold px-2 sm:flex-row sm:h-9 sm:py-0 sm:gap-1 sm:px-3 sm:text-xs"
             onClick={() => { setAddType("gasto_fijo"); setExpenseModalOpen(true) }}
             aria-label="Registrar gasto"
           >
-            <ReceiptText className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Registrar gasto</span>
+            <ReceiptText className="h-3.5 w-3.5" />
+            <span className="text-[8px] leading-none sm:hidden">Gasto</span>
+            <span className="hidden sm:inline">Registrar gasto</span>
           </Button>
           {(activeTab === "gastos_fijos" || activeTab === "deudas") && (
             <Button
@@ -729,6 +782,7 @@ export default function ObligacionesPage() {
                     const walletData = await undoPayFixed(fe.id)
                     if (walletData) setWallet(walletData)
                   }}
+                  onAbonar={() => { setAbonoFixedTarget(fe); setAbonoFixedAmount("") }}
                   hidden={hiddenItems.has(fe.id)}
                   onToggleHidden={() => toggleItemHidden(fe.id)}
                   isPeriodPriority={periodPriorityIds.has(fe.id)}
@@ -787,6 +841,7 @@ export default function ObligacionesPage() {
                     formatAmount={formatAmount}
                     onPay={() => openPay(debt)}
                     onUndoPay={async () => { const w = await undoPayDebt(debt.id); if (w) setWallet(w) }}
+                    onAbonar={() => { setAbonoTarget(debt); setAbonoAmount("") }}
                     onEdit={() => openEditDebt(debt)}
                     onDelete={() => setDeleteTarget({ type: "debt", id: debt.id, nombre: debt.nombre })}
                     hidden={hiddenItems.has(debt.id)}
@@ -990,6 +1045,35 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Abonar extra a una deuda ya pagada este periodo */}
+      <Dialog open={!!abonoTarget} onOpenChange={v => { if (!v) { setAbonoTarget(null); setAbonoAmount("") } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Abonar a esta deuda</DialogTitle>
+            <DialogDescription>
+              <strong>{abonoTarget?.nombre}</strong> · Saldo restante: {formatAmount(abonoTarget?.saldoRestante ?? 0)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Monto a abonar</Label>
+              <MoneyInput value={abonoAmount} onChange={v => setAbonoAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus />
+              <p className="text-[10px] text-muted-foreground">Se descuenta de tu saldo disponible ({formatAmount(wallet.cashBalance)}) y se abona directo al capital de la deuda.</p>
+            </div>
+            {Number(abonoAmount) > wallet.cashBalance && (
+              <p className="text-[10px] text-red-500 font-bold">No tienes saldo suficiente para este abono.</p>
+            )}
+            <Button
+              onClick={confirmAbono}
+              disabled={abonoSaving || !abonoAmount || Number(abonoAmount) <= 0 || Number(abonoAmount) > wallet.cashBalance}
+              className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl"
+            >
+              {abonoSaving ? "Abonando..." : "Confirmar abono"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Pay Fixed Modal */}
       <Dialog open={!!payFixed} onOpenChange={v => !v && setPayFixed(null)}>
         <DialogContent>
@@ -1105,6 +1189,35 @@ export default function ObligacionesPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Abonar extra a un gasto fijo ya pagado este periodo */}
+      <Dialog open={!!abonoFixedTarget} onOpenChange={v => { if (!v) { setAbonoFixedTarget(null); setAbonoFixedAmount("") } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Abonar a este gasto fijo</DialogTitle>
+            <DialogDescription>
+              <strong>{abonoFixedTarget?.nombre}</strong> · Ya pagado este periodo: {formatAmount((abonoFixedTarget as any)?.montoPagadoEstePeriodo ?? 0)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Monto a abonar</Label>
+              <MoneyInput value={abonoFixedAmount} onChange={v => setAbonoFixedAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus />
+              <p className="text-[10px] text-muted-foreground">Se descuenta de tu saldo disponible ({formatAmount(wallet.cashBalance)}) y se suma a lo ya pagado este periodo.</p>
+            </div>
+            {Number(abonoFixedAmount) > wallet.cashBalance && (
+              <p className="text-[10px] text-red-500 font-bold">No tienes saldo suficiente para este abono.</p>
+            )}
+            <Button
+              onClick={confirmAbonoFixed}
+              disabled={abonoFixedSaving || !abonoFixedAmount || Number(abonoFixedAmount) <= 0 || Number(abonoFixedAmount) > wallet.cashBalance}
+              className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl"
+            >
+              {abonoFixedSaving ? "Abonando..." : "Confirmar abono"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1455,6 +1568,7 @@ export default function ObligacionesPage() {
                     bankEntityId: data.bankEntityId,
                     tipoDeuda: data.tipoDeuda,
                     yaPagoEstePeriodo: data.yaPagoEstePeriodo,
+                    nuevaProximoPeriodo: data.nuevaProximoPeriodo,
                     budgetCategoryId: data.budgetCategoryId,
                   })
                   setSaving(false)
@@ -1732,9 +1846,9 @@ export default function ObligacionesPage() {
 
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay, strategyBadge }: {
+function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay, strategyBadge }: {
   debt: Debt; formatAmount: (n: number) => string
-  onPay: () => void; onUndoPay: () => void; onEdit: () => void; onDelete: () => void
+  onPay: () => void; onUndoPay: () => void; onAbonar: () => void; onEdit: () => void; onDelete: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
   strategyBadge?: string | null
@@ -1745,7 +1859,7 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
   // encima de `montoTotal` (el monto con el que se creó) al hacer nuevas
   // compras con ella, lo que sin este límite mostraba un "% pagado" negativo.
   const progreso = debt.montoTotal > 0 ? Math.max(0, Math.min(100, Math.round(((debt.montoTotal - debt.saldoRestante) / debt.montoTotal) * 100))) : 0
-  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo, debt.frecuenciaPago === 'quincenal')
+  const payInfo = getNextPaymentInfo(debt.diasPago, debt.pagadoEstePeriodo, debt.frecuenciaPago === 'quincenal', debt.pendienteProximoPeriodo)
   const obligIcon = getObligationIcon(debt.nombre)
 
   // Yellow highlight for period priority (pending in current period)
@@ -1901,9 +2015,14 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
 
           if (debt.pagadoEstePeriodo) {
             return (
-              <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
-                Deshacer pago
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
+                  Deshacer pago
+                </Button>
+                <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+                  Abonar
+                </Button>
+              </div>
             )
           }
           if (isPartiallyPaid) {
@@ -1938,13 +2057,13 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onEdit, onDelete, hidd
 }
 
 // ─── FixedCard ─────────────────────────────────────────────────────────────────
-function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
+function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogglePaid, onUndoPay, onAbonar, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay }: {
   item: FixedExpense; tarjetaNombre?: string; formatAmount: (n: number) => string
-  onEdit: () => void; onDelete: () => void; onTogglePaid: () => void; onUndoPay: () => void
+  onEdit: () => void; onDelete: () => void; onTogglePaid: () => void; onUndoPay: () => void; onAbonar: () => void
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
 }) {
-  const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo, item.frecuencia === 'quincenal')
+  const payInfo = getNextPaymentInfo(item.fechaCorte, item.pagadoEstePeriodo, item.frecuencia === 'quincenal', item.pendienteProximoPeriodo)
   const montoPagado = (item as any).montoPagadoEstePeriodo ?? 0
   const isPartiallyPaid = montoPagado > 0 && !item.pagadoEstePeriodo
   const remaining = item.monto - montoPagado
@@ -2037,9 +2156,14 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
 
         {/* Botones de acción */}
         {item.pagadoEstePeriodo ? (
-          <Button onClick={onUndoPay} size="sm" variant="ghost" className="w-full rounded-xl h-9 text-xs text-muted-foreground">
-            Deshacer pago
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
+              Deshacer pago
+            </Button>
+            <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
+              Abonar
+            </Button>
+          </div>
         ) : isPartiallyPaid ? (
           <div className="flex gap-2">
             <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
@@ -2212,7 +2336,7 @@ function FixedFormFields({
   }, [showDueQuestion, form.diasPago])
 
   useEffect(() => {
-    if (!dueQuestion && form.yaPagoEstePeriodo) set({ yaPagoEstePeriodo: false })
+    if (!dueQuestion && (form.yaPagoEstePeriodo || form.nuevaProximoPeriodo)) set({ yaPagoEstePeriodo: false, nuevaProximoPeriodo: false })
   }, [dueQuestion])
 
   return (
@@ -2293,7 +2417,7 @@ function FixedFormFields({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => set({ yaPagoEstePeriodo: true })}
+              onClick={() => set({ yaPagoEstePeriodo: true, nuevaProximoPeriodo: false })}
               className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
                 form.yaPagoEstePeriodo ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
               )}
@@ -2302,14 +2426,32 @@ function FixedFormFields({
             </button>
             <button
               type="button"
-              onClick={() => set({ yaPagoEstePeriodo: false })}
+              onClick={() => set({ yaPagoEstePeriodo: false, nuevaProximoPeriodo: false })}
               className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-                !form.yaPagoEstePeriodo ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
+                (!form.yaPagoEstePeriodo && !form.nuevaProximoPeriodo) ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
               )}
             >
               {dueQuestion === "hoy" ? "No, vence hoy" : "No, está vencida"}
             </button>
           </div>
+          {/* 3ra opción — para una obligación genuinamente NUEVA (ej. una
+              suscripción que arranca el mes que viene) las dos opciones de
+              arriba no aplican: no está pagada, pero tampoco está vencida
+              porque nunca debió cobrarse este periodo. Elegir "Sí, ya la
+              pagué" solo para salir del paso sembraba un pago falso en el
+              historial de Balance; elegir "No, está vencida" la dejaba
+              marcada como vencida desde el día uno. Esta opción no genera
+              ningún movimiento y corre la próxima fecha de pago a este mismo
+              día pero del mes siguiente. */}
+          <button
+            type="button"
+            onClick={() => set({ yaPagoEstePeriodo: false, nuevaProximoPeriodo: true })}
+            className={cn("w-full h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+              form.nuevaProximoPeriodo ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
+            )}
+          >
+            Es una obligación nueva (inicia el próximo mes)
+          </button>
         </div>
       )}
 
