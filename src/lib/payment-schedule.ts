@@ -62,6 +62,25 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean,
     return { nextDate: label, daysUntil: 999, status: 'pagado', statusLabel: 'Pagado ✓', statusColor: 'text-emerald-600', cardRing: '' }
   }
 
+  // Quincenal sin pagar: el periodo en curso EMPIEZA en su día de cobro (así
+  // lo etiqueta el backend: Q1 = [d1, d2), Q2 = [d2, d1 del mes siguiente)),
+  // así que la cuota que se debe ahora es la del último día de cobro ya
+  // alcanzado — no el próximo. Antes se mostraba "Pendiente, vence el d2"
+  // mientras la cuota del d1 seguía sin pagar y el backend la daba por vencida.
+  const sortedDays = [...new Set(days)].sort((a, b) => a - b)
+  if (isQuincenal && sortedDays.length >= 2) {
+    const [d1, d2] = sortedDays
+    let due: Date
+    if (todayDay >= d2) due = dateForDay(currentYear, currentMonth, d2)
+    else if (todayDay >= d1) due = dateForDay(currentYear, currentMonth, d1)
+    else due = dateForDay(currentYear, currentMonth - 1, d2)
+    const todayMidnight = new Date(currentYear, currentMonth, todayDay)
+    const diffDays = Math.round((todayMidnight.getTime() - due.getTime()) / 86_400_000)
+    const label = due.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+    if (diffDays === 0) return { nextDate: label, daysUntil: 0, status: 'proximo', statusLabel: 'Vence hoy', statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
+    return { nextDate: label, daysUntil: -diffDays, status: 'vencido', statusLabel: `Vencido (${diffDays}d)`, statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
+  }
+
   // Comparación por NÚMERO de día, no por Date con hora — comparar `today` (con
   // hora actual) contra una fecha construida a medianoche descartaba el día de
   // hoy en cuanto pasaba la medianoche, así que "Vence hoy"/"Vencido" nunca se
@@ -80,4 +99,14 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean,
   const daysUntil = mostRecentDay - todayDay
   const label = dateForDay(currentYear, currentMonth, mostRecentDay).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
   return { nextDate: label, daysUntil, status: 'vencido', statusLabel: `Vencido (${Math.abs(daysUntil)}d)`, statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
+}
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+/** "2026-08" → "agosto 2026"; "2026-09-Q1" → "1ª quincena de septiembre". */
+export function formatPeriodo(periodo: string): string {
+  const m = periodo.match(/^(\d{4})-(\d{2})(?:-Q([12]))?$/)
+  if (!m) return periodo
+  const mes = MESES[Number(m[2]) - 1] ?? m[2]
+  return m[3] ? `${m[3]}ª quincena de ${mes}` : `${mes} ${m[1]}`
 }

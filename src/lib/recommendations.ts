@@ -194,7 +194,7 @@ export function analyzeFinances(
       id: 'no_debt_capacity',
       level: 'warning',
       title: 'Tu margen está al límite',
-      message: 'Ahora mismo todo tu flujo libre va al día a día. No te preocupes, es temporal. Al liquidar una deuda pequeña, recuperarás capacidad para nuevas metas.',
+      message: 'Ahora mismo todo lo que te queda libre se va en el día a día y no alcanza para ahorrar. Si liquidas tu deuda más pequeña, su cuota queda libre para metas nuevas.',
     })
   }
 

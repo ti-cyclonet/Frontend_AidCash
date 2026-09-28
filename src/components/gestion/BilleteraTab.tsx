@@ -24,6 +24,7 @@ import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
 import { PaydaySelector } from "./PaydaySelector"
 import { Debt, FixedExpense } from "@/lib/types"
+import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
 
 // ─── Animated Amount ──────────────────────────────────────────────────────────
 
@@ -122,14 +123,6 @@ function BalanceAura({ total, formatAmount, children }: {
  * el total mensual y se divide entre las 2 quincenas. Mostrar `cuotaPeriodo/2`
  * subestimaba a la mitad lo que realmente se cobra en una deuda quincenal.
  */
-function getDisplayAmount(item: { frecuenciaPago?: string; frecuencia?: string; cuotaPeriodo?: number; monto?: number }): number {
-  const freq = item.frecuenciaPago || item.frecuencia || "mensual"
-  if (item.cuotaPeriodo != null) return item.cuotaPeriodo // deuda: ya es el monto por periodo
-  const rawAmount = item.monto ?? 0
-  if (freq === "quincenal") return Math.round(rawAmount / 2)
-  return rawAmount
-}
-
 // ─── Pocket config ────────────────────────────────────────────────────────────
 
 const POCKETS = [
@@ -360,34 +353,8 @@ export function BilleteraTab() {
   const realObligations = displayObligationsTotal
 
   // Calcular distribución real basada en lo que HAY disponible
-  const realAllocation = useMemo(() => {
-    // Sin saldo real → todo en 0, solo obligaciones muestra lo pendiente
-    if (realIncome <= 0) return { obligationsPct: 0, savingsPct: 0, freePct: 0, debtCapPct: 0, obligationsAmount: realObligations, savingsAmount: 0, freeAmount: 0, debtCapAmount: 0, isOverloaded: realObligations > 0, isTight: false }
-
-    const obligPct = Math.min(100, (realObligations / realIncome) * 100)
-    const isOverloaded = realObligations >= realIncome
-    const isTight = obligPct >= 70
-    const remanente = Math.max(0, realIncome - realObligations)
-
-    if (isOverloaded) {
-      return { obligationsPct: obligPct, savingsPct: 0, freePct: 0, debtCapPct: 0, obligationsAmount: realObligations, savingsAmount: 0, freeAmount: 0, debtCapAmount: 0, isOverloaded: true, isTight: true }
-    }
-
-    // Escala de ahorro según salud
-    const remanentePct = (remanente / realIncome) * 100
-    const targetSavPct = remanentePct >= 40 ? 20 : remanentePct >= 25 ? 15 : remanentePct >= 15 ? 10 : 5
-    const savingsAmount = Math.min((targetSavPct / 100) * realIncome, remanente)
-    const savingsPct = (savingsAmount / realIncome) * 100
-
-    const afterSavings = remanente - savingsAmount
-    const maxFree = (15 / 100) * realIncome
-    const freeAmount = Math.min(afterSavings, maxFree)
-    const freePct = (freeAmount / realIncome) * 100
-    const debtCapAmount = afterSavings - freeAmount
-    const debtCapPct = (debtCapAmount / realIncome) * 100
-
-    return { obligationsPct: obligPct, savingsPct, freePct, debtCapPct, obligationsAmount: realObligations, savingsAmount, freeAmount, debtCapAmount, isOverloaded, isTight }
-  }, [realIncome, realObligations])
+  // Mismo cálculo que usan "Me deben" y Presupuesto (ver lib/distribucion-billetera.ts).
+  const realAllocation = useMemo(() => calcularDistribucionReal(realIncome, realObligations), [realIncome, realObligations])
 
   const pocketValues: Record<string, number> = {
     ahorro: Math.round(realAllocation.savingsAmount),

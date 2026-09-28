@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Eye, EyeOff, AlertCircle, CheckCircle2, Sprout, Sparkles } from "lucide
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
+import { inviteLinksApi, INVITACION_KEY } from "@/lib/api-client"
 
 export default function RegisterPage() {
   return (
@@ -24,6 +25,21 @@ function RegisterContent() {
   const searchParams = useSearchParams()
   const planFromUrl = searchParams.get("plan")
   const { signUp } = useAuth()
+
+  // Llegó con un enlace de invitación: se guarda el código (el registro lo
+  // envía) y se muestra quién lo invitó.
+  const [invitadoPor, setInvitadoPor] = useState<{ nombre: string; rol: string } | null>(null)
+  useEffect(() => {
+    let code = searchParams.get("invitacion")
+    try {
+      if (code) localStorage.setItem(INVITACION_KEY, code)
+      else code = localStorage.getItem(INVITACION_KEY)
+    } catch { /* sin storage */ }
+    if (!code) return
+    inviteLinksApi.publico(code).then(({ data }) => {
+      if (data) setInvitadoPor({ nombre: data.inviter.nombre.split(" ")[0], rol: { FRIEND: "amigo", FAMILY: "familia", PARTNER: "pareja" }[data.role] })
+    })
+  }, [searchParams])
 
   const [nombre, setNombre] = useState("")
   const [secondName, setSecondName] = useState("")
@@ -120,6 +136,15 @@ function RegisterContent() {
           <h2 className="text-2xl font-black text-foreground">Crear cuenta</h2>
           <p className="text-muted-foreground text-sm mt-1">Empieza a organizar tus finanzas hoy</p>
         </div>
+
+        {invitadoPor && (
+          <div className="flex items-center gap-3 rounded-2xl border border-kiri-emerald/30 bg-kiri-emerald/5 px-4 py-3">
+            <span className="text-xl">💌</span>
+            <p className="text-xs">
+              <strong>{invitadoPor.nombre}</strong> te invitó a Kiri. Al crear tu cuenta quedarán conectados como <strong>{invitadoPor.rol}</strong>.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleRegister} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">

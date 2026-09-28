@@ -129,6 +129,9 @@ export interface Loan {
   remainingAmount: number;
   descripcion?: string;
   dueDate?: string;
+  /** Fecha en que se paga ("YYYY-MM-DD") y días que faltan (negativo = atrasado). */
+  fechaCompromiso?: string | null;
+  diasParaCompromiso?: number | null;
   status: LoanStatus;
   /** Tasa de interés que el prestamista propuso (0-100). Solo tiene sentido
    * junto con montoOriginal mientras el préstamo espera confirmación del
@@ -203,6 +206,26 @@ export interface Debt {
   /** true si se creó como "obligación nueva, empieza el próximo periodo" y ese
    * periodo todavía no llega — ver activoDesdePeriodo en el backend. */
   pendienteProximoPeriodo?: boolean;
+  /** Pagos registrados en el periodo actual — si hay más de uno (cuota +
+   * abonos), "Deshacer pago" pregunta si deshacer solo el último o todos. */
+  pagosPeriodo?: PagosPeriodo;
+  /** Cuota normal, sin el ajuste "solo este periodo" (cuotaPeriodo ya trae el ajuste si aplica). */
+  cuotaBase?: number;
+  cuotaAjustadaEstePeriodo?: boolean;
+  /** Pago adelantado de la próxima cuota. */
+  periodoSiguiente?: string;
+  montoAdelantado?: number | null;
+  proximaCuotaCubierta?: boolean;
+  /** Cuotas de periodos ya cerrados que quedaron sin cubrir, de la más antigua a la más reciente. */
+  atrasos?: CuotaAtrasada[];
+  montoAtrasado?: number;
+}
+
+export interface CuotaAtrasada {
+  periodo: string;
+  cuota: number;
+  pagado: number;
+  falta: number;
 }
 
 // Fila de Social > Deudas — visible tanto para el dueño de la deuda como
@@ -242,6 +265,22 @@ export interface FixedExpense {
   /** true si se creó como "obligación nueva, empieza el próximo periodo" y ese
    * periodo todavía no llega — ver activoDesdePeriodo en el backend. */
   pendienteProximoPeriodo?: boolean;
+  /** Pagos registrados en el periodo actual — si hay más de uno (cuota +
+   * abonos), "Deshacer pago" pregunta si deshacer solo el último o todos. */
+  pagosPeriodo?: PagosPeriodo;
+  periodoSiguiente?: string;
+  montoAdelantado?: number | null;
+  proximaCuotaCubierta?: boolean;
+  /** Cuotas de periodos ya cerrados sin cubrir (máx. las 6 más recientes). */
+  atrasos?: CuotaAtrasada[];
+  montoAtrasado?: number;
+}
+
+export interface PagosPeriodo {
+  cantidad: number;
+  ultimoMonto: number | null;
+  /** El último "pago" es solo la marca de "ya la había pagado por fuera de Kiri" (no devuelve dinero al deshacerlo). */
+  ultimoEsMarcador: boolean;
 }
 
 export type ImpulseCategory = 'cafe' | 'comida' | 'transporte' | 'antojo' | 'salida' | 'otro';
@@ -255,6 +294,10 @@ export interface ImpulseExpense {
   periodo: string;
   createdAt: string;
   tarjetaId?: string | null;
+  /** Esta tabla guarda todos los gastos variables — solo los marcados acá son hormiga. */
+  esHormiga: boolean;
+  /** Categoría de presupuesto (FK real; antes era una etiqueta "[Cat]" dentro del nombre). */
+  budgetCategoryId?: string | null;
 }
 
 export interface BudgetAllocation {
@@ -305,6 +348,8 @@ export interface MissionsResponse {
   daily: Mission[];
   weekly: Mission;
   onboarding: Mission[];
+  /** Traer gente nueva a Kiri con tu enlace: escalones de 1, 2 y 3 personas. */
+  invitaciones: { misiones: Mission[]; referidos: number };
 }
 
 export interface RewardResult {

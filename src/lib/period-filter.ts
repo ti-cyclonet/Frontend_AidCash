@@ -337,3 +337,17 @@ export function getPeriodData(
     quincena,
   }
 }
+
+/**
+ * Los dos periodos quincenales que "pertenecen" a un mes, según los días de
+ * cobro del usuario (misma frontera que getCurrentPeriodDateRange): Periodo 1
+ * = [d1, d2) y Periodo 2 = [d2, d1 del mes siguiente). Sin días configurados:
+ * 1–15 y 16–fin de mes. Rangos [start, end).
+ */
+export function getQuincenasDelMes(diasCobro: string, year: number, month: number): { periodo: 1 | 2; start: Date; end: Date }[] {
+  const [d1, d2] = paydayBoundary(diasCobro) ?? [1, 16]
+  return [
+    { periodo: 1, start: new Date(year, month, d1), end: new Date(year, month, d2) },
+    { periodo: 2, start: new Date(year, month, d2), end: new Date(year, month + 1, d1) },
+  ]
+}

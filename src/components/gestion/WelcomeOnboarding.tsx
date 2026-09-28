@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
   Wallet, ReceiptText, PieChart,
   ArrowRight, Sparkles, X, ChevronLeft, Info, ShieldCheck,
-  Mic, ScanLine, Bot,
+  Mic, ScanLine, Bot, Sprout,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -61,6 +61,16 @@ const steps = [
     cardExplanation: "Todo esto vive en el botón de Kiri Coach 🌱 (abajo a la derecha, o el + de la barra inferior en el celular).",
     icon: <Mic className="h-6 w-6" />,
     accentColor: "from-kiri-emerald/20 to-kiri-forest/5",
+  },
+  {
+    id: 5,
+    label: "Tu jardín",
+    title: "Tu árbol",
+    titleHighlight: "reacciona a tus finanzas",
+    description: "Cada decisión que tomas se ve en tu jardín: crece con tus buenos hábitos y te avisa cuando algo necesita atención.",
+    cardExplanation: "Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel. Y si conectas a tu pareja en Social, llevan juntos el presupuesto del hogar.",
+    icon: <Sprout className="h-6 w-6" />,
+    accentColor: "from-emerald-500/20 to-emerald-600/5",
   },
 ]
 
@@ -395,6 +405,37 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                         </p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+              {currentStep === 4 && (
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="flex flex-col justify-center space-y-3">
+                    <div className="h-14 w-14 rounded-2xl bg-kiri-emerald/10 flex items-center justify-center">
+                      <span className="text-3xl">🌳</span>
+                    </div>
+                    <h2 className="text-xl font-black leading-tight">
+                      {step.title}{" "}
+                      <span className="text-kiri-emerald">{step.titleHighlight}</span>
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
+                    <p className="text-xs text-emerald-700/80 dark:text-emerald-300/70 leading-relaxed">{step.cardExplanation}</p>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2.5 shadow-lg flex flex-col justify-center">
+                    {[
+                      { e: "🌧️", t: "Ahorras", d: "Llueve sobre tu árbol." },
+                      { e: "☀️", t: "Registras tu ingreso", d: "Sale el sol y caen monedas." },
+                      { e: "☁️", t: "Un pago está por vencer", d: "Se nubla. Toca las nubes para ver cuál." },
+                      { e: "⛈️", t: "Tienes pagos vencidos", d: "Llega la tormenta hasta que te pongas al día." },
+                    ].map(x => (
+                      <div key={x.t} className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2.5">
+                        <span className="text-xl shrink-0">{x.e}</span>
+                        <div>
+                          <p className="text-xs font-bold text-gray-900 dark:text-white">{x.t}</p>
+                          <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">{x.d}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

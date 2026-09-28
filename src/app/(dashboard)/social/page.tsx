@@ -42,7 +42,9 @@ export default function SocialPage() {
 function SocialContent() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("social")
   const { user: authUser } = useAuth()
-  const { connected, unreadCount } = useSocket()
+  // Solo notificaciones de Social (antes contaba también avisos de pagos y
+  // misiones, y entrar aquí no marcaba nada como leído: el "1" no se iba).
+  const { connected, socialUnreadCount: unreadCount, markSocialRead } = useSocket()
   const searchParams = useSearchParams()
 
   const [acceptedConnections, setAcceptedConnections] = useState<Connection[]>([])
@@ -57,6 +59,13 @@ function SocialContent() {
 
   const initialTab = (TABS.find(t => t.id === searchParams.get("tab"))?.id ?? "connections") as TabId
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
+
+  // Al ver Conexiones se dan por vistas las notificaciones de Social
+  useEffect(() => {
+    if (activeTab !== "connections" || unreadCount === 0) return
+    const t = window.setTimeout(markSocialRead, 1200)
+    return () => window.clearTimeout(t)
+  }, [activeTab, unreadCount, markSocialRead])
 
   // Cargar conexiones aceptadas para pasarlas a sub-tabs
   const loadAccepted = useCallback(async () => {

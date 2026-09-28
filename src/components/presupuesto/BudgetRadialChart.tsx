@@ -123,34 +123,23 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
 
   return (
     <div className="space-y-4">
-      {/* Header.
-          En mobile el nombre + los 2 botones ("Registrar gasto" y "Editar")
-          no cabían en una sola fila sin envolver — el botón "Editar" quedaba
-          empujado fuera del ancho de la pantalla en vez de bajar de línea.
-          `flex-wrap` deja que el cluster de botones baje a su propia fila
-          cuando no hay espacio, en vez de desbordar. */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Header: el nombre completo (antes se cortaba "Alimentaci…" por los dos
+          botones grandes) y solo un ícono de editar, como en Obligaciones. */}
+      <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${cat.color}22` }}>
           <IconComp size={18} color={cat.color} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-foreground text-base font-bold truncate">{cat.name}</p>
-          <p className="text-muted-foreground text-xs truncate">Presupuesto de esta categoría</p>
+          <p className="text-foreground text-base font-bold leading-tight break-words">{cat.name}</p>
+          <p className="text-muted-foreground text-xs">Presupuesto de esta categoría</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
-          <button
-            onClick={goRegisterExpense}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-kiri-emerald text-white text-sm font-semibold hover:bg-kiri-emerald/90 transition-colors"
-          >
-            <ReceiptText size={14} /> Registrar gasto
-          </button>
-          <button
-            onClick={onEdit}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
-          >
-            <Pencil size={14} /> Editar
-          </button>
-        </div>
+        <button
+          onClick={onEdit}
+          aria-label="Editar categoría"
+          className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors shrink-0"
+        >
+          <Pencil size={14} />
+        </button>
       </div>
 
       {/* Ring + Stats */}
@@ -200,6 +189,14 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
           </div>
         </div>
       )}
+
+      {/* Registrar un gasto en esta categoría — abajo, como las acciones de Obligaciones */}
+      <button
+        onClick={goRegisterExpense}
+        className="w-full flex items-center justify-center gap-1.5 h-10 rounded-xl bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 text-sm font-bold transition-colors"
+      >
+        <ReceiptText size={15} /> Gasto
+      </button>
     </div>
   )
 }

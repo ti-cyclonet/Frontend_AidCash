@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { impulseApi, TopConsumoItem } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
+import { useFinanceData } from "@/hooks/use-finance-data"
 import { Info, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -33,19 +34,26 @@ function getItemEmoji(nombre: string): string {
  */
 export function TopConsumosSection() {
   const { formatAmount } = useAppContext()
+  const { impulseExpenses } = useFinanceData()
   const [items, setItems] = useState<TopConsumoItem[]>([])
   const [totalGastado, setTotalGastado] = useState(0)
   const [loading, setLoading] = useState(true)
+  // "periodo" = tu quincena/mes de ingreso actual; "mes" = el mes calendario
+  // completo. Para un usuario quincenal el periodo es solo media quincena de
+  // gastos, y el top parecía "no traer toda la información".
+  const [alcance, setAlcance] = useState<'periodo' | 'mes'>('periodo')
 
+  // Se recarga al registrar/borrar/reclasificar un gasto (impulseExpenses
+  // cambia) — antes solo se cargaba al montar y se quedaba desactualizado.
   useEffect(() => {
-    impulseApi.topConsumos({ limit: 5 }).then(({ data }) => {
+    impulseApi.topConsumos({ limit: 5, alcance }).then(({ data }) => {
       if (data) {
         setItems(data.items)
         setTotalGastado(data.totalGastado)
       }
       setLoading(false)
     })
-  }, [])
+  }, [alcance, impulseExpenses])
 
   if (loading) {
     return (
@@ -55,7 +63,7 @@ export function TopConsumosSection() {
     )
   }
 
-  if (items.length === 0) return null
+  if (items.length === 0 && alcance === 'periodo') return null
 
   // El máximo para escalar las barras
   const maxAmount = items.length > 0 ? items[0].totalGastado : 1
@@ -68,12 +76,24 @@ export function TopConsumosSection() {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold">Top Mayores Consumos</h3>
-            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            <span title="Suma todos los registros del mismo consumo, aunque tengan distinta categoría o mayúsculas (ej. «InDriver» e «InDriver [Transporte]»).">
+              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+          </div>
+          <div className="flex gap-1">
+            {(['periodo', 'mes'] as const).map(a => (
+              <button key={a} onClick={() => setAlcance(a)}
+                className={cn("px-2 py-0.5 rounded-md text-[9px] font-bold transition-colors",
+                  alcance === a ? "bg-kiri-emerald text-white" : "bg-muted/40 text-muted-foreground hover:bg-muted")}>
+                {a === 'periodo' ? 'Este periodo' : 'Este mes'}
+              </button>
+            ))}
           </div>
         </div>
         <p className="text-[9px] text-muted-foreground mb-4">
-          Tus 5 mayores fugas de dinero en el periodo actual
+          Tus 5 mayores consumos variables {alcance === 'periodo' ? 'en el periodo actual' : 'en el mes calendario'}
         </p>
+        {items.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">Sin gastos registrados en este rango.</p>}
 
         {/* Items */}
         <div className="space-y-3">
@@ -88,7 +108,8 @@ export function TopConsumosSection() {
 
                 {/* Nombre */}
                 <span className="text-xs font-medium w-[120px] truncate shrink-0">
-                  {item.nombre.replace(/^\[.*?\]\s*/, '')}
+                  {item.nombre}
+                  {item.cantidad > 1 && <span className="text-muted-foreground font-normal"> ×{item.cantidad}</span>}
                 </span>
 
                 {/* Barra de progreso */}
@@ -122,10 +143,10 @@ export function TopConsumosSection() {
             )}
           </p>
           <Link
-            href="/gestion"
+            href="/balance"
             className="text-[10px] font-bold text-kiri-emerald hover:underline flex items-center gap-1"
           >
-            <TrendingDown className="h-3 w-3" /> Ver todos los gastos hormiga
+            <TrendingDown className="h-3 w-3" /> Ver todos los gastos
           </Link>
         </div>
       </CardContent>

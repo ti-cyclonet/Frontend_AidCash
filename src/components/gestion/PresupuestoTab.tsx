@@ -22,10 +22,12 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { userApi, WalletState, budgetCategoriesApi } from "@/lib/api-client"
 import { analyzeBudgetCategories, BudgetInsight, getCategoryInsight } from "@/lib/budget-insights"
-import { detectBudgetCategory } from "@/hooks/use-budget-categories"
-import { getPeriodDateRange, getPeriodLabel } from "@/lib/period-filter"
-import { SUGGESTIONS, extractCategoryTag } from "@/lib/budget-category-spend"
+import { useCategoryResumen, useCategoriaSugerida } from "@/hooks/use-budget-categories"
+import { useGastoLibre } from "@/hooks/use-gasto-libre"
+import { getPeriodLabel } from "@/lib/period-filter"
+import { SUGGESTIONS } from "@/lib/budget-category-spend"
 import { ImpulseCategory } from "@/lib/types"
+import { esGastoHormiga, nombreBaseGasto } from "@/lib/hormiga"
 import Link from "next/link"
 import { TopConsumosSection } from "./TopConsumosSection"
 import { DesgloseGastosSection } from "./DesgloseGastosSection"
@@ -88,7 +90,8 @@ function mapToImpulseCategory(budgetCatName: string): ImpulseCategory {
 export function PresupuestoTab() {
   const { formatAmount, incomeFrequency, diasCobro } = useAppContext()
   const { allocation } = usePeriodBudget()
-  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, fixedExpenses, debts } = useFinanceData()
+  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, setImpulseHormiga, setImpulseCategoria, fixedExpenses } = useFinanceData()
+  const { resumen, refreshResumen } = useCategoryResumen('periodo')
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [walletError, setWalletError] = useState(false)
@@ -98,8 +101,11 @@ export function PresupuestoTab() {
       .catch(() => setWalletError(true))
   }, [])
 
-  // El gasto libre real es libre + endeudamiento (todo lo que el usuario puede gastar)
-  const realFreeAmount = wallet.libre + wallet.endeudamiento
+  // Gasto libre = el MISMO número de la tarjeta "Gasto libre" de Billetera
+  // (saldo real − obligaciones pendientes − ahorro sugerido). Antes aquí se
+  // usaban los bolsillos guardados (libre + endeudamiento) y el "Disponible
+  // para gastar" no coincidía con lo que mostraba Billetera.
+  const { gastoLibre: realFreeAmount } = useGastoLibre()
 
   const [categories, setCategories] = useState<BudgetCategory[]>([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
@@ -107,6 +113,7 @@ export function PresupuestoTab() {
     const { data } = await budgetCategoriesApi.list()
     if (data) setCategories(data.categories.map(fromApi))
     setCategoriesLoading(false)
+    refreshResumen()
   }
   useEffect(() => { fetchCategories() }, [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -128,76 +135,31 @@ export function PresupuestoTab() {
   const [form, setForm] = useState({ name: "", budget: "", icon: "more", color: COLORS[0] })
   const [linkedFixed, setLinkedFixed] = useState<string[]>([])
 
-  // Gasto por categoría se reinicia cada periodo (mensual/quincenal, según
-  // incomeFrequency — el mismo que ya se elige en Billetera). El límite de la
-  // categoría (budget) NO se reinicia, solo lo gastado: se filtran los gastos
-  // hormiga por fecha dentro del periodo actual antes de sumarlos.
-  const periodRange = getPeriodDateRange(incomeFrequency, diasCobro)
-  const impulseThisBudgetPeriod = impulseExpenses.filter(e => {
-    const created = new Date(e.createdAt)
-    return created >= periodRange.start && created < periodRange.end
-  })
-
-  // Conectar gastos a categorias: impulseExpenses por keyword/tag + gastos fijos vinculados pagados
+  // Gasto por categoría: lo calcula el backend (GET /budget-categories/resumen)
+  // con la categoría REAL de cada gasto (FK) + los pagos de gastos fijos y
+  // deudas asignados a esa categoría, dentro del periodo actual. Antes se
+  // adivinaba aquí por etiquetas "[Cat]" en el nombre y palabras clave, con
+  // reglas distintas a las del "Consejo Kiri" y Balance — cada pantalla podía
+  // mostrar un monto diferente para la misma categoría.
+  // `budget` = límite del PERIODO (proporcional si es quincenal); el límite
+  // mensual que define el usuario queda en `budgetMensual`.
   const catsWithSpent = categories.map(cat => {
-    const sug = SUGGESTIONS.find(s => s.name.toLowerCase() === cat.name.toLowerCase())
-    const keys = sug?.keys ?? []
-
-    // Gastos hormiga/impulse del periodo actual que coincidan por keyword o tag.
-    // Si el gasto ya trae un tag explícito "[Categoría] ..." (el usuario la
-    // eligió al registrarlo), esa elección manda — sin esto, un gasto como
-    // "[Alimentación] pagué con tarjeta en el súper" también se sumaba a
-    // "Deudas" solo por contener la palabra "tarjeta" (mismo fix que en
-    // computeCategorySpend, ver ese comentario para el caso completo).
-    const matchedImpulse = impulseThisBudgetPeriod.filter(e => {
-      const expName = e.nombre.toLowerCase()
-      const tag = extractCategoryTag(expName)
-      if (tag) return tag === cat.name.toLowerCase()
-      return keys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
-    })
-
-    // Gastos fijos vinculados desde ESTA categoría (legacy) que ya fueron pagados
-    // este periodo — si el gasto YA tiene su propia categoría asignada
-    // (budgetCategoryId) y no es esta misma, esa es la fuente de verdad; contarlo
-    // también acá lo duplicaría en dos categorías a la vez (mismo fix que en
-    // computeCategorySpend, para datos guardados antes de que el formulario
-    // bloqueara vincular por ambos mecanismos al mismo tiempo).
-    const legacyIds = new Set(cat.linkedFixedIds ?? [])
-    const linkedFixedPaid = [...legacyIds]
-      .map(id => fixedExpenses.find(f => f.id === id))
-      .filter((f): f is NonNullable<typeof f> => !!f && f.pagadoEstePeriodo && (!f.budgetCategoryId || f.budgetCategoryId === cat.id))
-
-    // Deudas y gastos fijos vinculados desde SU PROPIO formulario de creación/
-    // edición (budgetCategoryId) — cuentan el pago real de este periodo, no el
-    // monto configurado, y no duplican lo que ya viene por el mecanismo legacy.
-    const linkedByOwnCategory = [
-      ...fixedExpenses.filter(f => f.budgetCategoryId === cat.id && !legacyIds.has(f.id)),
-      ...debts.filter(d => d.budgetCategoryId === cat.id),
-    ]
-
-    const spentFromImpulse = matchedImpulse.reduce((a, e) => a + e.monto, 0)
-    const spentFromFixed = linkedFixedPaid.reduce((a, f) => a + f.monto, 0)
-    const spentFromOwnCategory = linkedByOwnCategory.reduce((a, x) => a + (x.montoPagadoEstePeriodo ?? 0), 0)
-
-    // Desglose para mostrarle al usuario "en qué se fue" el total — antes solo
-    // incluía los gastos hormiga (matchedImpulse); un gasto fijo o deuda
-    // vinculado a la categoría SÍ sumaba al total de arriba pero desaparecía
-    // del desglose, así que el usuario veía "$3.797.000 gastados" con una
-    // lista que solo sumaba $20.000 — sin forma de ver a dónde se fue el resto.
-    const breakdownItems: { nombre: string; monto: number }[] = [
-      ...matchedImpulse.map(e => ({ nombre: e.nombre, monto: e.monto })),
-      ...linkedFixedPaid.map(f => ({ nombre: f.nombre, monto: f.monto })),
-      ...linkedByOwnCategory.map(x => ({ nombre: x.nombre, monto: x.montoPagadoEstePeriodo ?? 0 })),
-    ]
-
+    const r = resumen?.categorias.find(x => x.id === cat.id)
     return {
       ...cat,
-      spent: spentFromImpulse + spentFromFixed + spentFromOwnCategory,
-      expenses: matchedImpulse,
-      linkedFixedPaid,
-      breakdownItems,
+      budgetMensual: cat.budget,
+      budget: r?.limite ?? cat.budget,
+      spent: r?.gastado ?? 0,
+      estado: r?.estado ?? 'ok',
+      proyeccion: r?.proyeccion ?? 0,
+      variacionPct: r?.variacionPct ?? null,
+      gastadoAnterior: r?.gastadoAnterior ?? 0,
+      movimientos: r?.movimientos ?? [],
+      breakdownItems: (r?.items ?? []).map(i => ({ nombre: i.nombre, monto: i.monto })),
     }
   })
+  const sinCategoria = resumen?.sinCategoria ?? { gastado: 0, cantidad: 0, gastos: [] }
+  const esLimiteProporcional = catsWithSpent.some(c => c.budget !== c.budgetMensual)
 
   const totalBudget = catsWithSpent.reduce((a, c) => a + c.budget, 0)
   const totalSpent = catsWithSpent.reduce((a, c) => a + c.spent, 0)
@@ -209,9 +171,10 @@ export function PresupuestoTab() {
   const [insightsModalOpen, setInsightsModalOpen] = useState(false)
 
   const { insights } = useMemo(() => {
-    if (categories.length === 0) return { insights: [], analyses: [] }
-    return analyzeBudgetCategories(categories, impulseExpenses, incomeFrequency, realFreeAmount, diasCobro)
-  }, [categories, impulseExpenses, incomeFrequency, realFreeAmount, diasCobro])
+    if (catsWithSpent.length === 0 || !resumen) return { insights: [], analyses: [] }
+    return analyzeBudgetCategories(catsWithSpent, incomeFrequency, realFreeAmount, diasCobro)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumen, categories, incomeFrequency, realFreeAmount, diasCobro])
 
   // Insight principal: el más relevante para mostrar como banner único
   const primaryInsight = insights.length > 0 ? insights[0] : null
@@ -228,8 +191,13 @@ export function PresupuestoTab() {
     { value: "otro",       label: "Otro",       emoji: "💸" },
   ]
 
-  // Estadísticas de gastos hormiga — solo los marcados con 🐜
-  const hormigaExpenses = impulseExpenses.filter(e => e.nombre.startsWith('🐜'))
+  // Estadísticas de gastos hormiga — los marcados esHormiga (el backend los
+  // clasifica solo al registrarlos y el usuario puede corregirlo). Antes se
+  // reconocían por un 🐜 al inicio del nombre que casi ningún flujo ponía, así
+  // que el indicador se quedaba en 0% aunque hubiera muchos gastos hormiga.
+  const hormigaExpenses = impulseExpenses.filter(e => e.esHormiga)
+  const otrosGastosVariables = impulseExpenses.filter(e => !e.esHormiga)
+  const [showOtrosGastos, setShowOtrosGastos] = useState(false)
   // Solo los pagados en efectivo consumen el "disponible libre" — los pagados
   // con tarjeta no tocan cashBalance/walletLibre al registrarse (ver
   // addImpulseExpense en use-finance-data.tsx), así que sumarlos acá inflaba
@@ -246,7 +214,10 @@ export function PresupuestoTab() {
 
   const [savingCategory, setSavingCategory] = useState(false)
   const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length] }); setLinkedFixed([]); setShowSugg(false); setFormOpen(true) }
-  const openEdit = (cat: BudgetCategory) => { setEditingId(cat.id); setForm({ name: cat.name, budget: String(cat.budget), icon: cat.icon, color: cat.color }); setLinkedFixed(cat.linkedFixedIds ?? []); setFormOpen(true) }
+  const openEdit = (cat: BudgetCategory) => {
+    const orig = categories.find(c => c.id === cat.id) ?? cat
+    setEditingId(orig.id); setForm({ name: orig.name, budget: String(orig.budget), icon: orig.icon, color: orig.color }); setLinkedFixed(orig.linkedFixedIds ?? []); setFormOpen(true)
+  }
   const handleSave = async () => {
     if (!form.name || !form.budget) return
     setSavingCategory(true)
@@ -278,8 +249,11 @@ export function PresupuestoTab() {
   const [expCategoria, setExpCategoria] = useState<string>("")
   const [expSaving, setExpSaving] = useState(false)
   const [autoDetected, setAutoDetected] = useState<string | null>(null)
-  const [isDetectedHormiga, setIsDetectedHormiga] = useState(false)
+  // null = usar la sugerencia automática (monto chico o palabra clave)
+  const [isDetectedHormiga, setIsDetectedHormiga] = useState<boolean | null>(null)
   const [detectedImpulseCategory, setDetectedImpulseCategory] = useState<ImpulseCategory | null>(null)
+  const hormigaSugerido = !!expNombre && Number(expMonto) > 0 && esGastoHormiga(expNombre, Number(expMonto))
+  const hormigaActivo = isDetectedHormiga ?? hormigaSugerido
 
   // Keywords que indican gastos hormiga (pequeños, cotidianos, impulsivos)
   const HORMIGA_KEYWORDS: { keys: string[]; category: ImpulseCategory }[] = [
@@ -311,20 +285,28 @@ export function PresupuestoTab() {
     setDetectedImpulseCategory(hormigaResult.category)
     // NO activar isDetectedHormiga automáticamente — el usuario decide
 
-    // 2. Detectar categoría del presupuesto
-    const detected = detectBudgetCategory(value, categories)
-    setAutoDetected(detected)
-    if (detected && !expCategoria) {
-      setExpCategoria(detected)
-    }
+    // 2. La categoría la sugiere el backend (ver efecto de `categoriaSugerida`).
   }
 
+  // Kiri sugiere la categoría mientras se escribe — primero por el historial
+  // del usuario ("InDriver" ya lo pusiste en Transporte), luego por palabras
+  // clave. Solo rellena si el usuario todavía no eligió una a mano.
+  const categoriaSugerida = useCategoriaSugerida(expenseModalOpen ? expNombre : "")
+  const [expCategoriaManual, setExpCategoriaManual] = useState(false)
+  useEffect(() => {
+    setAutoDetected(categoriaSugerida?.nombre ?? null)
+    if (categoriaSugerida && !expCategoriaManual) setExpCategoria(categoriaSugerida.nombre)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoriaSugerida])
+  const categoryIdPorNombre = (nombre: string) => categories.find(c => c.name === nombre)?.id ?? null
+
   const openExpenseModal = (preselectedCategory?: string) => {
+    setExpCategoriaManual(!!preselectedCategory)
     setExpNombre("")
     setExpMonto("")
     setExpCategoria(preselectedCategory ?? "")
     setAutoDetected(null)
-    setIsDetectedHormiga(false)
+    setIsDetectedHormiga(null)
     setDetectedImpulseCategory(null)
     setExpenseModalOpen(true)
   }
@@ -358,21 +340,19 @@ export function PresupuestoTab() {
     }
 
     // Registrar el gasto como impulseExpense (una única transacción)
-    // El nombre se tagea con la categoría para la vinculación
-    // Si es gasto hormiga, se marca con 🐜 para identificarlo
+    // El nombre se tagea con la categoría para la vinculación; si es hormiga
+    // va en su propio campo (esHormiga), no como 🐜 dentro del nombre.
     setExpSaving(true)
     const impulseCategory = detectedImpulseCategory ?? mapToImpulseCategory(budgetCat || expNombre)
-    let nombreFinal = expNombre
-    if (budgetCat) nombreFinal = `[${budgetCat}] ${expNombre}`
-    if (isDetectedHormiga) nombreFinal = `🐜 ${nombreFinal}`
 
-    await addImpulseExpense({ nombre: nombreFinal, monto, categoria: impulseCategory })
+    // La categoría va en su propio campo (FK), no como "[Cat]" dentro del nombre.
+    await addImpulseExpense({ nombre: expNombre, monto, categoria: impulseCategory, esHormiga: hormigaActivo, budgetCategoryId: budgetCat ? categoryIdPorNombre(budgetCat) : null })
     setExpSaving(false)
     setExpenseModalOpen(false)
     setExpNombre("")
     setExpMonto("")
     setExpCategoria("")
-    setIsDetectedHormiga(false)
+    setIsDetectedHormiga(null)
     setDetectedImpulseCategory(null)
   }
 
@@ -383,13 +363,13 @@ export function PresupuestoTab() {
     if (!expNombre || !expMonto) return
     setExpSaving(true)
     const impulseCategory = mapToImpulseCategory(expCategoria)
-    const nombreConTag = expCategoria ? `[${expCategoria}] ${expNombre}` : expNombre
-    await addImpulseExpense({ nombre: nombreConTag, monto: Number(expMonto), categoria: impulseCategory })
+    await addImpulseExpense({ nombre: expNombre, monto: Number(expMonto), categoria: impulseCategory, esHormiga: hormigaActivo, budgetCategoryId: expCategoria ? categoryIdPorNombre(expCategoria) : null })
     setExpSaving(false)
     setInsufficientExpOpen(false)
     setExpNombre("")
     setExpMonto("")
     setExpCategoria("")
+    setIsDetectedHormiga(null)
   }
 
   const handleExpCancel = () => {
@@ -424,7 +404,7 @@ export function PresupuestoTab() {
       {/* 4 metricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <AnimatedStatCard label="Disponible para gastar" value={realFreeAmount} sub="Tu bolsillo de gasto libre" formatAmount={formatAmount} />
-        <MC label="Total presupuestado" value={formatAmount(totalBudget)} sub="Límites asignados a categorías" />
+        <MC label="Total presupuestado" value={formatAmount(totalBudget)} sub={esLimiteProporcional ? `Proporcional a este periodo (mes: ${formatAmount(catsWithSpent.reduce((a, c) => a + c.budgetMensual, 0))})` : "Límites asignados a categorías"} />
         <MC label="Total gastado" value={formatAmount(totalSpent)} sub={`${totalPct}% del presupuestado`} color={totalSpent > totalBudget ? "text-red-500" : "text-amber-500"} />
         <MC label="Disponible restante" value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={`${realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0}% sin gastar`} />
       </div>
@@ -434,8 +414,8 @@ export function PresupuestoTab() {
         categories={catsWithSpent.map(c => ({
           id: c.id, name: c.name, spent: c.spent, limit: c.budget,
           color: c.color, icon: c.icon,
-          items: (c.expenses ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
-            const cleanName = e.nombre.replace(/^\[.*?\]\s*/, '').replace(/^🐜\s*/, '')
+          items: c.breakdownItems.reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
+            const cleanName = nombreBaseGasto(e.nombre)
             const existing = acc.find(a => a.name === cleanName)
             if (existing) existing.amount += e.monto
             else acc.push({ emoji: '', name: cleanName, amount: e.monto })
@@ -511,7 +491,7 @@ export function PresupuestoTab() {
             <CardContent className="p-5">
               <CategoryDetail
                 cat={{ ...cat, limit: cat.budget, ratio, items: (cat.breakdownItems ?? []).reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
-                  const cleanName = e.nombre.replace(/^\[.*?\]\s*/, '').replace(/^🐜\s*/, '')
+                  const cleanName = nombreBaseGasto(e.nombre)
                   const existing = acc.find(a => a.name === cleanName)
                   if (existing) existing.amount += e.monto
                   else acc.push({ emoji: '', name: cleanName, amount: e.monto })
@@ -524,6 +504,42 @@ export function PresupuestoTab() {
           </Card>
         )
       })()}
+
+      {/* ═══ SIN CATEGORÍA — gastos del periodo que no quedaron en ninguna ═══
+          Antes simplemente no se contaban en ningún lado del presupuesto. Acá
+          se ven y se asignan con un toque; Kiri aprende de esa elección para
+          sugerir la categoría la próxima vez. */}
+      {!selectedCat && categories.length > 0 && sinCategoria.cantidad > 0 && (
+        <Card className="border border-dashed border-amber-400/40 bg-amber-500/5 shadow-none rounded-2xl">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold">Sin categoría · {formatAmount(sinCategoria.gastado)}</p>
+                <p className="text-[10px] text-muted-foreground">{sinCategoria.cantidad === 1 ? "1 gasto de este periodo no cuenta" : `${sinCategoria.cantidad} gastos de este periodo no cuentan`} en ningún presupuesto. Asígnalos:</p>
+              </div>
+            </div>
+            <div className="space-y-2 max-h-[260px] overflow-y-auto">
+              {sinCategoria.gastos.map(g => (
+                <div key={g.id} className="flex items-center gap-2 bg-card rounded-xl px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold truncate">{g.nombre}</p>
+                    <p className="text-[9px] text-muted-foreground">{new Date(g.fecha).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} · {formatAmount(g.monto)}</p>
+                  </div>
+                  <select
+                    defaultValue=""
+                    onChange={e => { if (e.target.value) setImpulseCategoria(g.id, e.target.value) }}
+                    className="h-8 rounded-lg bg-muted/30 border border-border px-2 text-[10px] font-bold max-w-[130px]"
+                    aria-label={`Categoría para ${g.nombre}`}
+                  >
+                    <option value="" disabled>Elegir…</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ═══ BOTÓN GASTOS HORMIGA (debajo de categorías) ═══ */}
       {!selectedCat && (
@@ -552,8 +568,19 @@ export function PresupuestoTab() {
                 <p className="text-[10px] text-muted-foreground">Pequeños gastos que pueden afectar tus metas sin que lo notes.</p>
               </div>
               <div className="text-right shrink-0">
-                <p className={cn("text-sm font-black", hormigaIsOver ? "text-red-500" : "")}>{hormigaUsagePct}%</p>
-                <p className="text-[9px] text-muted-foreground">del libre</p>
+                {/* Sin disponible libre (0 o negativo) el % siempre daba 0% aunque
+                    hubiera gastos hormiga — ahí se muestra el monto real. */}
+                {realFreeAmount > 0 ? (
+                  <>
+                    <p className={cn("text-sm font-black", hormigaIsOver ? "text-red-500" : "")}>{hormigaUsagePct}%</p>
+                    <p className="text-[9px] text-muted-foreground">del libre</p>
+                  </>
+                ) : (
+                  <>
+                    <p className={cn("text-sm font-black", totalHormiga > 0 ? "text-red-500" : "")}>{formatAmount(totalHormiga)}</p>
+                    <p className="text-[9px] text-muted-foreground">{hormigaExpenses.length} gastos · sin disponible</p>
+                  </>
+                )}
               </div>
             </div>
             {/* Barra de progreso integrada */}
@@ -601,7 +628,7 @@ export function PresupuestoTab() {
                       <div key={item.id} className="flex items-center gap-3 bg-card rounded-2xl px-4 py-3 shadow-sm">
                         <span className="text-lg">{cat?.emoji ?? "💸"}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold truncate">{item.nombre}</p>
+                          <p className="text-sm font-bold truncate">{nombreBaseGasto(item.nombre)}</p>
                           <p className="text-[10px] text-muted-foreground">
                             {item.createdAt
                               ? new Date(item.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })
@@ -611,6 +638,13 @@ export function PresupuestoTab() {
                         </div>
                         <span className="font-black text-sm shrink-0">{formatAmount(item.monto)}</span>
                         <button
+                          onClick={(e) => { e.stopPropagation(); setImpulseHormiga(item.id, false) }}
+                          title="No es gasto hormiga"
+                          className="h-7 px-2 rounded-lg text-[9px] font-bold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0"
+                        >
+                          No es 🐜
+                        </button>
+                        <button
                           onClick={(e) => { e.stopPropagation(); removeImpulseExpense(item.id) }}
                           className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
                         >
@@ -619,6 +653,33 @@ export function PresupuestoTab() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {/* Otros gastos del periodo que Kiri NO clasificó como hormiga —
+                  para poder corregir la clasificación en el otro sentido. */}
+              {otrosGastosVariables.length > 0 && (
+                <div className="space-y-2">
+                  <button onClick={() => setShowOtrosGastos(v => !v)} className="text-[10px] font-bold text-muted-foreground hover:text-foreground">
+                    {showOtrosGastos ? "▾" : "▸"} Otros gastos del periodo ({otrosGastosVariables.length}) — ¿alguno es hormiga?
+                  </button>
+                  {showOtrosGastos && otrosGastosVariables.map(item => (
+                    <div key={item.id} className="flex items-center gap-3 bg-muted/10 rounded-2xl px-4 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">{nombreBaseGasto(item.nombre)}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {new Date(item.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                        </p>
+                      </div>
+                      <span className="font-bold text-xs shrink-0">{formatAmount(item.monto)}</span>
+                      <button
+                        onClick={() => setImpulseHormiga(item.id, true)}
+                        className="h-7 px-2 rounded-lg text-[9px] font-bold text-cyclon-pink hover:bg-cyclon-pink/10 transition-colors shrink-0"
+                      >
+                        Marcar 🐜
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -856,7 +917,7 @@ export function PresupuestoTab() {
       </Dialog>
 
       {/* --- MODAL REGISTRAR GASTO --- */}
-      <Dialog open={expenseModalOpen} onOpenChange={v => { if (!v) { setExpenseModalOpen(false); setExpNombre(""); setExpMonto(""); setExpCategoria(""); setAutoDetected(null); setIsDetectedHormiga(false); setDetectedImpulseCategory(null) } }}>
+      <Dialog open={expenseModalOpen} onOpenChange={v => { if (!v) { setExpenseModalOpen(false); setExpNombre(""); setExpMonto(""); setExpCategoria(""); setAutoDetected(null); setIsDetectedHormiga(null); setDetectedImpulseCategory(null) } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -876,9 +937,10 @@ export function PresupuestoTab() {
                 autoFocus
               />
               {/* Detección inteligente de categoría */}
-              {autoDetected && expCategoria === autoDetected && (
+              {autoDetected && expCategoria === autoDetected && !expCategoriaManual && (
                 <p className="text-[9px] text-kiri-emerald flex items-center gap-1">
                   <MapPin className="h-3 w-3" /> Categoría sugerida: {autoDetected}
+                  {categoriaSugerida?.fuente === 'historial' && <span className="text-muted-foreground">· así lo registraste antes</span>}
                 </p>
               )}
             </div>
@@ -899,7 +961,7 @@ export function PresupuestoTab() {
                   {categories.map(cat => (
                     <button
                       key={cat.id}
-                      onClick={() => { setExpCategoria(cat.name); }}
+                      onClick={() => { setExpCategoria(expCategoria === cat.name ? "" : cat.name); setExpCategoriaManual(true) }}
                       className={cn(
                         "flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-colors",
                         expCategoria === cat.name
@@ -933,26 +995,22 @@ export function PresupuestoTab() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsDetectedHormiga(!isDetectedHormiga)}
+                  onClick={() => setIsDetectedHormiga(!hormigaActivo)}
                   className={cn(
                     "relative h-6 w-11 rounded-full transition-colors",
-                    isDetectedHormiga ? "bg-cyclon-pink" : "bg-muted"
+                    hormigaActivo ? "bg-cyclon-pink" : "bg-muted"
                   )}
                 >
                   <span className={cn(
                     "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-                    isDetectedHormiga && "translate-x-5"
+                    hormigaActivo && "translate-x-5"
                   )} />
                 </button>
               </div>
-              {isDetectedHormiga && (
+              {hormigaActivo && (
                 <p className="text-[9px] text-cyclon-pink flex items-center gap-1 px-1">
-                  <Coffee className="h-3 w-3" /> Kiri analizará este gasto como hábito de consumo.
-                </p>
-              )}
-              {!isDetectedHormiga && detectedImpulseCategory && (
-                <p className="text-[9px] text-amber-500 flex items-center gap-1 px-1">
-                  💡 Kiri detectó que este podría ser un gasto hormiga. ¿Quieres marcarlo?
+                  <Coffee className="h-3 w-3" />
+                  {isDetectedHormiga === null ? "Kiri lo marcó como hormiga (monto pequeño o consumo cotidiano). Puedes desmarcarlo." : "Kiri analizará este gasto como hábito de consumo."}
                 </p>
               )}
             </div>

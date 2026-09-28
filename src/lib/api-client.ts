@@ -11,7 +11,8 @@
  * - Tipado de respuestas
  */
 
-import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt } from './types'
+import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt, ConnectionRole } from './types'
+import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 // Authoriza es la identidad central: la foto de perfil se sube allí y se
@@ -156,6 +157,13 @@ export async function api<T = unknown>(
           return { data: null, error: 'Sesión expirada', status: 401 }
         }
       } else {
+        // Sin ningún token guardado la sesión ya no existe (cerró sesión en
+        // otra pestaña, se borraron los datos del sitio…): antes cada acción
+        // mostraba "Token de autorización requerido" y la pantalla quedaba
+        // con datos viejos que ya no se podían tocar. Se manda a iniciar sesión.
+        if (!getAccessToken() && typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login'
+        }
         return { data: null, error: errorData.error || 'No autorizado', status: 401 }
       }
     }
@@ -197,11 +205,16 @@ export interface LoginResponse {
 
 export const authApi = {
   async register(nombre: string, correo: string, password: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string) {
+    // Llegó con un enlace de invitación (/invitacion/[code]): se conecta en
+    // Social con quien lo invitó apenas se crea la cuenta.
+    let invitacion: string | undefined
+    try { invitacion = localStorage.getItem(INVITACION_KEY) ?? undefined } catch { /* sin storage */ }
     const res = await api<LoginResponse>('/auth/register', {
       method: 'POST',
-      body: { nombre, correo, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname },
+      body: { nombre, correo, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname, invitacion },
       skipAuth: true,
     })
+    if (!res.error) { try { localStorage.removeItem(INVITACION_KEY) } catch { /* sin storage */ } }
     if (res.data) {
       setTokens(res.data.accessToken, res.data.refreshToken, res.data.user.id)
     }
@@ -273,10 +286,13 @@ export const userApi = {
   },
 
   async walletIncome(monto: number, tipo: 'salario' | 'extra') {
-    return api<{ record: Record<string, unknown>; wallet: WalletState }>('/users/wallet/income', {
+    const res = await api<{ record: Record<string, unknown>; wallet: WalletState }>('/users/wallet/income', {
       method: 'POST',
       body: { monto, tipo },
     })
+    // El árbol celebra con sol y monedas (ver lib/garden-events.ts)
+    if (res.data) marcarSolDeIngreso(monto)
+    return res
   },
 
   async walletDeduct(monto: number, bolsillo: 'obligaciones' | 'libre' | 'ahorro') {
@@ -329,7 +345,11 @@ export async function uploadAvatarToAuthoriza(file: File): Promise<{ url: string
       return { url: null, error: e.message || `Error ${res.status}` }
     }
     const data = await res.json()
-    return { url: data.url as string, error: null }
+    let url = data.url as string | undefined
+    if (!url) return { url: null, error: 'Authoriza no devolvió la foto' }
+    // Si viene relativa ("/uploads/..."), es relativa a Authoriza, no a Kiri
+    if (url.startsWith('/')) url = new URL(url, base).toString()
+    return { url, error: null }
   } catch {
     return { url: null, error: 'Error de conexión al subir la foto' }
   }
@@ -342,6 +362,8 @@ export interface WalletState {
   libre: number
   endeudamiento: number
 }
+
+export type UndoAlcance = 'ultimo' | 'todo'
 
 // ─── Debts API ────────────────────────────────────────────────────────────────
 
@@ -368,10 +390,23 @@ export const debtsApi = {
     })
   },
 
-  async pay(id: string, monto?: number) {
-    return api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean }>(`/debts/${id}/pay`, {
+  /** periodo: 'actual' (default) | 'siguiente' (adelantar) | periodo de una cuota atrasada, ej. "2026-08". */
+  /**
+   * opciones.saldoReal: saldo que quedó según el banco (el interés real sale de ahí).
+   * opciones.cuotaCompleta: con este valor quedó pagada la cuota del periodo.
+   */
+  async pay(id: string, monto?: number, periodo?: string, opciones: { saldoReal?: number; cuotaCompleta?: boolean } = {}) {
+    return api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean; periodo: string; esPeriodoActual: boolean; amortizacion: { montoPagado: number; pagoInteres: number; abonoCapital: number }; tasaObservadaMensual: number | null; cuotaAjustada: boolean }>(`/debts/${id}/pay`, {
       method: 'POST',
-      body: monto ? { monto } : {},
+      body: { ...(monto ? { monto } : {}), ...(periodo ? { periodo } : {}), ...opciones },
+    })
+  },
+
+  /** "Esa cuota atrasada ya la había pagado por fuera de Kiri" — no toca la billetera. */
+  async marcarPagado(id: string, periodo: string) {
+    return api<{ debt: Record<string, unknown> }>(`/debts/${id}/marcar-pagado`, {
+      method: 'POST',
+      body: { periodo },
     })
   },
 
@@ -379,9 +414,11 @@ export const debtsApi = {
     return api(`/debts/${id}`, { method: 'DELETE' })
   },
 
-  async undoPay(id: string) {
-    return api<{ debt: Record<string, unknown>; montoDevuelto: number; revertidoDeTarjeta: { tarjetaId: string; monto: number }[] | null; wallet: WalletState }>(`/debts/${id}/undo-pay`, {
+  /** alcance 'ultimo' = solo el pago más reciente del periodo (ej. un abono); 'todo' = todos los del periodo. */
+  async undoPay(id: string, alcance: UndoAlcance = 'todo', periodo: 'actual' | 'siguiente' = 'actual') {
+    return api<{ debt: Record<string, unknown>; montoDevuelto: number; pagosDeshechos: number; revertidoDeTarjeta: { tarjetaId: string; monto: number }[] | null; wallet: WalletState }>(`/debts/${id}/undo-pay`, {
       method: 'POST',
+      body: { alcance, periodo },
     })
   },
 
@@ -414,10 +451,11 @@ export const fixedExpensesApi = {
     })
   },
 
-  async pay(id: string, monto?: number) {
+  /** periodo: 'actual' | 'siguiente' (adelantar) | periodo de una cuota atrasada, ej. "2026-08". */
+  async pay(id: string, monto?: number, periodo?: string, cuotaCompleta?: boolean) {
     return api<{ fixedExpense: Record<string, unknown>; pagoConTarjeta: boolean; tarjetaNombre?: string; nuevoSaldoTarjeta?: number }>(`/fixed-expenses/${id}/pay`, {
       method: 'PATCH',
-      body: monto ? { monto } : {},
+      body: { ...(monto ? { monto } : {}), ...(periodo ? { periodo } : {}), ...(cuotaCompleta ? { cuotaCompleta } : {}) },
     })
   },
 
@@ -425,9 +463,15 @@ export const fixedExpensesApi = {
     return api(`/fixed-expenses/${id}`, { method: 'DELETE' })
   },
 
-  async undoPay(id: string) {
-    return api<{ fixedExpense: Record<string, unknown>; montoDevuelto: number; revertidoDeTarjeta: { tarjetaId: string; monto: number }[] | null; wallet: WalletState }>(`/fixed-expenses/${id}/undo-pay`, {
+  /** "Esa cuota atrasada ya la había pagado por fuera de Kiri" — no toca la billetera. */
+  async marcarPagado(id: string, periodo: string) {
+    return api<{ ok: boolean }>(`/fixed-expenses/${id}/marcar-pagado`, { method: 'POST', body: { periodo } })
+  },
+
+  async undoPay(id: string, alcance: UndoAlcance = 'todo', periodo: 'actual' | 'siguiente' = 'actual') {
+    return api<{ fixedExpense: Record<string, unknown>; montoDevuelto: number; pagosDeshechos: number; revertidoDeTarjeta: { tarjetaId: string; monto: number }[] | null; wallet: WalletState }>(`/fixed-expenses/${id}/undo-pay`, {
       method: 'POST',
+      body: { alcance, periodo },
     })
   },
 }
@@ -476,29 +520,92 @@ export const extraIncomesApi = {
 // ─── Impulse Expenses API ─────────────────────────────────────────────────────
 
 export const impulseApi = {
-  async list(limit = 50) {
+  // Todos los gastos del periodo actual: antes el tope era 50, y un usuario
+  // con más registros en la quincena veía totales (hormiga, por categoría)
+  // calculados solo sobre los 50 más recientes.
+  async list(limit = 1000) {
     return api<{ expenses: Record<string, unknown>[]; totalThisPeriod: number; currentPeriodo: string }>(`/impulse-expenses?limit=${limit}`)
   },
 
-  async create(data: { nombre: string; monto: number; categoria: string; tarjetaId?: string; cuotas?: number }) {
-    return api<{ expense: Record<string, unknown> }>('/impulse-expenses', {
+  /**
+   * `esHormiga` omitido = el backend lo clasifica solo. `budgetCategoryId`
+   * omitido = Kiri sugiere la categoría (historial o palabras clave); null =
+   * sin categoría. `descontarBilletera` = el backend descuenta el bolsillo
+   * libre en la misma transacción (si no, lo hace quien llama).
+   */
+  async create(data: { nombre: string; monto: number; categoria: string; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null; sharedCategoryId?: string | null; descontarBilletera?: boolean }) {
+    const res = await api<{ expense: Record<string, unknown>; categoriaAutomatica?: 'historial' | 'palabra_clave' | null; alertaCategoria?: AlertaCategoria | null; hogar?: HogarAlerta | null; billeteraDescontada?: boolean }>('/impulse-expenses', {
       method: 'POST',
+      body: data,
+    })
+    // El árbol reacciona con tormenta (ver lib/garden-events.ts)
+    if (res.data?.expense?.esHormiga) marcarTormentaHormiga(String(res.data.expense.nombre ?? data.nombre))
+    return res
+  },
+
+  async update(id: string, data: { esHormiga?: boolean; categoria?: string; budgetCategoryId?: string | null }) {
+    return api<{ expense: Record<string, unknown> }>(`/impulse-expenses/${id}`, {
+      method: 'PATCH',
       body: data,
     })
   },
 
+  /** Revierte el gasto por completo (billetera o tarjeta) — `reversion` dice qué se devolvió. */
   async delete(id: string) {
-    return api(`/impulse-expenses/${id}`, { method: 'DELETE' })
+    return api<{ message: string; reversion: { tipo: 'billetera' | 'tarjeta'; monto: number; tarjetaNombre?: string | null } }>(`/impulse-expenses/${id}`, { method: 'DELETE' })
   },
 
-  async topConsumos(params?: { categoria?: string; limit?: number; periodo?: string }) {
+  async topConsumos(params?: { categoria?: string; limit?: number; periodo?: string; alcance?: 'periodo' | 'mes'; soloHormiga?: boolean }) {
     const searchParams = new URLSearchParams()
+    if (params?.alcance) searchParams.set('alcance', params.alcance)
+    if (params?.soloHormiga) searchParams.set('soloHormiga', 'true')
     if (params?.categoria) searchParams.set('categoria', params.categoria)
     if (params?.limit) searchParams.set('limit', String(params.limit))
     if (params?.periodo) searchParams.set('periodo', params.periodo)
     const qs = searchParams.toString()
     return api<TopConsumosResponse>(`/impulse-expenses/top-consumos${qs ? `?${qs}` : ''}`)
   },
+}
+
+export interface AlertaCategoria {
+  nivel: 'alerta' | 'excedido'
+  categoria: string
+  categoryId: string
+  gastado: number
+  limite: number
+  porcentaje: number
+}
+
+/** GET /budget-categories/resumen — gasto por categoría calculado en el servidor (fuente única). */
+export interface ResumenCategoria {
+  id: string
+  nombre: string
+  icono: string
+  color: string
+  /** Límite definido por el usuario (mensual). */
+  limiteMensual: number
+  /** Límite proporcional al rango consultado (la mitad aprox. en una quincena). */
+  limite: number
+  gastado: number
+  disponible: number
+  porcentaje: number
+  /** Gasto proyectado al cierre del periodo al ritmo actual. */
+  proyeccion: number
+  estado: 'sin_limite' | 'ok' | 'alerta' | 'excedido'
+  gastadoAnterior: number
+  variacionPct: number | null
+  cantidad: number
+  items: { nombre: string; monto: number; cantidad: number; tipo: 'variable' | 'fijo' | 'deuda' }[]
+  movimientos: { monto: number; fecha: string }[]
+}
+
+export interface ResumenCategorias {
+  alcance: 'periodo' | 'mes'
+  frecuencia: string
+  rango: { inicio: string; fin: string; diasTotales: number; diasTranscurridos: number }
+  categorias: ResumenCategoria[]
+  sinCategoria: { gastado: number; cantidad: number; gastos: { id: string; nombre: string; monto: number; fecha: string; esHormiga: boolean }[] }
+  totales: { limite: number; gastado: number; gastadoConSinCategoria: number; gastadoAnterior: number }
 }
 
 export interface TopConsumoItem {
@@ -512,6 +619,75 @@ export interface TopConsumosResponse {
   items: TopConsumoItem[]
   totalGastado: number
   periodo: string
+  alcance: 'periodo' | 'mes'
+}
+
+// ─── "Me deben" — préstamos a personas que no usan Kiri ────────────────────────
+
+export interface ExternalLoanPayment {
+  id: string
+  monto: number
+  entraABilletera: boolean
+  nota: string | null
+  createdAt: string
+}
+
+export interface ExternalLoan {
+  id: string
+  persona: string
+  telefono: string | null
+  montoPrestado: number
+  saldoPendiente: number
+  montoRecuperado: number
+  montoDesdeBilletera: number
+  fechaPrestamo: string
+  fechaCompromiso: string | null
+  /** Días hasta la fecha prometida (negativo = vencido); null sin fecha. */
+  diasParaCompromiso: number | null
+  vencido: boolean
+  nota: string | null
+  estado: 'activo' | 'pagado' | 'perdonado'
+  cerradoEn: string | null
+  createdAt: string
+  payments: ExternalLoanPayment[]
+}
+
+export interface ExternalLoansResumen {
+  porCobrar: number
+  personas: number
+  vencidos: number
+  recuperadoTotal: number
+  perdonadoTotal: number
+}
+
+export const externalLoansApi = {
+  async list() {
+    return api<{ loans: ExternalLoan[]; resumen: ExternalLoansResumen; disponible: { gastoLibre: number; total: number } }>('/external-loans')
+  },
+  async create(data: { persona: string; telefono?: string | null; monto: number; fechaPrestamo?: string; fechaCompromiso?: string | null; nota?: string | null; salioDeBilletera: boolean }) {
+    return api<{ loan: ExternalLoan; disponible?: number }>('/external-loans', { method: 'POST', body: data })
+  },
+  async update(id: string, data: { persona?: string; telefono?: string | null; fechaCompromiso?: string | null; nota?: string | null }) {
+    return api<{ loan: ExternalLoan }>(`/external-loans/${id}`, { method: 'PATCH', body: data })
+  },
+  async abono(id: string, data: { monto: number; entraABilletera: boolean; nota?: string | null }) {
+    return api<{ loan: ExternalLoan; saldado: boolean }>(`/external-loans/${id}/abono`, { method: 'POST', body: data })
+  },
+  async deshacerAbono(id: string, paymentId: string) {
+    return api<{ loan: ExternalLoan }>(`/external-loans/${id}/abono/${paymentId}`, { method: 'DELETE' })
+  },
+  async ampliar(id: string, data: { monto: number; salioDeBilletera: boolean; nota?: string | null }) {
+    return api<{ loan: ExternalLoan }>(`/external-loans/${id}/ampliar`, { method: 'POST', body: data })
+  },
+  async perdonar(id: string) {
+    return api<{ loan: ExternalLoan }>(`/external-loans/${id}/perdonar`, { method: 'POST' })
+  },
+  async reabrir(id: string) {
+    return api<{ loan: ExternalLoan }>(`/external-loans/${id}/reabrir`, { method: 'POST' })
+  },
+  async delete(id: string) {
+    return api<{ message: string; ajusteBilletera: number }>(`/external-loans/${id}`, { method: 'DELETE' })
+  },
 }
 
 // ─── Emergency Fund API ───────────────────────────────────────────────────────
@@ -556,6 +732,96 @@ export const gamificationApi = {
 }
 
 // ─── Missions API (Fase 3) ─────────────────────────────────────────────────────
+
+// ─── Presupuesto del hogar (categorías compartidas en pareja) ────────────────
+
+export interface HogarCategoria {
+  id: string
+  nombre: string
+  icono: string
+  color: string
+  montoLimite: number
+  gastado: number
+  gastadoYo: number
+  gastadoPareja: number
+  porcentaje: number
+  disponible: number
+}
+
+export interface HogarResumen {
+  conectado: boolean
+  connectionId?: string
+  pareja?: { id: string; nombre: string }
+  /** El tope de las categorías es por mes o por quincena (1–15 / 16–fin) */
+  periodo?: 'mensual' | 'quincenal'
+  /** Ej: "1 – 30 sep" o "16 – 30 sep" */
+  etiquetaPeriodo?: string
+  mes?: string
+  categorias?: HogarCategoria[]
+  total?: { limite: number; gastado: number }
+  recientes?: { id: string; nombre: string; monto: number; fecha: string; quien: 'yo' | 'pareja'; categoria: string }[]
+}
+
+export interface HogarAlerta { categoria: string; icono: string; gastado: number; limite: number; porcentaje: number; alerta: 'alerta' | 'excedido' | null; periodo?: 'mensual' | 'quincenal' }
+
+export const hogarApi = {
+  async resumen() {
+    return api<HogarResumen>('/hogar')
+  },
+  async crear(data: { nombre: string; icono?: string; color?: string; montoLimite: number }) {
+    return api<{ categoria: Record<string, unknown> }>('/hogar/categorias', { method: 'POST', body: data })
+  },
+  async actualizar(id: string, data: { nombre?: string; icono?: string; color?: string; montoLimite?: number }) {
+    return api<{ categoria: Record<string, unknown> }>(`/hogar/categorias/${id}`, { method: 'PATCH', body: data })
+  },
+  async eliminar(id: string) {
+    return api<{ message: string }>(`/hogar/categorias/${id}`, { method: 'DELETE' })
+  },
+  /** Mensual ⇄ quincenal. convertirTopes: $600.000/mes → $300.000/quincena (y al revés). */
+  async cambiarPeriodo(periodo: 'mensual' | 'quincenal', convertirTopes = true) {
+    return api<{ periodo: string; cambiado: boolean }>('/hogar/periodo', { method: 'PATCH', body: { periodo, convertirTopes } })
+  },
+}
+
+// ─── Invitaciones por enlace ─────────────────────────────────────────────────
+
+/** Código de invitación pendiente de usar (se guarda al abrir /invitacion/[code]). */
+export const INVITACION_KEY = 'kiri_invitacion'
+
+export interface InvitacionPublica {
+  code: string
+  role: ConnectionRole
+  inviter: { id: string; nombre: string; username: string; avatarUrl: string | null }
+}
+
+export const inviteLinksApi = {
+  /** Mi enlace para ese tipo de relación (se crea la primera vez). */
+  async get(role: ConnectionRole) {
+    return api<{ code: string; role: ConnectionRole; usos: number; referidos: number }>(`/invite-links?role=${role}`)
+  },
+  /** Quién invita — funciona sin sesión. */
+  async publico(code: string) {
+    return api<InvitacionPublica>(`/invite-links/publico/${encodeURIComponent(code)}`, { skipAuth: true })
+  },
+  /** Ya tenía cuenta: conectarse directo con quien invitó. */
+  async aceptar(code: string) {
+    return api<{ role: ConnectionRole; inviter: { id: string; nombre: string }; yaConectados: boolean }>(`/invite-links/${encodeURIComponent(code)}/aceptar`, { method: 'POST' })
+  },
+}
+
+/** Dominio público de Kiri — los enlaces de invitación siempre apuntan aquí. */
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://kiri.cyclonet.com.co'
+
+/**
+ * URL pública del enlace de invitación. En desarrollo (localhost) usa el
+ * origen local para poder probar el flujo completo; en cualquier otro caso,
+ * el dominio público.
+ */
+export function urlInvitacion(code: string): string {
+  const local = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+  const origin = local ? window.location.origin : APP_URL
+  return `${origin.replace(/\/$/, '')}/invitacion/${code}`
+}
 
 export const missionsApi = {
   async getMissions() {
@@ -621,13 +887,18 @@ export interface BalanceReport {
   incomeRecords: Record<string, unknown>[]
   debtPayments: Record<string, unknown>[]
   fixedExpensePayments: Record<string, unknown>[]
+  /** "Me deben": préstamos y abonos del rango (no suman a ingresos/egresos). */
+  prestamosExternos?: {
+    prestamos: { id: string; persona: string; monto: number; desdeBilletera: boolean; fecha: string }[]
+    abonos: { id: string; persona: string; monto: number; entraABilletera: boolean; fecha: string }[]
+  }
 }
 
 // ─── Movimiento unificado — Balance/Historial ─────────────────────────────────
 // Forma compartida de "un renglón" del historial financiero, sin importar si es
 // un pago de deuda, un gasto fijo, un gasto hormiga, un ingreso o un ahorro.
 
-export type MovementType = "deudas" | "gastos_fijos" | "hormiga" | "ingresos" | "ahorros"
+export type MovementType = "deudas" | "gastos_fijos" | "hormiga" | "ingresos" | "ahorros" | "prestamos"
 
 export interface Movement {
   id: string
@@ -740,9 +1011,11 @@ export const sharedPocketsApi = {
     })
   },
   async deposit(pocketId: string, monto: number, nota?: string, tipo?: 'aporte' | 'retiro') {
-    return api<{ deposit: Record<string, unknown>; requiresApproval: boolean }>(`/shared-pockets/${pocketId}/deposit`, {
+    const res = await api<{ deposit: Record<string, unknown>; requiresApproval: boolean }>(`/shared-pockets/${pocketId}/deposit`, {
       method: 'POST', body: { monto, nota, tipo: tipo ?? 'aporte' },
     })
+    if (res.data && (tipo ?? 'aporte') === 'aporte') marcarLluviaDeAhorro(monto)
+    return res
   },
   async approveDeposit(pocketId: string, depositId: string) {
     return api<{ newBalance: number }>(`/shared-pockets/${pocketId}/deposit/${depositId}/approve`, {
@@ -774,9 +1047,15 @@ export const loansApi = {
   async list() {
     return api<{ loans: Record<string, unknown>[] }>('/loans')
   },
-  async request(data: { lenderId: string; amount: number; descripcion?: string; dueDate?: string }) {
+  async request(data: { lenderId: string; amount: number; descripcion?: string; fechaCompromiso?: string | null }) {
     return api<{ loan: Record<string, unknown> }>('/loans/request', {
       method: 'POST', body: data,
+    })
+  },
+  /** Cambiar la fecha de pago (cualquiera de los dos; al otro le llega aviso). */
+  async cambiarFecha(loanId: string, fechaCompromiso: string | null) {
+    return api<{ fechaCompromiso: string | null; diasParaCompromiso: number | null }>(`/loans/${loanId}/fecha`, {
+      method: 'PATCH', body: { fechaCompromiso },
     })
   },
   async approve(loanId: string, tasaInteres?: number) {
@@ -815,32 +1094,6 @@ export const loansApi = {
     })
   },
 }
-
-// ─── AI API ───────────────────────────────────────────────────────────────────
-
-export const aiApi = {
-  async coach(body: Record<string, unknown>) {
-    return api<{ respuesta: string; patronDetectado: string | null; accionSugerida: string | null; impactoEstimado: string | null }>('/ai/coach', {
-      method: 'POST',
-      body,
-    })
-  },
-
-  async budgetInsight(body: Record<string, unknown>) {
-    return api<{ explicacion: string }>('/ai/budget-insight', {
-      method: 'POST',
-      body,
-    })
-  },
-
-  async scanReceipt(imageBase64: string, mimeType: string) {
-    return api<{ items: unknown[]; total: number; categoria: string }>('/ai/scan-receipt', {
-      method: 'POST',
-      body: { imageBase64, mimeType },
-    })
-  },
-}
-
 
 // ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────
 
@@ -915,10 +1168,13 @@ export const savingsPocketsApi = {
 
   /** Aportar al bolsillo — descuenta la billetera y suma el bolsillo, atómico en el backend */
   async deposit(id: string, monto: number) {
-    return api<{ pocket: SavingsPocket }>(`/savings-pockets/${id}/deposit`, {
+    const res = await api<{ pocket: SavingsPocket }>(`/savings-pockets/${id}/deposit`, {
       method: 'POST',
       body: { monto },
     })
+    // El árbol celebra con lluvia (ver lib/garden-events.ts)
+    if (res.data) marcarLluviaDeAhorro(monto)
+    return res
   },
 
   /** Retirar del bolsillo — devuelve el dinero a la billetera, atómico en el backend */
@@ -974,9 +1230,19 @@ export const budgetCategoriesApi = {
     })
   },
 
-  /** Eliminar una categoría */
+  /** Eliminar una categoría — sus gastos quedan "Sin categoría" (no se borran). */
   async delete(id: string) {
     return api(`/budget-categories/${id}`, { method: 'DELETE' })
+  },
+
+  /** Gasto por categoría del periodo (o mes) — misma cifra en todas las pantallas. */
+  async resumen(alcance: 'periodo' | 'mes' = 'periodo') {
+    return api<ResumenCategorias>(`/budget-categories/resumen?alcance=${alcance}`)
+  },
+
+  /** Categoría sugerida para una descripción de gasto (aprende del historial del usuario). */
+  async sugerir(nombre: string) {
+    return api<{ sugerencia: { categoryId: string; nombre: string; fuente: 'historial' | 'palabra_clave' } | null }>(`/budget-categories/sugerir?nombre=${encodeURIComponent(nombre)}`)
   },
 
   /** Bulk insert — usado en la migración desde localStorage */
@@ -1221,6 +1487,10 @@ export const projectionsApi = {
   async getSpending() {
     return api<{ projection: SpendingProjection }>('/projections/spending')
   },
+  /** Gastos (sin tarjeta) y ahorros de los últimos ~4 meses, para promedios reales */
+  async movimientos() {
+    return api<{ gastos: { monto: number; fecha: string; hormiga: boolean }[]; ahorros: { monto: number; fecha: string }[] }>('/projections/movimientos')
+  },
 }
 
 // ─── Notificaciones (campana) — persistidas en el backend ─────────────────────
@@ -1241,6 +1511,10 @@ export const notificationsApi = {
   },
   async markAllRead() {
     return api('/notifications/read-all', { method: 'POST' })
+  },
+  /** Marca leídas solo las notificaciones de esos eventos (ej. las de Social). */
+  async markRead(events: string[]) {
+    return api('/notifications/read', { method: 'POST', body: { events } })
   },
   async clear() {
     return api('/notifications', { method: 'DELETE' })

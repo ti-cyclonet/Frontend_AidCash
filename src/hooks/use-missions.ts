@@ -9,6 +9,9 @@ export interface MissionsState {
   daily: Mission[]
   weekly: Mission | null
   onboarding: Mission[]
+  /** Misiones de traer gente nueva a Kiri (1, 2 y 3 personas) */
+  invitaciones: Mission[]
+  referidos: number
   loading: boolean
 }
 
@@ -20,6 +23,8 @@ export function useMissions() {
     daily: [],
     weekly: null,
     onboarding: [],
+    invitaciones: [],
+    referidos: 0,
     loading: true,
   })
 
@@ -29,7 +34,11 @@ export function useMissions() {
     try {
       const { data: result } = await missionsApi.getMissions()
       if (result) {
-        setData({ daily: result.daily, weekly: result.weekly, onboarding: result.onboarding, loading: false })
+        setData({
+          daily: result.daily, weekly: result.weekly, onboarding: result.onboarding,
+          invitaciones: result.invitaciones?.misiones ?? [], referidos: result.invitaciones?.referidos ?? 0,
+          loading: false,
+        })
       } else {
         setData(prev => ({ ...prev, loading: false }))
       }
@@ -51,6 +60,8 @@ export function useMissions() {
       daily: prev.daily.map(m => m.key === missionKey ? { ...m, claimed: true } : m),
       weekly: prev.weekly?.key === missionKey ? { ...prev.weekly, claimed: true } : prev.weekly,
       onboarding: prev.onboarding.map(m => m.key === missionKey ? { ...m, claimed: true } : m),
+      invitaciones: prev.invitaciones.map(m => m.key === missionKey ? { ...m, claimed: true } : m),
+      referidos: prev.referidos,
       loading: prev.loading,
     }))
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
@@ -14,48 +14,17 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X } from "lucide-react"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X, Bell } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
-import { api, userApi, supportApi, uploadAvatarToAuthoriza } from "@/lib/api-client"
+import { api, userApi, supportApi } from "@/lib/api-client"
+import { prepararFotoPerfil, resizeImageToDataUrl } from "@/lib/avatar-upload"
+import { activarNotificaciones, enviarPrueba, estadoPush, registrarDispositivo, type EstadoPush } from "@/lib/push-client"
 
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
-
-// El backend guarda avatarUrl como texto plano (base64) con un tope de
-// 700.000 caracteres — una foto real de celular sin comprimir (2-8MB) lo
-// supera fácil y el guardado fallaba con un error de "imagen demasiado
-// grande" sin que el usuario supiera qué pasó. Se reescala al lado más largo
-// y se recomprime a JPEG antes de guardarla, así cualquier foto entra sin
-// que el usuario tenga que hacer nada distinto.
-const AVATAR_MAX_DIM = 512
-const AVATAR_QUALITY = 0.85
-
-function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, quality = AVATAR_QUALITY): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
-    reader.onload = () => {
-      const img = new Image()
-      img.onerror = () => reject(new Error("El archivo no es una imagen válida"))
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
-        const w = Math.max(1, Math.round(img.width * scale))
-        const h = Math.max(1, Math.round(img.height * scale))
-        const canvas = document.createElement("canvas")
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext("2d")
-        if (!ctx) { reject(new Error("No se pudo procesar la imagen")); return }
-        ctx.drawImage(img, 0, 0, w, h)
-        resolve(canvas.toDataURL("image/jpeg", quality))
-      }
-      img.src = reader.result as string
-    }
-    reader.readAsDataURL(file)
-  })
-}
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -78,6 +47,22 @@ export default function PerfilPage() {
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const [isSupportOpen, setIsSupportOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
+
+  // Notificaciones del celular
+  const [pushEstado, setPushEstado] = useState<EstadoPush | null>(null)
+  const [pushMsg, setPushMsg] = useState<string | null>(null)
+  useEffect(() => { setPushEstado(estadoPush()) }, [])
+  const activarPush = async () => {
+    const e = await activarNotificaciones()
+    setPushEstado(e)
+    setPushMsg(e === "activas" ? "¡Listo! Toca Probar para recibir una notificación de prueba." : e === "bloqueadas" ? "El navegador las bloqueó. Actívalas en los ajustes del sitio." : null)
+  }
+  const probarPush = async () => {
+    setPushMsg("Enviando…")
+    await registrarDispositivo().catch(() => false)
+    const n = await enviarPrueba()
+    setPushMsg(n > 0 ? `Enviada a ${n} dispositivo${n === 1 ? "" : "s"}. Debería aparecer en tu barra de notificaciones.` : "Este dispositivo no quedó registrado. Toca Activar de nuevo.")
+  }
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,20 +73,10 @@ export default function PerfilPage() {
       setAvatarError("Selecciona un archivo de imagen.")
       return
     }
-    // La foto se sube al endpoint CENTRAL de Authoriza (avatar compartido por
-    // todas las apps) y se usa la URL alojada que devuelve — ya no se guarda
-    // como base64 en el backend de Kiri. Muestra un preview local mientras sube.
     setAvatarError(null)
-    try {
-      const preview = await resizeImageToDataUrl(file)
-      setEditForm(f => ({ ...f, avatarUrl: preview }))
-    } catch { /* preview opcional */ }
-
-    const { url, error } = await uploadAvatarToAuthoriza(file)
-    if (error || !url) {
-      setAvatarError(error || "No se pudo subir la foto. Intenta con otra.")
-      return
-    }
+    const { url, preview, error } = await prepararFotoPerfil(file)
+    if (preview) setEditForm(f => ({ ...f, avatarUrl: preview }))
+    if (error || !url) { setAvatarError(error || "No se pudo subir la foto. Intenta con otra."); return }
     setEditForm(f => ({ ...f, avatarUrl: url }))
     setAvatarChanged(true)
   }
@@ -248,6 +223,33 @@ export default function PerfilPage() {
                   <SelectItem value="never">Nunca</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Notificaciones del celular (barra de estado) */}
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-8 w-8 rounded-lg bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald shrink-0">
+                    <Bell className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Notificaciones del celular</p>
+                    <p className={cn("text-[11px]", pushEstado === "activas" ? "text-kiri-emerald" : "text-muted-foreground")}>
+                      {pushEstado === "activas" ? "Activadas en este dispositivo"
+                        : pushEstado === "bloqueadas" ? "Bloqueadas: actívalas en los ajustes del navegador"
+                        : pushEstado === "instalar-ios" ? "En iPhone: instala Kiri (Compartir → Agregar a inicio)"
+                        : pushEstado === "no-soportado" ? "Este navegador no las soporta"
+                        : "Sin activar"}
+                    </p>
+                  </div>
+                </div>
+                {pushEstado === "activas" ? (
+                  <Button size="sm" variant="outline" className="rounded-xl h-8 text-xs shrink-0" onClick={probarPush}>Probar</Button>
+                ) : pushEstado === "sin-activar" ? (
+                  <Button size="sm" className="rounded-xl h-8 text-xs shrink-0 bg-kiri-emerald hover:bg-kiri-emerald/90 text-white" onClick={activarPush}>Activar</Button>
+                ) : null}
+              </div>
+              {pushMsg && <p className="text-[11px] text-muted-foreground pl-11">{pushMsg}</p>}
             </div>
           </CardContent>
         </Card>

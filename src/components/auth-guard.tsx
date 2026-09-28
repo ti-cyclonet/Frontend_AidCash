@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
 
 const PUBLIC_ROUTES = ['/', '/login', '/register']
+// Enlaces de invitación: se abren con o sin sesión (ver app/invitacion/[code])
+const PUBLIC_PREFIXES = ['/invitacion/']
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -14,7 +16,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return
 
-    const isPublicRoute = PUBLIC_ROUTES.includes(pathname)
+    const isPublicRoute = PUBLIC_ROUTES.includes(pathname) || PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
 
     if (!user && !isPublicRoute) {
       router.replace('/login')
@@ -22,6 +24,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (user && (pathname === '/' || pathname === '/login' || pathname === '/register')) {
+      // Entró a iniciar sesión desde un enlace de invitación: volver a él
+      // para que se conecte con quien lo invitó.
+      let invitacion: string | null = null
+      try { invitacion = localStorage.getItem('kiri_invitacion') } catch { /* sin storage */ }
+      if (invitacion && pathname === '/login') { router.replace(`/invitacion/${invitacion}`); return }
       router.replace(user.onboardingDone ? '/dashboard' : '/onboarding')
     }
   }, [user, loading, pathname, router])

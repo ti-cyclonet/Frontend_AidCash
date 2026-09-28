@@ -10,8 +10,16 @@ import { Progress } from "@/components/ui/progress"
 import {
   Wallet, Heart, TrendingUp, TrendingDown, Sparkles,
   Flame, PiggyBank, ShieldCheck, ChevronRight,
-  Droplets, Lock, Check, Gift, Lightbulb,
+  Droplets, Lock, Check, Gift, Lightbulb, UserPlus, Volume2, VolumeX, CloudLightning, CalendarClock,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { InviteLinkModal } from "@/components/social/InviteLinkPanel"
+import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
+import { tocarTrueno, prepararAudio } from "@/lib/thunder-sound"
+import {
+  GARDEN_EVENT_RAIN, GARDEN_EVENT_STORM, GARDEN_EVENT_INCOME,
+  consumirLluviaPendiente, consumirTormentaPendiente, consumirIngresoPendiente,
+} from "@/lib/garden-events"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { OdometerAmount } from "@/components/ui/odometer-amount"
@@ -22,7 +30,6 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { userApi, loansApi, connectionsApi, WalletState } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
-import { getNextPaymentInfo } from "@/lib/payment-schedule"
 import { calculateGardenXP } from "@/lib/garden-xp"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
@@ -39,11 +46,14 @@ interface GardenLevel {
 
 const GARDEN_LEVELS: GardenLevel[] = [
   { level: 1, name: "Semilla",             image: "/garden/tierra.png",          xpRequired: 0 },
-  { level: 2, name: "Brote",               image: "/garden/brote.png",           xpRequired: 750 },
-  { level: 3, name: "Planta joven",        image: "/garden/arbol_pequeno.png",   xpRequired: 1500 },
-  { level: 4, name: "Árbol en crecimiento", image: "/garden/arbol_mediano.png",  xpRequired: 3000 },
-  { level: 5, name: "Árbol floreciente",   image: "/garden/arbol_grande.png",    xpRequired: 5000 },
-  { level: 6, name: "Jardín próspero",     image: "/garden/arbol_flores.png",    xpRequired: 8000 },
+  // Cada nivel pide más que el anterior (+1500, +2500, +4000, +6000). Con uso
+  // diario (racha + misiones) se llega al 2 en ~2 semanas, al 3 en ~1 mes y
+  // al último en varios meses de constancia.
+  { level: 2, name: "Brote",               image: "/garden/brote.png",           xpRequired: 1000 },
+  { level: 3, name: "Planta joven",        image: "/garden/arbol_pequeno.png",   xpRequired: 2500 },
+  { level: 4, name: "Árbol en crecimiento", image: "/garden/arbol_mediano.png",  xpRequired: 5000 },
+  { level: 5, name: "Árbol floreciente",   image: "/garden/arbol_grande.png",    xpRequired: 9000 },
+  { level: 6, name: "Jardín próspero",     image: "/garden/arbol_flores.png",    xpRequired: 15000 },
 ]
 
 function getGardenHealth(
@@ -95,14 +105,21 @@ function getGardenHealth(
   return Math.max(0, Math.min(100, health))
 }
 
-function getHealthLabel(h: number): string {
+/**
+ * Con obligaciones vencidas el jardín está "En tormenta" sin importar el
+ * puntaje — antes podía decir "Estable" (o incluso "Creciendo") mientras
+ * había cuotas sin pagar, contradiciendo lo que mostraba Obligaciones.
+ */
+function getHealthLabel(h: number, hayVencidas = false): string {
+  if (hayVencidas) return "En tormenta"
   if (h >= 85) return "Floreciendo"
   if (h >= 65) return "Creciendo"
   if (h >= 40) return "Estable"
   return "Necesita atención"
 }
 
-function getHealthEmoji(h: number): string {
+function getHealthEmoji(h: number, hayVencidas = false): string {
+  if (hayVencidas) return "⛈️"
   if (h >= 85) return "🌳"
   if (h >= 65) return "🌿"
   if (h >= 40) return "🌱"
@@ -132,21 +149,6 @@ function getGardenRecommendation(
 }
 
 /**
- * ¿Hay una deuda o gasto fijo sin pagar que vence en los próximos 3 días (o ya
- * vencido)? Reutiliza el mismo cálculo de "próxima fecha de pago" que ya usa
- * Obligaciones (payment-schedule.ts), así que ambas pantallas quedan consistentes.
- */
-function hasUpcomingUnpaidObligation(debts: Debt[], fixedExpenses: FixedExpense[]): boolean {
-  const dueSoon = (diasPago: string, pagadoEstePeriodo: boolean) => {
-    if (pagadoEstePeriodo) return false
-    const { status } = getNextPaymentInfo(diasPago, pagadoEstePeriodo)
-    return status === "proximo" || status === "vencido"
-  }
-  return debts.some((d) => d.estado === "activa" && dueSoon(d.diasPago, d.pagadoEstePeriodo)) ||
-    fixedExpenses.some((f) => dueSoon(f.fechaCorte, f.pagadoEstePeriodo))
-}
-
-/**
  * Clima financiero del jardín — capa puramente visual (sol/lluvia/nubes) que se
  * superpone al árbol sin tocar tu imagen. Ligado a eventos reales, no es un
  * estado fijo:
@@ -156,16 +158,26 @@ function hasUpcomingUnpaidObligation(debts: Debt[], fixedExpenses: FixedExpense[
  *   y para sola, no se queda lloviendo para siempre.
  * - Sol: estado neutro, todo en orden.
  */
-function getGardenWeather(hasUpcomingObligation: boolean, showRainCelebration: boolean): "sol" | "lluvia" | "nubes" {
-  if (hasUpcomingObligation) return "nubes"
+type GardenWeather = "sol" | "lluvia" | "nubes" | "tormenta"
+
+/**
+ * Tormenta: hay obligaciones VENCIDAS — rayos cada pocos segundos mientras se
+ * esté en el jardín. La lluvia del ahorro gana unos segundos sobre todo lo
+ * demás (antes las nubes le ganaban y el ahorro no se celebraba nunca si
+ * había un pago próximo).
+ */
+function getGardenWeather(hayVencidas: boolean, hayProximas: boolean, showRainCelebration: boolean): GardenWeather {
   if (showRainCelebration) return "lluvia"
+  if (hayVencidas) return "tormenta"
+  if (hayProximas) return "nubes"
   return "sol"
 }
 
-const WEATHER_META: Record<"sol" | "lluvia" | "nubes", { icon: string; label: string }> = {
+const WEATHER_META: Record<GardenWeather, { icon: string; label: string }> = {
   sol: { icon: "☀️", label: "Todo en orden" },
   lluvia: { icon: "🌧️", label: "¡Buen ahorro!" },
   nubes: { icon: "☁️", label: "Pago próximo" },
+  tormenta: { icon: "⛈️", label: "Pagos vencidos" },
 }
 
 /**
@@ -190,6 +202,7 @@ const GARDEN_PHRASES: Record<string, string[]> = {
   "Creciendo": ["Vamos bien, sigue así 🌿", "Un gasto hormiga menos hoy = más crecimiento", "Me gusta cómo vas esta semana"],
   "Estable": ["Podemos llegar más lejos juntos 🌱", "Un pequeño ahorro hoy ayuda bastante", "Sigamos construyendo el hábito"],
   "Necesita atención": ["Hace días que no me visitas... 🥺", "Necesito que registres algo hoy", "Mis hojas se sienten un poco tristes"],
+  "En tormenta": ["Tengo pagos vencidos encima... ⛈️", "Toca las nubes y te muestro qué falta", "Ponte al día y vuelve el sol ☀️"],
 }
 
 function useCyclePhrase(list: string[], intervalMs = 4500): string {
@@ -212,7 +225,7 @@ export default function JardinPage() {
   const { user: authUser } = useAuth()
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
   const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, loading: streakLoading } = useStreaks(incomeFrequency)
-  const { allocation } = usePeriodBudget()
+  const { periodData } = usePeriodBudget()
   const { budgetCategories } = useBudgetCategories()
 
   const [wallet, setWallet] = useState<WalletState>({
@@ -239,15 +252,30 @@ export default function JardinPage() {
     })
   }, [])
 
-  // ── Feedback del botón "Regar jardín" (splash + XP flotante antes de navegar) ──
-  const [watering, setWatering] = useState(false)
-  const handleWaterClick = () => {
-    setWatering(true)
-    setTimeout(() => {
-      setWatering(false)
-      router.push("/ahorro")
-    }, 600)
+  // ── Clima según obligaciones (vencidas → tormenta, próximas → nubes) ──────
+  const clima = useMemo(() => calcularClima(debts, fixedExpenses), [debts, fixedExpenses])
+  const hayVencidas = clima.vencidas.length > 0
+  const [climaOpen, setClimaOpen] = useState(false)
+  const [invitarOpen, setInvitarOpen] = useState(false)
+
+  // Sonido de los truenos — activado por defecto, se recuerda por dispositivo
+  const [sonidoOn, setSonidoOn] = useState(true)
+  useEffect(() => {
+    try { setSonidoOn(localStorage.getItem("kiri_garden_sound") !== "off") } catch { /* sin storage */ }
+    const unlock = () => prepararAudio()
+    window.addEventListener("pointerdown", unlock, { once: true })
+    return () => window.removeEventListener("pointerdown", unlock)
+  }, [])
+  const toggleSonido = () => {
+    prepararAudio()
+    setSonidoOn(v => {
+      try { localStorage.setItem("kiri_garden_sound", v ? "off" : "on") } catch { /* sin storage */ }
+      return !v
+    })
   }
+
+  // ── Feedback del botón "Regar jardín" (splash + XP flotante antes de navegar) ──
+  const handleWaterClick = () => router.push("/ahorro")
 
   // ── XP y nivel actual ─────────────────────────────────────────────────────
   // Mientras streakLoading es true, streakActual/xpFromMissions todavía valen 0
@@ -284,26 +312,51 @@ export default function JardinPage() {
   const xpProgress = xpForNext > 0 ? Math.min(100, Math.round((currentXP / xpForNext) * 100)) : 100
   const xpNeeded = Math.max(0, xpForNext - currentXP)
 
-  // ── Lluvia por ahorro reciente (mismo patrón que el aura de level-up: se
-  //    detecta el aumento comparando contra localStorage y se auto-oculta).
-  //    Mientras financeLoading es true, totalAhorrado todavía vale 0 (estado
-  //    inicial antes de que responda la API) — comparar en ese momento hacía
-  //    parecer un "aumento" en cada refresh y disparaba lluvia siempre. ──
+  // ── Lluvia por ahorro — la registra la capa de API al aportar a un
+  //    bolsillo (lib/garden-events.ts): si estás viendo el árbol llueve en el
+  //    momento; si no, llueve apenas entras. ──
   const [showRainCelebration, setShowRainCelebration] = useState(false)
+  const [rainMessage, setRainMessage] = useState<string | null>(null)
+  const rainTimer = useRef<number | null>(null)
+  const celebrarAhorro = (monto?: number) => {
+    setShowRainCelebration(true)
+    setRainMessage(monto ? `💧 Ahorraste ${formatAmount(monto)}. ¡Cae la lluvia del crecimiento!` : "💧 Ahorro registrado. ¡Cae la lluvia del crecimiento!")
+    if (rainTimer.current) window.clearTimeout(rainTimer.current)
+    rainTimer.current = window.setTimeout(() => { setShowRainCelebration(false); setRainMessage(null) }, 8000)
+  }
   useEffect(() => {
-    if (financeLoading) return
-    const LS_KEY = "kiri_garden_last_ahorro"
-    const savedAhorro = parseFloat(localStorage.getItem(LS_KEY) ?? "0")
-    if (totalAhorrado > savedAhorro) {
-      setShowRainCelebration(true)
-      const timer = setTimeout(() => setShowRainCelebration(false), 8000)
-      localStorage.setItem(LS_KEY, String(totalAhorrado))
-      return () => clearTimeout(timer)
+    const pendiente = consumirLluviaPendiente()
+    if (pendiente) window.setTimeout(() => celebrarAhorro(pendiente.monto), 900)
+    const onSaving = (e: Event) => {
+      consumirLluviaPendiente()
+      celebrarAhorro((e as CustomEvent<{ monto?: number }>).detail?.monto)
     }
-    if (savedAhorro !== totalAhorrado) {
-      localStorage.setItem(LS_KEY, String(totalAhorrado))
+    window.addEventListener(GARDEN_EVENT_RAIN, onSaving)
+    return () => window.removeEventListener(GARDEN_EVENT_RAIN, onSaving)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Ingreso registrado: sale el sol dorado y caen monedas ────────────────
+  const [showIncome, setShowIncome] = useState(false)
+  const [incomeMessage, setIncomeMessage] = useState<string | null>(null)
+  const incomeTimer = useRef<number | null>(null)
+  const celebrarIngreso = (monto?: number) => {
+    setShowIncome(true)
+    setIncomeMessage(monto ? `💰 Llegó tu ingreso de ${formatAmount(monto)}. ¡Sale el sol en tu jardín!` : "💰 Ingreso registrado. ¡Sale el sol en tu jardín!")
+    if (incomeTimer.current) window.clearTimeout(incomeTimer.current)
+    incomeTimer.current = window.setTimeout(() => { setShowIncome(false); setIncomeMessage(null) }, 6000)
+  }
+  useEffect(() => {
+    const pendiente = consumirIngresoPendiente()
+    if (pendiente) window.setTimeout(() => celebrarIngreso(pendiente.monto), 700)
+    const onIncome = (e: Event) => {
+      consumirIngresoPendiente()
+      celebrarIngreso((e as CustomEvent<{ monto?: number }>).detail?.monto)
     }
-  }, [totalAhorrado, financeLoading])
+    window.addEventListener(GARDEN_EVENT_INCOME, onIncome)
+    return () => window.removeEventListener(GARDEN_EVENT_INCOME, onIncome)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── "Fulano regó tu árbol" — mensajito flotante + lluvia después ──────────
   // Antes de esto, regar el jardín de un amigo no dejaba NADA visible para
@@ -320,7 +373,8 @@ export default function JardinPage() {
     setTimeout(() => {
       setWateredMessage(null)
       setShowRainCelebration(true)
-      setTimeout(() => setShowRainCelebration(false), 8000)
+      if (rainTimer.current) window.clearTimeout(rainTimer.current)
+      rainTimer.current = window.setTimeout(() => setShowRainCelebration(false), 8000)
     }, 3200)
   }
 
@@ -358,16 +412,23 @@ export default function JardinPage() {
   //    cuando registra el gasto, lo ve reaccionar en el momento.
   const [showStorm, setShowStorm] = useState(false)
   const [stormMessage, setStormMessage] = useState<string | null>(null)
+  const stormTimer = useRef<number | null>(null)
+  const dispararTormentaHormiga = (nombre?: string) => {
+    setStormMessage(nombre ? `🐜 Gasto hormiga: "${nombre}". La tormenta debilita el jardín` : "🐜 Gasto hormiga detectado. La tormenta debilita el jardín")
+    setShowStorm(true)
+    if (stormTimer.current) window.clearTimeout(stormTimer.current)
+    stormTimer.current = window.setTimeout(() => { setShowStorm(false); setStormMessage(null) }, 4500)
+  }
   useEffect(() => {
+    const pendiente = consumirTormentaPendiente()
+    if (pendiente) window.setTimeout(() => dispararTormentaHormiga(pendiente.nombre), 1100)
     const onImpulse = (e: Event) => {
-      const nombre = (e as CustomEvent<{ nombre?: string }>).detail?.nombre
-      setStormMessage(nombre ? `🐜 Registraste "${nombre}"` : "🐜 Gasto hormiga registrado")
-      setShowStorm(true)
-      const timer = setTimeout(() => { setShowStorm(false); setStormMessage(null) }, 4500)
-      return () => clearTimeout(timer)
+      consumirTormentaPendiente()
+      dispararTormentaHormiga((e as CustomEvent<{ nombre?: string }>).detail?.nombre)
     }
-    window.addEventListener("kiri:impulse-registered", onImpulse)
-    return () => window.removeEventListener("kiri:impulse-registered", onImpulse)
+    window.addEventListener(GARDEN_EVENT_STORM, onImpulse)
+    return () => window.removeEventListener(GARDEN_EVENT_STORM, onImpulse)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Préstamos sociales (solo ACTIVE donde soy borrower) — antes quedaban
@@ -394,62 +455,80 @@ export default function JardinPage() {
   // Verificar si tiene categorías de presupuesto configuradas
   const hasBudgetCategories = budgetCategories.length > 0
 
-  const gardenHealth = getGardenHealth(
+  // Cada obligación vencida resta salud (hasta 45 puntos): el árbol no puede
+  // verse sano con cuotas sin pagar.
+  const gardenHealth = Math.max(5, getGardenHealth(
     streakActual,
     wallet.cashBalance > 0,
     totalAhorrado,
     totalDeuda,
     debts.length > 0,
     hasBudgetCategories,
-  )
+  ) - (hayVencidas ? Math.min(45, 15 + 10 * clima.vencidas.length) : 0))
+  const healthLabel = getHealthLabel(gardenHealth, hayVencidas)
+  const healthEmoji = getHealthEmoji(gardenHealth, hayVencidas)
 
-  const gardenRecommendation = getGardenRecommendation(
-    wallet.cashBalance > 0,
-    totalAhorrado,
-    totalDeuda,
-    debts.length > 0,
-    hasBudgetCategories,
-    streakActual,
-  )
+  const gardenRecommendation = hayVencidas
+    ? `Tienes ${clima.vencidas.length} obligaci${clima.vencidas.length === 1 ? "ón vencida" : "ones vencidas"} por ${formatAmount(clima.totalVencido)}. Toca las nubes para verlas y ponte al día.`
+    : getGardenRecommendation(
+      wallet.cashBalance > 0,
+      totalAhorrado,
+      totalDeuda,
+      debts.length > 0,
+      hasBudgetCategories,
+      streakActual,
+    )
 
-  // Clima financiero (sol / lluvia / nubes) — ver getGardenWeather: nubes cuando hay
-  // una obligación por vencer en ≤3 días, lluvia unos segundos tras ahorrar, si no, sol.
-  const gardenWeather = getGardenWeather(
-    hasUpcomingUnpaidObligation(debts, fixedExpenses),
-    showRainCelebration,
-  )
+  // Clima financiero — ver getGardenWeather.
+  const gardenWeather = getGardenWeather(hayVencidas, clima.proximas.length > 0, showRainCelebration)
+  const cloudBadge = hayVencidas
+    ? `⚡ ${clima.vencidas.length} vencida${clima.vencidas.length === 1 ? "" : "s"} · toca aquí`
+    : clima.proximas.length > 0 ? `☁️ ${clima.proximas.length} por vencer · toca aquí` : null
 
-  // Libertad financiera
-  const freedomPct = totalDeuda > 0
-    ? Math.min(100, Math.round((totalAhorrado / (totalAhorrado + totalDeuda)) * 100))
-    : totalAhorrado > 0 ? 100 : 0
+  // ── Tu progreso general ─────────────────────────────────────────────────
+  // Antes: "Sueldo 100%" (barra llena con cualquier saldo), "Deudas 93%" (lo
+  // que FALTA, se leía como avance) y "Libertad financiera" = ahorro /
+  // (ahorro + deuda), que con cualquier crédito grande quedaba en 0% siempre.
+  // Ahora cada barra responde una pregunta concreta.
+  const ingresoPeriodo = periodData?.effectiveIncome ?? 0
+  const disponiblePct = ingresoPeriodo > 0
+    ? Math.min(100, Math.round((wallet.cashBalance / ingresoPeriodo) * 100))
+    : wallet.cashBalance > 0 ? 100 : 0
+  const savingsPct = realPocketsMeta > 0 ? Math.min(100, Math.round((totalAhorrado / realPocketsMeta) * 100)) : 0
+  const deudasActivas = debts.filter(d => d.estado === "activa")
+  const deudaOriginal = deudasActivas.reduce((a, d) => a + Number(d.montoTotal), 0)
+  const deudaSaldo = deudasActivas.reduce((a, d) => a + Number(d.saldoRestante ?? d.montoTotal), 0)
+  const deudaPagadaPct = deudaOriginal > 0 ? Math.max(0, Math.min(100, Math.round((1 - deudaSaldo / deudaOriginal) * 100))) : 0
+  // Colchón: cuántos meses de obligaciones podrías cubrir solo con tus ahorros
+  const gastoMensualObligaciones = deudasActivas.reduce((a, d) => a + (d.cuotaBase ?? d.cuotaPeriodo) * (d.frecuenciaPago === "quincenal" ? 2 : 1), 0)
+    + fixedExpenses.reduce((a, f) => a + Number(f.monto), 0)
+  const mesesColchon = gastoMensualObligaciones > 0 ? totalAhorrado / gastoMensualObligaciones : null
+  const COLCHON_META_MESES = 3
 
-  // Progreso por métrica (para barras)
-  // Sueldo: si tiene ingreso registrado, barra al 100%; si no, 0%
-  const salaryCoverage = wallet.cashBalance > 0 ? 100 : 0
-  // Ahorro: porcentaje de la meta real de los bolsillos, o relativo a un piso
-  // arbitrario si el usuario todavía no se ha puesto ninguna meta.
-  const savingsPct = totalAhorrado <= 0
-    ? 0
-    : realPocketsMeta > 0
-      ? Math.min(100, Math.round((totalAhorrado / realPocketsMeta) * 100))
-      : Math.min(100, Math.round((totalAhorrado / Math.max(totalAhorrado, 1000000)) * 100))
-  // Deuda: porcentaje pagado (inverso - cuánto falta)
-  const debtPct = (() => {
-    if (debts.length === 0) return 0
-    const totalOriginal = debts.reduce((a, d) => a + Number(d.montoTotal), 0)
-    if (totalOriginal <= 0) return 0
-    return Math.min(100, Math.round((totalDeuda / totalOriginal) * 100))
-  })()
-
-  // Consejo diario
-  const tips = [
-    "Registra tu sueldo real cada vez que lo recibas. Es la base para tomar mejores decisiones. 🌱",
-    "Pequeñas decisiones hoy, grandes logros mañana. Tu jardín lo agradece. 🌿",
-    "Cada peso que ahorras es una semilla para tu futuro. 🌳",
-    "Tu árbol crece con cada buena decisión financiera. ¡No pares! 💚",
-  ]
-  const dailyTip = tips[new Date().getDate() % tips.length]
+  // ── Consejo Kiri ────────────────────────────────────────────────────────
+  // Antes: una de 4 frases genéricas según el día del mes y un "Ver más
+  // consejos" que solo llevaba a Gestión. Ahora primero van los consejos que
+  // aplican a TU situación (con un botón para ir a resolverlo) y luego
+  // generales; "Otro consejo" los recorre aquí mismo.
+  const consejos = useMemo(() => {
+    const lista: { texto: string; href?: string; cta?: string }[] = []
+    if (hayVencidas) lista.push({ texto: `Tienes ${clima.vencidas.length} pago${clima.vencidas.length === 1 ? "" : "s"} vencido${clima.vencidas.length === 1 ? "" : "s"}. Empieza por el más antiguo: los atrasos suelen cobrar intereses de mora. ⛈️`, href: "/obligaciones", cta: "Pagar" })
+    if (clima.proximas.length > 0) lista.push({ texto: `${clima.proximas[0].nombre} vence pronto (${clima.proximas[0].etiqueta.toLowerCase()}). Separa ese dinero desde ya para no gastarlo. ☁️`, href: "/obligaciones", cta: "Ver" })
+    if (wallet.cashBalance <= 0) lista.push({ texto: "Registra tu sueldo real cuando lo recibas: es la base para que Kiri reparta tu dinero y veas el sol en tu jardín. ☀️", href: "/gestion?tab=billetera", cta: "Registrar" })
+    if (totalAhorrado <= 0) lista.push({ texto: "Aún no tienes ahorros. Empieza con poco: un bolsillo con una meta pequeña ya hace llover en tu jardín. 🌧️", href: "/ahorro", cta: "Ahorrar" })
+    if (mesesColchon !== null && mesesColchon < 1) lista.push({ texto: "Tu colchón de emergencia cubre menos de un mes de obligaciones. La meta sana son 3 meses. 🛡️", href: "/ahorro", cta: "Ahorrar" })
+    if (!hasBudgetCategories) lista.push({ texto: "Crea categorías de presupuesto y Kiri te avisará cuando estés cerca del límite en cada una. 📊", href: "/gestion", cta: "Crear" })
+    lista.push(
+      { texto: "Cuando pagues una deuda, escribe el saldo que te muestra el banco: Kiri calcula el interés real que pagaste. 🏦" },
+      { texto: "¿Le prestaste plata a alguien que no usa Kiri? Regístralo en Obligaciones → Me deben y recuérdale por WhatsApp. 🤝", href: "/obligaciones?tab=me_deben", cta: "Ver" },
+      { texto: "Los gastos hormiga de $5.000 al día suman $150.000 al mes. Anótalos todos, así ves a dónde se va tu plata. 🐜" },
+      { texto: "Invita a alguien con tu enlace: quedan conectados en Social y avanzas tus misiones. 💌" },
+      { texto: "Completa tus misiones diarias: la racha de días es lo que más hace crecer tu árbol. 🔥", href: "/misiones", cta: "Misiones" },
+    )
+    return lista
+  }, [hayVencidas, clima, wallet.cashBalance, totalAhorrado, mesesColchon, hasBudgetCategories])
+  const [consejoIdx, setConsejoIdx] = useState(0)
+  const consejo = consejos[consejoIdx % consejos.length]
 
   return (
     <>
@@ -470,13 +549,20 @@ export default function JardinPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex flex-1 sm:flex-none items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setClimaOpen(true)}
+            className={cn(
+              "flex flex-1 sm:flex-none items-center gap-2 bg-card border rounded-2xl px-3 py-2 text-left hover:bg-muted/40 transition-colors",
+              hayVencidas ? "border-red-500/40" : "border-border"
+            )}
+          >
             <span className="text-base leading-none shrink-0">{WEATHER_META[gardenWeather].icon}</span>
             <div className="text-right min-w-0">
               <p className="text-[8px] text-muted-foreground whitespace-nowrap">Clima financiero</p>
-              <p className="text-[11px] font-black whitespace-nowrap">{WEATHER_META[gardenWeather].label}</p>
+              <p className={cn("text-[11px] font-black whitespace-nowrap", hayVencidas && "text-red-500")}>{WEATHER_META[gardenWeather].label}</p>
             </div>
-          </div>
+          </button>
           <div className="flex flex-1 sm:flex-none items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2">
             <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <div className="text-right min-w-0">
@@ -487,21 +573,23 @@ export default function JardinPage() {
         </div>
       </header>
 
-      {/* ═══ JARDÍN PRINCIPAL ═══ */}
+      {/* ═══ JARDÍN PRINCIPAL ═══
+          Un solo árbol (antes había uno para móvil y otro para escritorio
+          montados a la vez: los rayos y truenos sonaban doble) y solo lo
+          esencial: estado, salud, árbol y dos acciones. El progreso va aparte. */}
       <Card className="border-none shadow-xl rounded-3xl overflow-hidden relative">
-        <CardContent className="p-5 lg:p-6 relative">
-
-          {/* ── Mobile: Estado (ancho completo) + Árbol centrado abajo ── */}
-          <div className="lg:hidden">
-            <div className="space-y-1">
-              <h2 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                {getHealthLabel(gardenHealth)} {getHealthEmoji(gardenHealth)}
+        <CardContent className="p-5 lg:p-8 relative">
+          {/* Mismo diseño en celular y PC: estado → árbol grande al centro →
+              salud → acciones (Regar a la izquierda, Invitar a la derecha). */}
+          <div className="grid gap-4">
+            <div>
+              <h2 className={cn("text-2xl lg:text-3xl font-black flex items-center gap-2 whitespace-nowrap", hayVencidas ? "text-slate-600 dark:text-slate-300" : "text-emerald-600 dark:text-emerald-400")}>
+                {healthLabel} {healthEmoji}
               </h2>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                {gardenRecommendation}
-              </p>
+              <p className="text-[11px] lg:text-xs text-muted-foreground mt-1">{gardenRecommendation}</p>
             </div>
-            <div className="flex justify-center mt-2">
+
+            <div className="flex justify-center items-center">
               {dataReady ? (
                 <GardenTreeVisual
                   currentLevelIdx={currentLevelIdx}
@@ -510,234 +598,76 @@ export default function JardinPage() {
                   gardenWeather={gardenWeather}
                   streakActual={streakActual}
                   showLevelUpGlow={showLevelUpGlow}
-                  healthLabel={getHealthLabel(gardenHealth)}
-                  sizeClass="w-[220px] h-[220px]"
+                  healthLabel={healthLabel}
+                  sizeClass="w-[250px] h-[250px] lg:w-[320px] lg:h-[320px]"
                   wateredMessage={wateredMessage}
                   showStorm={showStorm}
                   stormMessage={stormMessage}
+                  rainMessage={rainMessage}
+                  showIncome={showIncome}
+                  incomeMessage={incomeMessage}
+                  persistentStorm={gardenWeather === "tormenta"}
+                  soundOn={sonidoOn}
+                  onToggleSound={toggleSonido}
+                  cloudBadge={cloudBadge}
+                  onCloudsClick={() => setClimaOpen(true)}
                 />
               ) : (
-                <div className="w-[220px] h-[220px] rounded-full bg-muted/30 animate-pulse" />
+                <div className="w-[250px] h-[250px] lg:w-[320px] lg:h-[320px] rounded-full bg-muted/30 animate-pulse" />
               )}
             </div>
-          </div>
 
-          {/* ── Mobile: Salud del jardín ── */}
-          <div className="lg:hidden mt-4">
-            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-3 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <Heart className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="text-xs font-bold">Salud del jardín</span>
-              </div>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">♥ {gardenHealth}%</p>
-              <Progress value={gardenHealth} className="h-1.5" indicatorClassName="bg-emerald-500" />
-              <p className="text-[8px] text-muted-foreground">
-                Sigue así para alcanzar tu máximo potencial financiero.
-              </p>
-            </div>
-          </div>
-
-          {/* ── Mobile: Botón regar ── */}
-          <div className="lg:hidden mt-4 relative inline-block w-full">
-            <Button
-              onClick={handleWaterClick}
-              className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 rounded-2xl gap-2 h-12 font-bold"
-            >
-              <Droplets className="h-5 w-5" /> Regar jardín
-              <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full">+10 XP</span>
-            </Button>
-            {watering && (
-              <div className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none">
-                <span className="block text-xs font-bold text-emerald-700 dark:text-emerald-300" style={{ animation: "kiriFloatUp .6s ease-out forwards" }}>
-                  +10 XP 💧
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5 font-bold">
+                  <Heart className={cn("h-3.5 w-3.5", hayVencidas ? "text-slate-500" : "text-emerald-600 dark:text-emerald-400")} /> Salud del jardín
                 </span>
+                <span className={cn("font-black", hayVencidas ? "text-slate-600 dark:text-slate-300" : "text-emerald-600 dark:text-emerald-400")}>{gardenHealth}%</span>
               </div>
-            )}
-          </div>
-
-          {/* ── Desktop: Layout 3 columnas ── */}
-          <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-6 items-start">
-
-            {/* ── Izquierda: Estado + Salud + Regar ── */}
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-3xl font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                  {getHealthLabel(gardenHealth)} {getHealthEmoji(gardenHealth)}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-1.5 max-w-[280px]">
-                  {gardenRecommendation}
-                </p>
-              </div>
-
-              {/* Salud del jardín */}
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 space-y-2 max-w-[240px]">
-                <div className="flex items-center gap-2">
-                  <Heart className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-sm font-bold">Salud del jardín</span>
-                </div>
-                <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400">♥ {gardenHealth}%</p>
-                <Progress value={gardenHealth} className="h-2" indicatorClassName="bg-emerald-500" />
-                <p className="text-[9px] text-muted-foreground">
-                  Sigue así para alcanzar tu máximo potencial financiero.
-                </p>
-              </div>
-
-              {/* Botón regar */}
-              <div className="relative inline-block">
-                <Button
-                  onClick={handleWaterClick}
-                  className="bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 rounded-2xl gap-2 h-12 px-5 font-bold"
-                >
-                  <Droplets className="h-5 w-5" /> Regar jardín
-                  <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full">+10 XP</span>
-                </Button>
-                {watering && (
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none">
-                    <span className="block text-xs font-bold text-emerald-700 dark:text-emerald-300" style={{ animation: "kiriFloatUp .6s ease-out forwards" }}>
-                      +10 XP 💧
-                    </span>
-                  </div>
-                )}
-              </div>
+              <Progress value={gardenHealth} className="h-1.5" indicatorClassName={hayVencidas ? "bg-slate-400" : "bg-emerald-500"} />
             </div>
 
-            {/* ── Centro: Árbol ── */}
-            <div className="flex justify-center">
-              {dataReady ? (
-                <GardenTreeVisual
-                  currentLevelIdx={currentLevelIdx}
-                  currentLevel={currentLevel}
-                  gardenHealth={gardenHealth}
-                  gardenWeather={gardenWeather}
-                  streakActual={streakActual}
-                  showLevelUpGlow={showLevelUpGlow}
-                  healthLabel={getHealthLabel(gardenHealth)}
-                  sizeClass="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px]"
-                  wateredMessage={wateredMessage}
-                  showStorm={showStorm}
-                  stormMessage={stormMessage}
-                />
-              ) : (
-                <div className="w-[200px] h-[220px] lg:w-[260px] lg:h-[280px] rounded-full bg-muted/30 animate-pulse" />
-              )}
-            </div>
-
-            {/* ── Derecha: Progreso general (desktop) ── */}
-            <div className="hidden lg:block bg-card border border-border rounded-2xl p-4 space-y-3">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                Tu progreso general <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              </h3>
-              <div className="space-y-3">
-                {/* Sueldo real */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-xs">Sueldo real disponible</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{salaryCoverage}%</span>
-                  </div>
-                  <OdometerAmount value={wallet.cashBalance} formatAmount={formatAmount} className="text-sm font-black text-emerald-600 dark:text-emerald-400" />
-                  <Progress value={salaryCoverage} className="h-1.5" indicatorClassName="bg-emerald-500" />
-                </div>
-                {/* Ahorros */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <PiggyBank className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <span className="text-xs">Ahorros totales</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{savingsPct}%</span>
-                  </div>
-                  <p className="text-sm font-black text-blue-600 dark:text-blue-400">{formatAmount(totalAhorrado)}</p>
-                  <Progress value={savingsPct} className="h-1.5" indicatorClassName="bg-blue-500" />
-                </div>
-                {/* Deudas */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
-                      <span className="text-xs">Deudas totales</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{debtPct}%</span>
-                  </div>
-                  <p className="text-sm font-black text-red-600 dark:text-red-400">{formatAmount(totalDeuda)}</p>
-                  <Progress value={debtPct} className="h-1.5" indicatorClassName="bg-red-500" />
-                </div>
-                {/* Libertad financiera */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      <span className="text-xs">Libertad financiera</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{freedomPct}%</span>
-                  </div>
-                  <p className="text-sm font-black text-purple-600 dark:text-purple-400">{freedomPct}%</p>
-                  <Progress value={freedomPct} className="h-1.5" indicatorClassName="bg-purple-500" />
-                </div>
-              </div>
-              <Link href="/balance" className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground pt-1 border-t border-border/50">
-                Ver detalle completo <ChevronRight className="h-3 w-3" />
-              </Link>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <GardenActions onWater={handleWaterClick} onInvite={() => setInvitarOpen(true)} />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* ── Mobile: Tu progreso general (card separada debajo) ── */}
-      <Card className="lg:hidden border-none bg-card shadow-sm rounded-2xl">
-        <CardContent className="p-4 space-y-3">
+      {/* ═══ TU PROGRESO GENERAL ═══ */}
+      <Card className="border-none bg-card shadow-sm rounded-2xl">
+        <CardContent className="p-4 lg:p-5 space-y-4">
           <h3 className="text-sm font-bold flex items-center gap-2">
             Tu progreso general <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
           </h3>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-xs">Sueldo real disponible</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground">{salaryCoverage}%</span>
-              </div>
-              <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatAmount(wallet.cashBalance)}</p>
-              <Progress value={salaryCoverage} className="h-1.5" indicatorClassName="bg-emerald-500" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <PiggyBank className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-xs">Ahorros totales</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground">{savingsPct}%</span>
-              </div>
-              <p className="text-sm font-black text-blue-600 dark:text-blue-400">{formatAmount(totalAhorrado)}</p>
-              <Progress value={savingsPct} className="h-1.5" indicatorClassName="bg-blue-500" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  <span className="text-xs">Deudas totales</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground">{debtPct}%</span>
-              </div>
-              <p className="text-sm font-black text-red-600 dark:text-red-400">{formatAmount(totalDeuda)}</p>
-              <Progress value={debtPct} className="h-1.5" indicatorClassName="bg-red-500" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  <span className="text-xs">Libertad financiera</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground">{freedomPct}%</span>
-              </div>
-              <p className="text-sm font-black text-purple-600 dark:text-purple-400">{freedomPct}%</p>
-              <Progress value={freedomPct} className="h-1.5" indicatorClassName="bg-purple-500" />
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Metrica
+              icon={Wallet} color="text-emerald-600 dark:text-emerald-400" barra="bg-emerald-500"
+              titulo="Disponible" valor={<OdometerAmount value={wallet.cashBalance} formatAmount={formatAmount} className="text-sm font-black text-emerald-600 dark:text-emerald-400" />}
+              pct={disponiblePct}
+              detalle={ingresoPeriodo > 0 ? `${disponiblePct}% de tu ingreso del periodo` : "Registra tu ingreso para compararlo"}
+            />
+            <Metrica
+              icon={PiggyBank} color="text-blue-600 dark:text-blue-400" barra="bg-blue-500"
+              titulo="Ahorros" valor={formatAmount(totalAhorrado)}
+              pct={savingsPct}
+              detalle={realPocketsMeta > 0 ? `${savingsPct}% de tu meta de ${formatAmount(realPocketsMeta)}` : "Ponle una meta a tus bolsillos"}
+            />
+            <Metrica
+              icon={TrendingDown} color="text-red-600 dark:text-red-400" barra="bg-emerald-500"
+              titulo="Deudas" valor={formatAmount(totalDeuda)}
+              pct={deudaPagadaPct}
+              detalle={deudasActivas.length > 0 ? `Llevas ${deudaPagadaPct}% pagado` : "Sin deudas 🎉"}
+            />
+            <Metrica
+              icon={ShieldCheck} color="text-purple-600 dark:text-purple-400" barra="bg-purple-500"
+              titulo="Colchón de emergencia"
+              valor={textoColchon(mesesColchon)}
+              pct={mesesColchon === null ? 0 : Math.min(100, Math.round((mesesColchon / COLCHON_META_MESES) * 100))}
+              detalle={mesesColchon === null ? "Registra tus obligaciones para calcularlo" : `Meses de obligaciones que cubren tus ahorros · meta ${COLCHON_META_MESES}`}
+            />
           </div>
-          <Link href="/balance" className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground pt-1 border-t border-border/50">
+          <Link href="/balance" className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground pt-2 border-t border-border/50">
             Ver detalle completo <ChevronRight className="h-3 w-3" />
           </Link>
         </CardContent>
@@ -853,16 +783,148 @@ export default function JardinPage() {
       <Card className="border-none bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
         <CardContent className="px-5 py-3 flex items-center gap-3">
           <Lightbulb className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <p className="text-[11px] text-muted-foreground flex-1">
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">Consejo Kiri:</span> {dailyTip}
+          <p key={consejoIdx} className="text-[11px] text-muted-foreground flex-1" style={{ animation: "kiriBubblePop .4s ease" }}>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">Consejo Kiri:</span> {consejo.texto}
           </p>
-          <Link href="/gestion" className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0 flex items-center gap-1">
-            Ver más consejos <ChevronRight className="h-3 w-3" />
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {consejo.href && (
+              <Link href={consejo.href} className="text-[10px] font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg px-2.5 py-1">
+                {consejo.cta}
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setConsejoIdx(i => i + 1)}
+              className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+            >
+              Otro consejo <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
         </CardContent>
       </Card>
+
+      <ClimaObligacionesModal
+        open={climaOpen}
+        onClose={() => setClimaOpen(false)}
+        vencidas={clima.vencidas}
+        proximas={clima.proximas}
+        formatAmount={formatAmount}
+        onIr={() => { setClimaOpen(false); router.push("/obligaciones") }}
+      />
+      <InviteLinkModal open={invitarOpen} onClose={() => setInvitarOpen(false)} />
     </div>
     </>
+  )
+}
+
+// ─── Acciones del jardín (regar = ir a ahorrar, invitar = enlace) ─────────────
+
+function GardenActions({ onWater, onInvite }: { onWater: () => void; onInvite: () => void }) {
+  return (
+    <>
+      <Button
+        onClick={onWater}
+        className="h-12 px-5 bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 rounded-2xl gap-2 font-bold"
+      >
+        <Droplets className="h-5 w-5" /> Regar jardín
+      </Button>
+      <Button
+        onClick={onInvite}
+        variant="outline"
+        className="h-12 px-4 rounded-2xl gap-1.5 font-bold border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10"
+      >
+        <UserPlus className="h-5 w-5" /> Invitar
+      </Button>
+    </>
+  )
+}
+
+/** "—", "Menos de 1 día", "12 días", "1.5 meses"… */
+function textoColchon(meses: number | null): string {
+  if (meses === null) return "—"
+  if (meses < 1) {
+    const dias = Math.floor(meses * 30)
+    return dias < 1 ? "Menos de 1 día" : `${dias} día${dias === 1 ? "" : "s"}`
+  }
+  const m = meses < 10 ? Math.round(meses * 10) / 10 : Math.round(meses)
+  return `${m} ${m === 1 ? "mes" : "meses"}`
+}
+
+function Metrica({ icon: Icon, color, barra, titulo, valor, pct, detalle }: {
+  icon: typeof Wallet
+  color: string
+  barra: string
+  titulo: string
+  valor: React.ReactNode
+  pct: number
+  detalle: string
+}) {
+  return (
+    <div className="space-y-1 min-w-0">
+      <div className="flex items-center gap-2">
+        <Icon className={cn("h-4 w-4 shrink-0", color)} />
+        <span className="text-xs">{titulo}</span>
+      </div>
+      {typeof valor === "string" ? <p className={cn("text-sm font-black", color)}>{valor}</p> : valor}
+      <Progress value={pct} className="h-1.5" indicatorClassName={barra} />
+      <p className="text-[10px] text-muted-foreground">{detalle}</p>
+    </div>
+  )
+}
+
+// ─── Modal del clima: qué está vencido y qué vence pronto ─────────────────────
+
+function ClimaObligacionesModal({ open, onClose, vencidas, proximas, formatAmount, onIr }: {
+  open: boolean
+  onClose: () => void
+  vencidas: ObligacionClima[]
+  proximas: ObligacionClima[]
+  formatAmount: (n: number) => string
+  onIr: () => void
+}) {
+  const Fila = ({ o, color }: { o: ObligacionClima; color: string }) => (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+      <span className="text-base shrink-0">{o.tipo === "deuda" ? "🏦" : "🏠"}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold truncate">{o.nombre}</p>
+        <p className={cn("text-[10px] font-semibold", color)}>{o.etiqueta}</p>
+      </div>
+      <p className="text-xs font-black shrink-0">{formatAmount(o.monto)}</p>
+    </div>
+  )
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto overflow-x-hidden [&>*]:min-w-0">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {vencidas.length > 0 ? <CloudLightning className="h-5 w-5 text-red-500" /> : <CalendarClock className="h-5 w-5 text-amber-500" />}
+            El clima de tus obligaciones
+          </DialogTitle>
+          <DialogDescription>
+            {vencidas.length > 0
+              ? "La tormenta sigue mientras haya pagos vencidos. Ponte al día y vuelve el sol ☀️"
+              : proximas.length > 0 ? "Nada vencido. Estos pagos se acercan:" : "¡Todo al día! No hay pagos vencidos ni próximos ☀️"}
+          </DialogDescription>
+        </DialogHeader>
+        {vencidas.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-wide text-red-500">⚡ Vencidas ({vencidas.length})</p>
+            {vencidas.map(o => <Fila key={o.key} o={o} color="text-red-500" />)}
+          </div>
+        )}
+        {proximas.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-wide text-amber-600">☁️ Próximas a vencer ({proximas.length})</p>
+            {proximas.map(o => <Fila key={o.key} o={o} color="text-amber-600" />)}
+          </div>
+        )}
+        {(vencidas.length > 0 || proximas.length > 0) && (
+          <Button onClick={onIr} className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold">
+            Ir a pagar en Obligaciones
+          </Button>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -976,11 +1038,19 @@ function GardenTreeVisual({
   wateredMessage,
   showStorm,
   stormMessage,
+  rainMessage,
+  showIncome = false,
+  incomeMessage,
+  persistentStorm = false,
+  soundOn = true,
+  onToggleSound,
+  cloudBadge,
+  onCloudsClick,
 }: {
   currentLevelIdx: number
   currentLevel: GardenLevel
   gardenHealth: number
-  gardenWeather: "sol" | "lluvia" | "nubes"
+  gardenWeather: GardenWeather
   streakActual: number
   showLevelUpGlow: boolean
   healthLabel: string
@@ -993,6 +1063,19 @@ function GardenTreeVisual({
    * rayo, vibración; el padre decide cuándo empieza/termina. */
   showStorm?: boolean
   stormMessage?: string | null
+  /** "Ahorro registrado…" — abajo del árbol mientras dura la lluvia. */
+  rainMessage?: string | null
+  /** Ingreso registrado: sol dorado y monedas cayendo unos segundos. */
+  showIncome?: boolean
+  incomeMessage?: string | null
+  /** Obligaciones vencidas: nubes oscuras y rayos cada pocos segundos. */
+  persistentStorm?: boolean
+  soundOn?: boolean
+  onToggleSound?: () => void
+  /** Texto de la píldora bajo las nubes ("⚡ 2 vencidas · toca aquí"). */
+  cloudBadge?: string | null
+  /** Tocar las nubes abre el detalle de vencidas / próximas. */
+  onCloudsClick?: () => void
 }) {
   const [leaves, setLeaves] = useState<{ id: number; x: number; delay: number }[]>([])
   const leafIdRef = useRef(0)
@@ -1004,6 +1087,59 @@ function GardenTreeVisual({
   // (más partículas + un emoji que flota y se desvanece). Convive con la
   // lluvia/tormenta porque anima un elemento propio, independiente del clima.
   const tapControls = useAnimationControls()
+
+  // ── Rayos ────────────────────────────────────────────────────────────────
+  // Cada golpe: destello + rayo + sacudida de la escena + el árbol se tiñe
+  // de color tormenta, y ~0.3-0.8 s después suena el trueno (como la luz
+  // llega antes que el sonido). Con obligaciones vencidas caen cada 5-9 s
+  // mientras la persona esté en el jardín; el gasto hormiga dispara dos.
+  const shakeControls = useAnimationControls()
+  const [bolt, setBolt] = useState<{ id: number; left: number } | null>(null)
+  const boltIdRef = useRef(0)
+  const soundRef = useRef(soundOn)
+  soundRef.current = soundOn
+  const strike = () => {
+    const id = ++boltIdRef.current
+    setBolt({ id, left: 30 + Math.random() * 40 })
+    window.setTimeout(() => setBolt(b => (b?.id === id ? null : b)), 1100)
+    shakeControls.start({ x: [0, -5, 5, -4, 4, -2, 2, 0] }, { duration: 0.55, ease: "easeInOut" })
+    if (soundRef.current) window.setTimeout(() => tocarTrueno(0.7 + Math.random() * 0.3), 300 + Math.random() * 500)
+  }
+  const strikeRef = useRef(strike)
+  strikeRef.current = strike
+
+  useEffect(() => {
+    if (!persistentStorm || gardenWeather !== "tormenta") return
+    let timer: number
+    const loop = (delay: number) => {
+      timer = window.setTimeout(() => {
+        if (!document.hidden) strikeRef.current()
+        loop(5000 + Math.random() * 4000)
+      }, delay)
+    }
+    loop(1400)
+    return () => window.clearTimeout(timer)
+  }, [persistentStorm, gardenWeather])
+
+  useEffect(() => {
+    if (!showStorm) return
+    strikeRef.current()
+    const t = window.setTimeout(() => strikeRef.current(), 1700)
+    return () => window.clearTimeout(t)
+  }, [showStorm])
+
+  // Monedas del ingreso — posiciones/tiempos al azar, una vez por montaje
+  const coins = useMemo(() =>
+    Array.from({ length: 14 }, () => ({
+      left: 8 + Math.random() * 84,
+      delay: Math.random() * 1.4,
+      duration: 1.6 + Math.random() * 0.8,
+      rotate: (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 360),
+      size: 14 + Math.random() * 8,
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  [])
+
   const [tapBursts, setTapBursts] = useState<{ id: number; x: number; y: number; special: boolean; emoji: string }[]>([])
   const tapIdRef = useRef(0)
   const TAP_EMOJIS = ["💚", "✨", "🌟"]
@@ -1138,15 +1274,17 @@ function GardenTreeVisual({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   [])
 
+  const stormVisual = showStorm || (persistentStorm && gardenWeather === "tormenta")
   const filterStyle = moodFilter(gardenHealth)
+    + (bolt || showStorm ? " sepia(.35) saturate(1.3) hue-rotate(-8deg) brightness(.82)" : showIncome ? " brightness(1.12) saturate(1.15)" : stormVisual ? " saturate(.85) brightness(.9)" : "")
   const imgClass = cn(sizeClass, "object-contain")
 
   return (
     <div className="flex flex-col items-center gap-1.5">
       {/* Altura reservada fija: la frase cambia de largo (1-2 líneas) pero el
           árbol de abajo nunca se mueve, sin importar qué tan corta o larga sea. */}
-      <div className="h-12 flex items-center justify-center">
-        {phrase && (
+      <div className={cn("flex items-center justify-center", cloudBadge ? "h-2" : "h-12")}>
+        {phrase && !cloudBadge && (
           <div
             key={phrase}
             className="max-w-[190px] text-center text-[10px] text-foreground bg-card border border-emerald-500/30 rounded-xl px-3 py-1.5 shadow-sm backdrop-blur-sm line-clamp-2"
@@ -1161,9 +1299,11 @@ function GardenTreeVisual({
           asomen sin quedar cortadas por el overflow-hidden de la Card.
           La vibración de la tormenta va acá (mueve toda la escena, no solo
           una capa) para que se sienta como un temblor real. */}
-      <div
+      <div style={{ perspective: 1000 }}>
+      <div className="kiri-scene-tilt" style={{ animation: "kiriSceneTilt 9s ease-in-out infinite" }}>
+      <motion.div
         className="relative flex items-center justify-center pt-6"
-        style={showStorm ? { animation: "kiriStormShake 0.5s ease-in-out 2" } : undefined}
+        animate={shakeControls}
       >
         {/* "Fulano regó tu árbol" — arriba de todo (z-20, por encima del
             clima y del árbol) para que se lea claro mientras aparece y
@@ -1229,7 +1369,32 @@ function GardenTreeVisual({
 
         {/* Clima financiero — capa sol/lluvia/nubes, siempre detrás del árbol (z-10, mismo
             nivel, el árbol pinta después y queda al frente). */}
-        {gardenWeather === "sol" && !showStorm && <GardenSun />}
+        {((gardenWeather === "sol" && !stormVisual) || showIncome) && <GardenSun />}
+        {/* Ahorro: aro verde que se expande desde la base + destellos */}
+        {gardenWeather === "lluvia" && !showStorm && (
+          <>
+            {[0, 1].map(i => (
+              <div
+                key={`ring-${i}`}
+                className="absolute bottom-2 left-1/2 z-[6] w-3/5 h-10 rounded-full pointer-events-none"
+                style={{
+                  background: "radial-gradient(closest-side, rgba(51,209,122,.55), rgba(51,209,122,0))",
+                  animation: `kiriGlowRing 2.2s ease-out ${i * 1.1}s 2 both`,
+                }}
+              />
+            ))}
+            {levelUpSparkles.map((sp, i) => (
+              <motion.span
+                key={`sav-${i}`}
+                className="absolute left-1/2 top-1/2 z-30 w-1.5 h-1.5 rounded-full bg-emerald-300 pointer-events-none"
+                style={{ boxShadow: "0 0 8px 3px rgba(110,231,183,0.85)" }}
+                initial={{ x: 0, y: 0, opacity: 0 }}
+                animate={{ x: [0, sp.dx], y: [0, sp.dy], opacity: [0, 1, 0], scale: [0.4, 1, 0.4] }}
+                transition={{ duration: 1.2, delay: 0.3 + (i % 4) * 0.08, ease: "easeOut" }}
+              />
+            ))}
+          </>
+        )}
         {gardenWeather === "lluvia" && !showStorm && (
           <div className="absolute top-1 inset-x-0 h-24 overflow-hidden z-10 pointer-events-none">
             {rainDrops.map((d, i) => (
@@ -1246,8 +1411,13 @@ function GardenTreeVisual({
             ))}
           </div>
         )}
-        {gardenWeather === "nubes" && !showStorm && (
-          <div className="absolute -top-4 inset-x-0 z-10 flex justify-center items-start gap-1 pointer-events-none">
+        {(gardenWeather === "nubes" || (gardenWeather === "lluvia" && cloudBadge)) && !showStorm && (
+          <div
+            className="absolute -top-4 inset-x-0 z-20 flex justify-center items-start gap-1 cursor-pointer"
+            onClick={onCloudsClick}
+            role="button"
+            aria-label="Ver obligaciones próximas"
+          >
             {[
               { w: "w-14", top: "mt-1", opacity: "opacity-70" },
               { w: "w-20", top: "mt-0", opacity: "opacity-90" },
@@ -1268,9 +1438,14 @@ function GardenTreeVisual({
         {/* ── Tormenta de gasto hormiga — nubes oscurecidas + rayo + flash +
             lluvia oscura. Reemplaza cualquier clima normal mientras dura (4.5s),
             sin hormigas dibujadas: el mensaje de abajo ya dice qué pasó. */}
-        {showStorm && (
+        {stormVisual && (
           <>
-            <div className="absolute -top-4 inset-x-0 z-10 flex justify-center items-start gap-1 pointer-events-none">
+            <div
+              className="absolute -top-4 inset-x-0 z-20 flex justify-center items-start gap-1 cursor-pointer"
+              onClick={onCloudsClick}
+              role="button"
+              aria-label="Ver obligaciones vencidas"
+            >
               {[
                 { w: "w-16", top: "mt-1" },
                 { w: "w-24", top: "-mt-1" },
@@ -1305,16 +1480,71 @@ function GardenTreeVisual({
                 />
               ))}
             </div>
-            <div
-              className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 text-2xl pointer-events-none"
-              style={{ animation: "kiriBoltFlash 2.2s ease-in-out 2" }}
+          </>
+        )}
+
+        {/* Un rayo por golpe (ver strike) */}
+        {bolt && (
+          <>
+            <svg
+              key={`bolt-${bolt.id}`}
+              viewBox="0 0 24 60"
+              className="absolute top-2 z-30 h-24 w-10 pointer-events-none"
+              style={{ left: `${bolt.left}%`, animation: "kiriBoltStrike 1.1s ease-out forwards", filter: "drop-shadow(0 0 8px rgba(253,224,71,.9))" }}
+              aria-hidden="true"
             >
-              ⚡
-            </div>
+              <path d="M14 0 L4 30 L12 30 L6 60 L22 22 L13 22 L20 0 Z" fill="#fde047" stroke="#fef9c3" strokeWidth="1" />
+            </svg>
             <div
+              key={`flash-${bolt.id}`}
               className="absolute -inset-6 z-40 rounded-3xl bg-slate-100 pointer-events-none"
-              style={{ animation: "kiriLightningFlash 2.2s ease-out 2" }}
+              style={{ animation: "kiriLightningFlash 1.1s ease-out 1" }}
             />
+          </>
+        )}
+
+        {/* Píldora bajo las nubes: invita a tocarlas */}
+        {cloudBadge && (stormVisual || gardenWeather === "nubes") && onCloudsClick && (
+          <button
+            type="button"
+            onClick={onCloudsClick}
+            className={cn(
+              "absolute top-9 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[9px] font-black shadow-md border",
+              stormVisual ? "bg-slate-900/90 text-amber-200 border-amber-400/40" : "bg-card/95 text-amber-700 dark:text-amber-300 border-amber-400/40"
+            )}
+          >
+            {cloudBadge}
+          </button>
+        )}
+
+        {/* Ingreso: resplandor dorado detrás del árbol + monedas que caen */}
+        {showIncome && (
+          <>
+            <motion.div
+              className="absolute inset-0 z-[4] rounded-full pointer-events-none"
+              style={{ background: "radial-gradient(circle, rgba(251,191,36,0.45) 0%, rgba(251,191,36,0.12) 45%, transparent 70%)", filter: "blur(14px)" }}
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: [0, 1, 0.8, 1, 0], scale: [0.6, 1.15, 1, 1.1, 1.2] }}
+              transition={{ duration: 5.5, ease: "easeInOut" }}
+            />
+            <div className="absolute inset-x-0 top-0 h-full overflow-hidden z-30 pointer-events-none">
+              {coins.map((c, i) => (
+                <motion.span
+                  key={`coin-${i}`}
+                  className="absolute top-0 flex items-center justify-center rounded-full font-black text-amber-900"
+                  style={{
+                    left: `${c.left}%`, width: c.size, height: c.size, fontSize: c.size * 0.55,
+                    background: "radial-gradient(circle at 35% 30%, #fef3c7 0%, #fbbf24 55%, #d97706 100%)",
+                    boxShadow: "0 0 6px rgba(251,191,36,.7)",
+                  }}
+                  initial={{ y: -24, opacity: 0, rotateY: 0 }}
+                  animate={{ y: [-24, 240], opacity: [0, 1, 1, 0], rotateY: c.rotate }}
+                  transition={{ duration: c.duration, delay: c.delay, ease: "easeIn", repeat: 1 }}
+                >
+                  $
+                </motion.span>
+              ))}
+            </div>
           </>
         )}
 
@@ -1325,7 +1555,7 @@ function GardenTreeVisual({
         <div
           key={currentLevelIdx}
           className="relative z-10 -ml-4 lg:-ml-6 cursor-pointer select-none"
-          style={{ animation: "kiriTreeGrowIn .6s cubic-bezier(.34,1.56,.64,1) both" }}
+          style={{ animation: "kiriTreeBounceIn .95s cubic-bezier(.34,1.56,.64,1) both", transformOrigin: "bottom center" }}
           onPointerDown={handleTreeTap}
         >
           {/* Rebote de resorte al tocar — elemento propio, no interfiere con
@@ -1408,6 +1638,41 @@ function GardenTreeVisual({
             {stormMessage}
           </div>
         )}
+
+        {/* Ahorro: mensaje abajo mientras llueve */}
+        {incomeMessage && !stormMessage && (
+          <div
+            key={incomeMessage}
+            className="absolute -bottom-3 left-1/2 z-40 whitespace-nowrap pointer-events-none rounded-full border border-amber-400/40 bg-slate-900/90 px-3.5 py-1.5 text-[11px] font-bold text-amber-100"
+            style={{ animation: "kiriToastPop 4.3s ease-out forwards", boxShadow: "0 0 16px 2px rgba(251,191,36,0.4)" }}
+          >
+            {incomeMessage}
+          </div>
+        )}
+        {rainMessage && !stormMessage && !incomeMessage && (
+          <div
+            key={rainMessage}
+            className="absolute -bottom-3 left-1/2 z-40 whitespace-nowrap pointer-events-none rounded-full border border-sky-400/40 bg-slate-900/90 px-3.5 py-1.5 text-[11px] font-bold text-sky-100"
+            style={{ animation: "kiriToastPop 4.3s ease-out forwards", boxShadow: "0 0 16px 2px rgba(56,189,248,0.35)" }}
+          >
+            {rainMessage}
+          </div>
+        )}
+
+        {/* Sonido de los truenos */}
+        {persistentStorm && onToggleSound && (
+          <button
+            type="button"
+            onClick={onToggleSound}
+            className="absolute bottom-1 -right-2 z-40 h-7 w-7 rounded-full bg-card/80 border border-border/60 flex items-center justify-center text-muted-foreground/70 hover:text-foreground"
+            aria-label={soundOn ? "Silenciar truenos" : "Activar sonido de truenos"}
+            title={soundOn ? "Silenciar truenos" : "Activar sonido de truenos"}
+          >
+            {soundOn ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </motion.div>
+      </div>
       </div>
     </div>
   )

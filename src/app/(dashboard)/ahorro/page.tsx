@@ -480,18 +480,21 @@ function AhorroContent() {
           <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">Ahorro</h1>
           <p className="text-muted-foreground text-sm">Tu banco personal, a tu ritmo.</p>
         </div>
+        {/* Acciones a la izquierda y el saldo siempre en el extremo derecho
+            (mismo orden que Obligaciones). */}
         <div className="flex items-center gap-2">
-          {/* Saldo en tiempo real con efecto */}
-          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo disponible" />
           {activeTab === "ahorro" && ahorroSubTab === "bolsillos" && (
             <Button
               size="icon"
               className="rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30 text-white"
               onClick={() => setNewPocketOpen(true)}
+              aria-label="Nuevo bolsillo de ahorro"
             >
               <Plus className="h-6 w-6" />
             </Button>
           )}
+          {/* Saldo en tiempo real con efecto */}
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo disponible" />
         </div>
       </header>
 

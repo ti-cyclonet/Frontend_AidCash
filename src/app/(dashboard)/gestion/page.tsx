@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Wallet, PieChart, TrendingUp } from "lucide-react"
 import { BilleteraTab } from "@/components/gestion/BilleteraTab"
@@ -12,6 +13,13 @@ type GestionTab = "billetera" | "presupuesto" | "proyecciones"
 
 export default function GestionPage() {
   const [activeTab, setActiveTab] = useState<GestionTab>("billetera")
+  // ?tab=presupuesto|proyecciones — lo usan las notificaciones y los consejos
+  // (antes se ignoraba y siempre abría Billetera). Se escucha el parámetro y
+  // no solo al montar: Kiri Coach puede mandar a otra pestaña estando ya aquí.
+  const tabParam = useSearchParams().get("tab")
+  useEffect(() => {
+    if (tabParam === "billetera" || tabParam === "presupuesto" || tabParam === "proyecciones") setActiveTab(tabParam)
+  }, [tabParam])
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("gestion")
 
   return (

@@ -14,8 +14,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api-client"
 import { looksLikeCreditCardName } from "@/lib/debt-utils"
-import { getNextPaymentInfo } from "@/lib/payment-schedule"
 import { BudgetCategorySelector } from "@/components/obligaciones/BudgetCategorySelector"
+import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuestion"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -100,18 +100,11 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // El día de pago ingresado ya pasó este mes (o es HOY) — sin aclarar si esa
-  // cuota está paga, la deuda nacería marcada "vencida" con una fecha que en
-  // realidad ya se resolvió (ver getNextPaymentInfo, misma lógica que ya usa
-  // el listado de obligaciones para decidir "vencido" vs "vence hoy").
-  const dueQuestion = useMemo(() => {
-    const day = parseInt(diasPago, 10)
-    if (isNaN(day) || day < 1 || day > 31) return null
-    const info = getNextPaymentInfo(diasPago, false)
-    if (info.status === "vencido") return "vencido" as const
-    if (info.status === "proximo" && info.daysUntil === 0) return "hoy" as const
-    return null
-  }, [diasPago])
+  // El día de pago ingresado ya pasó este periodo (o es HOY) — sin aclarar si
+  // esa cuota está paga, la deuda nacería marcada "vencida" con una fecha que
+  // en realidad ya se resolvió. Ahora también considera los DOS días de una
+  // deuda quincenal (antes solo miraba un día, como si fuera mensual).
+  const dueQuestion = useDueQuestion(diasPago, frecuenciaPago === "quincenal")
 
   // Si el usuario cambia el día a uno que ya no aplica, no dejar una
   // respuesta "ya pagué" colgada de un día distinto.
@@ -247,9 +240,15 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
     }
   }
 
+  // Quincenal necesita sus DOS días de cobro — antes el formulario solo pedía
+  // uno, y la deuda quedaba "quincenal" con un único día: la frontera entre
+  // quincenas caía en el calendario fijo (día 15) y no en sus cobros reales.
+  const diasValidos = frecuenciaPago === "quincenal"
+    ? diasPago.split(",").filter(d => d.trim() !== "").length === 2
+    : !!diasPago
   const canSubmit = mode === "normal"
-    ? !!nombre && !!montoTotal && !!cuotaPeriodo && !!diasPago
-    : !!nombre && (!!montoTotal || !!montoInicial) && !!cuotaPeriodo && !!diasPago
+    ? !!nombre && !!montoTotal && !!cuotaPeriodo && diasValidos
+    : !!nombre && (!!montoTotal || !!montoInicial) && !!cuotaPeriodo && diasValidos
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -465,7 +464,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setFrecuenciaPago("mensual")}
+            onClick={() => { setFrecuenciaPago("mensual"); setDiasPago(d => d.split(",")[0] ?? "") }}
             className={cn("h-10 rounded-xl text-sm font-bold border-2 transition-colors",
               frecuenciaPago === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
             )}
@@ -474,7 +473,15 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => setFrecuenciaPago("quincenal")}
+            onClick={() => {
+              setFrecuenciaPago("quincenal")
+              setDiasPago(d => {
+                if (d.includes(",")) return d
+                const n = parseInt(d, 10)
+                if (isNaN(n)) return "15,30"
+                return n <= 15 ? `${n},${Math.min(n + 15, 31)}` : `${Math.max(n - 15, 1)},${n}`
+              })
+            }}
             className={cn("h-10 rounded-xl text-sm font-bold border-2 transition-colors",
               frecuenciaPago === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
             )}
@@ -484,11 +491,27 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         </div>
       </div>
 
-      {/* Día de pago */}
+      {/* Día(s) de pago */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Día de pago</Label>
-        <Input type="number" min="1" max="31" value={diasPago} onChange={e => setDiasPago(e.target.value)} className="h-11 rounded-xl" placeholder="Ej: 15" />
-        <p className="text-[8px] text-muted-foreground">Día del mes en que debes pagar (1-31)</p>
+        <Label className="text-xs font-bold">{frecuenciaPago === "quincenal" ? "Días de pago (quincenal)" : "Día de pago"}</Label>
+        {frecuenciaPago === "quincenal" ? (
+          <div className="flex items-center gap-2">
+            <Input type="number" min="1" max="31" placeholder="15"
+              value={diasPago.split(",")[0] ?? ""}
+              onChange={e => setDiasPago(`${e.target.value},${diasPago.split(",")[1] ?? ""}`)}
+              className="h-11 rounded-xl w-20 text-center font-bold" />
+            <span className="text-muted-foreground font-bold">y</span>
+            <Input type="number" min="1" max="31" placeholder="30"
+              value={diasPago.split(",")[1] ?? ""}
+              onChange={e => setDiasPago(`${diasPago.split(",")[0] ?? ""},${e.target.value}`)}
+              className="h-11 rounded-xl w-20 text-center font-bold" />
+          </div>
+        ) : (
+          <Input type="number" min="1" max="31" value={diasPago} onChange={e => setDiasPago(e.target.value)} className="h-11 rounded-xl" placeholder="Ej: 15" />
+        )}
+        <p className="text-[8px] text-muted-foreground">
+          {frecuenciaPago === "quincenal" ? "Los dos días del mes en que te cobran (ej. 15 y 30)" : "Día del mes en que debes pagar (1-31)"}
+        </p>
       </div>
 
       <BudgetCategorySelector value={budgetCategoryId} onChange={v => setBudgetCategoryId(v ?? "")} />
@@ -497,46 +520,12 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
           esa cuota ya está paga — si no se pregunta, la deuda nace marcada
           "vencida" con una fecha que en realidad ya se resolvió. */}
       {dueQuestion && (
-        <div className="rounded-2xl border-2 border-amber-400/30 bg-amber-500/5 p-3 space-y-2">
-          <p className="text-xs font-bold">
-            {dueQuestion === "hoy"
-              ? "Esta cuota vence hoy. ¿Ya pagaste?"
-              : `El día ${diasPago} de este mes ya pasó. ¿Ya pagaste la cuota de este periodo?`}
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => { setYaPagoEstePeriodo(true); setNuevaProximoPeriodo(false) }}
-              className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-                yaPagoEstePeriodo ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
-              )}
-            >
-              {dueQuestion === "hoy" ? "Sí, ya pagué" : "Sí, ya la pagué"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setYaPagoEstePeriodo(false); setNuevaProximoPeriodo(false) }}
-              className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-                (!yaPagoEstePeriodo && !nuevaProximoPeriodo) ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
-              )}
-            >
-              {dueQuestion === "hoy" ? "No, vence hoy" : "No, está vencida"}
-            </button>
-          </div>
-          {/* 3ra opción — deuda genuinamente NUEVA (ej. un préstamo que arranca
-              el mes que viene): no está pagada, pero tampoco vencida porque
-              nunca debió cobrarse este periodo. No genera ningún movimiento y
-              corre la próxima fecha de pago al mismo día del mes siguiente. */}
-          <button
-            type="button"
-            onClick={() => { setYaPagoEstePeriodo(false); setNuevaProximoPeriodo(true) }}
-            className={cn("w-full h-9 rounded-xl text-xs font-bold border-2 transition-colors",
-              nuevaProximoPeriodo ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
-            )}
-          >
-            Es una obligación nueva (inicia el próximo mes)
-          </button>
-        </div>
+        <DueQuestion
+          kind={dueQuestion}
+          yaPago={yaPagoEstePeriodo}
+          nueva={nuevaProximoPeriodo}
+          onChange={v => { setYaPagoEstePeriodo(v.yaPago); setNuevaProximoPeriodo(v.nueva) }}
+        />
       )}
 
       {/* ═══ Preview primera cuota (modo banco con tasa) ═══ */}

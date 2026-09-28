@@ -174,6 +174,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setUserState(prev => ({ ...prev, nombre, correo, username, avatarUrl: avatarUrl || prev.avatarUrl }))
       if (avatarUrl && userId) saveAvatar(userId, avatarUrl).catch(() => {})
+      // Fotos que antes quedaron guardadas solo en este navegador (el guardado
+      // en el backend falló sin avisar): se suben ahora para que se vean en
+      // cualquier dispositivo donde se inicie sesión.
+      if (!avatarUrl && userId) {
+        loadAvatar(userId).then(local => {
+          if (local && local.length < 700_000) {
+            userApi.updateProfile({ avatarUrl: local }).catch(() => {})
+            setUserState(prev => ({ ...prev, avatarUrl: prev.avatarUrl || local }))
+          }
+        }).catch(() => {})
+      }
       setIncomeState(ingreso_base)
       setIncomeFrequencyState(frecuencia)
       setDiasCobroState(dias_cobro)

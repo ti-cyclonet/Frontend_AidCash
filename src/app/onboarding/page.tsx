@@ -17,6 +17,7 @@ import {
   Plus, Trash2, ReceiptText, Landmark, Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuestion"
 
 // ─── Pasos del test ───────────────────────────────────────────────────────────
 
@@ -37,6 +38,8 @@ interface OnboardingObligation {
   nombre: string
   monto: string
   diasPago: string
+  /** Solo deudas: cuánto se debe en total (si se deja vacío, la cuota) */
+  saldoTotal: string
 }
 
 export default function OnboardingPage() {
@@ -70,8 +73,14 @@ export default function OnboardingPage() {
     nombre: "",
     monto: "",
     diasPago: "",
+    saldoTotal: "",
   })
   const [savingObligation, setSavingObligation] = useState(false)
+  // Si el día de pago de este mes ya pasó, se pregunta si ya la pagó — si no,
+  // la obligación nacía "vencida" y el usuario nuevo entraba con su árbol en
+  // tormenta. Por defecto: ya la pagué (lo normal al empezar a usar Kiri).
+  const [dueFlags, setDueFlags] = useState({ yaPago: true, nueva: false })
+  const dueKind = useDueQuestion(currentObligation.diasPago, false)
   const [obligationError, setObligationError] = useState<string | null>(null)
 
   const totalSteps = STEPS.length
@@ -147,31 +156,38 @@ export default function OnboardingPage() {
   // después de registrarse, antes de que la sesión termine de cargar) — antes
   // este flujo no revisaba eso, así que el wizard marcaba la obligación como
   // "registrada" en pantalla aunque nunca se hubiera guardado de verdad.
-  const handleSaveObligation = async () => {
-    if (!currentObligation.nombre || !currentObligation.monto) return
+  // Devuelve true si quedó guardada. Las obligaciones son MENSUALES aunque el
+  // sueldo sea quincenal (antes heredaban la frecuencia del sueldo: un
+  // arriendo mensual quedaba como quincenal con un solo día de pago).
+  const handleSaveObligation = async (): Promise<boolean> => {
+    if (!currentObligation.nombre || !currentObligation.monto) return false
     setSavingObligation(true)
     setObligationError(null)
+    const due = dueKind ? { yaPagoEstePeriodo: dueFlags.yaPago, nuevaProximoPeriodo: dueFlags.nueva } : {}
 
     try {
+      const cuota = Number(currentObligation.monto)
       const saved = currentObligation.tipo === "deuda"
         ? await addDebt({
             nombre: currentObligation.nombre,
-            montoTotal: Number(currentObligation.monto),
-            cuotaPeriodo: Number(currentObligation.monto),
+            montoTotal: Math.max(cuota, Number(currentObligation.saldoTotal) || cuota),
+            cuotaPeriodo: cuota,
             diasPago: currentObligation.diasPago || "1",
-            frecuenciaPago: frecuencia,
+            frecuenciaPago: "mensual",
+            ...due,
           })
         : await addFixedExpense({
             nombre: currentObligation.nombre,
-            monto: Number(currentObligation.monto),
+            monto: cuota,
             fechaCorte: currentObligation.diasPago || "1",
-            frecuencia,
+            frecuencia: "mensual",
+            ...due,
           })
 
       if (!saved) {
         setObligationError("No se pudo guardar. Espera un momento e intenta de nuevo.")
         setSavingObligation(false)
-        return
+        return false
       }
 
       setObligations(prev => [...prev, currentObligation])
@@ -182,11 +198,26 @@ export default function OnboardingPage() {
         nombre: "",
         monto: "",
         diasPago: "",
+        saldoTotal: "",
       })
+      setDueFlags({ yaPago: true, nueva: false })
+      setSavingObligation(false)
+      return true
     } catch (e) {
       setObligationError("No se pudo guardar. Espera un momento e intenta de nuevo.")
     }
     setSavingObligation(false)
+    return false
+  }
+
+  // "Continuar": si dejó una obligación llena sin guardar, se guarda primero
+  // (antes se perdía en silencio).
+  const continuarDesdeRegistro = async () => {
+    if (currentObligation.nombre && currentObligation.monto) {
+      const ok = await handleSaveObligation()
+      if (!ok) return
+    }
+    setStep(6)
   }
 
   // ── Finalizar y guardar ───────────────────────────────────────────────────
@@ -738,10 +769,10 @@ export default function OnboardingPage() {
                       />
                     </div>
 
-                    {/* Monto (cuota mensual/quincenal) */}
+                    {/* Monto mensual */}
                     <div className="space-y-1">
                       <Label className="text-[10px] font-bold">
-                        {currentObligation.tipo === "deuda" ? "Cuota por periodo" : "Monto"}
+                        {currentObligation.tipo === "deuda" ? "Cuota mensual" : "Monto mensual"}
                       </Label>
                       <MoneyInput
                         value={currentObligation.monto}
@@ -750,6 +781,18 @@ export default function OnboardingPage() {
                         placeholder="0"
                       />
                     </div>
+
+                    {currentObligation.tipo === "deuda" && (
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold">¿Cuánto debes en total? <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+                        <MoneyInput
+                          value={currentObligation.saldoTotal}
+                          onChange={v => setCurrentObligation(prev => ({ ...prev, saldoTotal: v }))}
+                          className="h-11 rounded-xl font-bold"
+                          placeholder="Saldo pendiente con el banco"
+                        />
+                      </div>
+                    )}
 
                     {/* Día de pago */}
                     <div className="space-y-1">
@@ -765,10 +808,14 @@ export default function OnboardingPage() {
                       />
                     </div>
 
+                    {dueKind && (
+                      <DueQuestion kind={dueKind} yaPago={dueFlags.yaPago} nueva={dueFlags.nueva} onChange={setDueFlags} />
+                    )}
+
                     {/* Botones de acción */}
                     <div className="flex items-center gap-2 pt-2">
                       <Button
-                        onClick={handleSaveObligation}
+                        onClick={() => { handleSaveObligation() }}
                         disabled={!currentObligation.nombre || !currentObligation.monto || savingObligation}
                         className="flex-1 h-10 rounded-xl bg-kiri-emerald text-white font-bold text-xs gap-1"
                       >
@@ -785,13 +832,22 @@ export default function OnboardingPage() {
                       <p className="text-[11px] text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-2 text-center">{obligationError}</p>
                     )}
 
-                    {/* Botón para continuar */}
-                    <button
-                      onClick={() => setStep(6)}
-                      className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
-                    >
-                      {obligations.length > 0 ? "Continuar →" : "Continuar después →"}
-                    </button>
+                    {/* Volver / continuar */}
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        onClick={() => setQuiereRegistrar(null)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" /> Volver
+                      </button>
+                      <button
+                        onClick={continuarDesdeRegistro}
+                        disabled={savingObligation}
+                        className="text-xs font-bold text-kiri-emerald hover:underline py-2 disabled:opacity-50"
+                      >
+                        {obligations.length > 0 || (currentObligation.nombre && currentObligation.monto) ? "Continuar →" : "Continuar después →"}
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
@@ -803,11 +859,10 @@ export default function OnboardingPage() {
                 <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center relative">
                   <span className="text-7xl">🌱</span>
                   <div className="absolute -top-2 -right-2 text-2xl">✨</div>
-                  <div className="absolute -bottom-1 -left-2 text-xl">🎉</div>
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-black">¡Listo, Kiri te conoce mejor! 🎉</h1>
+                  <h1 className="text-2xl font-black">¡Listo, Kiri te conoce mejor!</h1>
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     Con esta información personalizaremos tu experiencia y te ayudaremos a hacer crecer tu jardín financiero.
                   </p>
