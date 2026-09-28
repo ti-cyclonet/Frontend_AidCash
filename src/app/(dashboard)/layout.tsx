@@ -8,6 +8,7 @@ import { NotificationInitializer } from "@/components/notifications/Notification
 import { DataSyncInitializer } from "@/components/providers/DataSyncInitializer"
 import { OfflineSyncProvider } from "@/components/providers/OfflineSyncProvider"
 import { PlanWelcomeModal } from "@/components/providers/PlanWelcomeModal"
+import { ForcePasswordChange } from "@/components/auth/ForcePasswordChange"
 
 export default function DashboardLayout({
   children,
@@ -42,6 +43,7 @@ export default function DashboardLayout({
       <DataSyncInitializer />
       <OfflineSyncProvider />
       <PlanWelcomeModal />
+      <ForcePasswordChange />
     </div>
   )
 }
