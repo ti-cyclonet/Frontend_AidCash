@@ -25,6 +25,8 @@ const STORAGE_KEYS = {
   accessToken: 'kiri_access_token',
   refreshToken: 'kiri_refresh_token',
   userId: 'kiri_user_id',
+  // Tras un reset desde Authoriza: la app no se usa hasta cambiar la contraseña
+  mustChangePassword: 'kiri_must_change_password',
 } as const
 
 // ─── Token Management ─────────────────────────────────────────────────────────
@@ -54,6 +56,16 @@ export function clearTokens() {
   localStorage.removeItem(STORAGE_KEYS.accessToken)
   localStorage.removeItem(STORAGE_KEYS.refreshToken)
   localStorage.removeItem(STORAGE_KEYS.userId)
+  localStorage.removeItem(STORAGE_KEYS.mustChangePassword)
+}
+
+export function mustChangePassword(): boolean {
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem(STORAGE_KEYS.mustChangePassword) === '1'
+}
+
+export function clearMustChangePassword() {
+  localStorage.removeItem(STORAGE_KEYS.mustChangePassword)
 }
 
 export function isAuthenticated(): boolean {
@@ -156,6 +168,14 @@ export async function api<T = unknown>(
         } else {
           return { data: null, error: 'Sesión expirada', status: 401 }
         }
+      } else if (errorData.code === 'SESSION_REVOKED') {
+        // La sesión se cerró desde el servidor (contraseña restablecida o
+        // cuenta bloqueada en Authoriza): limpiar y volver a iniciar sesión.
+        clearTokens()
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login'
+        }
+        return { data: null, error: errorData.error || 'Tu sesión ya no es válida', status: 401 }
       } else {
         // Sin ningún token guardado la sesión ya no existe (cerró sesión en
         // otra pestaña, se borraron los datos del sitio…): antes cada acción
@@ -201,6 +221,7 @@ export interface LoginResponse {
   user: AuthUser
   accessToken: string
   refreshToken: string
+  mustChangePassword?: boolean
 }
 
 export const authApi = {
@@ -229,6 +250,8 @@ export const authApi = {
     })
     if (res.data) {
       setTokens(res.data.accessToken, res.data.refreshToken, res.data.user.id)
+      if (res.data.mustChangePassword) localStorage.setItem(STORAGE_KEYS.mustChangePassword, '1')
+      else localStorage.removeItem(STORAGE_KEYS.mustChangePassword)
     }
     return res
   },
