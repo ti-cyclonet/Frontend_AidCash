@@ -335,6 +335,11 @@ export const userApi = {
     return res
   },
 
+  /** Elimina un ingreso como si nunca hubiera existido (la billetera pierde lo que sumó). */
+  async deleteIncome(id: string) {
+    return api<{ message: string; monto: number; tipo: string; wallet: WalletState }>(`/users/wallet/income/${id}`, { method: 'DELETE' })
+  },
+
   async walletDeduct(monto: number, bolsillo: 'obligaciones' | 'libre' | 'ahorro') {
     return api<{ wallet: WalletState }>('/users/wallet/deduct', {
       method: 'POST',

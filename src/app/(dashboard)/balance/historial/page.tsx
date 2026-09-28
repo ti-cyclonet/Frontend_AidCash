@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
-import { impulseApi, reportsApi, type BalanceReport, type Movement, type MovementType } from "@/lib/api-client"
+import { impulseApi, reportsApi, userApi, type BalanceReport, type Movement, type MovementType } from "@/lib/api-client"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useToast } from "@/hooks/use-toast"
 import { buildMovements } from "@/lib/balance-movements"
@@ -80,8 +80,25 @@ export default function HistorialPage() {
   const [aEliminar, setAEliminar] = useState<Movement | null>(null)
   const [eliminando, setEliminando] = useState(false)
   const [recarga, setRecarga] = useState(0)
+  const esIngreso = aEliminar?.tipo === "ingresos"
   const confirmarEliminar = async () => {
     if (!aEliminar) return
+    // Ingreso: la billetera pierde exactamente lo que ese ingreso le sumó
+    if (aEliminar.tipo === "ingresos") {
+      setEliminando(true)
+      const { data, error } = await userApi.deleteIncome(aEliminar.id)
+      setEliminando(false)
+      if (error || !data) {
+        toast({ title: "No se pudo eliminar", description: error ?? "Intenta de nuevo.", variant: "destructive" })
+        return
+      }
+      toast({ title: `Eliminaste el ingreso de ${formatAmount(data.monto)}`, description: "Tu billetera quedó como si nunca lo hubieras registrado." })
+      setAEliminar(null)
+      setRecarga(n => n + 1)
+      window.dispatchEvent(new Event("kiri:wallet-updated"))
+      refetch()
+      return
+    }
     setEliminando(true)
     const { data, error } = await impulseApi.delete(aEliminar.id)
     setEliminando(false)
@@ -271,16 +288,25 @@ export default function HistorialPage() {
         <Dialog open={!!aEliminar} onOpenChange={v => { if (!v && !eliminando) setAEliminar(null) }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-500"><Trash2 className="h-5 w-5" /> ¿Eliminar este gasto?</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-red-500"><Trash2 className="h-5 w-5" /> {esIngreso ? "¿Eliminar este ingreso?" : "¿Eliminar este gasto?"}</DialogTitle>
               <DialogDescription>
                 <strong>{aEliminar?.nombre}</strong> por {formatAmount(aEliminar?.monto ?? 0)}. Todo queda como si no lo hubieras registrado:
               </DialogDescription>
             </DialogHeader>
+            {esIngreso ? (
+              <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5">
+                <li>Se descuentan {formatAmount(aEliminar?.monto ?? 0)} de tu disponible y de los bolsillos de tu billetera a los que fue.</li>
+                <li>Deja de contar en tus ingresos del Balance.</li>
+                <li>Los pagos que ya hiciste con esa plata siguen registrados (se ven aparte en el historial).</li>
+                <li>Desaparece de este historial. No se puede deshacer.</li>
+              </ul>
+            ) : (
             <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5">
               <li>{aEliminar?.tarjetaNombre ? `Se revierte de tu tarjeta ${aEliminar.tarjetaNombre}.` : `Vuelven ${formatAmount(aEliminar?.monto ?? 0)} a tu gasto libre.`}</li>
               <li>Deja de contar en su categoría de presupuesto y en gastos hormiga.</li>
               <li>Desaparece de este historial. No se puede deshacer.</li>
             </ul>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" disabled={eliminando} onClick={() => setAEliminar(null)}>Cancelar</Button>
               <Button variant="destructive" disabled={eliminando} onClick={confirmarEliminar}>{eliminando ? "Eliminando..." : "Eliminar gasto"}</Button>
