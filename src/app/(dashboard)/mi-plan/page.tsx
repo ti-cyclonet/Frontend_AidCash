@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePlan } from "@/lib/plan-context"
 import {
-  Check, Sparkles, Crown, ExternalLink, Receipt, FileSignature, LogIn, AlertTriangle,
+  Check, Sparkles, Crown, ExternalLink, FileSignature, LogIn, AlertTriangle,
   Loader2, Eye, EyeOff, CheckCircle2, Clock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -53,10 +53,17 @@ export default function MiPlanPage() {
   const [resaltar, setResaltar] = useState(false)
   const factonetRef = useRef<HTMLDivElement>(null)
 
-  const cargar = useCallback(() => {
-    planApi.disponibles().then(({ data }) => setPlanes(Array.isArray(data) ? [...data].sort((a, b) => a.displayOrder - b.displayOrder) : []))
-    planApi.factonet().then(({ data }) => { if (data) setFactonet(data) })
+  const cargarPlanes = useCallback(async () => {
+    setPlanes(null)
+    const { data } = await planApi.disponibles()
+    setPlanes(Array.isArray(data) ? [...data].sort((a, b) => a.displayOrder - b.displayOrder) : [])
+    return Array.isArray(data) && data.length > 0
   }, [])
+  const cargar = useCallback(() => {
+    // Si Authoriza no respondió (p. ej. estaba arrancando), un reintento solo
+    cargarPlanes().then(ok => { if (!ok) setTimeout(() => { cargarPlanes() }, 3000) })
+    planApi.factonet().then(({ data }) => { if (data) setFactonet(data) })
+  }, [cargarPlanes])
   useEffect(() => { cargar() }, [cargar])
 
   // Desde el aviso de factura (/mi-plan#factonet): llevar a la sección y resaltarla
@@ -164,7 +171,10 @@ export default function MiPlanPage() {
             {[0, 1].map(i => <div key={i} className="h-64 rounded-2xl bg-muted/30 animate-pulse" />)}
           </div>
         ) : planes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No pudimos cargar los planes en este momento. Intenta de nuevo más tarde.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-sm text-muted-foreground">No pudimos cargar los planes en este momento.</p>
+            <Button variant="outline" size="sm" onClick={() => cargarPlanes()}>Reintentar</Button>
+          </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {planes.map(p => {
@@ -213,8 +223,9 @@ export default function MiPlanPage() {
         className={cn("rounded-2xl border-2 p-5 space-y-4 scroll-mt-20 transition-shadow",
           resaltar ? "border-kiri-emerald shadow-[0_0_0_6px_rgba(16,185,129,0.15)]" : "border-border")}>
         <div className="flex items-start gap-3">
-          <div className="h-12 w-12 rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
-            <Receipt className="h-6 w-6" />
+          <div className="h-12 w-12 rounded-2xl bg-sky-500/10 overflow-hidden shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logos/factonet.png" alt="FactoNet" className="h-full w-full object-cover" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-bold">Tu contrato y tus facturas: FactoNet</h2>
