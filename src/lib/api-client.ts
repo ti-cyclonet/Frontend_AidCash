@@ -1130,6 +1130,46 @@ export const loansApi = {
   },
 }
 
+// ─── Mi plan: cambiarse de plan y acceso a FactoNet ───────────────────────────
+
+export interface PlanDisponible {
+  packageId: string
+  displayName: string
+  name: string
+  description: string | null
+  price: number
+  isHighlighted: boolean
+  displayOrder: number
+  badge: string | null
+  features: string[]
+}
+
+export interface FacturaPendiente {
+  codigo: string
+  valor: number
+  emitida?: string | null
+  vence?: string | null
+  estado?: string
+  plan?: string | null
+  evento: 'emitida' | 'vence_hoy' | 'aviso_mora' | 'recargo' | 'suspendida' | 'pago_rechazado'
+  actualizada: string
+}
+
+export interface FactonetInfo {
+  url: string
+  correo: string
+  facturaPendiente: FacturaPendiente | null
+  cambioPlan: { packageId: string; plan: string | null; fecha: string } | null
+}
+
+export const planApi = {
+  disponibles: () => api<PlanDisponible[]>('/plan/available'),
+  factonet: () => api<FactonetInfo>('/plan/factonet'),
+  /** Cambio de plan: Authoriza valida la contraseña, crea el contrato y da acceso a FactoNet */
+  cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean }) =>
+    api<{ success: boolean; message?: string }>('/plan/upgrade', { method: 'POST', body: data }),
+}
+
 // ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────
 
 export const homeBudgetApi = {

@@ -109,7 +109,7 @@ export function TopBar() {
                   {notifications.map(n => (
                     <li key={n.id} onClick={() => handleNotifClick(n)}
                       className={cn("flex items-start gap-3 px-4 py-3 active:bg-muted/50 cursor-pointer", !n.read && "bg-cyclon-lavender/5")}>
-                      <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">{notifIcon(n.event)}</div>
+                      <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">{notifIcon(n.event, n.data as Record<string, unknown> | undefined)}</div>
                       <div className="flex-1 min-w-0">
                         <p className={cn("text-xs leading-snug", !n.read && "font-semibold")}>{notifTitle(n)}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">{formatDistanceToNow(n.createdAt, { addSuffix: true, locale: es })}</p>
