@@ -1028,14 +1028,16 @@ export const sharedPocketsApi = {
   async list() {
     return api<{ pockets: Record<string, unknown>[] }>('/shared-pockets')
   },
-  async create(partnerIds: string[], nombre: string, meta?: number) {
+  /** montoInicial: lo que ya tenían ahorrado antes de Kiri (no se descuenta de la billetera) */
+  async create(partnerIds: string[], nombre: string, meta?: number, montoInicial?: number) {
     return api<{ pocket: Record<string, unknown> }>('/shared-pockets', {
-      method: 'POST', body: { partnerIds, nombre, meta },
+      method: 'POST', body: { partnerIds, nombre, meta, ...(montoInicial ? { montoInicial } : {}) },
     })
   },
-  async deposit(pocketId: string, monto: number, nota?: string, tipo?: 'aporte' | 'retiro') {
+  /** yaAhorrado: plata que ya estaba ahorrada por fuera — suma al bolsillo sin descontar de la billetera */
+  async deposit(pocketId: string, monto: number, nota?: string, tipo?: 'aporte' | 'retiro', yaAhorrado = false) {
     const res = await api<{ deposit: Record<string, unknown>; requiresApproval: boolean }>(`/shared-pockets/${pocketId}/deposit`, {
-      method: 'POST', body: { monto, nota, tipo: tipo ?? 'aporte' },
+      method: 'POST', body: { monto, nota, tipo: tipo ?? 'aporte', ...(yaAhorrado ? { yaAhorrado: true } : {}) },
     })
     if (res.data && (tipo ?? 'aporte') === 'aporte') marcarLluviaDeAhorro(monto)
     return res
@@ -1074,6 +1076,10 @@ export const loansApi = {
     return api<{ loan: Record<string, unknown> }>('/loans/request', {
       method: 'POST', body: data,
     })
+  },
+  /** Préstamo que YA existía (no mueve plata): la otra persona lo confirma */
+  async existente(data: { otroId: string; rol: 'yo_preste' | 'me_prestaron'; monto: number; pendiente: number; descripcion?: string; fechaCompromiso?: string | null }) {
+    return api<{ loan: Record<string, unknown> }>('/loans/existente', { method: 'POST', body: data })
   },
   /** Cambiar la fecha de pago (cualquiera de los dos; al otro le llega aviso). */
   async cambiarFecha(loanId: string, fechaCompromiso: string | null) {

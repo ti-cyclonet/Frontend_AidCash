@@ -102,8 +102,24 @@ export function SocialDebtsTab({ myId, acceptedConnections }: SocialDebtsTabProp
               <p className="text-xs text-muted-foreground">
                 Compartida con {d.isOwner ? d.peerName : d.ownerName}
               </p>
+              {(() => {
+                const pagado = Math.max(0, d.montoTotal - (d.saldoRestante ?? d.montoTotal))
+                const pct = d.montoTotal > 0 ? Math.min(100, Math.round((pagado / d.montoTotal) * 100)) : 0
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between text-xs">
+                      <span>Faltan <b>{formatAmount(d.saldoRestante ?? d.montoTotal)}</b></span>
+                      <span className="text-muted-foreground">{pct}% pagado</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden"><div className="h-full rounded-full bg-cyclon-lavender" style={{ width: `${pct}%` }} /></div>
+                    {d.cuotaPeriodo > 0 && d.cuotaPeriodo < d.montoTotal && (
+                      <p className="text-[10px] text-muted-foreground">Cuota de {formatAmount(d.cuotaPeriodo)}{d.frecuenciaPago === "quincenal" ? " por quincena" : " al mes"}{d.diasPago ? ` · día ${d.diasPago}` : ""}</p>
+                    )}
+                  </div>
+                )
+              })()}
               <div className="flex items-center justify-between text-sm">
-                <span className="font-bold">{formatAmount(d.montoTotal)}</span>
+                <span className="font-bold">{formatAmount(d.montoTotal)} <span className="text-[10px] font-normal text-muted-foreground">en total</span></span>
                 <span className="text-[10px] text-muted-foreground">
                   {d.tipoDeuda === "TARJETA_CREDITO" ? "Bancaria" : "Simple"}
                   {d.tasaInteres ? ` · ${d.tasaInteres}% mensual` : ""}
@@ -146,6 +162,12 @@ function NewSharedDebtModal({ open, onClose, connections, myId, onCreated }: {
   const [montoTotal, setMontoTotal] = useState("")
   const [tipoDeuda, setTipoDeuda] = useState<"PRESTAMO" | "TARJETA_CREDITO">("PRESTAMO")
   const [tasaInteres, setTasaInteres] = useState("")
+  const [cuota, setCuota] = useState("")
+  const [diaPago, setDiaPago] = useState(String(new Date().getDate()))
+  // Deuda que ya venían pagando antes de Kiri
+  const [antigua, setAntigua] = useState(false)
+  const [saldo, setSaldo] = useState("")
+  const [yaPagoCuota, setYaPagoCuota] = useState(false)
   // % del monto total que le corresponde a "Tú" — los dos inputs numéricos
   // siempre se derivan de esto para garantizar que sumen el total exacto.
   const [pctA, setPctA] = useState(50)
@@ -163,6 +185,11 @@ function NewSharedDebtModal({ open, onClose, connections, myId, onCreated }: {
     setMontoTotal("")
     setTipoDeuda("PRESTAMO")
     setTasaInteres("")
+    setCuota("")
+    setDiaPago(String(new Date().getDate()))
+    setAntigua(false)
+    setSaldo("")
+    setYaPagoCuota(false)
     setPctA(50)
   }, [open, connections])
 
@@ -179,7 +206,9 @@ function NewSharedDebtModal({ open, onClose, connections, myId, onCreated }: {
     setPctA(total > 0 ? ((total - n) / total) * 100 : 50)
   }
 
-  const canSubmit = !!connectionId && !!nombre.trim() && total > 0 && !creating
+  const saldoNum = antigua ? Number(saldo) || 0 : total
+  const saldoValido = !antigua || (saldoNum > 0 && saldoNum <= total)
+  const canSubmit = !!connectionId && !!nombre.trim() && total > 0 && saldoValido && !creating
 
   const handleSubmit = async () => {
     if (!canSubmit) return
@@ -187,11 +216,15 @@ function NewSharedDebtModal({ open, onClose, connections, myId, onCreated }: {
     const { error } = await debtsApi.create({
       nombre: nombre.trim(),
       montoTotal: total,
-      cuotaPeriodo: total, // sin cuota/frecuencia definidas en este form simplificado — se paga como un solo abono desde Obligaciones
-      // Día de hoy, no el día 1 fijo del default del backend — si no, una
+      // Deuda antigua: se registra con lo que falta hoy, así el avance es real
+      saldoRestante: saldoNum,
+      // Sin cuota → se paga de una sola vez (como antes)
+      cuotaPeriodo: Math.min(Number(cuota) || saldoNum, saldoNum),
+      // Día de hoy por defecto, no el día 1 fijo del backend — si no, una
       // deuda recién creada podía nacer marcada "vencida" con solo pasar el
       // día 1 del mes.
-      diasPago: String(new Date().getDate()),
+      diasPago: String(Math.min(31, Math.max(1, Number(diaPago) || new Date().getDate()))),
+      ...(antigua && yaPagoCuota ? { yaPagoEstePeriodo: true } : {}),
       tipoDeuda,
       tasaInteres: tipoDeuda === "TARJETA_CREDITO" && tasaInteres ? Number(tasaInteres) : undefined,
       esCompartida: true,
@@ -244,8 +277,39 @@ function NewSharedDebtModal({ open, onClose, connections, myId, onCreated }: {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Monto total</Label>
+            <Label className="text-xs font-bold">Monto total de la deuda</Label>
             <MoneyInput value={montoTotal} onChange={setMontoTotal} className="h-11 rounded-xl" placeholder="0" />
+          </div>
+
+          {/* Deuda que ya venían pagando */}
+          <label className="flex items-start gap-2 text-xs cursor-pointer">
+            <input type="checkbox" checked={antigua} onChange={e => setAntigua(e.target.checked)} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
+            <span>Es una deuda que ya venían pagando <span className="block text-[10px] text-muted-foreground">Regístrala con lo que falta hoy para que los dos vean el avance real.</span></span>
+          </label>
+          {antigua && (
+            <div className="space-y-2 rounded-2xl bg-muted/30 p-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">¿Cuánto falta por pagar hoy?</Label>
+                <MoneyInput value={saldo} onChange={setSaldo} className="h-11 rounded-xl" placeholder="0" />
+                {total > 0 && saldoNum > total && <p className="text-xs text-destructive font-bold">No puede ser más que el monto total.</p>}
+                {total > 0 && saldoNum > 0 && saldoNum <= total && <p className="text-[10px] text-muted-foreground">Ya pagaron {formatAmount(total - saldoNum)}.</p>}
+              </div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={yaPagoCuota} onChange={e => setYaPagoCuota(e.target.checked)} className="accent-kiri-emerald h-4 w-4" />
+                Ya pagamos la cuota de este mes
+              </label>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Cuota (opcional)</Label>
+              <MoneyInput value={cuota} onChange={setCuota} className="h-11 rounded-xl" placeholder="De una vez" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Día de pago</Label>
+              <Input inputMode="numeric" value={diaPago} onChange={e => setDiaPago(e.target.value.replace(/\D/g, "").slice(0, 2))} className="h-11 rounded-xl" placeholder="15" />
+            </div>
           </div>
 
           <div className="space-y-1.5">
