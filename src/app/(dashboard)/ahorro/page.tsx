@@ -23,6 +23,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { EmergencyFundSection } from "@/components/recommendations/emergency-fund"
 import { emergencyFundApi, userApi, sharedPocketsApi, savingsPocketsApi, type SavingsPocket as ApiSavingsPocket } from "@/lib/api-client"
+import { marcarLluviaDeAhorro } from "@/lib/garden-events"
 import { useAuth } from "@/lib/auth-context"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { useToast } from "@/hooks/use-toast"
@@ -201,15 +202,14 @@ function AhorroContent() {
       setInsufficientSavingsOpen(true)
       return
     }
-    // Descontar del wallet — si falla, no registrar el aporte en el fondo
-    const { error: deductError } = await userApi.walletDeduct(monto, 'ahorro')
-    if (deductError) {
-      toast({ title: "No se pudo registrar el aporte", description: "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
+    // El backend descuenta la billetera y suma al fondo en una sola transacción
+    const { data, error } = await emergencyFundApi.transaction(monto, "aporte")
+    if (error || !data) {
+      toast({ title: "No se pudo registrar el aporte", description: error ?? "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
       return
     }
-    // Registrar en fondo de emergencia
-    const { data } = await emergencyFundApi.transaction(monto, "aporte")
-    if (data) setFondoActual(data.fondoActual)
+    setFondoActual(data.fondoActual)
+    marcarLluviaDeAhorro(monto)
     // Disparar evento para refrescar wallet en otros componentes
     window.dispatchEvent(new Event("kiri:wallet-updated"))
   }, [authUser?.id, toast])
@@ -217,15 +217,13 @@ function AhorroContent() {
   const handleRetiro = useCallback(async (monto: number) => {
     if (!authUser?.id) return
     if (monto > fondoActual) return
-    // Registrar retiro del fondo
-    const { data } = await emergencyFundApi.transaction(monto, "retiro")
-    if (data) setFondoActual(data.fondoActual)
-    // Sumar al wallet (regresa al disponible)
-    const { error: withdrawError } = await userApi.walletWithdraw(monto, 'ahorro')
-    if (withdrawError) {
-      toast({ title: "El retiro quedó registrado pero no se reflejó en tu saldo", description: "Contacta soporte si el monto no aparece disponible.", variant: "destructive" })
+    // El backend resta del fondo y devuelve a la billetera en una sola transacción
+    const { data, error } = await emergencyFundApi.transaction(monto, "retiro")
+    if (error || !data) {
+      toast({ title: "No se pudo registrar el retiro", description: error ?? "Intenta de nuevo.", variant: "destructive" })
       return
     }
+    setFondoActual(data.fondoActual)
     window.dispatchEvent(new Event("kiri:wallet-updated"))
   }, [authUser?.id, fondoActual, toast])
 

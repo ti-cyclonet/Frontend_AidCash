@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import {
   Coins, Plus, Check, XCircle, Loader2, ChevronDown, ChevronUp,
-  ArrowUpRight, ArrowDownLeft, Clock, AlertCircle, CalendarClock,
+  ArrowUpRight, ArrowDownLeft, Clock, AlertCircle, CalendarClock, History,
 } from "lucide-react"
 import { MoneyInput } from "@/components/ui/money-input"
 import { Button } from "@/components/ui/button"
@@ -130,6 +130,30 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
   // ── Formularios ────────────────────────────────────────────────────────────
   const [reqForm, setReqForm] = useState({ lenderId: "", amount: "", descripcion: "", fechaCompromiso: enDias(15) })
 
+  // Préstamo que ya existía (no mueve plata)
+  const [existenteOpen, setExistenteOpen] = useState(false)
+  const formExistenteVacio = { otroId: "", rol: "yo_preste" as "yo_preste" | "me_prestaron", monto: "", pendiente: "", abonado: false, descripcion: "", fechaCompromiso: "" }
+  const [exForm, setExForm] = useState(formExistenteVacio)
+  const [registrando, setRegistrando] = useState(false)
+  const exMonto = Number(exForm.monto) || 0
+  const exPendiente = exForm.abonado ? (Number(exForm.pendiente) || 0) : exMonto
+  const exValido = !!exForm.otroId && exMonto > 0 && exPendiente > 0 && exPendiente <= exMonto
+  const exOtro = acceptedConnections.map(c => (c.requesterId === myId ? c.addressee : c.requester)).find(p => p?.id === exForm.otroId)
+  const handleExistente = async () => {
+    if (!exValido) return
+    setRegistrando(true)
+    const { error } = await loansApi.existente({
+      otroId: exForm.otroId, rol: exForm.rol, monto: exMonto, pendiente: exPendiente,
+      descripcion: exForm.descripcion.trim() || undefined, fechaCompromiso: exForm.fechaCompromiso || null,
+    })
+    setRegistrando(false)
+    if (error) { toast({ title: error, variant: "destructive" }); return }
+    toast({ title: "Préstamo registrado", description: `${exOtro?.nombre.split(" ")[0] ?? "La otra persona"} tiene que confirmarlo. No se movió plata de ninguna billetera.` })
+    setExistenteOpen(false)
+    setExForm(formExistenteVacio)
+    load()
+  }
+
   // Cambiar la fecha de pago de un préstamo
   const [fechaLoan, setFechaLoan] = useState<Loan | null>(null)
   const [fechaValue, setFechaValue] = useState("")
@@ -225,7 +249,8 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: accept ? "Préstamo aceptado — ya tienes el dinero disponible" : "Oferta rechazada" })
+      const loan = loans.find(l => l.id === loanId)
+      toast({ title: accept ? (loan?.sinDesembolso ? "Préstamo confirmado — ya llevan juntos el control" : "Préstamo aceptado — ya tienes el dinero disponible") : (loan?.sinDesembolso ? "Le avisamos que no es así" : "Oferta rechazada") })
       load()
     }
   }
@@ -300,15 +325,25 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
 
   return (
     <div className="space-y-4">
-      {/* ── Solicitar nuevo préstamo ── */}
-      <Button
-        onClick={() => setRequestOpen(true)}
-        disabled={acceptedConnections.length === 0}
-        className="w-full h-12 rounded-2xl bg-cyclon-lavender/10 text-cyclon-lavender hover:bg-cyclon-lavender/20 font-bold border-0 gap-2"
-        variant="outline"
-      >
-        <Plus className="h-4 w-4" /> Solicitar préstamo
-      </Button>
+      {/* ── Solicitar nuevo préstamo / registrar uno que ya existía ── */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          onClick={() => setRequestOpen(true)}
+          disabled={acceptedConnections.length === 0}
+          className="h-12 rounded-2xl bg-cyclon-lavender/10 text-cyclon-lavender hover:bg-cyclon-lavender/20 font-bold border-0 gap-2"
+          variant="outline"
+        >
+          <Plus className="h-4 w-4" /> Solicitar préstamo
+        </Button>
+        <Button
+          onClick={() => { setExForm(formExistenteVacio); setExistenteOpen(true) }}
+          disabled={acceptedConnections.length === 0}
+          className="h-12 rounded-2xl bg-muted/50 text-foreground hover:bg-muted font-bold border-0 gap-2 text-xs"
+          variant="outline"
+        >
+          <History className="h-4 w-4" /> Ya nos prestamos antes
+        </Button>
+      </div>
 
       {acceptedConnections.length === 0 && (
         <p className="text-xs text-muted-foreground text-center">
@@ -369,8 +404,11 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                     )}
                     <div className="mt-1.5 flex items-center gap-3">
                       <span className={cn("text-[9px] font-black px-2 py-0.5 rounded-lg", STATUS_COLOR[loan.status])}>
-                        {STATUS_LABEL[loan.status]}
+                        {loan.sinDesembolso && (loan.status === "PENDING_APPROVAL" || loan.status === "PENDING_BORROWER_CONFIRMATION") ? "Por confirmar" : STATUS_LABEL[loan.status]}
                       </span>
+                      {loan.sinDesembolso && (
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-lg bg-muted text-muted-foreground" title="Préstamo que ya existía: no movió plata de ninguna billetera">Previo</span>
+                      )}
                       {(() => {
                         const est = estadoFecha(loan)
                         return est ? <span className={cn("text-[9px] font-black px-2 py-0.5 rounded-lg", est.className)}>{est.label}</span> : null
@@ -399,7 +437,51 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                     {/* Acciones según rol y estado */}
                     <div className="pt-3 flex gap-2 flex-wrap">
                       {/* Lender: aprobar / rechazar solicitud pendiente */}
-                      {isLender && loan.status === "PENDING_APPROVAL" && (
+                      {/* Préstamo que ya existía: la otra persona lo registró, aquí se confirma */}
+                      {loan.sinDesembolso && loan.creadoPorId !== myId && ((isLender && loan.status === "PENDING_APPROVAL") || (isBorrower && loan.status === "PENDING_BORROWER_CONFIRMATION")) && (
+                        <div className="w-full space-y-2">
+                          <div className="bg-muted/40 border border-border rounded-2xl p-3 space-y-1">
+                            <p className="text-xs font-bold">
+                              {peer?.nombre.split(" ")[0]} registró que {isLender ? `le prestaste ${formatAmount(loan.amount)}` : `te prestó ${formatAmount(loan.amount)}`}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Es un préstamo que ya tenían: {loan.remainingAmount < loan.amount ? `ya se abonaron ${formatAmount(loan.amount - loan.remainingAmount)} y faltan ${formatAmount(loan.remainingAmount)}` : `falta todo (${formatAmount(loan.remainingAmount)})`}. Confirmarlo no mueve plata de ninguna billetera; desde aquí los abonos quedan registrados para los dos.
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" disabled={actionId === loan.id}
+                              onClick={() => isLender ? handleApprove(loan.id, 0) : handleBorrowerConfirm(loan.id, true)}
+                              className="h-8 px-4 rounded-xl bg-kiri-emerald text-white font-bold text-xs gap-1">
+                              {actionId === loan.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Sí, es correcto
+                            </Button>
+                            <Button size="sm" variant="ghost" disabled={actionId === loan.id}
+                              onClick={() => isLender ? handleRejectLoan(loan.id) : handleBorrowerConfirm(loan.id, false)}
+                              className="h-8 px-4 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10 font-bold text-xs gap-1">
+                              <XCircle className="h-3 w-3" /> No es así
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quien lo registró: esperando la confirmación del otro */}
+                      {loan.sinDesembolso && loan.creadoPorId === myId && (loan.status === "PENDING_APPROVAL" || loan.status === "PENDING_BORROWER_CONFIRMATION") && (
+                        <div className="w-full flex items-center justify-between gap-2 bg-muted/40 rounded-2xl px-3 py-2">
+                          <p className="text-[11px] text-muted-foreground">Esperando que {peer?.nombre.split(" ")[0]} lo confirme.</p>
+                          <Button size="sm" variant="ghost" disabled={actionId === loan.id}
+                            onClick={async () => {
+                              setActionId(loan.id)
+                              const { error } = await loansApi.cancel(loan.id)
+                              setActionId(null)
+                              if (error) toast({ title: error, variant: "destructive" })
+                              else { toast({ title: "Registro retirado" }); load() }
+                            }}
+                            className="h-7 px-3 rounded-xl text-destructive hover:bg-destructive/10 text-[10px] font-bold">
+                            Retirar
+                          </Button>
+                        </div>
+                      )}
+
+                      {isLender && loan.status === "PENDING_APPROVAL" && !loan.sinDesembolso && (
                         <>
                           <div className="w-full space-y-2">
                             {/* Selector de interés */}
@@ -483,7 +565,7 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                       )}
 
                       {/* Borrower: cancelar solicitud pendiente */}
-                      {isBorrower && loan.status === "PENDING_APPROVAL" && (
+                      {isBorrower && loan.status === "PENDING_APPROVAL" && !loan.sinDesembolso && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -506,7 +588,7 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                           antes esta pantalla no existía en ningún lado: el préstamo quedaba
                           en PENDING_BORROWER_CONFIRMATION para siempre, con el backend listo
                           para aceptar/rechazar pero sin ningún botón que lo llamara. */}
-                      {isBorrower && loan.status === "PENDING_BORROWER_CONFIRMATION" && (
+                      {isBorrower && loan.status === "PENDING_BORROWER_CONFIRMATION" && !loan.sinDesembolso && (
                         <div className="w-full space-y-2">
                           <div className="bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-2xl p-3 space-y-1">
                             <p className="text-xs font-bold text-cyclon-lavender">
@@ -724,6 +806,74 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
               className="rounded-xl bg-cyclon-lavender text-white font-bold px-6"
             >
               {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar solicitud"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ════ Modal Préstamo que ya existía ════ */}
+      <Dialog open={existenteOpen} onOpenChange={setExistenteOpen}>
+        <DialogContent className="max-w-sm max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-cyclon-lavender" /> Préstamo que ya tenían
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Para una plata que se prestó antes (aunque ya se haya gastado). <strong className="text-foreground">No se mueve plata de ninguna billetera</strong>: solo queda el registro para que los dos lleven el control de los abonos.
+          </p>
+          <div className="space-y-4 py-1">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">¿Con quién?</Label>
+              <Select value={exForm.otroId} onValueChange={v => setExForm(f => ({ ...f, otroId: v }))}>
+                <SelectTrigger className="h-11 rounded-2xl"><SelectValue placeholder="Elige a la persona" /></SelectTrigger>
+                <SelectContent>
+                  {acceptedConnections.map(conn => {
+                    const p = conn.requesterId === myId ? conn.addressee! : conn.requester!
+                    return <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {([["yo_preste", "Yo le presté", ArrowDownLeft], ["me_prestaron", "Me prestó", ArrowUpRight]] as const).map(([v, label, Icono]) => (
+                <button key={v} type="button" onClick={() => setExForm(f => ({ ...f, rol: v }))}
+                  className={cn("h-11 rounded-xl text-xs font-bold border-2 flex items-center justify-center gap-1.5 transition-colors",
+                    exForm.rol === v ? "border-cyclon-lavender bg-cyclon-lavender/10 text-cyclon-lavender" : "border-muted text-muted-foreground")}>
+                  <Icono className="h-3.5 w-3.5" /> {label}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">¿Cuánto se prestó?</Label>
+              <MoneyInput value={exForm.monto} onChange={v => setExForm(f => ({ ...f, monto: v }))} className="h-11 rounded-2xl font-bold" placeholder="0" />
+            </div>
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <input type="checkbox" checked={exForm.abonado} onChange={e => setExForm(f => ({ ...f, abonado: e.target.checked }))} className="accent-kiri-emerald h-4 w-4" />
+              Ya se ha abonado una parte
+            </label>
+            {exForm.abonado && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">¿Cuánto falta por pagar hoy?</Label>
+                <MoneyInput value={exForm.pendiente} onChange={v => setExForm(f => ({ ...f, pendiente: v }))} className="h-11 rounded-2xl font-bold" placeholder="0" />
+                {exMonto > 0 && exPendiente > exMonto && <p className="text-xs text-destructive font-bold">No puede ser más de lo que se prestó.</p>}
+                {exMonto > 0 && exPendiente > 0 && exPendiente <= exMonto && <p className="text-[10px] text-muted-foreground">Ya se abonaron {formatAmount(exMonto - exPendiente)}.</p>}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Descripción (opcional)</Label>
+              <Input placeholder="Ej: Lo del arreglo del carro" value={exForm.descripcion} onChange={e => setExForm(f => ({ ...f, descripcion: e.target.value }))} className="h-11 rounded-2xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">¿Cuándo se paga? (opcional)</Label>
+              <SelectorFecha value={exForm.fechaCompromiso} onChange={v => setExForm(f => ({ ...f, fechaCompromiso: v }))} />
+            </div>
+            {exOtro && <p className="text-[10px] text-muted-foreground">Le llegará un aviso a {exOtro.nombre.split(" ")[0]} para que lo confirme.</p>}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setExistenteOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button disabled={!exValido || registrando} onClick={handleExistente} className="rounded-xl bg-cyclon-lavender text-white font-bold px-6">
+              {registrando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Registrar"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { PiggyBank, Plus, ArrowDownToLine, Calculator, Loader2, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -51,6 +52,17 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
   const [pockets, setPockets] = useState<SharedPocket[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Aprobar / rechazar retiros pendientes (antes no había ningún botón: los
+  // retiros pedidos quedaban esperando para siempre)
+  const [aprobandoId, setAprobandoId] = useState<string | null>(null)
+  const responderRetiro = async (pocketId: string, depositId: string, aprobar: boolean) => {
+    setAprobandoId(depositId)
+    const { error } = aprobar ? await sharedPocketsApi.approveDeposit(pocketId, depositId) : await sharedPocketsApi.rejectDeposit(pocketId, depositId)
+    setAprobandoId(null)
+    if (error) { toast({ title: error, variant: "destructive" }); return }
+    toast({ title: aprobar ? "Retiro aprobado — la plata volvió a su billetera" : "Retiro rechazado" })
+    load()
+  }
 
   // ── Modales ────────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false)
@@ -58,10 +70,11 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
   const [calcOpen, setCalcOpen] = useState(false)
 
   // ── Formularios ────────────────────────────────────────────────────────────
-  const [createForm, setCreateForm] = useState({ partnerId: "", nombre: "", meta: "" })
+  const [createForm, setCreateForm] = useState({ partnerId: "", nombre: "", meta: "", yaTienen: false, montoInicial: "" })
   const [creating, setCreating]     = useState(false)
 
-  const [depositForm, setDepositForm] = useState({ pocketId: "", monto: "", nota: "" })
+  const [depositForm, setDepositForm] = useState({ pocketId: "", monto: "", nota: "", yaAhorrado: false })
+  const esRetiro = depositForm.nota.startsWith("[RETIRO]")
   const [depositing, setDepositing]   = useState(false)
 
   const [calcForm, setCalcForm]   = useState({ partnerId: "", gasto: "" })
@@ -101,7 +114,8 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     const { error } = await sharedPocketsApi.create(
       [createForm.partnerId],
       createForm.nombre.trim(),
-      createForm.meta ? Number(createForm.meta) : undefined
+      createForm.meta ? Number(createForm.meta) : undefined,
+      createForm.yaTienen && Number(createForm.montoInicial) > 0 ? Number(createForm.montoInicial) : undefined,
     )
     setCreating(false)
     if (error) {
@@ -109,7 +123,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     } else {
       toast({ title: "Ahorro compartido creado ✓" })
       setCreateOpen(false)
-      setCreateForm({ partnerId: "", nombre: "", meta: "" })
+      setCreateForm({ partnerId: "", nombre: "", meta: "", yaTienen: false, montoInicial: "" })
       load()
     }
   }
@@ -121,7 +135,11 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     const { error, data } = await sharedPocketsApi.deposit(
       depositForm.pocketId,
       Number(depositForm.monto),
-      depositForm.nota || undefined
+      depositForm.nota.replace(/^\[RETIRO\]\s*/, "") || undefined,
+      // "Retirar" abre este mismo formulario con la marca [RETIRO] — antes se
+      // mandaba siempre como aporte, así que retirar en realidad depositaba.
+      esRetiro ? "retiro" : "aporte",
+      !esRetiro && depositForm.yaAhorrado,
     )
     setDepositing(false)
     if (error) {
@@ -129,11 +147,11 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     } else {
       const needsApproval = (data as any)?.requiresApproval
       toast({
-        title: `Aporte de ${formatAmount(Number(depositForm.monto))} registrado`,
-        description: needsApproval ? "Esperando aprobación del otro miembro" : "Aplicado exitosamente",
+        title: esRetiro ? `Retiro de ${formatAmount(Number(depositForm.monto))} solicitado` : `Aporte de ${formatAmount(Number(depositForm.monto))} registrado`,
+        description: needsApproval ? "Esperando aprobación del otro miembro" : depositForm.yaAhorrado ? "Sumado al bolsillo sin tocar tu billetera" : "Aplicado exitosamente",
       })
       setDepositOpen(false)
-      setDepositForm({ pocketId: "", monto: "", nota: "" })
+      setDepositForm({ pocketId: "", monto: "", nota: "", yaAhorrado: false })
       load()
     }
   }
@@ -256,7 +274,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                     <div className="grid grid-cols-3 gap-2">
                       <Button
                         size="sm"
-                        onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "" }); setDepositOpen(true) }}
+                        onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "", yaAhorrado: false }); setDepositOpen(true) }}
                         className="rounded-xl bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none font-bold text-xs h-9 gap-1"
                       >
                         <ArrowDownToLine className="h-3.5 w-3.5" /> Abonar
@@ -264,7 +282,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "[RETIRO]" }); setDepositOpen(true) }}
+                        onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "[RETIRO]", yaAhorrado: false }); setDepositOpen(true) }}
                         className="rounded-xl font-bold text-xs h-9 gap-1 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
                       >
                         <ChevronUp className="h-3.5 w-3.5" /> Retirar
@@ -294,20 +312,50 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                       Últimos movimientos
                     </p>
                     <ul className="space-y-2">
-                      {pocket.deposits.map(dep => (
-                        <li key={dep.id} className="flex items-center gap-2 text-xs">
-                          <Avatar className="h-6 w-6 shrink-0">
-                            <AvatarFallback className="text-[9px] font-bold bg-muted">
-                              {dep.userId === myId ? "Yo" : initials(peer?.nombre ?? "?")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-muted-foreground flex-1">
-                            {dep.userId === myId ? "Tú depositaste" : `${peer?.nombre ?? "Pareja"} depositó`}
-                            {dep.nota && ` · "${dep.nota}"`}
-                          </span>
-                          <span className="font-bold text-kiri-emerald">+{formatAmount(dep.monto)}</span>
-                        </li>
-                      ))}
+                      {pocket.deposits.filter(dep => !dep.nota?.includes("DELETE_REQUEST")).map(dep => {
+                        const nota0 = dep.nota ?? ""
+                        const previo = nota0.includes("PREVIO")
+                        const retiro = Number(dep.monto) < 0 || nota0.includes("RETIRO")
+                        const pendiente = nota0.includes("RETIRO_PENDIENTE")
+                        const nota = nota0.replace(/^\[[A-Z_]+\]\s*/, "").trim()
+                        const mio = dep.userId === myId
+                        const quien = mio ? "Tú" : (peer?.nombre ?? "Pareja")
+                        const verbo = retiro ? (pendiente ? "pidió retirar" : "retiró") : previo ? "registró" : "depositó"
+                        return (
+                          <li key={dep.id} className="text-xs space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6 shrink-0">
+                                <AvatarFallback className="text-[9px] font-bold bg-muted">
+                                  {mio ? "Yo" : initials(peer?.nombre ?? "?")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-muted-foreground flex-1 min-w-0">
+                                {quien} {mio && !retiro && !previo ? "depositaste" : mio && previo ? "registraste" : mio && retiro ? (pendiente ? "pediste retirar" : "retiraste") : verbo}
+                                {previo && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted">ya ahorrado</span>}
+                                {pendiente && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400">por aprobar</span>}
+                                {nota && ` · "${nota}"`}
+                              </span>
+                              <span className={cn("font-bold shrink-0", retiro ? "text-cyclon-pink" : "text-kiri-emerald")}>
+                                {retiro ? "−" : "+"}{formatAmount(Math.abs(Number(dep.monto)))}
+                              </span>
+                            </div>
+                            {/* Retiro pendiente: lo aprueba o rechaza OTRO miembro */}
+                            {pendiente && !mio && (
+                              <div className="flex gap-2 pl-8">
+                                <Button size="sm" disabled={aprobandoId === dep.id} onClick={() => responderRetiro(pocket.id, dep.id, true)}
+                                  className="h-7 px-3 rounded-xl bg-kiri-emerald text-white font-bold text-[10px]">
+                                  {aprobandoId === dep.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Aprobar retiro"}
+                                </Button>
+                                <Button size="sm" variant="ghost" disabled={aprobandoId === dep.id} onClick={() => responderRetiro(pocket.id, dep.id, false)}
+                                  className="h-7 px-3 rounded-xl text-destructive hover:bg-destructive/10 font-bold text-[10px]">
+                                  Rechazar
+                                </Button>
+                              </div>
+                            )}
+                            {pendiente && mio && <p className="pl-8 text-[10px] text-muted-foreground">Esperando que {peer?.nombre?.split(" ")[0] ?? "la otra persona"} lo apruebe.</p>}
+                          </li>
+                        )
+                      })}
                     </ul>
                   </div>
                 )}
@@ -355,14 +403,19 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Meta de ahorro (opcional)</Label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={createForm.meta}
-                onChange={e => setCreateForm(f => ({ ...f, meta: e.target.value }))}
-                className="h-11 rounded-2xl"
-              />
+              <MoneyInput value={createForm.meta} onChange={v => setCreateForm(f => ({ ...f, meta: v }))} className="h-11 rounded-2xl" placeholder="0" />
             </div>
+            {/* Ahorro que ya tenían antes de Kiri */}
+            <label className="flex items-start gap-2 text-xs cursor-pointer">
+              <input type="checkbox" checked={createForm.yaTienen} onChange={e => setCreateForm(f => ({ ...f, yaTienen: e.target.checked }))} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
+              <span>Ya tenemos algo ahorrado para esto <span className="block text-[10px] text-muted-foreground">Se suma al bolsillo sin descontarlo de tu billetera.</span></span>
+            </label>
+            {createForm.yaTienen && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">¿Cuánto tienen ahorrado?</Label>
+                <MoneyInput value={createForm.montoInicial} onChange={v => setCreateForm(f => ({ ...f, montoInicial: v }))} className="h-11 rounded-2xl font-bold" placeholder="0" />
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setCreateOpen(false)} className="rounded-xl">Cancelar</Button>
@@ -382,7 +435,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowDownToLine className="h-5 w-5 text-kiri-emerald" /> Depositar en bolsillo
+              <ArrowDownToLine className="h-5 w-5 text-kiri-emerald" /> {esRetiro ? "Retirar del bolsillo" : "Depositar en bolsillo"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
@@ -414,12 +467,18 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Nota (opcional)</Label>
               <Input
-                placeholder="Ej: Quincena de marzo"
-                value={depositForm.nota}
-                onChange={e => setDepositForm(f => ({ ...f, nota: e.target.value }))}
+                placeholder={esRetiro ? "Ej: Para el pasaje" : "Ej: Quincena de marzo"}
+                value={depositForm.nota.replace(/^\[RETIRO\]\s*/, "")}
+                onChange={e => setDepositForm(f => ({ ...f, nota: (esRetiro ? "[RETIRO] " : "") + e.target.value }))}
                 className="h-11 rounded-2xl"
               />
             </div>
+            {!depositForm.nota.startsWith("[RETIRO]") && (
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={depositForm.yaAhorrado} onChange={e => setDepositForm(f => ({ ...f, yaAhorrado: e.target.checked }))} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
+                <span>Esta plata ya la tenía ahorrada <span className="block text-[10px] text-muted-foreground">Se suma al bolsillo sin descontarla de tu billetera (ej. lo que ya tenían guardado antes de Kiri).</span></span>
+              </label>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setDepositOpen(false)} className="rounded-xl">Cancelar</Button>
@@ -428,7 +487,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
               onClick={handleDeposit}
               className="rounded-xl bg-kiri-emerald text-white font-bold px-6"
             >
-              {depositing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Depositar"}
+              {depositing ? <Loader2 className="h-4 w-4 animate-spin" /> : esRetiro ? "Pedir retiro" : "Depositar"}
             </Button>
           </DialogFooter>
         </DialogContent>

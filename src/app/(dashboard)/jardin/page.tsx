@@ -46,14 +46,14 @@ interface GardenLevel {
 
 const GARDEN_LEVELS: GardenLevel[] = [
   { level: 1, name: "Semilla",             image: "/garden/tierra.png",          xpRequired: 0 },
-  // Cada nivel pide más que el anterior (+1500, +2500, +4000, +6000). Con uso
-  // diario (racha + misiones) se llega al 2 en ~2 semanas, al 3 en ~1 mes y
-  // al último en varios meses de constancia.
-  { level: 2, name: "Brote",               image: "/garden/brote.png",           xpRequired: 1000 },
-  { level: 3, name: "Planta joven",        image: "/garden/arbol_pequeno.png",   xpRequired: 2500 },
-  { level: 4, name: "Árbol en crecimiento", image: "/garden/arbol_mediano.png",  xpRequired: 5000 },
-  { level: 5, name: "Árbol floreciente",   image: "/garden/arbol_grande.png",    xpRequired: 9000 },
-  { level: 6, name: "Jardín próspero",     image: "/garden/arbol_flores.png",    xpRequired: 15000 },
+  // XP que pide cada nivel: 850 para el 2, luego +1000, +2500, +4000, +6000.
+  // Con uso diario (racha + misiones) se llega al 2 en ~2 semanas y al último
+  // en varios meses de constancia.
+  { level: 2, name: "Brote",               image: "/garden/brote.png",           xpRequired: 850 },
+  { level: 3, name: "Planta joven",        image: "/garden/arbol_pequeno.png",   xpRequired: 1850 },
+  { level: 4, name: "Árbol en crecimiento", image: "/garden/arbol_mediano.png",  xpRequired: 4350 },
+  { level: 5, name: "Árbol floreciente",   image: "/garden/arbol_grande.png",    xpRequired: 8350 },
+  { level: 6, name: "Jardín próspero",     image: "/garden/arbol_flores.png",    xpRequired: 14350 },
 ]
 
 function getGardenHealth(
@@ -369,13 +369,13 @@ export default function JardinPage() {
   const { socket } = useSocket()
 
   const celebrateWatered = (message: string) => {
+    // La lluvia empieza de una vez (antes esperaba a que se fuera el mensaje
+    // y casi nadie la alcanzaba a ver); el mensaje sale debajo del árbol.
     setWateredMessage(message)
-    setTimeout(() => {
-      setWateredMessage(null)
-      setShowRainCelebration(true)
-      if (rainTimer.current) window.clearTimeout(rainTimer.current)
-      rainTimer.current = window.setTimeout(() => setShowRainCelebration(false), 8000)
-    }, 3200)
+    setShowRainCelebration(true)
+    if (rainTimer.current) window.clearTimeout(rainTimer.current)
+    rainTimer.current = window.setTimeout(() => setShowRainCelebration(false), 8000)
+    setTimeout(() => setWateredMessage(null), 4000)
   }
 
   useEffect(() => {
@@ -634,6 +634,44 @@ export default function JardinPage() {
         </CardContent>
       </Card>
 
+      {/* ═══ XP + RECOMPENSAS ═══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+        {/* XP Bar */}
+        <Card className="border-none bg-card shadow-sm rounded-2xl">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0">
+              <Sparkles className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold">Próximo hito: Nivel {currentLevel.level + 1}</p>
+                <span className="text-xs text-muted-foreground">{currentXP} / {xpForNext} XP</span>
+              </div>
+              <Progress value={xpProgress} className="h-2" indicatorClassName="bg-amber-400" />
+              <p className="text-[9px] text-muted-foreground">
+                Te faltan {xpNeeded} XP para desbloquear nuevas recompensas
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recompensas */}
+        <Link href="/misiones">
+          <Card className="border-none bg-card shadow-sm rounded-2xl hover:bg-muted/30 transition-colors cursor-pointer">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Gift className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">Misiones</p>
+                <p className="text-[10px] text-muted-foreground">Recompensas y cofre sorpresa</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
       {/* ═══ TU PROGRESO GENERAL ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-4 lg:p-5 space-y-4">
@@ -672,44 +710,6 @@ export default function JardinPage() {
           </Link>
         </CardContent>
       </Card>
-
-      {/* ═══ XP + RECOMPENSAS ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
-        {/* XP Bar */}
-        <Card className="border-none bg-card shadow-sm rounded-2xl">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0">
-              <Sparkles className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-bold">Próximo hito: Nivel {currentLevel.level + 1}</p>
-                <span className="text-xs text-muted-foreground">{currentXP} / {xpForNext} XP</span>
-              </div>
-              <Progress value={xpProgress} className="h-2" indicatorClassName="bg-amber-400" />
-              <p className="text-[9px] text-muted-foreground">
-                Te faltan {xpNeeded} XP para desbloquear nuevas recompensas
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recompensas */}
-        <Link href="/misiones">
-          <Card className="border-none bg-card shadow-sm rounded-2xl hover:bg-muted/30 transition-colors cursor-pointer">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <Gift className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-sm font-bold">Misiones</p>
-                <p className="text-[10px] text-muted-foreground">Recompensas y cofre sorpresa</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
 
       {/* ═══ ASÍ CRECE TU JARDÍN — Timeline de niveles ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
@@ -1305,15 +1305,13 @@ function GardenTreeVisual({
         className="relative flex items-center justify-center pt-6"
         animate={shakeControls}
       >
-        {/* "Fulano regó tu árbol" — arriba de todo (z-20, por encima del
-            clima y del árbol) para que se lea claro mientras aparece y
-            desaparece; la lluvia (gardenWeather) empieza justo después,
-            controlada por el padre. */}
+        {/* "Fulano regó tu árbol" — debajo del árbol (antes salía arriba,
+            tapado por las nubes), mientras cae la lluvia. */}
         {wateredMessage && (
           <div
             key={wateredMessage}
-            className="absolute -top-2 left-1/2 z-20 whitespace-nowrap pointer-events-none flex items-center gap-1.5 bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg shadow-sky-500/30"
-            style={{ animation: "kiriWateredPop 3.2s ease-out forwards" }}
+            className={cn("absolute left-1/2 z-20 whitespace-nowrap pointer-events-none flex items-center gap-1.5 bg-sky-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg shadow-sky-500/30", stormMessage || incomeMessage ? "bottom-8" : "bottom-0")}
+            style={{ animation: "kiriWateredPop 4s ease-out forwards" }}
           >
             <Droplets className="h-3.5 w-3.5 shrink-0" />
             {wateredMessage}

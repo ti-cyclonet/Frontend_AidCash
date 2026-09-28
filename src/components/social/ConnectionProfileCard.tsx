@@ -18,6 +18,44 @@ import type { ConnectionSharedResponse, ConnectionRole } from "@/lib/types"
 
 const ROLE_LABEL: Record<ConnectionRole, string> = { FRIEND: "Amigo", FAMILY: "Familia", PARTNER: "Pareja" }
 
+// Colores de la tarjeta según el rol, con exactamente el mismo estilo: azul
+// para amigos, ámbar para familia y rosa para la pareja (los mismos colores
+// de los chips de rol en Social). Verde Kiri mientras carga.
+const TEMA = {
+  base: {
+    header: "from-kiri-emerald/20", sparkle: "text-kiri-emerald/30",
+    avatar: "border-kiri-emerald/30 shadow-kiri-emerald/20", avatarFallback: "bg-kiri-mint text-kiri-emerald",
+    text: "text-kiri-emerald", softBg: "bg-kiri-emerald/10", barra: "bg-kiri-emerald",
+    activo: "bg-kiri-emerald text-white border-kiri-emerald shadow-sm shadow-kiri-emerald/20", hoverBorde: "hover:border-kiri-emerald/30",
+    creciendo: "from-kiri-emerald/5 to-emerald-900/5 border-kiri-emerald/10", anillo: "#10b981",
+    emoji: "⚙", equipo: "🌱 Equipo Kiri",
+  },
+  amigo: {
+    header: "from-blue-500/20", sparkle: "text-blue-500/30",
+    avatar: "border-blue-500/30 shadow-blue-500/20", avatarFallback: "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+    text: "text-blue-600 dark:text-blue-400", softBg: "bg-blue-500/10", barra: "bg-blue-500",
+    activo: "bg-blue-500 text-white border-blue-500 shadow-sm shadow-blue-500/20", hoverBorde: "hover:border-blue-500/30",
+    creciendo: "from-blue-500/5 to-blue-900/5 border-blue-500/10", anillo: "#3b82f6",
+    emoji: "🤝", equipo: "🤝 Amigos Kiri",
+  },
+  familia: {
+    header: "from-amber-500/20", sparkle: "text-amber-500/30",
+    avatar: "border-amber-500/30 shadow-amber-500/20", avatarFallback: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+    text: "text-amber-600 dark:text-amber-400", softBg: "bg-amber-500/10", barra: "bg-amber-500",
+    activo: "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20", hoverBorde: "hover:border-amber-500/30",
+    creciendo: "from-amber-500/5 to-amber-900/5 border-amber-500/10", anillo: "#f59e0b",
+    emoji: "🏡", equipo: "🏡 Familia Kiri",
+  },
+  pareja: {
+    header: "from-pink-500/20", sparkle: "text-pink-500/30",
+    avatar: "border-pink-500/30 shadow-pink-500/20", avatarFallback: "bg-pink-100 text-pink-600 dark:bg-pink-500/15 dark:text-pink-400",
+    text: "text-pink-600 dark:text-pink-400", softBg: "bg-pink-500/10", barra: "bg-pink-500",
+    activo: "bg-pink-500 text-white border-pink-500 shadow-sm shadow-pink-500/20", hoverBorde: "hover:border-pink-500/30",
+    creciendo: "from-pink-500/5 to-pink-900/5 border-pink-500/10", anillo: "#ec4899",
+    emoji: "💞", equipo: "💞 Pareja Kiri",
+  },
+} as const
+
 /**
  * ConnectionProfileCard — Tarjeta de presentación completa de una conexión
  * Diseño inspirado en la referencia visual con:
@@ -117,15 +155,19 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
     return Math.min(100, score)
   })() : 0
 
+  // La misma tarjeta, con el color de su rol
+  const rol = data?.connection.role
+  const t = rol === "PARTNER" ? TEMA.pareja : rol === "FAMILY" ? TEMA.familia : rol === "FRIEND" ? TEMA.amigo : TEMA.base
+
   return (
     <>
     <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="w-full max-w-md lg:max-w-xl max-h-[90vh] overflow-y-auto bg-card rounded-3xl shadow-2xl">
         {/* Header con fondo */}
-        <div className="relative bg-gradient-to-b from-kiri-emerald/20 to-transparent pb-16 pt-4 px-4 rounded-t-3xl">
+        <div className={cn("relative bg-gradient-to-b to-transparent pb-16 pt-4 px-4 rounded-t-3xl", t.header)}>
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute top-8 left-1/2 -translate-x-1/2">
-              <Sparkles className="h-5 w-5 text-kiri-emerald/30" />
+              <Sparkles className={cn("h-5 w-5", t.sparkle)} />
             </div>
           </div>
           <div className="flex items-center justify-between relative z-10">
@@ -147,13 +189,13 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
             <UserAvatar
               nombre={data.peer.nombre}
               avatarUrl={data.peer.avatarUrl}
-              className="h-24 w-24 border-4 border-kiri-emerald/30 shadow-lg shadow-kiri-emerald/20"
-              fallbackClassName="bg-kiri-mint text-kiri-emerald font-black text-3xl"
+              className={cn("h-24 w-24 border-4 shadow-lg", t.avatar)}
+              fallbackClassName={cn("font-black text-3xl", t.avatarFallback)}
             />
             <div className="text-center">
               <h2 className="text-xl font-black flex items-center gap-1.5 justify-center">
                 {data.peer.nombre}
-                <span className="text-kiri-emerald">⚙</span>
+                <span className={t.text}>{t.emoji}</span>
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Conectados desde {formatDate(data.connection.createdAt)}
@@ -168,8 +210,8 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
           <Card className="border-none bg-card rounded-2xl shadow-sm">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-kiri-emerald/10 flex items-center justify-center">
-                  <Users className="h-4 w-4 text-kiri-emerald" />
+                <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center", t.softBg)}>
+                  <Users className={cn("h-4 w-4", t.text)} />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-bold">Rol en tu vida</p>
@@ -216,8 +258,8 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                       className={cn(
                         "flex items-center justify-center gap-1.5 h-10 rounded-xl text-xs font-bold border-2 transition-all disabled:opacity-50",
                         isActive
-                          ? "bg-kiri-emerald text-white border-kiri-emerald shadow-sm shadow-kiri-emerald/20"
-                          : "border-muted text-muted-foreground hover:border-kiri-emerald/30"
+                          ? t.activo
+                          : cn("border-muted text-muted-foreground", t.hoverBorde)
                       )}
                     >
                       {r.icon} {r.label}
@@ -239,9 +281,9 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <PiggyBank className="h-4 w-4 text-kiri-emerald" />
+                    <PiggyBank className={cn("h-4 w-4", t.text)} />
                     <span className="text-sm font-bold">Ahorros compartidos</span>
-                    <span className="text-[8px] font-bold bg-kiri-emerald/10 text-kiri-emerald px-1.5 py-0.5 rounded-full">{data.pockets.length}</span>
+                    <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full", t.softBg, t.text)}>{data.pockets.length}</span>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
@@ -257,10 +299,10 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                         <div key={p.id} className="space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold">{p.nombre}</span>
-                            <span className="text-[10px] font-bold text-kiri-emerald">{pct}%</span>
+                            <span className={cn("text-[10px] font-bold", t.text)}>{pct}%</span>
                           </div>
                           <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
-                            <div className="h-full rounded-full bg-kiri-emerald transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                            <div className={cn("h-full rounded-full transition-all", t.barra)} style={{ width: `${Math.min(pct, 100)}%` }} />
                           </div>
                           <p className="text-[8px] text-muted-foreground">{formatAmount(p.balance)} / {formatAmount(p.meta)}</p>
                         </div>
@@ -270,7 +312,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 )}
 
                 {data.pockets.length > 0 && (
-                  <button className="w-full text-center text-[10px] font-bold text-kiri-emerald hover:underline pt-1">
+                  <button className={cn("w-full text-center text-[10px] font-bold hover:underline pt-1", t.text)}>
                     Ver todos los ahorros
                   </button>
                 )}
@@ -332,7 +374,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
           </div>
 
           {/* Creciendo juntos — con datos reales y recomendaciones */}
-          <Card className="border-none bg-gradient-to-r from-kiri-emerald/5 to-emerald-900/5 rounded-2xl shadow-sm border border-kiri-emerald/10">
+          <Card className={cn("bg-gradient-to-r rounded-2xl shadow-sm border", t.creciendo)}>
             <CardContent className="p-5">
               <div className="flex items-center gap-4">
                 <div className="flex-1">
@@ -359,7 +401,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                     })()}
                   </p>
                   {data.pockets.length > 0 && (
-                    <p className="text-[9px] font-bold text-kiri-emerald mt-2">
+                    <p className={cn("text-[9px] font-bold mt-2", t.text)}>
                       Total ahorrado juntos: {formatAmount(data.pockets.reduce((a, p) => a + p.balance, 0))}
                     </p>
                   )}
@@ -368,15 +410,15 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                   <div className="relative h-16 w-16">
                     <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
                       <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" className="text-muted/20" strokeWidth="8" />
-                      <circle cx="50" cy="50" r="42" fill="none" stroke="#10b981" strokeWidth="8" strokeLinecap="round"
+                      <circle cx="50" cy="50" r="42" fill="none" stroke={t.anillo} strokeWidth="8" strokeLinecap="round"
                         strokeDasharray={`${connectionLevel * 2.64} 264`} />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-sm font-black text-kiri-emerald">{connectionLevel}%</span>
+                      <span className={cn("text-sm font-black", t.text)}>{connectionLevel}%</span>
                     </div>
                   </div>
                   <p className="text-[8px] text-muted-foreground mt-1">Nivel de conexión</p>
-                  <p className="text-[8px] font-bold text-kiri-emerald">🌱 Equipo Kiri</p>
+                  <p className={cn("text-[8px] font-bold", t.text)}>{t.equipo}</p>
                 </div>
               </div>
             </CardContent>

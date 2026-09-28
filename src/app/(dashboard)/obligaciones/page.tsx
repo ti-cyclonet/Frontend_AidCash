@@ -614,13 +614,12 @@ export default function ObligacionesPage() {
     const needed = insufficientTarget.monto - wallet.cashBalance
     if (fondoEmergencia < needed) return
 
-    // Retirar del fondo de emergencia
+    // Retirar del fondo de emergencia — el backend ya devuelve esa plata a la
+    // billetera en la misma transacción (antes era un walletWithdraw aparte)
     const { emergencyFundApi } = await import("@/lib/api-client")
-    const { data: fundData } = await emergencyFundApi.transaction(needed, "retiro")
-    if (fundData) setFondoEmergencia(fundData.fondoActual)
-
-    // Sumar al cashBalance
-    await userApi.walletWithdraw(needed, 'ahorro')
+    const { data: fundData, error: fundError } = await emergencyFundApi.transaction(needed, "retiro")
+    if (fundError || !fundData) return
+    setFondoEmergencia(fundData.fondoActual)
 
     // Pagar la obligación
     if (insufficientTarget.type === "debt") {

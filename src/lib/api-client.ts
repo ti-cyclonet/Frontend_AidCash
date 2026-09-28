@@ -15,9 +15,6 @@ import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse,
 import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
-// Authoriza es la identidad central: la foto de perfil se sube allí y se
-// refleja en todas las apps del ecosistema.
-const AUTHORIZA_API_URL = process.env.NEXT_PUBLIC_AUTHORIZA_API_URL || 'http://localhost:3000/api'
 
 // ─── Storage Keys ─────────────────────────────────────────────────────────────
 
@@ -346,36 +343,15 @@ export const userApi = {
 }
 
 /**
- * Sube la foto de perfil al endpoint CENTRAL de Authoriza (multipart, campo
- * 'file') y devuelve la URL alojada. El avatar vive en Authoriza y se refleja
- * en todas las apps. Usa el access token de Kiri (Authoriza valida el token
- * federado). El api() normal solo maneja JSON, por eso este helper es aparte.
+ * Sube la foto de perfil (data URL ya redimensionada) a Authoriza A TRAVÉS del
+ * backend de Kiri: el avatar vive en Authoriza y se refleja en todas las apps,
+ * pero el token de Kiri no es válido contra Authoriza, así que el navegador no
+ * puede subirla directo allá (antes fallaba siempre con 401).
  */
-export async function uploadAvatarToAuthoriza(file: File): Promise<{ url: string | null; error: string | null }> {
-  try {
-    const form = new FormData()
-    form.append('file', file)
-    // Base normalizada: quita un '/auth' final por si el env lo trae (prod Kiri
-    // ya es '.../api' sin /auth, pero se protege por consistencia).
-    const base = AUTHORIZA_API_URL.replace(/\/auth\/?$/, '')
-    const headers: Record<string, string> = {}
-    const token = getAccessToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    // NO fijar Content-Type: el navegador pone el boundary del multipart.
-    const res = await fetch(`${base}/users/me/avatar`, { method: 'POST', headers, body: form })
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}))
-      return { url: null, error: e.message || `Error ${res.status}` }
-    }
-    const data = await res.json()
-    let url = data.url as string | undefined
-    if (!url) return { url: null, error: 'Authoriza no devolvió la foto' }
-    // Si viene relativa ("/uploads/..."), es relativa a Authoriza, no a Kiri
-    if (url.startsWith('/')) url = new URL(url, base).toString()
-    return { url, error: null }
-  } catch {
-    return { url: null, error: 'Error de conexión al subir la foto' }
-  }
+export async function uploadAvatarToAuthoriza(dataUrl: string): Promise<{ url: string | null; error: string | null }> {
+  const { data, error } = await api<{ url: string }>('/users/avatar', { method: 'POST', body: { dataUrl } })
+  if (error || !data?.url) return { url: null, error: error || 'No se pudo subir la foto' }
+  return { url: data.url, error: null }
 }
 
 export interface WalletState {
@@ -915,6 +891,12 @@ export interface BalanceReport {
     prestamos: { id: string; persona: string; monto: number; desdeBilletera: boolean; fecha: string }[]
     abonos: { id: string; persona: string; monto: number; entraABilletera: boolean; fecha: string }[]
   }
+  /** Social: préstamos entre usuarios, sus abonos y ahorros compartidos del rango. */
+  social?: {
+    prestamos: { id: string; conQuien: string; rol: 'preste' | 'me_prestaron'; monto: number; previo: boolean; descripcion: string | null; fecha: string }[]
+    abonos: { id: string; conQuien: string; rol: 'recibi' | 'pague'; monto: number; fecha: string }[]
+    ahorros: { id: string; bolsillo: string; tipo: 'aporte' | 'previo' | 'retiro'; monto: number; fecha: string }[]
+  }
 }
 
 // ─── Movimiento unificado — Balance/Historial ─────────────────────────────────
@@ -1028,14 +1010,16 @@ export const sharedPocketsApi = {
   async list() {
     return api<{ pockets: Record<string, unknown>[] }>('/shared-pockets')
   },
-  async create(partnerIds: string[], nombre: string, meta?: number) {
+  /** montoInicial: lo que ya tenían ahorrado antes de Kiri (no se descuenta de la billetera) */
+  async create(partnerIds: string[], nombre: string, meta?: number, montoInicial?: number) {
     return api<{ pocket: Record<string, unknown> }>('/shared-pockets', {
-      method: 'POST', body: { partnerIds, nombre, meta },
+      method: 'POST', body: { partnerIds, nombre, meta, ...(montoInicial ? { montoInicial } : {}) },
     })
   },
-  async deposit(pocketId: string, monto: number, nota?: string, tipo?: 'aporte' | 'retiro') {
+  /** yaAhorrado: plata que ya estaba ahorrada por fuera — suma al bolsillo sin descontar de la billetera */
+  async deposit(pocketId: string, monto: number, nota?: string, tipo?: 'aporte' | 'retiro', yaAhorrado = false) {
     const res = await api<{ deposit: Record<string, unknown>; requiresApproval: boolean }>(`/shared-pockets/${pocketId}/deposit`, {
-      method: 'POST', body: { monto, nota, tipo: tipo ?? 'aporte' },
+      method: 'POST', body: { monto, nota, tipo: tipo ?? 'aporte', ...(yaAhorrado ? { yaAhorrado: true } : {}) },
     })
     if (res.data && (tipo ?? 'aporte') === 'aporte') marcarLluviaDeAhorro(monto)
     return res
@@ -1074,6 +1058,10 @@ export const loansApi = {
     return api<{ loan: Record<string, unknown> }>('/loans/request', {
       method: 'POST', body: data,
     })
+  },
+  /** Préstamo que YA existía (no mueve plata): la otra persona lo confirma */
+  async existente(data: { otroId: string; rol: 'yo_preste' | 'me_prestaron'; monto: number; pendiente: number; descripcion?: string; fechaCompromiso?: string | null }) {
+    return api<{ loan: Record<string, unknown> }>('/loans/existente', { method: 'POST', body: data })
   },
   /** Cambiar la fecha de pago (cualquiera de los dos; al otro le llega aviso). */
   async cambiarFecha(loanId: string, fechaCompromiso: string | null) {
@@ -1116,6 +1104,46 @@ export const loansApi = {
       method: 'POST', body: { paymentId },
     })
   },
+}
+
+// ─── Mi plan: cambiarse de plan y acceso a FactoNet ───────────────────────────
+
+export interface PlanDisponible {
+  packageId: string
+  displayName: string
+  name: string
+  description: string | null
+  price: number
+  isHighlighted: boolean
+  displayOrder: number
+  badge: string | null
+  features: string[]
+}
+
+export interface FacturaPendiente {
+  codigo: string
+  valor: number
+  emitida?: string | null
+  vence?: string | null
+  estado?: string
+  plan?: string | null
+  evento: 'emitida' | 'vence_hoy' | 'aviso_mora' | 'recargo' | 'suspendida' | 'pago_rechazado'
+  actualizada: string
+}
+
+export interface FactonetInfo {
+  url: string
+  correo: string
+  facturaPendiente: FacturaPendiente | null
+  cambioPlan: { packageId: string; plan: string | null; fecha: string } | null
+}
+
+export const planApi = {
+  disponibles: () => api<PlanDisponible[]>('/plan/available'),
+  factonet: () => api<FactonetInfo>('/plan/factonet'),
+  /** Cambio de plan: Authoriza valida la contraseña, crea el contrato y da acceso a FactoNet */
+  cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean }) =>
+    api<{ success: boolean; message?: string }>('/plan/upgrade', { method: 'POST', body: data }),
 }
 
 // ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────

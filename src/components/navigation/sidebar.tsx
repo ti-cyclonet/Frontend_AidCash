@@ -170,7 +170,7 @@ export function Sidebar() {
                           <button key={n.id} onClick={() => { setNotifsOpen(false); router.push(notifRoute(n)) }}
                             className={cn("w-full flex items-start gap-2.5 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0", !n.read && "bg-cyclon-lavender/5")}>
                             <div className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">
-                              {notifIcon(n.event)}
+                              {notifIcon(n.event, n.data as Record<string, unknown> | undefined)}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className={cn("text-xs leading-snug", !n.read && "font-semibold")}>{notifTitle(n)}</p>

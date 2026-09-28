@@ -16,7 +16,7 @@ import { api, getUserId } from "@/lib/api-client"
  * había visto) para mostrar lo nuevo. Se guarda como "social@2".
  */
 const VERSION_GUIA: Record<string, number> = {
-  social: 2, // presupuesto del hogar, préstamos con fecha de pago, avisos al celular
+  social: 3, // + registrar préstamos, ahorros y deudas que ya existían
   gestion: 2, // nuevas Proyecciones: día sin deudas, aporte extra en vivo, logros reales
 }
 const conVersion = (id: string) => (VERSION_GUIA[id] ?? 1) > 1 ? `${id}@${VERSION_GUIA[id]}` : id

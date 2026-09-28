@@ -1,6 +1,6 @@
 import {
   UserPlus, UserCheck, UserX, PiggyBank, Coins, Check, XCircle,
-  CalendarClock, Wallet, ArrowRightLeft, Droplet, Bell, PartyPopper, Target, Home,
+  CalendarClock, Wallet, ArrowRightLeft, Droplet, Bell, PartyPopper, Target, Home, Receipt,
 } from "lucide-react"
 import { SOCKET_EVENTS, KiriNotification } from "@/lib/socket-context"
 
@@ -16,7 +16,9 @@ import { SOCKET_EVENTS, KiriNotification } from "@/lib/socket-context"
  * rol) se agrega una vez y aparece correcto en todas las campanas a la vez.
  */
 
-export function notifIcon(event: KiriNotification["event"]) {
+export function notifIcon(event: KiriNotification["event"], data?: Record<string, unknown>) {
+  // Avisos de factura (FactoNet → Kiri)
+  if (event === SOCKET_EVENTS.AVISO && data?.tipo === "factura") return <Receipt className="h-4 w-4 text-sky-500" />
   switch (event) {
     case SOCKET_EVENTS.NEW_INVITE:             return <UserPlus className="h-4 w-4 text-cyclon-lavender" />
     case SOCKET_EVENTS.INVITE_ACCEPTED:        return <UserCheck className="h-4 w-4 text-kiri-emerald" />

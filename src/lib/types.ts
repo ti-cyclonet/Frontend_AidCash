@@ -139,6 +139,10 @@ export interface Loan {
   tasaInteres?: number | null;
   /** Monto original solicitado, antes de sumarle el interés propuesto. */
   montoOriginal?: number | null;
+  /** Préstamo que ya existía antes de Kiri: se confirma sin mover plata. */
+  sinDesembolso?: boolean;
+  /** Quién lo registró (el otro lo confirma). */
+  creadoPorId?: string | null;
   createdAt: string;
   updatedAt: string;
   lender?: SocialUser;
@@ -234,6 +238,10 @@ export interface SharedDebt {
   id: string;
   nombre: string;
   montoTotal: number;
+  saldoRestante: number;
+  cuotaPeriodo: number;
+  frecuenciaPago?: string;
+  diasPago?: string;
   tipoDeuda: DebtType;
   tasaInteres: number | null;
   estado: DebtStatus;
