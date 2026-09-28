@@ -20,7 +20,7 @@ export interface SavingsEntry {
   id: string
   periodo: string
   monto: number
-  tipo: 'ahorro' | 'sin_ahorro'
+  tipo: 'ahorro' | 'sin_ahorro' | 'retiro'
   created_at: string
 }
 
@@ -157,6 +157,8 @@ function useFinanceDataInternal() {
   const [debts, setDebts] = useState<Debt[]>([])
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([])
   const [savingsHistory, setSavingsHistory] = useState<SavingsEntry[]>([])
+  // Total ahorrado neto que calcula el backend sobre TODO el historial
+  const [totalAhorradoServidor, setTotalAhorradoServidor] = useState<number | null>(null)
   const [extraIncomes, setExtraIncomes] = useState<ExtraIncome[]>([])
   const [impulseExpenses, setImpulseExpenses] = useState<ImpulseExpense[]>([])
   const [loading, setLoading] = useState(true)
@@ -182,6 +184,7 @@ function useFinanceDataInternal() {
         setDebts((debtsRes.data?.debts ?? []).map(mapDebt))
         setFixedExpenses((fixedRes.data?.fixedExpenses ?? []).map(mapFixed))
         setSavingsHistory((savingsRes.data?.history ?? []).map(mapSavings))
+        if (savingsRes.data?.totalAhorrado != null) setTotalAhorradoServidor(Number(savingsRes.data.totalAhorrado))
         setExtraIncomes((extraRes.data?.extraIncomes ?? []).map(mapExtraIncome))
         setImpulseExpenses((impulseRes.data?.expenses ?? []).map(mapImpulse))
       }
@@ -550,7 +553,7 @@ function useFinanceDataInternal() {
 
   // ─── Ahorro ──────────────────────────────────────────────────────────────────
 
-  const addSavingsEntry = async (monto: number, tipo: SavingsEntry['tipo'], skipWalletDeduct = false) => {
+  const addSavingsEntry = async (monto: number, tipo: 'ahorro' | 'sin_ahorro', skipWalletDeduct = false) => {
     if (!userId) return
     await savingsApi.create(monto, tipo)
     // Si es ahorro real y no se pidió omitir la deducción (para evitar doble deducción)
@@ -661,9 +664,11 @@ function useFinanceDataInternal() {
 
   // ─── Derivados ───────────────────────────────────────────────────────────────
 
-  const totalAhorrado = savingsHistory
-    .filter(e => e.tipo === 'ahorro')
-    .reduce((acc, e) => acc + e.monto, 0)
+  // Antes se sumaban solo los últimos 12 registros de ahorro y sin restar los
+  // retiros: con más de 12 depósitos o tras retirar, "Ahorros" salía mal.
+  const totalAhorrado = totalAhorradoServidor ?? Math.max(0,
+    savingsHistory.filter(e => e.tipo === 'ahorro').reduce((acc, e) => acc + e.monto, 0)
+    - savingsHistory.filter(e => e.tipo === 'retiro').reduce((acc, e) => acc + e.monto, 0))
 
   const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
 
