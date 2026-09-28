@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { FileText, Loader2, Calendar, Download } from "lucide-react"
+import { FileText, Loader2, Download } from "lucide-react"
 import { exportToPdf } from "@/lib/export-utils"
-import { reportsApi, type BalanceReport } from "@/lib/api-client"
+import { reportsApi } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
 /**
@@ -13,10 +13,9 @@ import { cn } from "@/lib/utils"
  * ExportButtons — Selector de periodo para descarga de PDF
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Permite al usuario:
- *   1. Descargar el PDF del periodo actual (rápido)
- *   2. Abrir modal para seleccionar meses específicos
- *   3. Descargar varios meses en un solo archivo
+ * El botón "PDF" abre SIEMPRE el selector de meses y solo descarga después
+ * de elegir uno o varios (antes descargaba de una vez el periodo en pantalla
+ * y el selector estaba en un botón aparte). Varios meses van en un solo archivo.
  *
  * Las gráficas del PDF se dibujan con los datos reales del reporte (ver
  * export-utils.ts) en vez de capturar con html2canvas los gráficos ya
@@ -26,8 +25,12 @@ import { cn } from "@/lib/utils"
  */
 
 interface ExportButtonsProps {
-  report: BalanceReport | null
   className?: string
+}
+
+/** "AAAA-MM-DD" con la fecha LOCAL (toISOString la pasa a UTC y puede correr un día). */
+function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // Genera los últimos 12 meses como opciones
@@ -39,8 +42,8 @@ function getLast12Months(): { value: string; label: string; from: string; to: st
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const year = date.getFullYear()
     const month = date.getMonth()
-    const from = new Date(year, month, 1).toISOString().split('T')[0]
-    const to = new Date(year, month + 1, 0).toISOString().split('T')[0]
+    const from = ymdLocal(new Date(year, month, 1))
+    const to = ymdLocal(new Date(year, month + 1, 0))
     const label = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
 
     months.push({
@@ -54,24 +57,12 @@ function getLast12Months(): { value: string; label: string; from: string; to: st
   return months
 }
 
-export function ExportButtons({ report, className }: ExportButtonsProps) {
-  const [loadingPdf, setLoadingPdf] = useState(false)
+export function ExportButtons({ className }: ExportButtonsProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState(false)
 
   const months = getLast12Months()
-
-  // Descarga rápida del periodo actual
-  const handleQuickPdf = async () => {
-    if (!report) return
-    setLoadingPdf(true)
-    try {
-      await exportToPdf(report, `kiri-balance-${report.timeframe}`)
-    } finally {
-      setLoadingPdf(false)
-    }
-  }
 
   // Toggle selección de mes
   const toggleMonth = (value: string) => {
@@ -119,30 +110,15 @@ export function ExportButtons({ report, className }: ExportButtonsProps) {
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      {/* Botón rápido: descarga el periodo actual */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleQuickPdf}
-        disabled={!report || loadingPdf}
-        className="h-9 rounded-xl gap-1.5 border-kiri-emerald/40 text-kiri-emerald hover:bg-kiri-emerald/10 hover:border-kiri-emerald font-bold text-xs"
-      >
-        {loadingPdf
-          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          : <FileText className="h-3.5 w-3.5" />
-        }
-        PDF
-      </Button>
-
-      {/* Botón para elegir meses */}
+      {/* Abre el selector de meses; la descarga ocurre desde el modal */}
       <Button
         variant="outline"
         size="sm"
         onClick={() => setModalOpen(true)}
-        className="h-9 rounded-xl gap-1.5 border-muted text-muted-foreground hover:border-cyclon-lavender/40 hover:text-cyclon-lavender font-bold text-xs"
+        className="h-9 rounded-xl gap-1.5 border-kiri-emerald/40 text-kiri-emerald hover:bg-kiri-emerald/10 hover:border-kiri-emerald font-bold text-xs"
       >
-        <Calendar className="h-3.5 w-3.5" />
-        Elegir meses
+        <FileText className="h-3.5 w-3.5" />
+        PDF
       </Button>
 
       {/* Modal selector de meses */}

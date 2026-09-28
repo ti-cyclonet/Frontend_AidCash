@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { budgetCategoriesApi } from "@/lib/api-client"
+import { budgetCategoriesApi, ResumenCategorias } from "@/lib/api-client"
+import { useFinanceData } from "@/hooks/use-finance-data"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -86,4 +87,45 @@ export function useBudgetCategories() {
   useEffect(() => { refresh() }, [refresh])
 
   return { budgetCategories: categories, refreshBudgetCategories: refresh }
+}
+
+/**
+ * Resumen de gasto por categoría calculado en el servidor — la MISMA cifra en
+ * Presupuesto, Consejo Kiri y Balance (antes cada pantalla lo calculaba a su
+ * manera en el navegador). Se recarga solo cuando cambian gastos, pagos de
+ * gastos fijos o de deudas (cualquier cosa que mueva el gasto de una categoría).
+ */
+export function useCategoryResumen(alcance: 'periodo' | 'mes' = 'periodo') {
+  const { impulseExpenses, fixedExpenses, debts } = useFinanceData()
+  const [resumen, setResumen] = useState<ResumenCategorias | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const refresh = useCallback(async () => {
+    const { data } = await budgetCategoriesApi.resumen(alcance)
+    if (data) setResumen(data)
+    setLoading(false)
+  }, [alcance])
+
+  useEffect(() => { refresh() }, [refresh, impulseExpenses, fixedExpenses, debts])
+
+  return { resumen, loading, refreshResumen: refresh }
+}
+
+/**
+ * Categoría que Kiri sugiere para una descripción mientras el usuario escribe
+ * (con pausa de 350 ms). Usa el historial del usuario: si ya puso "InDriver"
+ * en Transporte, la próxima vez lo propone solo.
+ */
+export function useCategoriaSugerida(nombre: string) {
+  const [sugerencia, setSugerencia] = useState<{ categoryId: string; nombre: string; fuente: 'historial' | 'palabra_clave' } | null>(null)
+  useEffect(() => {
+    const texto = nombre.trim()
+    if (texto.length < 3) { setSugerencia(null); return }
+    let vigente = true
+    const t = setTimeout(() => {
+      budgetCategoriesApi.sugerir(texto).then(({ data }) => { if (vigente) setSugerencia(data?.sugerencia ?? null) })
+    }, 350)
+    return () => { vigente = false; clearTimeout(t) }
+  }, [nombre])
+  return sugerencia
 }

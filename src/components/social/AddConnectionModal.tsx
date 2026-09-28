@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { userApi, connectionsApi } from "@/lib/api-client"
 import { UserAvatar } from "@/components/social/UserAvatar"
+import { InviteLinkPanel } from "@/components/social/InviteLinkPanel"
 import type { SocialUser, ConnectionRole } from "@/lib/types"
 
 const TYPE_META: Record<ConnectionRole, { label: string; color: string; icon: typeof Heart; desc: string }> = {
@@ -64,7 +65,7 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose() }}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm [&>*]:min-w-0 overflow-x-hidden">
         {step === "type" && (
           <>
             <DialogHeader>
@@ -153,6 +154,13 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
             )}
 
             {error && <p className="text-center text-xs text-destructive mt-2">{error}</p>}
+
+            {/* ¿Todavía no usa Kiri? Enlace de invitación con este mismo rol:
+                al registrarse quedan conectados sin buscar ni aceptar nada. */}
+            <div className="mt-4 pt-4 border-t border-border space-y-2">
+              <p className="text-xs font-bold">¿Todavía no usa Kiri? Envíale tu enlace</p>
+              <InviteLinkPanel role={role} compact />
+            </div>
           </>
         )}
 

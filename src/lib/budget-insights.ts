@@ -1,4 +1,3 @@
-import { ImpulseExpense } from './types'
 import { getDaysElapsedAndTotal } from './period-filter'
 
 /**
@@ -48,33 +47,29 @@ export interface CategoryAnalysis {
   trend: 'rising' | 'stable' | 'declining'
 }
 
+/** Categoría con su gasto YA calculado por el backend (GET /budget-categories/resumen). */
 interface BudgetCategory {
   id: string
   name: string
   budget: number
   spent: number
-  color: string
-  icon: string
+  /** Movimientos del periodo, solo para detectar la tendencia. */
+  movimientos?: { monto: number; fecha: string }[]
+  /** % de variación contra el periodo anterior (null si el anterior fue $0). */
+  variacionPct?: number | null
+  gastadoAnterior?: number
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const SUGGESTIONS_KEYS: Record<string, string[]> = {
-  "Alimentacion": ["comida", "mercado", "supermercado", "restaurante", "hamburguesa", "almuerzo", "cena", "cafeteria", "snack", "desayuno", "pizza", "pollo", "arroz"],
-  "Transporte": ["gasolina", "uber", "taxi", "bus", "peaje", "parqueadero", "metro", "moto", "lavada", "mantenimiento"],
-  "Ocio": ["netflix", "spotify", "cine", "juego", "bar", "fiesta", "salida", "discoteca", "cerveza", "trago"],
-  "Compras": ["ropa", "zapatos", "accesorios", "electronica", "amazon", "tienda", "online"],
-  "Viajes": ["vuelo", "hotel", "vacaciones", "paseo", "hospedaje"],
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getExpenseTrend(expenses: ImpulseExpense[], categoryKeys: string[]): 'rising' | 'stable' | 'declining' {
+function getExpenseTrend(expenses: { monto: number; fecha: string }[]): 'rising' | 'stable' | 'declining' {
   if (expenses.length < 3) return 'stable'
 
   // Dividir en dos mitades temporales
   const sorted = [...expenses].sort((a, b) =>
-    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
   )
   const mid = Math.floor(sorted.length / 2)
   const firstHalf = sorted.slice(0, mid)
@@ -93,7 +88,6 @@ function getExpenseTrend(expenses: ImpulseExpense[], categoryKeys: string[]): 'r
 
 export function analyzeBudgetCategories(
   categories: BudgetCategory[],
-  impulseExpenses: ImpulseExpense[],
   frequency: 'mensual' | 'quincenal',
   freeAmount: number,
   diasCobro: string = '',
@@ -105,22 +99,16 @@ export function analyzeBudgetCategories(
   const daysLeft = Math.max(1, daysInPeriod - daysElapsed)
 
   for (const cat of categories) {
-    // Match expenses to this category (same logic as PresupuestoTab)
-    const catKeys = SUGGESTIONS_KEYS[cat.name] ?? []
-    const allKeys = [...catKeys, cat.name.toLowerCase()]
-
-    const matched = impulseExpenses.filter(e => {
-      const expName = e.nombre.toLowerCase()
-      return allKeys.some(k => expName.includes(k)) || expName.includes(cat.name.toLowerCase())
-    })
-
-    const spent = matched.reduce((a, e) => a + e.monto, 0)
+    // El gasto viene calculado por el backend (misma cifra que el gráfico y
+    // Balance) — antes este motor volvía a adivinar por palabras clave y el
+    // "Consejo Kiri" podía citar un monto distinto al que mostraba la pantalla.
+    const spent = cat.spent
     const pct = cat.budget > 0 ? Math.round((spent / cat.budget) * 100) : 0
     const isOver = spent > cat.budget
     const remaining = Math.max(0, cat.budget - spent)
     const dailyAvg = daysElapsed > 0 ? spent / daysElapsed : 0
     const projectedSpend = dailyAvg * daysInPeriod
-    const trend = getExpenseTrend(matched, allKeys)
+    const trend = getExpenseTrend(cat.movimientos ?? [])
 
     analyses.push({
       name: cat.name,
@@ -149,10 +137,12 @@ export function analyzeBudgetCategories(
       })
     }
     // Alerta preventiva: va a excederse si sigue así
+    // Antes: "si reduces X esta semana podrías ahorrar Y" con un 30% fijo
+    // inventado y cifras que no cuadraban entre sí. Ahora: a tu ritmo real
+    // cuánto te pasarías, y cuánto puedes gastar por día para no pasarte.
     else if (!isOver && projectedSpend > cat.budget && pct >= 60) {
-      const reduction = Math.round(dailyAvg * 0.3) // Sugerir reducir 30%
-      const weekSavings = reduction * 7
-      const monthSavings = reduction * daysLeft
+      const exceso = projectedSpend - cat.budget
+      const limiteDiario = remaining / Math.max(1, daysLeft)
 
       insights.push({
         id: `alert-projected-${cat.id}`,
@@ -160,8 +150,8 @@ export function analyzeBudgetCategories(
         severity: 'warning',
         category: cat.name,
         title: `Consejo Kiri`,
-        message: `Si reduces ${cat.name.toLowerCase()} esta semana en ${formatMoney(weekSavings)}, podrías ahorrar ${formatMoney(monthSavings)} al final del ${frequency === 'quincenal' ? 'periodo' : 'mes'}.`,
-        savingsAmount: monthSavings,
+        message: `A tu ritmo (${formatMoney(dailyAvg)}/día) cerrarías ${cat.name.toLowerCase()} en ${formatMoney(projectedSpend)}, ${formatMoney(exceso)} por encima del límite. Para no pasarte, gasta máximo ${formatMoney(limiteDiario)} por día los próximos ${daysLeft} días.`,
+        savingsAmount: Math.round(exceso),
         usagePct: pct,
       })
     }
@@ -174,6 +164,18 @@ export function analyzeBudgetCategories(
         category: cat.name,
         title: `¡Excelente control en ${cat.name}!`,
         message: `Llevas ${Math.round((daysElapsed / daysInPeriod) * 100)}% del periodo y solo has usado ${pct}% de tu presupuesto. ¡Sigue así!`,
+        usagePct: pct,
+      })
+    }
+    // ═══ COMPARACIÓN: mucho más que el periodo anterior ═══
+    else if (cat.variacionPct != null && cat.variacionPct >= 30 && (cat.gastadoAnterior ?? 0) > 0) {
+      insights.push({
+        id: `pattern-vs-anterior-${cat.id}`,
+        type: 'pattern',
+        severity: 'warning',
+        category: cat.name,
+        title: `${cat.name}: ${cat.variacionPct}% más que el periodo pasado`,
+        message: `Llevas ${formatMoney(spent)} en ${cat.name.toLowerCase()}; el periodo anterior cerraste en ${formatMoney(cat.gastadoAnterior ?? 0)}.`,
         usagePct: pct,
       })
     }
@@ -201,7 +203,7 @@ export function analyzeBudgetCategories(
         severity: 'success',
         category: zc.name,
         title: `¡${zc.name} sin gastos este periodo!`,
-        message: `No has gastado nada en ${zc.name.toLowerCase()} este periodo. Ese dinero está disponible para ahorro o redistribuir.`,
+        message: `No has gastado nada en ${zc.name.toLowerCase()} este periodo: tienes los ${formatMoney(zc.budget)} completos. Si no los vas a necesitar, puedes pasarlos a un bolsillo de ahorro.`,
         savingsAmount: zc.budget,
         usagePct: 0,
       })
@@ -291,16 +293,16 @@ export function getCategoryInsight(
 
   // 🟡 Ritmo acelerado — va a excederse
   if (pct >= 60 && projectedSpend > budget) {
-    const reduction = Math.round(dailyAvg * 0.3)
-    const weekSavings = reduction * 7
+    const exceso = projectedSpend - budget
+    const limiteDiario = remaining / daysLeft
     return {
       id: `cat-insight-${categoryName}`,
       type: 'recommendation',
       severity: 'warning',
       category: categoryName,
       title: 'Consejo Kiri',
-      message: `Si reduces ${categoryName.toLowerCase()} esta semana en ${formatMoney(weekSavings)}, podrías terminar el periodo dentro del presupuesto.`,
-      savingsAmount: weekSavings,
+      message: `A tu ritmo actual te pasarías por ${formatMoney(exceso)}. Para cerrar dentro del presupuesto, gasta máximo ${formatMoney(limiteDiario)} por día los próximos ${daysLeft} días.`,
+      savingsAmount: Math.round(exceso),
       usagePct: pct,
     }
   }
@@ -326,7 +328,7 @@ export function getCategoryInsight(
       severity: 'success',
       category: categoryName,
       title: '¡Excelente disciplina!',
-      message: `Llevas ${periodPct}% del periodo sin gastar en ${categoryName.toLowerCase()}. Ese dinero está disponible para ahorro.`,
+      message: `Llevas ${periodPct}% del periodo sin gastar en ${categoryName.toLowerCase()}: tienes los ${formatMoney(budget)} completos. Si no los vas a necesitar, pásalos a un bolsillo de ahorro.`,
       savingsAmount: budget,
       usagePct: 0,
     }

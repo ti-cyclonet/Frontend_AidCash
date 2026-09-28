@@ -1,5 +1,6 @@
 "use client"
 
+import { guiaVista, marcarGuiaVista } from "@/lib/guias"
 import { useMemo, useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { userApi, WalletState, getUserId } from "@/lib/api-client"
 import { WelcomeOnboarding } from "@/components/gestion/WelcomeOnboarding"
 import { SpendingStatsGrid } from "@/components/gestion/SpendingStatsGrid"
 import { TopConsumosSection } from "@/components/gestion/TopConsumosSection"
+import { CategoryDistributionCard } from "@/components/gestion/CategoryDistributionCard"
 
 export default function DashboardPage() {
   const { formatAmount, incomeFrequency, diasCobro, onboardingDone, user } = useAppContext()
@@ -42,16 +44,16 @@ export default function DashboardPage() {
     const userId = getUserId()
     return userId ? `kiri_welcome_seen_${userId}` : null
   }
+  // Bienvenida: solo la primera vez que se registra (lib/guias.ts la
+  // recuerda en el servidor, no solo en este navegador).
   const [showWelcome, setShowWelcome] = useState(() => {
     if (typeof window === 'undefined') return false
-    const key = welcomeSeenKey()
-    return key ? !localStorage.getItem(key) : false
+    return welcomeSeenKey() ? !guiaVista('welcome') : false
   })
 
   const handleWelcomeComplete = () => {
     setShowWelcome(false)
-    const key = welcomeSeenKey()
-    if (key) localStorage.setItem(key, 'true')
+    marcarGuiaVista('welcome')
   }
 
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
@@ -322,6 +324,9 @@ export default function DashboardPage() {
 
         </div>
       </div>
+
+      {/* ═══ DISTRIBUCIÓN POR CATEGORÍA — misma gráfica de Balance ═══ */}
+      <CategoryDistributionCard verMas={{ href: "/balance", label: "Ver en Balance" }} />
 
       {/* ═══ TOP MAYORES CONSUMOS ═══ */}
       <TopConsumosSection />

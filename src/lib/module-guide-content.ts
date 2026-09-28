@@ -58,10 +58,12 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     bgGradient: "from-emerald-500/10 to-emerald-900/5",
     borderColor: "border-emerald-500/20",
     items: [
-      { icon: "🌳", title: "Nivel y salud del árbol", description: "Sube de nivel (Semilla → Jardín próspero) acumulando XP. Su salud (0-100%) depende de si registras ingresos, ahorras, controlas tus deudas y tienes presupuesto activo." },
-      { icon: "⛅", title: "Clima financiero", description: "El clima sobre tu árbol reacciona en tiempo real: se nubla si tienes un pago próximo a vencer o vencido, y despeja apenas te pones al día." },
-      { icon: "🎯", title: "Misiones y racha", description: "Desde aquí entras a Misiones: completa retos diarios y uno semanal, mantén tu racha activa y reclama cofres con recompensas sorpresa. A los 7, 30 y 100 días de racha desbloqueas premios especiales." },
-      { icon: "💡", title: "Recomendación del día", description: "Kiri analiza tu situación y te sugiere la acción más importante que puedes hacer ahora mismo para mejorar tu salud financiera." },
+      { icon: "🌳", title: "Nivel y salud del árbol", description: "Sube de nivel (Semilla → Jardín próspero) acumulando XP; cada nivel pide más que el anterior. La salud (0-100%) depende de si registras ingresos, ahorras, controlas tus deudas y estás al día con tus pagos." },
+      { icon: "⛈️", title: "El clima reacciona", description: "Ahorras → llueve. Registras tu ingreso → sale el sol y caen monedas. Un pago por vencer → nubes. Pagos vencidos → tormenta con rayos (y truenos, que puedes silenciar). Un gasto hormiga → cae un rayo." },
+      { icon: "☁️", title: "Toca las nubes", description: "Te muestran qué obligaciones están vencidas y cuáles vencen en los próximos 7 días, con el monto de cada una." },
+      { icon: "🎯", title: "Misiones y racha", description: "Completa las misiones diarias y la semanal, reclama cofres y mantén tu racha. Kiri te recuerda las misiones pendientes en la mañana y en la tarde." },
+      { icon: "💌", title: "Invita a Kiri", description: "Con el botón Invitar compartes tu enlace (Amigo, Familia o Pareja). Quien se registre con él queda conectado contigo en Social y avanzas las misiones de invitar." },
+      { icon: "📊", title: "Tu progreso", description: "Disponible frente a tu ingreso, avance de tus ahorros, cuánto llevas pagado de tus deudas y tu colchón de emergencia (meses de obligaciones que cubren tus ahorros)." },
     ],
   },
   {
@@ -78,8 +80,8 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     borderColor: "border-teal-500/20",
     items: [
       { icon: "💰", title: "Billetera", description: "Registra tus ingresos, mira tu saldo real y activa pagos automáticos al recibir tu sueldo. Tu Sueldo Base es el planificado y el Sueldo Real se actualiza al pagar obligaciones." },
-      { icon: "📊", title: "Presupuesto", description: "Crea categorías con color e ícono propio, vincúlalas a tus gastos fijos y controla en tiempo real cuánto gastas en cada una — gastos hormiga incluidos." },
-      { icon: "📈", title: "Proyecciones", description: "Simula distintos escenarios y proyecta tu futuro financiero a 3, 6, 12 o 24 meses." },
+      { icon: "📊", title: "Presupuesto", description: "Crea categorías con límite, vincúlalas a tus gastos fijos y mira cuánto llevas en cada una — gastos hormiga incluidos. Kiri sugiere la categoría de cada gasto según tu historial y te avisa al llegar al 80% y al 100%." },
+      { icon: "📈", title: "Proyecciones", description: "Proyecta tu ahorro y tus deudas a 3, 6, 12 o 24 meses y compara tu ruta actual con la ruta Kiri (Bola de Nieve), con recomendaciones calculadas con tus datos." },
     ],
   },
   {
@@ -98,7 +100,11 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
       { icon: "🏠", title: "Registrar gastos fijos", description: "Añade tus pagos recurrentes (renta, internet, servicios) y dales 'check' al pagarlos. Activa el pago automático ⚡." },
       { icon: "💳", title: "Deudas y tarjetas", description: "Registra deudas bancarias y tarjetas de crédito. Vincula cada tarjeta para controlar cuotas, intereses y fechas de corte automáticamente." },
       { icon: "🧮", title: "Pagos con tarjeta de crédito", description: "Al pagar una deuda o gasto fijo con tu tarjeta, el interés se calcula igual que un pago en efectivo y la cuota de la tarjeta sube — y baja sola cuando esa cuota termina de pagarse." },
-      { icon: "⚡", title: "Simular estrategias de deuda", description: "Usa 'Bola de Nieve' vs 'Avalancha' para comparar métodos y salir de deudas más rápido." },
+      { icon: "🏦", title: "Saldo real del banco", description: "Al pagar una cuota puedes escribir en cuánto quedó tu saldo según el banco: Kiri calcula el interés real que pagaste y ajusta la tasa para sus próximas estimaciones." },
+      { icon: "✅", title: "Cuota más baja", description: "Si pagaste otro valor (ej. llegó $180.000 y no $182.000), marca \"Con este valor quedó pagada la cuota\" y no queda saldo pendiente ese periodo." },
+      { icon: "⏪", title: "Atrasos, adelantos y deshacer", description: "Kiri marca las cuotas atrasadas de periodos anteriores, te deja adelantar la próxima y deshacer solo el último abono o todo el pago del periodo." },
+      { icon: "🤝", title: "Me deben", description: "Registra plata que prestaste a personas que no usan Kiri: sale de tu disponible, registras sus abonos y le recuerdas por WhatsApp con un toque." },
+      { icon: "⚡", title: "Estrategias de deuda", description: "Compara 'Bola de Nieve' y 'Avalancha' para decidir qué deuda pagar primero." },
     ],
   },
   {
@@ -116,8 +122,9 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     items: [
       { icon: "📊", title: "KPIs en vivo", description: "6 indicadores animados: balance neto, total recibido, total gastado, ahorro del periodo, interés pagado e interés evitado por tus abonos extra." },
       { icon: "📈", title: "Gráficos", description: "Evolución del balance, ingresos vs. egresos y distribución de gastos por cada categoría que creaste en Presupuesto." },
-      { icon: "🔍", title: "Historial unificado", description: "Busca y filtra cada movimiento de la app —ingresos, deudas, gastos fijos, gastos hormiga y ahorros— en una sola lista. Expande un pago de deuda para ver capital, interés, saldo y tasa." },
-      { icon: "📄", title: "Exportar a PDF", description: "Descarga un reporte con tus KPIs, gráficos e historial del periodo actual, o elige varios meses a la vez." },
+      { icon: "🔍", title: "Historial", description: "Botón Historial: muestra tu periodo actual con buscador y filtros. Con \"Elegir mes\" ves meses anteriores dentro de la app (en quincenal, separados en Periodo 1 y Periodo 2)." },
+      { icon: "🗑️", title: "Eliminar un gasto", description: "Si registraste un gasto por error, elimínalo desde el historial: la plata vuelve a tu gasto libre (o a la tarjeta) y deja de contar en su categoría y en gastos hormiga." },
+      { icon: "📄", title: "Exportar a PDF", description: "El botón PDF te pide elegir el mes antes de descargar el reporte." },
     ],
   },
   {
@@ -133,7 +140,7 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     bgGradient: "from-pink-500/10 to-pink-900/5",
     borderColor: "border-pink-500/20",
     items: [
-      { icon: "🤝", title: "Conexiones", description: "Invita a tus amigos, familia o pareja enviándoles una invitación por correo electrónico." },
+      { icon: "🤝", title: "Conexiones", description: "Busca a alguien por usuario o correo, o envíale tu enlace de invitación con Copiar o Compartir: al registrarse quedan conectados como amigo, familia o pareja." },
       { icon: "🐷", title: "Bolsillos compartidos", description: "Creen metas de ahorro juntos y usen la calculadora inteligente para aportar lo justo según sus ingresos." },
       { icon: "💸", title: "Préstamos P2P", description: "Pide prestado, aprueba solicitudes y lleva el registro exacto de cada abono hasta saldar la cuenta." },
     ],
@@ -153,7 +160,7 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     items: [
       { icon: "🎨", title: "Bolsillos de ahorro", description: "Crea alcancías con colores e íconos para tus sueños y llénalas poco a poco." },
       { icon: "💵", title: "Registrar depósitos", description: "Añade dinero y mira cómo crecen tus metas. Estima el tiempo necesario para alcanzar cada objetivo." },
-      { icon: "🛡️", title: "Fondo de emergencia", description: "Mantén tu colchón de seguridad. La app te guiará hasta alcanzar la meta ideal de 6 meses de gastos fijos." },
+      { icon: "🛡️", title: "Fondo de emergencia", description: "Tu colchón para imprevistos: la meta mínima es cubrir 3 meses de tus gastos fijos y la ideal, 6." },
       { icon: "👥", title: "Bolsillos compartidos", description: "Los ahorros que crees en Social también aparecen aquí para que no los pierdas de vista." },
     ],
   },

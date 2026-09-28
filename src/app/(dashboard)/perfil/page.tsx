@@ -19,43 +19,10 @@ import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
-import { api, userApi, supportApi, uploadAvatarToAuthoriza } from "@/lib/api-client"
+import { api, userApi, supportApi } from "@/lib/api-client"
+import { prepararFotoPerfil, resizeImageToDataUrl } from "@/lib/avatar-upload"
 
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
-
-// El backend guarda avatarUrl como texto plano (base64) con un tope de
-// 700.000 caracteres — una foto real de celular sin comprimir (2-8MB) lo
-// supera fácil y el guardado fallaba con un error de "imagen demasiado
-// grande" sin que el usuario supiera qué pasó. Se reescala al lado más largo
-// y se recomprime a JPEG antes de guardarla, así cualquier foto entra sin
-// que el usuario tenga que hacer nada distinto.
-const AVATAR_MAX_DIM = 512
-const AVATAR_QUALITY = 0.85
-
-function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, quality = AVATAR_QUALITY): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
-    reader.onload = () => {
-      const img = new Image()
-      img.onerror = () => reject(new Error("El archivo no es una imagen válida"))
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
-        const w = Math.max(1, Math.round(img.width * scale))
-        const h = Math.max(1, Math.round(img.height * scale))
-        const canvas = document.createElement("canvas")
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext("2d")
-        if (!ctx) { reject(new Error("No se pudo procesar la imagen")); return }
-        ctx.drawImage(img, 0, 0, w, h)
-        resolve(canvas.toDataURL("image/jpeg", quality))
-      }
-      img.src = reader.result as string
-    }
-    reader.readAsDataURL(file)
-  })
-}
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -88,20 +55,10 @@ export default function PerfilPage() {
       setAvatarError("Selecciona un archivo de imagen.")
       return
     }
-    // La foto se sube al endpoint CENTRAL de Authoriza (avatar compartido por
-    // todas las apps) y se usa la URL alojada que devuelve — ya no se guarda
-    // como base64 en el backend de Kiri. Muestra un preview local mientras sube.
     setAvatarError(null)
-    try {
-      const preview = await resizeImageToDataUrl(file)
-      setEditForm(f => ({ ...f, avatarUrl: preview }))
-    } catch { /* preview opcional */ }
-
-    const { url, error } = await uploadAvatarToAuthoriza(file)
-    if (error || !url) {
-      setAvatarError(error || "No se pudo subir la foto. Intenta con otra.")
-      return
-    }
+    const { url, preview, error } = await prepararFotoPerfil(file)
+    if (preview) setEditForm(f => ({ ...f, avatarUrl: preview }))
+    if (error || !url) { setAvatarError(error || "No se pudo subir la foto. Intenta con otra."); return }
     setEditForm(f => ({ ...f, avatarUrl: url }))
     setAvatarChanged(true)
   }

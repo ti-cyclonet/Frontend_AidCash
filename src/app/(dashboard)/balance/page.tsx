@@ -3,12 +3,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
-  BookOpen, TrendingUp, TrendingDown, Trash2, Calendar,
-  PiggyBank, ArrowUpRight, ArrowDownRight, CreditCard, ReceiptText,
-  Trophy, BarChart3, Target, ChevronDown, Search, ShieldCheck, Percent,
-  Home, Sparkles,
+  BookOpen, History, TrendingUp, TrendingDown, Trash2, Calendar, PiggyBank,
+  ArrowUpRight, ArrowDownRight, Trophy, BarChart3, Target, ShieldCheck,
+  Percent,
 } from "lucide-react"
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -18,11 +17,8 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useCountUp } from "@/hooks/use-count-up"
-import { useBudgetCategories } from "@/hooks/use-budget-categories"
-import { getPeriodDateRange } from "@/lib/period-filter"
-import { computeCategorySpend } from "@/lib/budget-category-spend"
-import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletState, type Movement, type MovementType } from "@/lib/api-client"
-import { ExportButtons } from "@/components/balance/ExportButtons"
+import { CategoryDistributionCard } from "@/components/gestion/CategoryDistributionCard"
+import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletState } from "@/lib/api-client"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { FeatureGate } from "@/components/plan/feature-gate"
 import Link from "next/link"
@@ -34,29 +30,10 @@ const TIMEFRAMES: { value: Timeframe; label: string }[] = [
   { value: "all",   label: "Todo"   },
 ]
 
-const MOVEMENT_FILTERS: { value: MovementType | "todos"; label: string }[] = [
-  { value: "todos", label: "Todos" },
-  { value: "deudas", label: "Deudas" },
-  { value: "gastos_fijos", label: "Gastos Fijos" },
-  { value: "hormiga", label: "Hormiga" },
-  { value: "ingresos", label: "Ingresos" },
-  { value: "ahorros", label: "Ahorros" },
-]
-
-// Color de acento (borde izquierdo + ícono) por tipo de movimiento en el historial.
-const MOVEMENT_META: Record<MovementType, { color: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }> = {
-  ingresos: { color: "#22c55e", icon: TrendingUp },
-  deudas: { color: "#f97362", icon: CreditCard },
-  gastos_fijos: { color: "#3b82f6", icon: Home },
-  hormiga: { color: "#a855f7", icon: Sparkles },
-  ahorros: { color: "#22d3ee", icon: PiggyBank },
-}
-
 export default function BalancePage() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("balance")
   const { formatAmount, metaAhorro, incomeFrequency, diasCobro } = useAppContext()
   const { debts, impulseExpenses, fixedExpenses } = useFinanceData()
-  const { budgetCategories } = useBudgetCategories()
 
   const [timeframe, setTimeframe] = useState<Timeframe>("month")
   const [report, setReport] = useState<BalanceReport | null>(null)
@@ -65,9 +42,6 @@ export default function BalancePage() {
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
 
   // Historial unificado — búsqueda + filtro por tipo
-  const [movementFilter, setMovementFilter] = useState<MovementType | "todos">("todos")
-  const [movementSearch, setMovementSearch] = useState("")
-  const [expandedMovement, setExpandedMovement] = useState<string | null>(null)
 
   const handleResetBalance = async () => {
     // Solo borra el historial (income_records, savings_history, impulse_expenses)
@@ -138,26 +112,6 @@ export default function BalancePage() {
     }))
   }, [report?.monthlySeries])
 
-  // Distribución por categoría — las categorías reales creadas en Presupuesto,
-  // con el mismo cálculo de "gastado" (gastos hormiga por keyword/tag + gastos
-  // fijos vinculados pagados, dentro del periodo actual mensual/quincenal) que
-  // ya usa PresupuestoTab, para que el número coincida entre ambas pantallas.
-  const periodRange = useMemo(() => getPeriodDateRange(incomeFrequency, diasCobro), [incomeFrequency, diasCobro])
-  const impulseThisBudgetPeriod = useMemo(() => impulseExpenses.filter(e => {
-    const created = new Date(e.createdAt)
-    return created >= periodRange.start && created < periodRange.end
-  }), [impulseExpenses, periodRange])
-
-  const categoryData = useMemo(() => {
-    return budgetCategories
-      .map(cat => ({
-        name: cat.name,
-        value: computeCategorySpend(cat, impulseThisBudgetPeriod, fixedExpenses, debts),
-        color: cat.color,
-      }))
-      .filter(c => c.value > 0)
-  }, [budgetCategories, impulseThisBudgetPeriod, fixedExpenses, debts])
-  const categoryTotal = categoryData.reduce((a, c) => a + c.value, 0)
 
   // Rango de fechas legible
   const dateRange = report ? `${fmtDateShort(report.from)} – ${fmtDateShort(report.to)}` : ""
@@ -173,129 +127,32 @@ export default function BalancePage() {
     return { promedio, meta, metaPct, mayorAumento: ingresos, mayorDisminucion: egresos }
   }, [s, balanceNeto, timeframe, metaAhorro, ahorroDelPeriodo, realSavingsMeta])
 
-  // ═══ Historial unificado — mismo movements[] que antes vivía en /historial ═══
-  const allMovements = useMemo((): Movement[] => {
-    if (!report) return []
-    const movements: Movement[] = []
-
-    for (const p of (report.debtPayments ?? [])) {
-      movements.push({
-        id: (p.id as string) ?? `dp-${Math.random()}`,
-        fecha: p.createdAt as string,
-        nombre: (p.debtName as string) ?? 'Deuda',
-        tipo: "deudas",
-        tipoLabel: "Pago de deuda",
-        monto: p.montoPagado as number,
-        estado: 'pagado',
-        abonoCapital: p.abonoCapital as number,
-        pagoInteres: p.pagoInteres as number,
-        saldoAnterior: p.saldoAnterior as number,
-        saldoPosterior: p.saldoPosterior as number,
-        tasaInteres: p.tasaAplicada ? `${Number(p.tasaAplicada).toFixed(2)}% M.V.` : undefined,
-        acreedor: p.acreedor as string | undefined,
-        tarjetaNombre: p.tarjetaNombre as string | null | undefined,
-      })
-    }
-
-    // Ledger real de pagos (fixedExpensePayments), acotado por el rango
-    // pedido — antes esto se reconstruía desde fixedExpenses.pagadoEstePeriodo,
-    // que SIEMPRE refleja el periodo actual sin importar qué rango se esté
-    // viendo, así que un mes pasado mostraba "$0 en gastos fijos" aunque el
-    // total del resumen sí los hubiera sumado.
-    for (const p of (report.fixedExpensePayments ?? [])) {
-      movements.push({
-        id: (p.id as string) ?? `fep-${Math.random()}`,
-        fecha: p.createdAt as string,
-        nombre: p.nombre as string,
-        tipo: "gastos_fijos",
-        tipoLabel: "Gasto fijo",
-        monto: p.montoPagado as number,
-        estado: 'pagado',
-        tarjetaNombre: p.tarjetaNombre as string | null | undefined,
-      })
-    }
-
-    for (const e of report.impulseExpenses) {
-      movements.push({
-        id: e.id as string,
-        fecha: e.createdAt as string,
-        nombre: e.nombre as string,
-        tipo: "hormiga",
-        tipoLabel: `Gasto hormiga · ${e.categoria as string}`,
-        monto: e.monto as number,
-        estado: 'pagado',
-        tarjetaNombre: e.tarjetaNombre as string | null | undefined,
-      })
-    }
-
-    for (const r of (report.incomeRecords ?? [])) {
-      movements.push({
-        id: (r.id as string) ?? `ir-${Math.random()}`,
-        fecha: r.createdAt as string,
-        nombre: (r.tipo as string) === 'salario' ? 'Sueldo' : 'Ingreso extra',
-        tipo: "ingresos",
-        tipoLabel: (r.tipo as string) === 'salario' ? 'Salario' : 'Extra',
-        monto: r.monto as number,
-        estado: 'pagado',
-      })
-    }
-
-    for (const sv of report.savingsHistory) {
-      const tipoSv = sv.tipo as string
-      if (tipoSv === 'ahorro') {
-        movements.push({
-          id: sv.id as string,
-          fecha: sv.createdAt as string,
-          nombre: `Ahorro — ${sv.periodo as string}`,
-          tipo: "ahorros",
-          tipoLabel: "Ahorro",
-          monto: sv.monto as number,
-          estado: 'pagado',
-        })
-      } else if (tipoSv === 'retiro') {
-        // Retirar de un bolsillo devuelve el dinero al saldo disponible —
-        // antes esto no dejaba ningún rastro en el historial (el retiro era
-        // real, pero invisible en Balance/PDF).
-        movements.push({
-          id: sv.id as string,
-          fecha: sv.createdAt as string,
-          nombre: `Retiro de ahorro — ${sv.periodo as string}`,
-          tipo: "ahorros",
-          tipoLabel: "Retiro de ahorro",
-          monto: sv.monto as number,
-          estado: 'pagado',
-          direccion: 'entrada',
-        })
-      }
-    }
-
-    return movements.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-  }, [report])
-
-  const filteredMovements = useMemo(() => {
-    let result = allMovements
-    if (movementFilter !== "todos") result = result.filter(m => m.tipo === movementFilter)
-    if (movementSearch) {
-      const q = movementSearch.toLowerCase()
-      result = result.filter(m => m.nombre.toLowerCase().includes(q) || m.tipoLabel.toLowerCase().includes(q))
-    }
-    return result
-  }, [allMovements, movementFilter, movementSearch])
 
   return (
     <FeatureGate feature="basicReports">
     <>
       {showTutorial && <TutorialSlider module="balance" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-10">
-      {/* ═══ HEADER ═══ */}
-      <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BookOpen className="h-6 w-6" /> Balance
-          </h1>
-          <p className="text-muted-foreground text-sm">Todo lo que pasa con tu plata, en un solo lugar.</p>
+      {/* ═══ HEADER ═══
+          Título a la izquierda y "Historial" a la derecha; el selector de
+          periodo va centrado debajo. El historial completo (búsqueda,
+          filtros, PDF y elegir mes) vive en su propio módulo: /balance/historial. */}
+      <header className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <BookOpen className="h-6 w-6" /> Balance
+            </h1>
+            <p className="text-muted-foreground text-sm">Todo lo que pasa con tu plata, en un solo lugar.</p>
+          </div>
+          {/* Historial es su propio módulo (/balance/historial), no una ventana. */}
+          <Link href="/balance/historial" className="shrink-0">
+            <Button className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold gap-2">
+              <History className="h-4 w-4" /> Historial
+            </Button>
+          </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col items-center gap-2">
           {/* Filtro de tiempo */}
           <div className="flex bg-muted/30 rounded-xl p-1">
             {TIMEFRAMES.map(tf => (
@@ -305,17 +162,19 @@ export default function BalancePage() {
               )}>{tf.label}</button>
             ))}
           </div>
-          {/* Rango de fechas */}
-          {dateRange && (
-            <span className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/30 px-3 py-2 rounded-lg">
-              <Calendar className="h-3.5 w-3.5" /> {dateRange}
-            </span>
-          )}
-          {/* Reiniciar balance */}
-          <button onClick={() => setResetConfirmOpen(true)}
-            className="h-8 px-3 rounded-lg text-[10px] font-bold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1">
-            <Trash2 className="h-3 w-3" /> Reiniciar
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {/* Rango de fechas */}
+            {dateRange && (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg">
+                <Calendar className="h-3.5 w-3.5" /> {dateRange}
+              </span>
+            )}
+            {/* Reiniciar balance */}
+            <button onClick={() => setResetConfirmOpen(true)}
+              className="h-8 px-3 rounded-lg text-[10px] font-bold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1">
+              <Trash2 className="h-3 w-3" /> Reiniciar
+            </button>
+          </div>
         </div>
       </header>
 
@@ -424,51 +283,8 @@ export default function BalancePage() {
 
           {/* ═══ DISTRIBUCIÓN POR CATEGORÍA + INGRESOS VS EGRESOS ═══ */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="border-none bg-card shadow-sm rounded-2xl">
-              <CardContent className="p-5">
-                <h2 className="font-bold text-sm mb-3">Distribución por categoría</h2>
-                {categoryData.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-4 items-center bg-card">
-                    <div className="h-[150px] relative">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={categoryData} dataKey="value" nameKey="name" innerRadius={40} outerRadius={60} paddingAngle={3}>
-                            {categoryData.map((c, i) => <Cell key={i} fill={c.color} stroke="none" />)}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip formatAmount={formatAmount} />} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[8px] text-muted-foreground">Total</span>
-                        <span className="text-xs font-black">{formatAmount(categoryTotal)}</span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {categoryData.map(c => (
-                        <div key={c.name} className="flex items-center gap-2">
-                          <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-bold truncate">{c.name}</p>
-                            <p className="text-[9px] text-muted-foreground">{formatAmount(c.value)}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : budgetCategories.length === 0 ? (
-                  <div className="h-[150px] flex flex-col items-center justify-center gap-2 text-center px-4">
-                    <p className="text-muted-foreground text-xs">Aún no has creado categorías de presupuesto.</p>
-                    <Link href="/gestion" className="text-[10px] font-bold text-kiri-emerald hover:underline">
-                      Crear una categoría →
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="h-[150px] flex items-center justify-center text-muted-foreground text-xs">
-                    Sin gasto registrado en tus categorías este periodo
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Mismo componente que el Dashboard (ver CategoryDistributionCard). */}
+            <CategoryDistributionCard verMas={{ href: "/gestion", label: "Ver presupuesto" }} />
 
             <Card className="border-none bg-card shadow-sm rounded-2xl">
               <CardContent className="p-5">
@@ -635,117 +451,6 @@ export default function BalancePage() {
             </Card>
           )}
 
-          {/* ═══ HISTORIAL UNIFICADO ═══ */}
-          {report && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Historial de movimientos</h3>
-                <ExportButtons report={report} />
-              </div>
-
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nombre, acreedor, tipo..."
-                  value={movementSearch}
-                  onChange={e => setMovementSearch(e.target.value)}
-                  className="h-11 rounded-xl pl-10"
-                />
-              </div>
-
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {MOVEMENT_FILTERS.map(f => (
-                  <button key={f.value} onClick={() => setMovementFilter(f.value)} className={cn(
-                    "px-4 py-2 rounded-xl text-xs font-bold shrink-0 border-2 transition-colors",
-                    movementFilter === f.value ? "bg-cyclon-lavender text-white border-cyclon-lavender" : "border-muted text-muted-foreground hover:border-cyclon-lavender/40"
-                  )}>{f.label}</button>
-                ))}
-              </div>
-
-              {filteredMovements.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <ReceiptText className="h-12 w-12 mx-auto opacity-20 mb-3" />
-                  <p className="text-sm">No hay movimientos que mostrar.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredMovements.map(m => {
-                    const isExpanded = expandedMovement === m.id
-                    const isIngreso = m.tipo === 'ingresos' || m.direccion === 'entrada'
-                    const hasDetail = m.tipo === 'deudas' && m.abonoCapital != null
-                    const meta = MOVEMENT_META[m.tipo]
-                    const Icon = meta.icon
-
-                    return (
-                      <Card
-                        key={m.id}
-                        style={{ borderLeft: `3px solid ${meta.color}` }}
-                        className={cn("border-y-0 border-r-0 bg-card shadow-sm rounded-2xl transition-all", hasDetail && "cursor-pointer hover:ring-1 hover:ring-cyclon-lavender/30")}
-                        onClick={() => hasDetail && setExpandedMovement(isExpanded ? null : m.id)}
-                      >
-                        <CardContent className="p-4 space-y-2">
-                          <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${meta.color}1a` }}>
-                              <Icon className="h-4 w-4" style={{ color: meta.color }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold truncate">{m.nombre}</p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {m.tipoLabel}
-                                {m.acreedor && ` · ${m.acreedor}`}
-                                {m.tarjetaNombre && ` · 💳 pagado con ${m.tarjetaNombre}`}
-                                {' · '}
-                                {m.fecha ? new Date(m.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className={cn("text-sm font-black", isIngreso ? "text-emerald-500" : m.tipo === 'deudas' ? "text-red-500" : "text-foreground")}>
-                                {isIngreso ? '+' : ''}{formatAmount(m.monto)}
-                              </p>
-                              {hasDetail && (
-                                <p className="text-[8px] text-muted-foreground flex items-center gap-0.5 justify-end">
-                                  <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", isExpanded && "rotate-180")} />
-                                  {isExpanded ? 'Ocultar' : 'Ver detalle'}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {isExpanded && hasDetail && (
-                            <div className="bg-muted/10 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <p className="text-[9px] text-muted-foreground">Capital pagado</p>
-                                  <p className="text-xs font-black text-emerald-500">{formatAmount(m.abonoCapital!)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[9px] text-muted-foreground">Intereses pagados</p>
-                                  <p className="text-xs font-black text-red-500">{formatAmount(m.pagoInteres!)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[9px] text-muted-foreground">Saldo anterior</p>
-                                  <p className="text-xs font-bold">{formatAmount(m.saldoAnterior!)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[9px] text-muted-foreground">Saldo actual</p>
-                                  <p className="text-xs font-bold">{formatAmount(m.saldoPosterior!)}</p>
-                                </div>
-                              </div>
-                              {m.tasaInteres && (
-                                <p className="text-[9px] text-muted-foreground pt-1 border-t border-border/30">
-                                  Interés aplicado: <span className="font-bold text-amber-500">{m.tasaInteres}</span>
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
     </div>

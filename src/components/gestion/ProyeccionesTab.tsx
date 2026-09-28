@@ -18,7 +18,7 @@ import Link from "next/link"
 
 export function ProyeccionesTab() {
   const { formatAmount, income, incomeFrequency } = useAppContext()
-  const { debts, fixedExpenses, totalAhorrado } = useFinanceData()
+  const { debts, fixedExpenses, totalAhorrado, impulseThisPeriod } = useFinanceData()
   const { periodData } = usePeriodBudget()
 
   const [activeRoute, setActiveRoute] = useState<"kiri" | "actual">("kiri")
@@ -45,6 +45,30 @@ export function ProyeccionesTab() {
   }
 
   const deudaTotal = debts.filter(d => d.estado === "activa").reduce((a, d) => a + d.saldoRestante, 0)
+
+  // ── Recomendaciones reales ─────────────────────────────────────────────
+  const activas = debts.filter(d => d.estado === "activa")
+  const gastoMensual = activas.reduce((a, d) => a + (d.cuotaBase ?? d.cuotaPeriodo) * (d.frecuenciaPago === "quincenal" ? 2 : 1), 0)
+    + fixedExpenses.reduce((a, f) => a + f.monto, 0)
+  const metaColchon = gastoMensual * 3
+  const faltaColchon = Math.max(0, metaColchon - totalAhorrado)
+  const hormigaPeriodo = impulseThisPeriod.filter(e => e.esHormiga).reduce((a, e) => a + e.monto, 0)
+  const sinTasa = activas.filter(d => !d.tasaInteres).length
+  const recomendaciones: { icon: React.ReactNode; title: string; desc: string; href: string }[] = [
+    activas.length === 0
+      ? { icon: <Zap className="h-3.5 w-3.5 text-amber-500" />, title: "Sin deudas activas", desc: "No tienes deudas: todo lo que antes iba a cuotas puede ir directo a ahorro.", href: "/ahorro" }
+      : projection.interesesAhorrados > 0
+        ? { icon: <Zap className="h-3.5 w-3.5 text-amber-500" />, title: "Prioriza tus deudas", desc: `Pagando primero la deuda más pequeña y pasando su cuota a la siguiente (Bola de Nieve), pagarías ${formatAmount(projection.interesesAhorrados)} menos en intereses${projection.mesesMenosDeuda > 0 ? ` y terminarías ${projection.mesesMenosDeuda} meses antes` : ""}.`, href: "/obligaciones" }
+        : { icon: <Zap className="h-3.5 w-3.5 text-amber-500" />, title: "Registra las tasas", desc: sinTasa > 0 ? `${sinTasa} de tus deudas no tiene tasa de interés registrada. Agrégala para calcular cuánto puedes ahorrar en intereses.` : "Con tus deudas actuales no hay diferencia de intereses entre estrategias: mantén tus pagos al día.", href: "/obligaciones" },
+    gastoMensual <= 0
+      ? { icon: <PiggyBank className="h-3.5 w-3.5 text-emerald-500" />, title: "Fondo de emergencia", desc: "Registra tus obligaciones para calcular cuánto necesitas en tu fondo de emergencia (3 meses de gastos).", href: "/obligaciones" }
+      : faltaColchon > 0
+        ? { icon: <PiggyBank className="h-3.5 w-3.5 text-emerald-500" />, title: "Fondo de emergencia", desc: `Tus obligaciones suman ${formatAmount(gastoMensual)} al mes; 3 meses son ${formatAmount(metaColchon)}. Te faltan ${formatAmount(faltaColchon)}.`, href: "/ahorro" }
+        : { icon: <PiggyBank className="h-3.5 w-3.5 text-emerald-500" />, title: "Fondo de emergencia completo", desc: `Tus ahorros ya cubren 3 meses de obligaciones (${formatAmount(metaColchon)}). Lo que sigas ahorrando puede ir a tus metas.`, href: "/ahorro" },
+    hormigaPeriodo > 0
+      ? { icon: <Shield className="h-3.5 w-3.5 text-cyclon-lavender" />, title: "Gasto hormiga", desc: `Este periodo llevas ${formatAmount(hormigaPeriodo)} en gastos hormiga. Cada peso que recortes ahí puede ir a ahorro o a abonar deudas.`, href: "/balance" }
+      : { icon: <Shield className="h-3.5 w-3.5 text-cyclon-lavender" />, title: "Gasto hormiga", desc: "No tienes gastos hormiga registrados este periodo. Si los tienes, anótalos: sin ellos las proyecciones salen más optimistas de lo real.", href: "/gestion" },
+  ]
   const patrimonioActual = totalAhorrado - deudaTotal
   const now = new Date()
   const rangeStart = now.toLocaleDateString("es-ES", { month: "short", year: "numeric" })
@@ -233,9 +257,12 @@ export function ProyeccionesTab() {
             </div>
             <p className="text-[10px] text-muted-foreground">Consejos personalizados para acelerar tu progreso.</p>
             <div className="space-y-2">
-              <RecoCard icon={<Zap className="h-3.5 w-3.5 text-amber-500" />} title="Prioridad #1" desc="Continúa usando la estrategia Bola de Nieve. Te ahorrará en intereses." href="/obligaciones" />
-              <RecoCard icon={<PiggyBank className="h-3.5 w-3.5 text-emerald-500" />} title="Ahorro automático" desc="Aumenta tu ahorro al 15% de tu ingreso. Tendrás tu fondo de emergencia antes." href="/ahorro" />
-              <RecoCard icon={<Shield className="h-3.5 w-3.5 text-cyclon-lavender" />} title="Gasto hormiga" desc="Reducir gastos hormiga libera capacidad para ahorrar." href="/gestion" />
+              {/* Antes eran 3 frases fijas iguales para todos ("Continúa con
+                  Bola de Nieve", "Aumenta tu ahorro al 15%"…). Ahora salen de
+                  tus datos y de esta misma proyección. */}
+              {recomendaciones.map(r => (
+                <RecoCard key={r.title} icon={r.icon} title={r.title} desc={r.desc} href={r.href} />
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -246,9 +273,7 @@ export function ProyeccionesTab() {
         <MiniMetric label="Intereses que ahorrarías" value={formatAmount(projection.interesesAhorrados)} sub="Con el plan Kiri" />
         <MiniMetric label="Tiempo para libertad financiera" value={`${projection.mesesMenosDeuda} meses menos`} sub="Que con la ruta actual" />
         <MiniMetric label="Mejora en tu patrimonio" value={`+${formatAmount(projection.mejoraPatrimonio)}`} sub={`Diferencia en ${meses} meses`} color="text-emerald-500" />
-        <MiniMetric label="Probabilidad de éxito" value={`${projection.probabilidadExito}%`} sub="Con el plan optimizado" extra={
-          <Progress value={projection.probabilidadExito} className="h-1.5 mt-1" indicatorClassName="bg-kiri-emerald" />
-        } />
+        <MiniMetric label="Ahorro al final" value={formatAmount(projection.kiriFinal.ahorro)} sub={`Con el plan Kiri en ${meses} meses`} color="text-emerald-500" />
       </div>
 
       {/* Disclaimer */}

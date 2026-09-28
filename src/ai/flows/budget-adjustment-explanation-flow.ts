@@ -82,6 +82,7 @@ INSTRUCCIONES:
 2. Describe el IMPACTO: cuánto margen libre y ahorro quedan.
 3. Da 1-2 consejos accionables. Si hay meta, personaliza hacia ella.
 4. Cierra con una frase motivacional corta.
+5. NUNCA inventes estadísticas ni cifras que no salgan de los datos de arriba; si estimas algo, dilo ("aprox.").
 
 Responde ÚNICAMENTE con JSON: { "explicacion": "tu párrafo aquí" }`
 

@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { Flame, Lock, Check, Gift, ChevronLeft, Sparkles, Sprout } from "lucide-react"
+import { Flame, Lock, Check, Gift, ChevronLeft, Sparkles, Sprout, UserPlus } from "lucide-react"
+import { InviteLinkModal } from "@/components/social/InviteLinkPanel"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -26,7 +27,8 @@ const MILESTONES = [
 export default function MisionesPage() {
   const { incomeFrequency } = useAppContext()
   const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, loading: streakLoading, refetch: refetchStreaks } = useStreaks(incomeFrequency)
-  const { daily, weekly, onboarding, loading: missionsLoading, claim } = useMissions()
+  const { daily, weekly, onboarding, invitaciones, referidos, loading: missionsLoading, claim } = useMissions()
+  const [invitarOpen, setInvitarOpen] = useState(false)
   const pendingOnboarding = onboarding.filter(m => !m.claimed)
 
   const [claiming, setClaiming] = useState<string | null>(null)
@@ -224,6 +226,54 @@ export default function MisionesPage() {
             </CardContent>
           </Card>
 
+          {/* ═══ INVITA AMIGOS A KIRI — escalones de 1, 2 y 3 personas ═══ */}
+          {invitaciones.length > 0 && (
+            <Card className="border border-sky-500/30 bg-sky-500/5 rounded-2xl">
+              <CardContent className="p-5 space-y-1">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                    <p className="text-sm font-bold">Invita amigos a Kiri</p>
+                  </div>
+                  <Button size="sm" onClick={() => setInvitarOpen(true)} className="h-8 gap-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3">
+                    <UserPlus className="h-3.5 w-3.5" /> Invitar
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-3">
+                  Cuenta cuando se registran con tu enlace — quedan conectados en Social. {referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">Llevas {referidos}.</strong>}
+                </p>
+                <div className="space-y-4">
+                  {invitaciones.map((m) => {
+                    const done = m.progress >= m.target
+                    return (
+                      <div key={m.key} className="flex items-center gap-3">
+                        <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center text-base shrink-0", done ? "bg-sky-500/15" : "bg-muted")}>
+                          {m.claimed ? <Check className="h-4 w-4 text-sky-600 dark:text-sky-400" /> : m.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold">{m.title}</p>
+                          <p className="text-[10px] text-muted-foreground mb-1">{m.desc}</p>
+                          <Progress value={(m.progress / m.target) * 100} className="h-1.5" indicatorClassName="bg-sky-500" />
+                        </div>
+                        <div className="shrink-0">
+                          {m.claimed ? (
+                            <span className="text-[10px] text-muted-foreground">Reclamada</span>
+                          ) : done ? (
+                            <Button size="sm" onClick={() => handleClaim(m.key)} disabled={claiming === m.key} className="h-8 gap-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3">
+                              <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : "Reclamar"}
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">{m.progress}/{m.target}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* ═══ HITOS DE RACHA ═══ */}
           <Card className="border-none bg-card shadow-sm rounded-2xl">
             <CardContent className="p-5">
@@ -260,6 +310,8 @@ export default function MisionesPage() {
           </Card>
         </>
       )}
+
+      <InviteLinkModal open={invitarOpen} onClose={() => setInvitarOpen(false)} />
 
       {/* ═══ COFRE SORPRESA ═══ */}
       <Dialog open={!!reward} onOpenChange={(open) => { if (!open) setReward(null) }}>

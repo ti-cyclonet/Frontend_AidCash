@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useSocket } from "@/lib/socket-context"
 import { notifIcon, notifTitle, notifRoute } from "@/lib/notification-display"
 import { userApi } from "@/lib/api-client"
+import { prepararFotoPerfil } from "@/lib/avatar-upload"
 
 const navItems = [
   { label: "Árbol Kiri",    icon: Sprout,     href: "/jardin" },
@@ -73,17 +74,29 @@ export function Sidebar() {
     router.replace("/login")
   }
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Mismo flujo que Perfil (lib/avatar-upload): antes esto guardaba la foto
+  // original en base64 sin comprimir; si pasaba de 700 KB el backend la
+  // rechazaba en silencio y la foto quedaba solo en este navegador.
+  const [avatarError, setAvatarError] = useState<string | null>(null)
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ""
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => setEditForm(f => ({ ...f, avatarUrl: ev.target?.result as string }))
-    reader.readAsDataURL(file)
+    setAvatarError(null)
+    const { url, preview, error } = await prepararFotoPerfil(file)
+    if (preview) setEditForm(f => ({ ...f, avatarUrl: preview }))
+    if (error || !url) { setAvatarError(error || "No se pudo procesar la foto."); return }
+    setEditForm(f => ({ ...f, avatarUrl: url }))
   }
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
+    const avatarCambio = editForm.avatarUrl !== user.avatarUrl
+    const { error } = await userApi.updateProfile({
+      nombre: editForm.nombre, correo: editForm.correo,
+      ...(avatarCambio ? { avatarUrl: editForm.avatarUrl } : {}),
+    })
+    if (error) { setAvatarError(error); return }
     setUser({ ...user, ...editForm })
-    userApi.updateProfile({ nombre: editForm.nombre, correo: editForm.correo, avatarUrl: editForm.avatarUrl })
     setSettingsOpen(false)
   }
 
@@ -286,6 +299,7 @@ export function Sidebar() {
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               <p className="text-[10px] text-muted-foreground">Toca el ícono para cambiar la foto</p>
+              {avatarError && <p className="text-[10px] text-destructive">{avatarError}</p>}
             </div>
             {/* Nombre y correo */}
             <div className="space-y-3">

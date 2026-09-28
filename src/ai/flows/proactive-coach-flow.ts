@@ -97,7 +97,7 @@ Obligaciones: ${input.obligacionesPct}% del ingreso
 Ahorro: ${input.ahorroPct}% del ingreso
 Capacidad libre: ${input.capacidadLibre}
 Meta de ahorro: ${input.metaAhorro} (acumulado: ${input.ahorroAcumulado})
-Racha actual: ${input.streakSemanas} semanas
+Racha actual: ${input.streakSemanas} días seguidos usando Kiri
 
 ═══ HISTORIAL DE 3 MESES ═══
 ${historialLines}
@@ -115,7 +115,9 @@ ${mensajeSection}
    - Sugiere UNA acción específica con impacto estimado (ej: "si reduces $X en Y, pagas Z 3 meses antes")
 3. Mantén la respuesta en máximo 3-4 oraciones. Sé conciso pero empático.
 4. Usa el nombre del usuario para personalizar.
-5. Si la racha es alta (4+), felicítalo brevemente.
+5. Si la racha es alta (7+ días), felicítalo brevemente.
+7. NUNCA inventes estadísticas, porcentajes "de estudios" ni cifras que no salgan de los datos de arriba. Todo número que digas debe calcularse con esos datos (y si es una estimación, dilo: "aprox.").
+8. Solo recomienda funciones que existen en Kiri: registrar ingresos y gastos, obligaciones (deudas y gastos fijos), abonos, "Me deben", presupuesto por categorías, bolsillos de ahorro, misiones y Social.
 6. Siempre cierra con una pregunta que invite a la acción o al diálogo.
 
 Responde ÚNICAMENTE con un JSON válido con estos campos:

@@ -9,6 +9,7 @@ import {
   AuthUser,
 } from "@/lib/api-client"
 import { clearAvatar } from "@/lib/avatar-storage"
+import { hidratarGuias } from "@/lib/guias"
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
       } else {
         const u = data.user
+        hidratarGuias(u.id as string, u.guiasVistas)
         setUser({
           id: u.id as string,
           nombre: u.nombre as string,
@@ -53,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await authApi.login(email, password)
     if (error) return { error }
     if (data) {
+      hidratarGuias(data.user.id, (data.user as unknown as { guiasVistas?: string[] }).guiasVistas)
       setUser(data.user)
     }
     return { error: null }

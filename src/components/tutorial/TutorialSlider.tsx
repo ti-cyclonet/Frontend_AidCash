@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { MODULE_GUIDES, type ModuleGuideData, type GuideItem } from "@/lib/module-guide-content"
 import { getUserId } from "@/lib/api-client"
+import { guiaVista, marcarGuiaVista } from "@/lib/guias"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -252,18 +253,15 @@ export function useTutorialFirstTime(moduleId: string) {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const key = tutorialKey(moduleId)
-    if (!key) return
-    const seen = localStorage.getItem(key)
-    if (!seen) {
-      setShow(true)
-    }
+    if (!tutorialKey(moduleId)) return
+    if (!guiaVista(moduleId)) setShow(true)
   }, [moduleId])
 
+  // Se guarda también en el servidor (lib/guias.ts): así no vuelve a salir
+  // al iniciar sesión en otro dispositivo.
   const dismiss = () => {
     setShow(false)
-    const key = tutorialKey(moduleId)
-    if (key) localStorage.setItem(key, "true")
+    marcarGuiaVista(moduleId)
   }
 
   return { showTutorial: show, dismissTutorial: dismiss }

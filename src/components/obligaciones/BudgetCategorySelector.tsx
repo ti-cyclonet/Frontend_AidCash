@@ -10,8 +10,8 @@ import { useBudgetCategories } from "@/hooks/use-budget-categories"
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Al vincular, los pagos que se registren contra esta deuda/gasto fijo cuentan
- * como consumo de esa categoría (ver computeCategorySpend en
- * budget-category-spend.ts) — usando el monto REAL pagado cada periodo, no el
+ * como consumo de esa categoría (ver resumenCategorias en
+ * Backend_AidCash/src/lib/category-summary.ts) — usando el monto REAL pagado, no el
  * monto configurado completo.
  */
 
