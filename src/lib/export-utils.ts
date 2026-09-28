@@ -765,10 +765,3 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   doc.save(`${filename}.pdf`)
 }
-
-// ─── Export Excel (deprecated — mantenido para compatibilidad) ─────────────────
-
-export async function exportToExcel(report: BalanceReport, filename = 'kiri-balance'): Promise<void> {
-  // Redirigir a PDF
-  await exportToPdf(report, filename)
-}

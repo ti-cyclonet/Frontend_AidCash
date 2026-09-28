@@ -217,10 +217,13 @@ function BadgeCard({ badge, unlocked, freq }: { badge: BadgeDefinition; unlocked
     <Card className={cn(
       "border-2 rounded-2xl shadow-none transition-all",
       unlocked
-        ? "border-cyclon-lavender/40 bg-cyclon-lavender/5"
+        ? badge.pro ? "border-amber-400/50 bg-amber-400/10" : "border-cyclon-lavender/40 bg-cyclon-lavender/5"
         : "border-muted bg-muted/20 opacity-50"
     )}>
-      <CardContent className="p-3 flex flex-col items-center text-center gap-2">
+      <CardContent className="p-3 flex flex-col items-center text-center gap-2 relative">
+        {badge.pro && (
+          <span className="absolute top-1.5 right-1.5 text-[8px] font-black text-amber-700 dark:text-amber-300 bg-amber-400/25 px-1.5 py-0.5 rounded">PRO</span>
+        )}
         <div className={cn(
           "text-3xl transition-transform",
           unlocked && "animate-bounce-slow"

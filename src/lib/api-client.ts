@@ -117,6 +117,14 @@ export interface ApiResponse<T = unknown> {
   status: number
 }
 
+/** Detalle del evento 'kiri:limite' (el backend dijo que el plan no alcanza). */
+export interface LimitePlanEvento {
+  codigo: 'LIMITE' | 'FUNCION' | 'CUOTA_IA'
+  mensaje: string
+  plan?: string
+  mejora?: { plan: string; maxValue?: number } | null
+}
+
 export async function api<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
@@ -188,6 +196,18 @@ export async function api<T = unknown>(
     const data = await res.json().catch(() => null)
 
     if (!res.ok) {
+      // Límite del plan (403 LIMITE/FUNCION) o cuota de IA agotada (429): se
+      // avisa a <LimitePlanDialog> para ofrecer "Ver planes" en cualquier pantalla.
+      const codigo = data?.codigo as string | undefined
+      if (codigo === 'LIMITE' || codigo === 'FUNCION' || codigo === 'CUOTA_IA') {
+        const mensaje = (codigo === 'CUOTA_IA' ? data?.error : data?.message) || 'Tu plan no incluye esto.'
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent<LimitePlanEvento>('kiri:limite', {
+            detail: { codigo, mensaje, plan: data?.plan, mejora: data?.mejora ?? null },
+          }))
+        }
+        return { data: null, error: mensaje, status: res.status }
+      }
       return {
         data: null,
         error: data?.error || `Error ${res.status}`,
@@ -749,6 +769,8 @@ export interface HogarCategoria {
 
 export interface HogarResumen {
   conectado: boolean
+  /** El hogar es de KIRI PRO: basta con que uno de los dos lo tenga. */
+  habilitado?: boolean
   connectionId?: string
   pareja?: { id: string; nombre: string }
   /** El tope de las categorías es por mes o por quincena (1–15 / 16–fin) */
@@ -855,6 +877,8 @@ export interface BalanceReport {
   timeframe: Timeframe
   from: string
   to: string
+  /** El plan recortó el rango pedido (KIRI FREE ve 3 meses; PLUS 24). */
+  historialLimitado?: { meses: number; desde: string; plan: string; mejora: { plan: string; maxValue: number } | null } | null
   summary: {
     totalIngreso: number
     totalEgreso: number
@@ -1117,7 +1141,17 @@ export interface PlanDisponible {
   isHighlighted: boolean
   displayOrder: number
   badge: string | null
+  /** Precio del año (con descuento); null si el plan no tiene pago anual. */
+  annualPrice?: number | null
   features: string[]
+}
+
+/** Uso de los recursos contables del plan (GET /usage-status). */
+export interface UsoPlan {
+  packageName: string
+  tier?: string
+  fuente?: string
+  variables: { variableName: string; displayName: string; maxValue: number; ilimitado: boolean; currentCount: number; usagePercentage: number }[]
 }
 
 export interface FacturaPendiente {
@@ -1142,8 +1176,9 @@ export const planApi = {
   disponibles: () => api<PlanDisponible[]>('/plan/available'),
   factonet: () => api<FactonetInfo>('/plan/factonet'),
   /** Cambio de plan: Authoriza valida la contraseña, crea el contrato y da acceso a FactoNet */
-  cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean }) =>
+  cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean; billingCycle?: 'monthly' | 'annual' }) =>
     api<{ success: boolean; message?: string }>('/plan/upgrade', { method: 'POST', body: data }),
+  uso: () => api<UsoPlan>('/usage-status'),
 }
 
 // ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────
@@ -1542,7 +1577,14 @@ export const projectionsApi = {
   async movimientos() {
     return api<{ gastos: { monto: number; fecha: string; hormiga: boolean }[]; ahorros: { monto: number; fecha: string }[] }>('/projections/movimientos')
   },
+  /** Escenarios guardados (KIRI PRO) */
+  escenarios: () => api<{ escenarios: EscenarioProyeccion[] }>('/projections/escenarios'),
+  guardarEscenario: (data: { nombre: string; aporteExtra: number; recortarHormiga: boolean; meses: number }) =>
+    api<{ escenario: EscenarioProyeccion }>('/projections/escenarios', { method: 'POST', body: data }),
+  borrarEscenario: (id: string) => api<{ message: string }>(`/projections/escenarios/${id}`, { method: 'DELETE' }),
 }
+
+export interface EscenarioProyeccion { id: string; nombre: string; aporteExtra: number; recortarHormiga: boolean; meses: number; createdAt: string }
 
 // ─── Notificaciones (campana) — persistidas en el backend ─────────────────────
 // `event`/`data` tienen la misma forma que espera KiriNotification en

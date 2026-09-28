@@ -108,7 +108,7 @@ export function useDestinos(activo = true): Destinos {
       setCategorias(c.data?.categories ?? [])
       setBolsillos(b.data?.pockets ?? [])
       setMeDeben((l.data?.loans ?? []).filter(x => x.estado === "activo"))
-      setHogar(h.data?.conectado ? { pareja: h.data.pareja?.nombre.split(" ")[0] ?? "tu pareja", categorias: h.data.categorias ?? [] } : null)
+      setHogar(h.data?.conectado && h.data.habilitado !== false ? { pareja: h.data.pareja?.nombre.split(" ")[0] ?? "tu pareja", categorias: h.data.categorias ?? [] } : null)
       setCargando(false)
     })
     return () => { vivo = false }
@@ -221,15 +221,21 @@ export function useEjecutarAcciones() {
 
 // ─── Llamadas a la IA (backend, con login) ────────────────────────────────────
 
-export interface RespuestaCoach { respuesta: string; acciones: Accion[]; sugerencias: string[]; ir: { ruta: string; etiqueta: string } | null }
-export interface RespuestaDictado { resumen: string; acciones: Accion[]; confianza: "alta" | "media" | "baja" }
+export interface RespuestaCoach { respuesta: string; acciones: Accion[]; sugerencias: string[]; ir: { ruta: string; etiqueta: string } | null; uso?: UsoIA }
+export interface RespuestaDictado { resumen: string; acciones: Accion[]; confianza: "alta" | "media" | "baja"; uso?: UsoIA }
 export interface RespuestaRecibo {
   esRecibo: boolean; establecimiento: string; fecha: string | null; total: number
   items: { descripcion: string; monto: number }[]; nombreClaro: boolean; confianza: "alta" | "media" | "baja"; acciones: Accion[]
+  uso?: UsoIA
 }
+
+/** Cuánto se lleva de cada cuota mensual de IA (se renueva el día 1). */
+export interface UsoIA { usados: number; limite: number; ilimitado?: boolean; restantes: number | null }
+export interface UsoIAMes { periodo: string; plan: string; tier: string; coach: UsoIA; dictado: UsoIA; escaneo: UsoIA }
 
 export const iaApi = {
   estado: () => api<{ activa: boolean }>("/ai/estado"),
+  uso: () => api<UsoIAMes>("/ai/uso"),
   coach: (mensaje: string, historial: { rol: "usuario" | "coach"; texto: string }[], pantalla?: string) =>
     api<RespuestaCoach>("/ai/coach", { method: "POST", body: { mensaje, historial, ...(pantalla ? { pantalla } : {}) } }),
   dictado: (transcripcion: string) => api<RespuestaDictado>("/ai/dictado", { method: "POST", body: { transcripcion } }),

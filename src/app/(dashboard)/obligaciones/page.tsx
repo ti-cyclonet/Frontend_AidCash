@@ -310,7 +310,8 @@ export default function ObligacionesPage() {
   useEffect(() => {
     if (!expenseModalOpen) return
     hogarApi.resumen().then(({ data }) => {
-      if (data?.conectado) {
+      // Sin KIRI PRO en la pareja no se ofrecen categorías del hogar al registrar
+      if (data?.conectado && data.habilitado !== false) {
         setHogarCats((data.categorias ?? []).map(c => ({ id: c.id, nombre: c.nombre, icono: c.icono, disponible: c.disponible })))
         setHogarPareja(data.pareja?.nombre ?? null)
       } else setHogarCats([])

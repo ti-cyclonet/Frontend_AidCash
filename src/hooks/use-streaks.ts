@@ -14,6 +14,8 @@ export interface BadgeDefinition {
   icono: string
   getCondicion: (freq: IncomeFrequency) => string
   minStreak: number
+  /** Exclusiva de KIRI PRO (la otorga el backend: ver lib/planes.ts) */
+  pro?: boolean
 }
 
 // streakActual es una racha de DÍAS consecutivos con alguna acción financiera
@@ -87,6 +89,34 @@ export const BADGES: BadgeDefinition[] = [
     icono: '💰',
     getCondicion: () => 'Ahorrar el monto sugerido del periodo',
     minStreak: 0,
+  },
+  // ── Exclusivas de KIRI PRO ──
+  {
+    id: 'pro_jardin_dorado',
+    nombre: 'Jardín Dorado',
+    getDescripcion: () => 'Eres KIRI PRO: tu jardín brilla en dorado.',
+    icono: '🌟',
+    getCondicion: () => 'Tener KIRI PRO',
+    minStreak: 0,
+    pro: true,
+  },
+  {
+    id: 'pro_hogar_equipo',
+    nombre: 'Hogar en Equipo',
+    getDescripcion: () => 'Crearon su primer presupuesto del hogar en pareja.',
+    icono: '💞',
+    getCondicion: () => 'Con KIRI PRO, crear una categoría del hogar',
+    minStreak: 0,
+    pro: true,
+  },
+  {
+    id: 'pro_estratega',
+    nombre: 'Estratega',
+    getDescripcion: () => 'Guardaste tu primer escenario de proyección.',
+    icono: '♟️',
+    getCondicion: () => 'Con KIRI PRO, guardar un escenario en Proyecciones',
+    minStreak: 0,
+    pro: true,
   },
 ]
 

@@ -3,6 +3,13 @@
 import { usePlan } from "@/lib/plan-context"
 import { Lock, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
+
+/** Plan desde el que viene cada función (igual que la matriz del backend). */
+const PLAN_DE_FUNCION: Record<string, string> = {
+  advancedReports: "KIRI PLUS", debtStrategies: "KIRI PLUS", p2pLoans: "KIRI PLUS", sharedDebts: "KIRI PLUS", sharedPockets: "KIRI PLUS",
+  householdBudget: "KIRI PRO", openBanking: "KIRI PRO", receiptItems: "KIRI PRO", savedScenarios: "KIRI PRO", exclusiveBadges: "KIRI PRO", prioritySupport: "KIRI PRO",
+}
 
 interface FeatureGateProps {
   /** The feature variable name to check (e.g., 'aiCoach', 'socialConnections') */
@@ -19,6 +26,8 @@ interface FeatureGateProps {
  */
 export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
   const { hasFeature, loading, plan } = usePlan()
+  const router = useRouter()
+  const planNecesario = PLAN_DE_FUNCION[feature] ?? "KIRI PLUS"
 
   if (loading) {
     return (
@@ -41,7 +50,7 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
         <Lock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
       </div>
       <h3 className="text-lg font-semibold mb-2">
-        Función exclusiva de KIRI PLUS
+        Función de {planNecesario}
       </h3>
       <p className="text-muted-foreground text-sm max-w-sm mb-6">
         Esta funcionalidad no está disponible en tu plan actual
@@ -49,11 +58,11 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
         todas las herramientas de Kiri Finance.
       </p>
       <Button
-        onClick={() => window.open(`${process.env.NEXT_PUBLIC_LANDING_URL || "https://www.cyclonet.com.co/kiri-finance"}/#planes`, "_blank")}
+        onClick={() => router.push("/mi-plan")}
         className="gap-2"
       >
         <Sparkles className="w-4 h-4" />
-        Ver planes
+        Ver {planNecesario}
       </Button>
     </div>
   )

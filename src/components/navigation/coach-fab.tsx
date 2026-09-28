@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   X, Send, Mic, Loader2, Sparkles, CheckCircle2, AlertTriangle, ScanLine, Camera, Upload,
-  Calculator, ArrowRight, Keyboard, RotateCcw, ListChecks,
+  Calculator, ArrowRight, Keyboard, RotateCcw, ListChecks, Lock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,8 +20,20 @@ import { resizeImageToDataUrl } from "@/lib/avatar-upload"
 import { AccionesReview } from "@/components/coach/AccionesReview"
 import {
   iaApi, useDestinos, useEjecutarAcciones, faltantes, pantallaActual,
-  type Accion, type RespuestaRecibo,
+  type Accion, type RespuestaRecibo, type UsoIA, type UsoIAMes,
 } from "@/lib/kiri-acciones"
+import { usePlan } from "@/lib/plan-context"
+
+/** "Te quedan 7 mensajes este mes" (nada si es ilimitado o aún no se sabe). */
+function CuotaIA({ uso, que }: { uso?: UsoIA | null; que: string }) {
+  if (!uso || uso.ilimitado || uso.restantes == null) return null
+  const poco = uso.restantes <= Math.max(1, Math.round(uso.limite * 0.2))
+  return (
+    <span className={cn("text-[10px] font-bold tabular-nums", uso.restantes === 0 ? "text-destructive" : poco ? "text-amber-600" : "text-muted-foreground")}>
+      {uso.restantes === 0 ? `Sin ${que} este mes` : `Te quedan ${uso.restantes} ${que} este mes`}
+    </span>
+  )
+}
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -126,6 +138,11 @@ export function CoachFab() {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [iaActiva, setIaActiva] = useState<boolean | null>(null)
+  const [usoIA, setUsoIA] = useState<UsoIAMes | null>(null)
+  const { hasFeature } = usePlan()
+  const actualizarUso = (tipo: "coach" | "dictado" | "escaneo", u?: UsoIA) => {
+    if (u) setUsoIA(prev => prev ? { ...prev, [tipo]: { ...prev[tipo], ...u } } : prev)
+  }
   const [showSatellites, setShowSatellites] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [simOpen, setSimOpen] = useState(false)
@@ -176,6 +193,19 @@ export function CoachFab() {
     iaApi.estado().then(({ data }) => setIaActiva(data?.activa ?? false))
   }, [isOpen, voiceOpen, scanOpen, iaActiva])
 
+  // Cuotas del mes (se vuelven a pedir cada vez que se abre algo)
+  useEffect(() => {
+    if (!(isOpen || voiceOpen || scanOpen)) return
+    iaApi.uso().then(({ data }) => { if (data) setUsoIA(data) })
+  }, [isOpen, voiceOpen, scanOpen])
+
+  // "Ver planes" desde el aviso de límite: cerrar el chat para que se vea Mi plan
+  useEffect(() => {
+    const h = () => { setIsOpen(false); setVoiceOpen(false); setScanOpen(false) }
+    window.addEventListener("kiri:ir-mi-plan", h)
+    return () => window.removeEventListener("kiri:ir-mi-plan", h)
+  }, [])
+
   // ── Simulador (satélite) ──────────────────────────────────────────────────
   const periodData = getPeriodData(income, extraIncomes.reduce((a, e) => a + e.monto, 0), debts, fixedExpenses, incomeFrequency)
   const debtCapacityAmount = periodData.effectiveIncome > 0
@@ -201,6 +231,7 @@ export function CoachFab() {
       setMessages(p => [...p, { id: nuevoId(), role: "assistant", texto: error ?? "No pude responder ahora. Intenta de nuevo.", error: true }])
       return
     }
+    actualizarUso("coach", data.uso)
     setMessages(p => [...p, {
       id: nuevoId(), role: "assistant", texto: data.respuesta,
       acciones: data.acciones.length ? data.acciones : undefined,
@@ -293,6 +324,7 @@ export function CoachFab() {
     setVoiceError(null)
     const { data, error } = await iaApi.dictado(texto)
     if (!data) { setVoiceError(error ?? "No pude interpretar lo que dijiste."); setVoicePhase("idle"); setEscribiendo(true); return }
+    actualizarUso("dictado", data.uso)
     setVoiceResumen(data.resumen)
     setVoiceConfianza(data.confianza)
     setVoiceAcciones(data.acciones)
@@ -380,6 +412,7 @@ export function CoachFab() {
       setScanPreview(dataUrl)
       const { data, error } = await iaApi.recibo(dataUrl.split(",")[1], "image/jpeg")
       if (!data) { setScanError(error ?? "No se pudo leer el recibo."); setScanState("error"); return }
+      actualizarUso("escaneo", data.uso)
       if (!data.esRecibo) { setScanError("Esa foto no parece un recibo o factura. Intenta con otra más cerca y con buena luz."); setScanState("error"); return }
       setScanResult(data)
       setScanAcciones(data.acciones)
@@ -400,6 +433,13 @@ export function CoachFab() {
   // "Separar por ítems": un gasto por cada ítem (con la categoría que la IA eligió para el total)
   const cambiarModoItems = (v: boolean) => {
     if (!scanResult) return
+    // Separar el recibo en un gasto por producto es de KIRI PRO
+    if (v && !hasFeature("receiptItems")) {
+      window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
+        codigo: "FUNCION", mensaje: "Separar un recibo en un gasto por cada producto es parte de KIRI PRO.", mejora: { plan: "KIRI PRO" },
+      } }))
+      return
+    }
     setPorItems(v)
     setScanErrores({})
     if (!v) { setScanAcciones(scanResult.acciones); return }
@@ -533,6 +573,7 @@ export function CoachFab() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2"><Mic className="h-4 w-4 text-kiri-emerald" /> Dictado inteligente</DialogTitle>
                 <DialogDescription>Cuéntale a Kiri qué hiciste con tu plata: gastos, ingresos, pagos, ahorros o préstamos. Él lo ubica en su lugar.</DialogDescription>
+                <CuotaIA uso={usoIA?.dictado} que="dictados" />
               </DialogHeader>
               <div className="py-2 space-y-4">
                 {avisoIA}
@@ -596,6 +637,7 @@ export function CoachFab() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5 text-cyclon-periwinkle" /> Escanear recibo</DialogTitle>
             <DialogDescription>Toma o sube la foto de un recibo o factura. Kiri lee el total, el comercio y los productos.</DialogDescription>
+            <CuotaIA uso={usoIA?.escaneo} que="escaneos" />
           </DialogHeader>
           <div className="space-y-3">
             {avisoIA}
@@ -656,7 +698,7 @@ export function CoachFab() {
                 {scanResult.items.length > 1 && (
                   <div className="flex bg-muted/40 rounded-xl p-1 text-[11px] font-bold">
                     <button onClick={() => cambiarModoItems(false)} className={cn("flex-1 py-1.5 rounded-lg", !porItems ? "bg-background shadow-sm" : "text-muted-foreground")}>Todo en uno</button>
-                    <button onClick={() => cambiarModoItems(true)} className={cn("flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1", porItems ? "bg-background shadow-sm" : "text-muted-foreground")}><ListChecks className="h-3.5 w-3.5" /> Separar por productos</button>
+                    <button onClick={() => cambiarModoItems(true)} className={cn("flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1", porItems ? "bg-background shadow-sm" : "text-muted-foreground")}>{hasFeature("receiptItems") ? <ListChecks className="h-3.5 w-3.5" /> : <Lock className="h-3 w-3" />} Separar por productos{!hasFeature("receiptItems") && <span className="text-[9px] font-black text-amber-600 ml-0.5">PRO</span>}</button>
                   </div>
                 )}
                 <AccionesReview acciones={scanAcciones} destinos={destinos} errores={scanErrores} compacto={porItems}
@@ -685,7 +727,9 @@ export function CoachFab() {
         <div className="fixed z-[60] bg-card border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden inset-x-0 top-0 bottom-0 sm:inset-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[400px] sm:rounded-2xl lg:bottom-8 lg:right-8 lg:top-auto lg:w-[420px] lg:h-[640px] lg:rounded-2xl">
           <div className="flex items-center gap-3 px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:pt-3 border-b border-border bg-kiri-emerald/5">
             <div className="h-10 w-10 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0"><KiriLogo className="h-6 w-6" ojos="#fff" /></div>
-            <div className="flex-1 min-w-0"><p className="text-sm font-bold">Kiri Coach</p><p className="text-[10px] text-muted-foreground truncate">Tu experto en Kiri Finance y en tu plata</p></div>
+            <div className="flex-1 min-w-0"><p className="text-sm font-bold">Kiri Coach</p>{usoIA?.coach && !usoIA.coach.ilimitado && usoIA.coach.restantes != null
+              ? <p className="truncate leading-tight"><CuotaIA uso={usoIA.coach} que="mensajes" /></p>
+              : <p className="text-[10px] text-muted-foreground truncate">Tu experto en Kiri Finance y en tu plata</p>}</div>
             <button onClick={abrirVoz} title="Dictar movimientos" className="h-8 w-8 rounded-lg bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 flex items-center justify-center"><Mic className="h-4 w-4" /></button>
             <button onClick={() => { setIsOpen(false); abrirScanner() }} title="Escanear recibo" className="h-8 w-8 rounded-lg bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 flex items-center justify-center"><ScanLine className="h-4 w-4" /></button>
             <button onClick={() => setIsOpen(false)} className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted" aria-label="Cerrar"><X className="h-4 w-4" /></button>

@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { FileText, Loader2, Download } from "lucide-react"
+import { FileText, Loader2, Download, Lock } from "lucide-react"
+import { usePlan } from "@/lib/plan-context"
 import { exportToPdf } from "@/lib/export-utils"
 import { reportsApi } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
@@ -33,12 +34,12 @@ function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// Genera los últimos 12 meses como opciones
-function getLast12Months(): { value: string; label: string; from: string; to: string }[] {
+// Genera los últimos meses como opciones (hasta 12, o lo que guarde el plan si es menos)
+function getLastMonths(n = 12): { value: string; label: string; from: string; to: string }[] {
   const months = []
   const now = new Date()
 
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < n; i++) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -61,8 +62,11 @@ export function ExportButtons({ className }: ExportButtonsProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState(false)
+  // Los reportes PDF son de KIRI PLUS en adelante
+  const { hasFeature, limite } = usePlan()
+  const puedePdf = hasFeature("advancedReports")
 
-  const months = getLast12Months()
+  const months = getLastMonths(Math.max(1, Math.min(12, limite("mesesHistorial") ?? 12)))
 
   // Toggle selección de mes
   const toggleMonth = (value: string) => {
@@ -114,10 +118,14 @@ export function ExportButtons({ className }: ExportButtonsProps) {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setModalOpen(true)}
+        onClick={() => puedePdf
+          ? setModalOpen(true)
+          : window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
+              codigo: "FUNCION", mensaje: "Descargar tu balance en PDF es parte de KIRI PLUS.", mejora: { plan: "KIRI PLUS" },
+            } }))}
         className="h-9 rounded-xl gap-1.5 border-kiri-emerald/40 text-kiri-emerald hover:bg-kiri-emerald/10 hover:border-kiri-emerald font-bold text-xs"
       >
-        <FileText className="h-3.5 w-3.5" />
+        {puedePdf ? <FileText className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
         PDF
       </Button>
 
