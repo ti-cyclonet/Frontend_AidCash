@@ -2,7 +2,8 @@ import type { BalanceReport, Movement } from "@/lib/api-client"
 
 /**
  * Lista unificada de movimientos (pagos de deudas y gastos fijos, gastos
- * variables, ingresos, ahorro y préstamos "Me deben") a partir del reporte de
+ * variables, ingresos, ahorro, préstamos "Me deben" y todo lo de Social:
+ * préstamos entre usuarios, sus abonos y ahorros compartidos) a partir del reporte de
  * Balance, del más reciente al más antiguo. Compartida por Balance y la
  * página de Historial para que ambas muestren exactamente lo mismo.
  */
@@ -117,6 +118,38 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       id: `pa-${a.id}`, fecha: a.fecha, nombre: `${a.persona} te devolvió`, tipo: "prestamos",
       tipoLabel: a.entraABilletera ? "Abono recibido" : "Abono recibido (fuera de Kiri)",
       monto: a.monto, estado: 'pagado', direccion: 'entrada',
+    })
+  }
+
+  // Social: préstamos entre usuarios de Kiri y sus abonos (como "Me deben":
+  // mueven el disponible pero no son gasto ni ingreso) y ahorros compartidos.
+  for (const p of report.social?.prestamos ?? []) {
+    const primero = p.conQuien.split(" ")[0]
+    movements.push({
+      id: `sp-${p.id}`, fecha: p.fecha, tipo: "prestamos", estado: 'pagado',
+      nombre: p.rol === 'preste' ? `Préstamo a ${primero}` : `Préstamo de ${primero}`,
+      tipoLabel: p.previo
+        ? "Social · préstamo previo (no movió tu billetera)"
+        : p.rol === 'preste' ? "Social · prestaste (salió de tu billetera)" : "Social · te prestaron (entró a tu billetera)",
+      monto: p.monto,
+      direccion: p.previo ? undefined : p.rol === 'preste' ? 'salida' : 'entrada',
+    })
+  }
+  for (const a of report.social?.abonos ?? []) {
+    const primero = a.conQuien.split(" ")[0]
+    movements.push({
+      id: `sa-${a.id}`, fecha: a.fecha, tipo: "prestamos", estado: 'pagado',
+      nombre: a.rol === 'recibi' ? `${primero} te abonó` : `Abono a ${primero}`,
+      tipoLabel: a.rol === 'recibi' ? "Social · abono recibido" : "Social · abono a un préstamo",
+      monto: a.monto, direccion: a.rol === 'recibi' ? 'entrada' : 'salida',
+    })
+  }
+  for (const s of report.social?.ahorros ?? []) {
+    movements.push({
+      id: `sh-${s.id}`, fecha: s.fecha, tipo: "ahorros", estado: 'pagado',
+      nombre: s.tipo === 'retiro' ? `Retiro de ${s.bolsillo}` : `Aporte a ${s.bolsillo}`,
+      tipoLabel: s.tipo === 'previo' ? "Ahorro compartido · ya ahorrado (no movió tu billetera)" : s.tipo === 'retiro' ? "Ahorro compartido · retiro" : "Ahorro compartido",
+      monto: s.monto, direccion: s.tipo === 'retiro' ? 'entrada' : undefined,
     })
   }
 

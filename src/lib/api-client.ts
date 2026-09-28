@@ -915,6 +915,12 @@ export interface BalanceReport {
     prestamos: { id: string; persona: string; monto: number; desdeBilletera: boolean; fecha: string }[]
     abonos: { id: string; persona: string; monto: number; entraABilletera: boolean; fecha: string }[]
   }
+  /** Social: préstamos entre usuarios, sus abonos y ahorros compartidos del rango. */
+  social?: {
+    prestamos: { id: string; conQuien: string; rol: 'preste' | 'me_prestaron'; monto: number; previo: boolean; descripcion: string | null; fecha: string }[]
+    abonos: { id: string; conQuien: string; rol: 'recibi' | 'pague'; monto: number; fecha: string }[]
+    ahorros: { id: string; bolsillo: string; tipo: 'aporte' | 'previo' | 'retiro'; monto: number; fecha: string }[]
+  }
 }
 
 // ─── Movimiento unificado — Balance/Historial ─────────────────────────────────

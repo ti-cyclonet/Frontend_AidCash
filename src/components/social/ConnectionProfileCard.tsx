@@ -18,8 +18,9 @@ import type { ConnectionSharedResponse, ConnectionRole } from "@/lib/types"
 
 const ROLE_LABEL: Record<ConnectionRole, string> = { FRIEND: "Amigo", FAMILY: "Familia", PARTNER: "Pareja" }
 
-// Colores de la tarjeta: verde Kiri para todos, rosa para la pareja (el mismo
-// rosa de "Pareja" y del presupuesto del hogar), con exactamente el mismo estilo.
+// Colores de la tarjeta según el rol, con exactamente el mismo estilo: azul
+// para amigos, ámbar para familia y rosa para la pareja (los mismos colores
+// de los chips de rol en Social). Verde Kiri mientras carga.
 const TEMA = {
   base: {
     header: "from-kiri-emerald/20", sparkle: "text-kiri-emerald/30",
@@ -28,6 +29,22 @@ const TEMA = {
     activo: "bg-kiri-emerald text-white border-kiri-emerald shadow-sm shadow-kiri-emerald/20", hoverBorde: "hover:border-kiri-emerald/30",
     creciendo: "from-kiri-emerald/5 to-emerald-900/5 border-kiri-emerald/10", anillo: "#10b981",
     emoji: "⚙", equipo: "🌱 Equipo Kiri",
+  },
+  amigo: {
+    header: "from-blue-500/20", sparkle: "text-blue-500/30",
+    avatar: "border-blue-500/30 shadow-blue-500/20", avatarFallback: "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
+    text: "text-blue-600 dark:text-blue-400", softBg: "bg-blue-500/10", barra: "bg-blue-500",
+    activo: "bg-blue-500 text-white border-blue-500 shadow-sm shadow-blue-500/20", hoverBorde: "hover:border-blue-500/30",
+    creciendo: "from-blue-500/5 to-blue-900/5 border-blue-500/10", anillo: "#3b82f6",
+    emoji: "🤝", equipo: "🤝 Amigos Kiri",
+  },
+  familia: {
+    header: "from-amber-500/20", sparkle: "text-amber-500/30",
+    avatar: "border-amber-500/30 shadow-amber-500/20", avatarFallback: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+    text: "text-amber-600 dark:text-amber-400", softBg: "bg-amber-500/10", barra: "bg-amber-500",
+    activo: "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20", hoverBorde: "hover:border-amber-500/30",
+    creciendo: "from-amber-500/5 to-amber-900/5 border-amber-500/10", anillo: "#f59e0b",
+    emoji: "🏡", equipo: "🏡 Familia Kiri",
   },
   pareja: {
     header: "from-pink-500/20", sparkle: "text-pink-500/30",
@@ -138,8 +155,9 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
     return Math.min(100, score)
   })() : 0
 
-  // Pareja: la misma tarjeta, con el rosa de pareja en vez del verde
-  const t = data?.connection.role === "PARTNER" ? TEMA.pareja : TEMA.base
+  // La misma tarjeta, con el color de su rol
+  const rol = data?.connection.role
+  const t = rol === "PARTNER" ? TEMA.pareja : rol === "FAMILY" ? TEMA.familia : rol === "FRIEND" ? TEMA.amigo : TEMA.base
 
   return (
     <>

@@ -22,9 +22,15 @@ export const GARDEN_EVENT_RAIN = "kiri:saving-registered"
 export const GARDEN_EVENT_STORM = "kiri:impulse-registered"
 export const GARDEN_EVENT_INCOME = "kiri:income-registered"
 
+// Por cuenta: si en el mismo navegador entra otra persona, no hereda la
+// lluvia / el rayo / el sol pendientes de la anterior.
+function porUsuario(key: string): string {
+  try { return `${key}_${localStorage.getItem("kiri_user_id") ?? "anon"}` } catch { return key }
+}
+
 function marcar(key: string, detalle: Record<string, unknown>, evento: string) {
   if (typeof window === "undefined") return
-  try { localStorage.setItem(key, JSON.stringify({ ...detalle, at: Date.now() })) } catch { /* sin storage */ }
+  try { localStorage.setItem(porUsuario(key), JSON.stringify({ ...detalle, at: Date.now() })) } catch { /* sin storage */ }
   window.dispatchEvent(new CustomEvent(evento, { detail: detalle }))
 }
 
@@ -46,9 +52,9 @@ export function marcarSolDeIngreso(monto: number) {
 function consumir<T>(key: string): T | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem(key)
+    const raw = localStorage.getItem(porUsuario(key))
     if (!raw) return null
-    localStorage.removeItem(key)
+    localStorage.removeItem(porUsuario(key))
     const data = JSON.parse(raw) as T & { at: number }
     return Date.now() - data.at <= VIGENCIA_MS ? data : null
   } catch {
