@@ -15,9 +15,6 @@ import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse,
 import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
-// Authoriza es la identidad central: la foto de perfil se sube allí y se
-// refleja en todas las apps del ecosistema.
-const AUTHORIZA_API_URL = process.env.NEXT_PUBLIC_AUTHORIZA_API_URL || 'http://localhost:3000/api'
 
 // ─── Storage Keys ─────────────────────────────────────────────────────────────
 
@@ -346,36 +343,15 @@ export const userApi = {
 }
 
 /**
- * Sube la foto de perfil al endpoint CENTRAL de Authoriza (multipart, campo
- * 'file') y devuelve la URL alojada. El avatar vive en Authoriza y se refleja
- * en todas las apps. Usa el access token de Kiri (Authoriza valida el token
- * federado). El api() normal solo maneja JSON, por eso este helper es aparte.
+ * Sube la foto de perfil (data URL ya redimensionada) a Authoriza A TRAVÉS del
+ * backend de Kiri: el avatar vive en Authoriza y se refleja en todas las apps,
+ * pero el token de Kiri no es válido contra Authoriza, así que el navegador no
+ * puede subirla directo allá (antes fallaba siempre con 401).
  */
-export async function uploadAvatarToAuthoriza(file: File): Promise<{ url: string | null; error: string | null }> {
-  try {
-    const form = new FormData()
-    form.append('file', file)
-    // Base normalizada: quita un '/auth' final por si el env lo trae (prod Kiri
-    // ya es '.../api' sin /auth, pero se protege por consistencia).
-    const base = AUTHORIZA_API_URL.replace(/\/auth\/?$/, '')
-    const headers: Record<string, string> = {}
-    const token = getAccessToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    // NO fijar Content-Type: el navegador pone el boundary del multipart.
-    const res = await fetch(`${base}/users/me/avatar`, { method: 'POST', headers, body: form })
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}))
-      return { url: null, error: e.message || `Error ${res.status}` }
-    }
-    const data = await res.json()
-    let url = data.url as string | undefined
-    if (!url) return { url: null, error: 'Authoriza no devolvió la foto' }
-    // Si viene relativa ("/uploads/..."), es relativa a Authoriza, no a Kiri
-    if (url.startsWith('/')) url = new URL(url, base).toString()
-    return { url, error: null }
-  } catch {
-    return { url: null, error: 'Error de conexión al subir la foto' }
-  }
+export async function uploadAvatarToAuthoriza(dataUrl: string): Promise<{ url: string | null; error: string | null }> {
+  const { data, error } = await api<{ url: string }>('/users/avatar', { method: 'POST', body: { dataUrl } })
+  if (error || !data?.url) return { url: null, error: error || 'No se pudo subir la foto' }
+  return { url: data.url, error: null }
 }
 
 export interface WalletState {

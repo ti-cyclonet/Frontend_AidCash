@@ -41,9 +41,11 @@ export function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, qualit
 export async function prepararFotoPerfil(file: File): Promise<{ url: string | null; preview: string | null; error: string | null }> {
   if (!file.type.startsWith("image/")) return { url: null, preview: null, error: "Selecciona un archivo de imagen." }
   let preview: string | null = null
-  try { preview = await resizeImageToDataUrl(file) } catch { /* se intenta igual con Authoriza */ }
-  const { url } = await uploadAvatarToAuthoriza(file)
+  try { preview = await resizeImageToDataUrl(file) } catch { /* sin preview no hay qué subir */ }
+  if (!preview) return { url: null, preview: null, error: "No se pudo procesar la foto. Intenta con otra." }
+  const { url } = await uploadAvatarToAuthoriza(preview)
   if (url) return { url, preview, error: null }
-  if (preview) return { url: preview, preview, error: null }
-  return { url: null, preview: null, error: "No se pudo procesar la foto. Intenta con otra." }
+  // Si Authoriza no respondió se devuelve el preview: al guardar el perfil,
+  // PATCH /users/profile lo vuelve a intentar subir a Authoriza.
+  return { url: preview, preview, error: null }
 }
