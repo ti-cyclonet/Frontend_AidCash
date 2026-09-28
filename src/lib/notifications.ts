@@ -213,6 +213,20 @@ const EVENT_MESSAGES: Record<string, (data: Record<string, unknown>) => Notifica
     tag: 'mission-reminder',
     sound: 'default',
   }),
+  [SOCKET_EVENTS.HOGAR_GASTO]: (data) => ({
+    title: (data.message as string) ?? '🏠 Presupuesto del hogar',
+    body: (data.detalle as string) ?? '',
+    url: '/social',
+    tag: 'hogar',
+    sound: 'default',
+  }),
+  [SOCKET_EVENTS.AVISO]: (data) => ({
+    title: (data.message as string) ?? 'Kiri Finance',
+    body: (data.detalle as string) ?? '',
+    url: (data.route as string) ?? '/dashboard',
+    tag: (data.tipo as string) ?? 'kiri-aviso',
+    sound: 'default',
+  }),
   [SOCKET_EVENTS.GARDEN_WATERED]: (data) => ({
     title: `💧 ${(data.fromName as string) ?? 'Alguien'} regó tu árbol`,
     body: 'Entra a Kiri y sigue cuidando tus finanzas para que siga creciendo.',

@@ -25,7 +25,9 @@ export const SOCKET_EVENTS = {
   SHARED_DEPOSIT:          "social:shared_deposit",
   GARDEN_WATERED:          "social:garden_watered",
   REFERRAL_JOINED:         "social:referral_joined",
+  HOGAR_GASTO:             "social:hogar_gasto",
   MISSION_REMINDER:        "mission:daily_reminder",
+  AVISO:                   "kiri:aviso",
   LOAN_REQUESTED:          "loan:requested",
   LOAN_APPROVED:           "loan:approved",
   LOAN_REJECTED:           "loan:rejected",
@@ -62,6 +64,8 @@ interface SocketContextValue {
   unreadCount:   number
   socialUnreadCount: number
   markAllRead:   () => void
+  /** Marca leídas solo las de Social (al abrir esa pantalla). */
+  markSocialRead: () => void
   clearNotifications: () => void
   addNotification: (event: SocketEvent, data: Record<string, unknown>) => void
 }
@@ -73,6 +77,7 @@ const SocketContext = createContext<SocketContextValue>({
   unreadCount:   0,
   socialUnreadCount: 0,
   markAllRead:   () => {},
+  markSocialRead: () => {},
   clearNotifications: () => {},
   addNotification: () => {},
 })
@@ -120,11 +125,12 @@ export const NOTIFICATION_EVENTS: SocketEvent[] = [
   SOCKET_EVENTS.ROLE_CHANGE_REJECTED,
   SOCKET_EVENTS.GARDEN_WATERED,
   SOCKET_EVENTS.REFERRAL_JOINED,
+  SOCKET_EVENTS.HOGAR_GASTO,
 ]
 
 // Eventos persistidos que llegan por socket pero NO son de Social (no
 // encienden el ícono de Social, sí la campana).
-const OTHER_LIVE_EVENTS: SocketEvent[] = [SOCKET_EVENTS.MISSION_REMINDER]
+const OTHER_LIVE_EVENTS: SocketEvent[] = [SOCKET_EVENTS.MISSION_REMINDER, SOCKET_EVENTS.AVISO]
 
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { user: authUser } = useAuth()
@@ -224,6 +230,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     notificationsApi.markAllRead().catch(() => {})
   }, [])
 
+  const markSocialRead = useCallback(() => {
+    setNotifications(prev => {
+      if (!prev.some(n => !n.read && NOTIFICATION_EVENTS.includes(n.event))) return prev
+      notificationsApi.markRead(NOTIFICATION_EVENTS).catch(() => {})
+      return prev.map(n => NOTIFICATION_EVENTS.includes(n.event) ? { ...n, read: true } : n)
+    })
+  }, [])
+
   const clearNotifications = useCallback(() => {
     setNotifications([])
     notificationsApi.clear().catch(() => {})
@@ -253,6 +267,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       unreadCount,
       socialUnreadCount,
       markAllRead,
+      markSocialRead,
       clearNotifications,
       addNotification,
     }}>

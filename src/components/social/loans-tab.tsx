@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from "react"
 import {
   Coins, Plus, Check, XCircle, Loader2, ChevronDown, ChevronUp,
-  ArrowUpRight, ArrowDownLeft, Clock, AlertCircle,
+  ArrowUpRight, ArrowDownLeft, Clock, AlertCircle, CalendarClock,
 } from "lucide-react"
+import { MoneyInput } from "@/components/ui/money-input"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,6 +21,56 @@ import { useAppContext } from "@/lib/app-context"
 import type { Loan, Connection } from "@/lib/types"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** "YYYY-MM-DD" de hoy + n días (local). */
+function enDias(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+function finDeMes(): string {
+  const d = new Date()
+  const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+  return `${ultimo.getFullYear()}-${String(ultimo.getMonth() + 1).padStart(2, "0")}-${String(ultimo.getDate()).padStart(2, "0")}`
+}
+function fmtFecha(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString("es-CO", { day: "numeric", month: "short" })
+}
+
+/** Mismo lenguaje que "Me deben": cuándo toca pagar y si ya está atrasado. */
+function estadoFecha(loan: Loan): { label: string; className: string } | null {
+  if (!loan.fechaCompromiso || loan.diasParaCompromiso == null || loan.status === "PAID" || loan.status === "REJECTED") return null
+  const d = loan.diasParaCompromiso
+  if (d < 0) return { label: `Vencido ${-d} día${d === -1 ? "" : "s"}`, className: "text-red-500 bg-red-500/10" }
+  if (d === 0) return { label: "Se paga hoy", className: "text-amber-600 bg-amber-500/10" }
+  if (d <= 3) return { label: `Vence en ${d} día${d === 1 ? "" : "s"}`, className: "text-amber-600 bg-amber-500/10" }
+  return { label: `Paga el ${fmtFecha(loan.fechaCompromiso)}`, className: "text-muted-foreground bg-muted/40" }
+}
+
+/** Atajos de fecha + selector (solicitud y cambio de fecha). */
+function SelectorFecha({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const atajos = [
+    { label: "En 1 semana", v: enDias(7) },
+    { label: "En 15 días", v: enDias(15) },
+    { label: "Fin de mes", v: finDeMes() },
+    { label: "En 1 mes", v: enDias(30) },
+  ]
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        {atajos.map(a => (
+          <button key={a.label} type="button" onClick={() => onChange(a.v)}
+            className={cn("h-9 rounded-xl text-xs font-bold border-2 transition-colors",
+              value === a.v ? "border-cyclon-lavender bg-cyclon-lavender/10 text-cyclon-lavender" : "border-muted text-muted-foreground hover:border-cyclon-lavender/40")}>
+            {a.label}
+          </button>
+        ))}
+      </div>
+      <Input type="date" min={enDias(0)} value={value} onChange={e => onChange(e.target.value)} className="h-10 rounded-xl" />
+    </div>
+  )
+}
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -77,7 +128,22 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null)
 
   // ── Formularios ────────────────────────────────────────────────────────────
-  const [reqForm, setReqForm] = useState({ lenderId: "", amount: "", descripcion: "", dueDate: "" })
+  const [reqForm, setReqForm] = useState({ lenderId: "", amount: "", descripcion: "", fechaCompromiso: enDias(15) })
+
+  // Cambiar la fecha de pago de un préstamo
+  const [fechaLoan, setFechaLoan] = useState<Loan | null>(null)
+  const [fechaValue, setFechaValue] = useState("")
+  const [guardandoFecha, setGuardandoFecha] = useState(false)
+  const guardarFecha = async () => {
+    if (!fechaLoan) return
+    setGuardandoFecha(true)
+    const { error } = await loansApi.cambiarFecha(fechaLoan.id, fechaValue || null)
+    setGuardandoFecha(false)
+    if (error) { toast({ title: error, variant: "destructive" }); return }
+    toast({ title: "Fecha actualizada", description: "Le avisamos a la otra persona." })
+    setFechaLoan(null)
+    load()
+  }
   const [requesting, setRequesting] = useState(false)
 
   const [payForm, setPayForm] = useState({ monto: "", nota: "" })
@@ -125,7 +191,7 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
       lenderId:    reqForm.lenderId,
       amount:      Number(reqForm.amount),
       descripcion: reqForm.descripcion || undefined,
-      dueDate:     reqForm.dueDate || undefined,
+      fechaCompromiso: reqForm.fechaCompromiso || null,
     })
     setRequesting(false)
     if (error) {
@@ -133,7 +199,7 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
     } else {
       toast({ title: "Solicitud enviada — el prestamista recibirá una notificación" })
       setRequestOpen(false)
-      setReqForm({ lenderId: "", amount: "", descripcion: "", dueDate: "" })
+      setReqForm({ lenderId: "", amount: "", descripcion: "", fechaCompromiso: enDias(15) })
       load()
     }
   }
@@ -305,6 +371,10 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                       <span className={cn("text-[9px] font-black px-2 py-0.5 rounded-lg", STATUS_COLOR[loan.status])}>
                         {STATUS_LABEL[loan.status]}
                       </span>
+                      {(() => {
+                        const est = estadoFecha(loan)
+                        return est ? <span className={cn("text-[9px] font-black px-2 py-0.5 rounded-lg", est.className)}>{est.label}</span> : null
+                      })()}
                       <span className="text-xs font-bold">{formatAmount(loan.remainingAmount)}</span>
                       {loan.status === "ACTIVE" && loan.amount > 0 && (
                         <span className="text-[10px] text-muted-foreground">
@@ -538,13 +608,23 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                     )}
 
                     {/* Info extra */}
-                    {(loan.dueDate || loan.status === "ACTIVE") && (
+                    {loan.status !== "PAID" && loan.status !== "REJECTED" && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5" />
-                        {loan.dueDate
-                          ? `Vence: ${loan.dueDate}`
-                          : `Pendiente: ${formatAmount(loan.remainingAmount)}`
-                        }
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1">
+                          {loan.fechaCompromiso
+                            ? `${isBorrower ? "Pagas" : "Te paga"} el ${fmtFecha(loan.fechaCompromiso)} · pendiente ${formatAmount(loan.remainingAmount)}`
+                            : loan.dueDate
+                              ? `Vence: ${loan.dueDate}`
+                              : `Sin fecha de pago · pendiente ${formatAmount(loan.remainingAmount)}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setFechaLoan(loan); setFechaValue(loan.fechaCompromiso ?? "") }}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-cyclon-lavender hover:underline shrink-0"
+                        >
+                          <CalendarClock className="h-3 w-3" /> {loan.fechaCompromiso ? "Cambiar fecha" : "Poner fecha"}
+                        </button>
                       </div>
                     )}
 
@@ -561,6 +641,29 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
           )
         })
       )}
+
+      {/* ════ Modal Cambiar fecha de pago ════ */}
+      <Dialog open={!!fechaLoan} onOpenChange={v => { if (!v) setFechaLoan(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 text-cyclon-lavender" /> Fecha de pago
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <SelectorFecha value={fechaValue} onChange={setFechaValue} />
+            <p className="text-[10px] text-muted-foreground">La otra persona recibe un aviso con la nueva fecha.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            {fechaLoan?.fechaCompromiso && (
+              <Button variant="ghost" onClick={() => setFechaValue("")} className="rounded-xl text-xs">Quitar fecha</Button>
+            )}
+            <Button onClick={guardarFecha} disabled={guardandoFecha} className="rounded-xl bg-cyclon-lavender text-white font-bold px-6">
+              {guardandoFecha ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ════ Modal Solicitar préstamo ════ */}
       <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
@@ -591,12 +694,11 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Monto</Label>
-              <Input
-                type="number"
-                placeholder="0.00"
+              <MoneyInput
                 value={reqForm.amount}
-                onChange={e => setReqForm(f => ({ ...f, amount: e.target.value }))}
-                className="h-11 rounded-2xl"
+                onChange={v => setReqForm(f => ({ ...f, amount: v }))}
+                className="h-11 rounded-2xl font-bold"
+                placeholder="0"
               />
             </div>
             <div className="space-y-1.5">
@@ -609,13 +711,9 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Fecha límite (opcional)</Label>
-              <Input
-                type="date"
-                value={reqForm.dueDate}
-                onChange={e => setReqForm(f => ({ ...f, dueDate: e.target.value }))}
-                className="h-11 rounded-2xl"
-              />
+              <Label className="text-xs font-bold">¿Cuándo lo pagarás?</Label>
+              <SelectorFecha value={reqForm.fechaCompromiso} onChange={v => setReqForm(f => ({ ...f, fechaCompromiso: v }))} />
+              <p className="text-[10px] text-muted-foreground">A los dos les avisamos un día antes, el día del pago y si se atrasa.</p>
             </div>
           </div>
           <DialogFooter className="gap-2">

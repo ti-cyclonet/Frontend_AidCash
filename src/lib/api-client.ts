@@ -533,8 +533,8 @@ export const impulseApi = {
    * sin categoría. `descontarBilletera` = el backend descuenta el bolsillo
    * libre en la misma transacción (si no, lo hace quien llama).
    */
-  async create(data: { nombre: string; monto: number; categoria: string; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null; descontarBilletera?: boolean }) {
-    const res = await api<{ expense: Record<string, unknown>; categoriaAutomatica?: 'historial' | 'palabra_clave' | null; alertaCategoria?: AlertaCategoria | null; billeteraDescontada?: boolean }>('/impulse-expenses', {
+  async create(data: { nombre: string; monto: number; categoria: string; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null; sharedCategoryId?: string | null; descontarBilletera?: boolean }) {
+    const res = await api<{ expense: Record<string, unknown>; categoriaAutomatica?: 'historial' | 'palabra_clave' | null; alertaCategoria?: AlertaCategoria | null; hogar?: HogarAlerta | null; billeteraDescontada?: boolean }>('/impulse-expenses', {
       method: 'POST',
       body: data,
     })
@@ -732,6 +732,56 @@ export const gamificationApi = {
 }
 
 // ─── Missions API (Fase 3) ─────────────────────────────────────────────────────
+
+// ─── Presupuesto del hogar (categorías compartidas en pareja) ────────────────
+
+export interface HogarCategoria {
+  id: string
+  nombre: string
+  icono: string
+  color: string
+  montoLimite: number
+  gastado: number
+  gastadoYo: number
+  gastadoPareja: number
+  porcentaje: number
+  disponible: number
+}
+
+export interface HogarResumen {
+  conectado: boolean
+  connectionId?: string
+  pareja?: { id: string; nombre: string }
+  /** El tope de las categorías es por mes o por quincena (1–15 / 16–fin) */
+  periodo?: 'mensual' | 'quincenal'
+  /** Ej: "1 – 30 sep" o "16 – 30 sep" */
+  etiquetaPeriodo?: string
+  mes?: string
+  categorias?: HogarCategoria[]
+  total?: { limite: number; gastado: number }
+  recientes?: { id: string; nombre: string; monto: number; fecha: string; quien: 'yo' | 'pareja'; categoria: string }[]
+}
+
+export interface HogarAlerta { categoria: string; icono: string; gastado: number; limite: number; porcentaje: number; alerta: 'alerta' | 'excedido' | null; periodo?: 'mensual' | 'quincenal' }
+
+export const hogarApi = {
+  async resumen() {
+    return api<HogarResumen>('/hogar')
+  },
+  async crear(data: { nombre: string; icono?: string; color?: string; montoLimite: number }) {
+    return api<{ categoria: Record<string, unknown> }>('/hogar/categorias', { method: 'POST', body: data })
+  },
+  async actualizar(id: string, data: { nombre?: string; icono?: string; color?: string; montoLimite?: number }) {
+    return api<{ categoria: Record<string, unknown> }>(`/hogar/categorias/${id}`, { method: 'PATCH', body: data })
+  },
+  async eliminar(id: string) {
+    return api<{ message: string }>(`/hogar/categorias/${id}`, { method: 'DELETE' })
+  },
+  /** Mensual ⇄ quincenal. convertirTopes: $600.000/mes → $300.000/quincena (y al revés). */
+  async cambiarPeriodo(periodo: 'mensual' | 'quincenal', convertirTopes = true) {
+    return api<{ periodo: string; cambiado: boolean }>('/hogar/periodo', { method: 'PATCH', body: { periodo, convertirTopes } })
+  },
+}
 
 // ─── Invitaciones por enlace ─────────────────────────────────────────────────
 
@@ -997,9 +1047,15 @@ export const loansApi = {
   async list() {
     return api<{ loans: Record<string, unknown>[] }>('/loans')
   },
-  async request(data: { lenderId: string; amount: number; descripcion?: string; dueDate?: string }) {
+  async request(data: { lenderId: string; amount: number; descripcion?: string; fechaCompromiso?: string | null }) {
     return api<{ loan: Record<string, unknown> }>('/loans/request', {
       method: 'POST', body: data,
+    })
+  },
+  /** Cambiar la fecha de pago (cualquiera de los dos; al otro le llega aviso). */
+  async cambiarFecha(loanId: string, fechaCompromiso: string | null) {
+    return api<{ fechaCompromiso: string | null; diasParaCompromiso: number | null }>(`/loans/${loanId}/fecha`, {
+      method: 'PATCH', body: { fechaCompromiso },
     })
   },
   async approve(loanId: string, tasaInteres?: number) {
@@ -1038,32 +1094,6 @@ export const loansApi = {
     })
   },
 }
-
-// ─── AI API ───────────────────────────────────────────────────────────────────
-
-export const aiApi = {
-  async coach(body: Record<string, unknown>) {
-    return api<{ respuesta: string; patronDetectado: string | null; accionSugerida: string | null; impactoEstimado: string | null }>('/ai/coach', {
-      method: 'POST',
-      body,
-    })
-  },
-
-  async budgetInsight(body: Record<string, unknown>) {
-    return api<{ explicacion: string }>('/ai/budget-insight', {
-      method: 'POST',
-      body,
-    })
-  },
-
-  async scanReceipt(imageBase64: string, mimeType: string) {
-    return api<{ items: unknown[]; total: number; categoria: string }>('/ai/scan-receipt', {
-      method: 'POST',
-      body: { imageBase64, mimeType },
-    })
-  },
-}
-
 
 // ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────
 
@@ -1457,6 +1487,10 @@ export const projectionsApi = {
   async getSpending() {
     return api<{ projection: SpendingProjection }>('/projections/spending')
   },
+  /** Gastos (sin tarjeta) y ahorros de los últimos ~4 meses, para promedios reales */
+  async movimientos() {
+    return api<{ gastos: { monto: number; fecha: string; hormiga: boolean }[]; ahorros: { monto: number; fecha: string }[] }>('/projections/movimientos')
+  },
 }
 
 // ─── Notificaciones (campana) — persistidas en el backend ─────────────────────
@@ -1477,6 +1511,10 @@ export const notificationsApi = {
   },
   async markAllRead() {
     return api('/notifications/read-all', { method: 'POST' })
+  },
+  /** Marca leídas solo las notificaciones de esos eventos (ej. las de Social). */
+  async markRead(events: string[]) {
+    return api('/notifications/read', { method: 'POST', body: { events } })
   },
   async clear() {
     return api('/notifications', { method: 'DELETE' })

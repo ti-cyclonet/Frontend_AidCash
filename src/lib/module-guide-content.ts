@@ -80,8 +80,8 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     borderColor: "border-teal-500/20",
     items: [
       { icon: "💰", title: "Billetera", description: "Registra tus ingresos, mira tu saldo real y activa pagos automáticos al recibir tu sueldo. Tu Sueldo Base es el planificado y el Sueldo Real se actualiza al pagar obligaciones." },
-      { icon: "📊", title: "Presupuesto", description: "Crea categorías con límite, vincúlalas a tus gastos fijos y mira cuánto llevas en cada una — gastos hormiga incluidos. Kiri sugiere la categoría de cada gasto según tu historial y te avisa al llegar al 80% y al 100%." },
-      { icon: "📈", title: "Proyecciones", description: "Proyecta tu ahorro y tus deudas a 3, 6, 12 o 24 meses y compara tu ruta actual con la ruta Kiri (Bola de Nieve), con recomendaciones calculadas con tus datos." },
+      { icon: "📊", title: "Presupuesto", description: "Crea categorías con límite, vincúlalas a tus gastos fijos y mira cuánto llevas en cada una — gastos hormiga incluidos. Toca una categoría para ver su detalle, editarla con el lápiz o registrar un gasto con el botón Gasto. Kiri sugiere la categoría según tu historial y te avisa al llegar al 80% y al 100%." },
+      { icon: "📈", title: "Proyecciones", description: "Te muestra el día en que quedas libre de deudas y cuánto te ahorras en intereses. Mueve el \"aporte extra al mes\" (Kiri te sugiere uno que te cabe) y mira en vivo cómo se adelantan tus logros: cada deuda pagada, tu colchón de emergencia y tu patrimonio en positivo. Todo sale de tus promedios reales de los últimos 3 meses." },
     ],
   },
   {
@@ -134,7 +134,7 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     Icon: Users,
     navBlurb: "Finanzas compartidas en equipo",
     subtitle: "¡Mejorar tus finanzas es más divertido en equipo!",
-    description: "La dimensión social de tus finanzas. Conéctate con otros usuarios para compartir objetivos y gestionar presupuestos conjuntos.",
+    description: "La dimensión social de tus finanzas. Conéctate con tus amigos, familia o pareja para ahorrar juntos, prestarse plata con fecha de pago y llevar el presupuesto del hogar en pareja.",
     textColor: "text-pink-600 dark:text-pink-400",
     badgeSolid: "bg-pink-600",
     bgGradient: "from-pink-500/10 to-pink-900/5",
@@ -142,7 +142,10 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     items: [
       { icon: "🤝", title: "Conexiones", description: "Busca a alguien por usuario o correo, o envíale tu enlace de invitación con Copiar o Compartir: al registrarse quedan conectados como amigo, familia o pareja." },
       { icon: "🐷", title: "Bolsillos compartidos", description: "Creen metas de ahorro juntos y usen la calculadora inteligente para aportar lo justo según sus ingresos." },
-      { icon: "💸", title: "Préstamos P2P", description: "Pide prestado, aprueba solicitudes y lleva el registro exacto de cada abono hasta saldar la cuenta." },
+      { icon: "💞", title: "Presupuesto del hogar", description: "Con tu pareja crean categorías compartidas (Comida, Salidas, Viajes, Renta…) con un tope mensual o quincenal — cualquiera de los dos lo cambia. Ven cuánto lleva cada uno y cuánto les queda." },
+      { icon: "🧾", title: "Gastos del hogar", description: "Registra un gasto con el botón Gasto de la categoría, o elige \"Del hogar\" al registrar cualquier gasto. Sale de tu billetera, suma al tope compartido y le avisa a tu pareja; si llegan al 80% o se pasan, les avisa a los dos." },
+      { icon: "💸", title: "Préstamos con fecha de pago", description: "Pide prestado a un amigo con la fecha en que vas a pagar (en 1 semana, 15 días, fin de mes o la que elijas). Los dos ven cuántos días faltan, cualquiera puede cambiar la fecha y Kiri les recuerda el día antes, el día y si se atrasa." },
+      { icon: "🔔", title: "Avisos al celular", description: "Solicitudes de amistad, invitaciones aceptadas, préstamos y gastos del hogar te llegan a la campana y, si los activas en Perfil, a la barra de notificaciones del celular." },
     ],
   },
   {
@@ -170,15 +173,16 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     title: "Registro Rápido",
     Icon: Mic,
     navBlurb: "Voz y escáner: registra sin escribir",
-    subtitle: "¡Sin formularios! Dicta o toma una foto y Kiri hace el resto.",
-    description: "No siempre hay tiempo de abrir un formulario. Desde el botón flotante de Kiri Coach 🌱 (o el + de la barra inferior en el celular) puedes registrar lo que sea con solo hablar o tomar una foto.",
+    subtitle: "¡Sin formularios! Habla, toma una foto o pídeselo a Kiri Coach.",
+    description: "Desde el botón flotante de Kiri Coach 🌱 (o el + de la barra inferior en el celular) registras lo que sea hablando, con una foto o en el chat. Kiri te muestra cada movimiento en una tarjeta para que lo revises: nada se guarda sin que toques Confirmar.",
     textColor: "text-cyan-600 dark:text-cyan-400",
     badgeSolid: "bg-cyan-600",
     bgGradient: "from-cyan-500/10 to-cyan-900/5",
     borderColor: "border-cyan-500/20",
     items: [
-      { icon: "🎙️", title: "Dictado por voz", description: "Toca el micrófono junto a Kiri Coach y di algo como \"gasté 20 mil en el almuerzo\" o \"me pagaron 2 millones\". Kiri entiende gastos, ingresos, deudas y ahorros, y los guarda cada uno en su lugar." },
-      { icon: "📷", title: "Escáner de recibos", description: "Toca el ícono de escáner, toma o sube una foto de un recibo o factura, y Kiri extrae el monto y lo registra como gasto automáticamente." },
+      { icon: "🎙️", title: "Dictado por voz", description: "Di algo como \"almorcé 18 mil, pagué el arriendo y ahorré 100 mil para el viaje\". Kiri separa cada cosa y la ubica: el gasto en su categoría, el pago en tu obligación, el ahorro en tu bolsillo. También entiende ingresos, préstamos (\"le presté 50 mil a Juan\"), deudas nuevas y categorías nuevas. Si prefieres, escríbelo." },
+      { icon: "📷", title: "Escáner de recibos", description: "Toma o sube la foto de un recibo o factura: Kiri lee el comercio, el total y los productos. Puedes registrarlo todo en uno o separar por productos, y si reconoce una factura de tus gastos fijos (luz, internet…) la registra como pago. Si lee el valor pero no sabe a qué corresponde, tú eliges a dónde va." },
+      { icon: "💬", title: "Kiri Coach", description: "Pregúntale lo que sea de la app (\"¿cómo funciona el presupuesto del hogar?\") o de tu plata (\"¿cómo voy este mes?\", \"¿qué deuda pago primero?\"). Conoce tus datos reales, te explica cada movimiento y también puede dejar listo un registro para que lo confirmes." },
     ],
   },
 ]

@@ -10,6 +10,17 @@ import { api, getUserId } from "@/lib/api-client"
  * guías solo salen al registrarse. Para volver a verlas: Perfil → Guía de Kiri.
  */
 
+/**
+ * Versión del contenido de cada guía. Al agregar algo importante a un módulo
+ * se sube su versión y la guía vuelve a salir UNA vez (también a quien ya la
+ * había visto) para mostrar lo nuevo. Se guarda como "social@2".
+ */
+const VERSION_GUIA: Record<string, number> = {
+  social: 2, // presupuesto del hogar, préstamos con fecha de pago, avisos al celular
+  gestion: 2, // nuevas Proyecciones: día sin deudas, aporte extra en vivo, logros reales
+}
+const conVersion = (id: string) => (VERSION_GUIA[id] ?? 1) > 1 ? `${id}@${VERSION_GUIA[id]}` : id
+
 const clave = (userId: string, id: string) =>
   id === "welcome" ? `kiri_welcome_seen_${userId}` : `kiri_tutorial_seen_${userId}_${id}`
 const claveTodas = (userId: string) => `kiri_guias_todas_${userId}`
@@ -18,8 +29,11 @@ export function guiaVista(id: string): boolean {
   if (typeof window === "undefined") return true
   const userId = getUserId()
   if (!userId) return true
+  const idv = conVersion(id)
   try {
-    return localStorage.getItem(claveTodas(userId)) === "1" || !!localStorage.getItem(clave(userId, id))
+    // "Todas vistas" solo cubre la primera versión de cada guía
+    if (idv === id && localStorage.getItem(claveTodas(userId)) === "1") return true
+    return !!localStorage.getItem(clave(userId, idv))
   } catch {
     return true
   }
@@ -28,8 +42,9 @@ export function guiaVista(id: string): boolean {
 export function marcarGuiaVista(id: string) {
   const userId = getUserId()
   if (!userId) return
-  try { localStorage.setItem(clave(userId, id), "true") } catch { /* sin storage */ }
-  api("/users/guias", { method: "POST", body: { guia: id } }).catch(() => {})
+  const idv = conVersion(id)
+  try { localStorage.setItem(clave(userId, idv), "true") } catch { /* sin storage */ }
+  api("/users/guias", { method: "POST", body: { guia: idv } }).catch(() => {})
 }
 
 /** Copia al navegador las guías que el servidor ya tiene como vistas. */

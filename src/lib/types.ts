@@ -129,6 +129,9 @@ export interface Loan {
   remainingAmount: number;
   descripcion?: string;
   dueDate?: string;
+  /** Fecha en que se paga ("YYYY-MM-DD") y días que faltan (negativo = atrasado). */
+  fechaCompromiso?: string | null;
+  diasParaCompromiso?: number | null;
   status: LoanStatus;
   /** Tasa de interés que el prestamista propuso (0-100). Solo tiene sentido
    * junto con montoOriginal mientras el préstamo espera confirmación del

@@ -27,7 +27,7 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
 import { analyzeFinances } from "@/lib/recommendations"
-import { userApi, WalletState, loansApi } from "@/lib/api-client"
+import { userApi, WalletState, loansApi, hogarApi } from "@/lib/api-client"
 import { debtsApi, fixedExpensesApi, impulseApi, budgetCategoriesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { MeDebenTab } from "@/components/obligaciones/MeDebenTab"
@@ -303,6 +303,19 @@ export default function ObligacionesPage() {
   const [expMonto, setExpMonto] = useState("")
   const [expSaving, setExpSaving] = useState(false)
   const [expCategoria, setExpCategoria] = useState<string | null>(null)
+  // Categoría del hogar (compartida con la pareja) — opcional
+  const [expHogarId, setExpHogarId] = useState<string | null>(null)
+  const [hogarCats, setHogarCats] = useState<{ id: string; nombre: string; icono: string; disponible: number }[]>([])
+  const [hogarPareja, setHogarPareja] = useState<string | null>(null)
+  useEffect(() => {
+    if (!expenseModalOpen) return
+    hogarApi.resumen().then(({ data }) => {
+      if (data?.conectado) {
+        setHogarCats((data.categorias ?? []).map(c => ({ id: c.id, nombre: c.nombre, icono: c.icono, disponible: c.disponible })))
+        setHogarPareja(data.pareja?.nombre ?? null)
+      } else setHogarCats([])
+    })
+  }, [expenseModalOpen])
   const [expShowTCOptions, setExpShowTCOptions] = useState(false)
   const [expSelectedTC, setExpSelectedTC] = useState<string | null>(null)
   const [expTcCuotas, setExpTcCuotas] = useState("1")
@@ -1954,6 +1967,25 @@ export default function ObligacionesPage() {
                 </div>
               </div>
             )}
+            {/* Del hogar: suma al presupuesto compartido con la pareja y le avisa */}
+            {hogarCats.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Del hogar {hogarPareja && <span className="font-normal text-muted-foreground">(con {hogarPareja.split(" ")[0]})</span>}</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {hogarCats.map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => setExpHogarId(expHogarId === c.id ? null : c.id)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-colors",
+                        expHogarId === c.id ? "border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-400" : "border-muted text-muted-foreground hover:border-pink-500/40"
+                      )}
+                    >
+                      {c.icono} {c.nombre} <span className="font-normal opacity-70">· quedan {formatAmount(c.disponible)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Pagar con tarjeta de crédito: es un consumo más, con la misma
                 lógica de tarjeta+cuotas que pagar una deuda/gasto fijo con TC. */}
             {(() => {
@@ -2035,7 +2067,7 @@ export default function ObligacionesPage() {
                 // como "[Cat]" pegado al nombre.
                 const budgetCategoryId = expCategoria ? budgetCategories.find(c => c.name === expCategoria)?.id ?? null : null
                 const result = await addImpulseExpense({
-                  nombre: expNombre, monto: Number(expMonto), categoria: 'otro', esHormiga, budgetCategoryId,
+                  nombre: expNombre, monto: Number(expMonto), categoria: 'otro', esHormiga, budgetCategoryId, sharedCategoryId: expHogarId,
                   ...(expSelectedTC ? { tarjetaId: expSelectedTC, cuotas: Number(expTcCuotas) || 1 } : {}),
                 })
                 setExpSaving(false)
@@ -2044,7 +2076,7 @@ export default function ObligacionesPage() {
                   return
                 }
                 setExpenseModalOpen(false)
-                setExpNombre(""); setExpMonto(""); setExpCategoria(null); setExpHormiga(null); setExpCategoriaManual(false)
+                setExpNombre(""); setExpMonto(""); setExpCategoria(null); setExpHormiga(null); setExpCategoriaManual(false); setExpHogarId(null)
                 setExpShowTCOptions(false); setExpSelectedTC(null); setExpTcCuotas("1")
                 const { data } = await userApi.getWallet()
                 if (data) setWallet(data.wallet)

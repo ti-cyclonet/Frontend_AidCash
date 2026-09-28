@@ -38,14 +38,10 @@ export function Sidebar() {
 
   const [collapsed, setCollapsed] = useState(false)
   const [notifsOpen, setNotifsOpen] = useState(false)
-  const dropRef = useRef<HTMLDivElement>(null)
-
-  // Auto-cerrar notificaciones después de 5 segundos
-  useEffect(() => {
-    if (!notifsOpen) return
-    const timer = setTimeout(() => setNotifsOpen(false), 5000)
-    return () => clearTimeout(timer)
-  }, [notifsOpen])
+  // Campana + su panel: el panel queda abierto hasta que se toque la ✕ o
+  // afuera de él (antes se cerraba solo a los 5 s, y el "afuera" se medía
+  // contra el bloque del perfil, así que tocar dentro del panel lo cerraba).
+  const bellRef = useRef<HTMLDivElement>(null)
 
   // ── Configuración ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -60,14 +56,15 @@ export function Sidebar() {
     : "KF"
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+    if (!notifsOpen) return
+    const handler = (e: PointerEvent) => {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
         setNotifsOpen(false)
       }
     }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
+    document.addEventListener("pointerdown", handler)
+    return () => document.removeEventListener("pointerdown", handler)
+  }, [notifsOpen])
 
   const handleLogout = async () => {
     await signOut()
@@ -140,7 +137,7 @@ export function Sidebar() {
             </Link>
             <div className="ml-auto flex items-center gap-1">
               {/* Campana de notificaciones */}
-              <div className="relative">
+              <div className="relative" ref={bellRef}>
                 <button onClick={() => { setNotifsOpen(v => !v); markAllRead() }}
                   className="relative h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
                   <Bell className="h-4 w-4" />
@@ -237,7 +234,7 @@ export function Sidebar() {
         </nav>
 
         {/* ── Footer: pill de usuario ── */}
-        <div className="border-t border-border px-2 py-3" ref={dropRef}>
+        <div className="border-t border-border px-2 py-3">
           <div className="relative">
 
             {/* Botón pill — va directo a /perfil */}

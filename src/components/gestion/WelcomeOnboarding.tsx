@@ -68,7 +68,7 @@ const steps = [
     title: "Tu árbol",
     titleHighlight: "reacciona a tus finanzas",
     description: "Cada decisión que tomas se ve en tu jardín: crece con tus buenos hábitos y te avisa cuando algo necesita atención.",
-    cardExplanation: "Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel.",
+    cardExplanation: "Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel. Y si conectas a tu pareja en Social, llevan juntos el presupuesto del hogar.",
     icon: <Sprout className="h-6 w-6" />,
     accentColor: "from-emerald-500/20 to-emerald-600/5",
   },

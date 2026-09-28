@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
@@ -14,13 +14,15 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X } from "lucide-react"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X, Bell } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
 import { api, userApi, supportApi } from "@/lib/api-client"
 import { prepararFotoPerfil, resizeImageToDataUrl } from "@/lib/avatar-upload"
+import { activarNotificaciones, enviarPrueba, estadoPush, registrarDispositivo, type EstadoPush } from "@/lib/push-client"
 
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
 
@@ -45,6 +47,22 @@ export default function PerfilPage() {
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const [isSupportOpen, setIsSupportOpen] = useState(false)
   const handleOpenGuia = () => router.push("/guia-kiri")
+
+  // Notificaciones del celular
+  const [pushEstado, setPushEstado] = useState<EstadoPush | null>(null)
+  const [pushMsg, setPushMsg] = useState<string | null>(null)
+  useEffect(() => { setPushEstado(estadoPush()) }, [])
+  const activarPush = async () => {
+    const e = await activarNotificaciones()
+    setPushEstado(e)
+    setPushMsg(e === "activas" ? "¡Listo! Toca Probar para recibir una notificación de prueba." : e === "bloqueadas" ? "El navegador las bloqueó. Actívalas en los ajustes del sitio." : null)
+  }
+  const probarPush = async () => {
+    setPushMsg("Enviando…")
+    await registrarDispositivo().catch(() => false)
+    const n = await enviarPrueba()
+    setPushMsg(n > 0 ? `Enviada a ${n} dispositivo${n === 1 ? "" : "s"}. Debería aparecer en tu barra de notificaciones.` : "Este dispositivo no quedó registrado. Toca Activar de nuevo.")
+  }
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -205,6 +223,33 @@ export default function PerfilPage() {
                   <SelectItem value="never">Nunca</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Notificaciones del celular (barra de estado) */}
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-8 w-8 rounded-lg bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald shrink-0">
+                    <Bell className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">Notificaciones del celular</p>
+                    <p className={cn("text-[11px]", pushEstado === "activas" ? "text-kiri-emerald" : "text-muted-foreground")}>
+                      {pushEstado === "activas" ? "Activadas en este dispositivo"
+                        : pushEstado === "bloqueadas" ? "Bloqueadas: actívalas en los ajustes del navegador"
+                        : pushEstado === "instalar-ios" ? "En iPhone: instala Kiri (Compartir → Agregar a inicio)"
+                        : pushEstado === "no-soportado" ? "Este navegador no las soporta"
+                        : "Sin activar"}
+                    </p>
+                  </div>
+                </div>
+                {pushEstado === "activas" ? (
+                  <Button size="sm" variant="outline" className="rounded-xl h-8 text-xs shrink-0" onClick={probarPush}>Probar</Button>
+                ) : pushEstado === "sin-activar" ? (
+                  <Button size="sm" className="rounded-xl h-8 text-xs shrink-0 bg-kiri-emerald hover:bg-kiri-emerald/90 text-white" onClick={activarPush}>Activar</Button>
+                ) : null}
+              </div>
+              {pushMsg && <p className="text-[11px] text-muted-foreground pl-11">{pushMsg}</p>}
             </div>
           </CardContent>
         </Card>

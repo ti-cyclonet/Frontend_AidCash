@@ -567,7 +567,7 @@ function useFinanceDataInternal() {
    * Kiri sugiere la categoría (historial del usuario o palabras clave); null =
    * "sin categoría" explícito.
    */
-  const addImpulseExpense = async (data: { nombre: string; monto: number; categoria: ImpulseCategory; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null }) => {
+  const addImpulseExpense = async (data: { nombre: string; monto: number; categoria: ImpulseCategory; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null; sharedCategoryId?: string | null }) => {
     if (!userId) return null
     const { data: result } = await impulseApi.create({
       nombre: data.nombre,
@@ -577,6 +577,7 @@ function useFinanceDataInternal() {
       cuotas: data.cuotas,
       esHormiga: data.esHormiga,
       budgetCategoryId: data.budgetCategoryId,
+      sharedCategoryId: data.sharedCategoryId,
       descontarBilletera: true,
     })
     if (result?.expense) {
@@ -597,6 +598,16 @@ function useFinanceDataInternal() {
       }
       window.dispatchEvent(new Event("kiri:wallet-updated"))
       // Este gasto cruzó el 80% / 100% del límite de su categoría.
+      // Categoría del hogar: confirmar que se sumó (y si cruzaron el 80/100%)
+      if (result.hogar) {
+        const h = result.hogar
+        toast({
+          title: h.alerta === 'excedido' ? `Se pasaron en ${h.categoria}` : `${h.icono} Sumado a ${h.categoria} del hogar`,
+          description: `Llevan $${Math.round(h.gastado).toLocaleString('es-CO')} de $${Math.round(h.limite).toLocaleString('es-CO')} ${h.periodo === 'quincenal' ? 'esta quincena' : 'este mes'} (${h.porcentaje}%). Le avisamos a tu pareja.`,
+          variant: h.alerta === 'excedido' ? 'destructive' : undefined,
+        })
+        window.dispatchEvent(new Event("kiri:hogar-updated"))
+      }
       const alerta = result.alertaCategoria
       if (alerta) {
         toast({

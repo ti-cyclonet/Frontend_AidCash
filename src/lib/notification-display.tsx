@@ -1,6 +1,6 @@
 import {
   UserPlus, UserCheck, UserX, PiggyBank, Coins, Check, XCircle,
-  CalendarClock, Wallet, ArrowRightLeft, Droplet, Bell, PartyPopper, Target,
+  CalendarClock, Wallet, ArrowRightLeft, Droplet, Bell, PartyPopper, Target, Home,
 } from "lucide-react"
 import { SOCKET_EVENTS, KiriNotification } from "@/lib/socket-context"
 
@@ -33,7 +33,9 @@ export function notifIcon(event: KiriNotification["event"]) {
     case SOCKET_EVENTS.ROLE_CHANGE_REJECTED:   return <XCircle className="h-4 w-4 text-destructive" />
     case SOCKET_EVENTS.GARDEN_WATERED:         return <Droplet className="h-4 w-4 text-cyclon-sky" />
     case SOCKET_EVENTS.REFERRAL_JOINED:        return <PartyPopper className="h-4 w-4 text-kiri-emerald" />
+    case SOCKET_EVENTS.HOGAR_GASTO:            return <Home className="h-4 w-4 text-pink-500" />
     case SOCKET_EVENTS.MISSION_REMINDER:       return <Target className="h-4 w-4 text-amber-500" />
+    case SOCKET_EVENTS.AVISO:                  return <Bell className="h-4 w-4 text-kiri-emerald" />
     case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY: return <CalendarClock className="h-4 w-4 text-amber-500" />
     case SOCKET_EVENTS.ALERT_INCOME_REMINDER:   return <Wallet className="h-4 w-4 text-kiri-emerald" />
     case SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED:   return <CalendarClock className="h-4 w-4 text-cyclon-sky" />
@@ -74,10 +76,14 @@ export function notifTitle(n: KiriNotification): string {
       return `${(d.responderName as string) ?? "Tu contacto"} rechazó el cambio de rol`
     case SOCKET_EVENTS.GARDEN_WATERED:
       return `${(d.fromName as string) ?? "Alguien"} regó tu árbol${d.xpGiven ? ` (+${d.xpGiven} XP)` : ""}`
+    case SOCKET_EVENTS.HOGAR_GASTO:
+      return (d.message as string) ?? "Movimiento en el presupuesto del hogar"
     case SOCKET_EVENTS.REFERRAL_JOINED:
       return (d.message as string) ?? `${(d.nombre as string) ?? "Alguien"} se unió a Kiri con tu enlace`
     case SOCKET_EVENTS.MISSION_REMINDER:
       return (d.message as string) ?? "Tus misiones de hoy te esperan"
+    case SOCKET_EVENTS.AVISO:
+      return (d.message as string) ?? "Aviso de Kiri"
     case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY:
       return (d.message as string) ?? "Se acerca tu fecha de pago"
     case SOCKET_EVENTS.ALERT_INCOME_REMINDER:

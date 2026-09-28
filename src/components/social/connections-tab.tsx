@@ -5,11 +5,11 @@ import { UserCheck, UserX, Loader2, Users, Trash2, Clock, Heart, Home, UsersRoun
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { connectionsApi, homeBudgetApi } from "@/lib/api-client"
+import { connectionsApi } from "@/lib/api-client"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { useToast } from "@/hooks/use-toast"
 import { GamificationLeaderboard, LeaderboardEntry } from "@/components/social/GamificationLeaderboard"
-import { HomeBudgetDashboard } from "@/components/social/HomeBudgetDashboard"
+import { HogarPresupuesto } from "@/components/social/HogarPresupuesto"
 import { ConnectionProfileCard } from "@/components/social/ConnectionProfileCard"
 import { AddConnectionModal } from "@/components/social/AddConnectionModal"
 import { UserAvatar } from "@/components/social/UserAvatar"
@@ -67,8 +67,6 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
   const [data, setData] = useState<ConnectionsData>({ accepted: [], pendingReceived: [], pendingSent: [] })
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [homeBudget, setHomeBudget] = useState<{ budget: any; partnerId: string } | null>(null)
-  const [homeBudgetLoading, setHomeBudgetLoading] = useState(false)
   const [profileCardConnId, setProfileCardConnId] = useState<string | null>(null)
   const [connectionsExpanded, setConnectionsExpanded] = useState(true)
   const [inviteModalOpen, setInviteModalOpen] = useState(showInviteModal)
@@ -94,18 +92,6 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
   }, [toast])
 
   useEffect(() => { load() }, [load])
-
-  // Cargar presupuesto del hogar si hay conexión PARTNER
-  useEffect(() => {
-    const hasPartner = data.accepted.some((c: any) => c.role === 'PARTNER')
-    if (hasPartner) {
-      setHomeBudgetLoading(true)
-      homeBudgetApi.get().then(({ data: res }) => {
-        if (res) setHomeBudget(res as any)
-        setHomeBudgetLoading(false)
-      })
-    }
-  }, [data.accepted])
 
   // ── Recargar al recibir eventos socket ─────────────────────────────────────
   useEffect(() => {
@@ -339,18 +325,12 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
       </section>
 
       {/* ── Presupuesto del Hogar (solo si hay PARTNER) ── */}
-      {(homeBudget || homeBudgetLoading) && (
+      {/* Presupuesto del hogar: categorías compartidas (Comida, Salidas,
+          Viajes, Renta…) con tope mensual — reemplaza la dona y el desglose
+          de obligaciones/ahorro/libre, que no se podía gestionar. */}
+      {data.accepted.some((c: any) => c.role === 'PARTNER') && (
         <section className="space-y-2">
-          <HomeBudgetDashboard
-            budget={homeBudget?.budget ?? null}
-            partnerName={(() => {
-              const partnerConn = data.accepted.find((c: any) => c.role === 'PARTNER')
-              if (!partnerConn) return "Pareja"
-              const peer = getPeer(partnerConn, myId)
-              return peer?.nombre ?? "Pareja"
-            })()}
-            loading={homeBudgetLoading}
-          />
+          <HogarPresupuesto />
         </section>
       )}
 
