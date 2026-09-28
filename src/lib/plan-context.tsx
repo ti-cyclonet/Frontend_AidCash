@@ -13,14 +13,27 @@ import { useAuth } from "@/lib/auth-context"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type PlanTier = "FREE" | "PLUS" | "PRO"
+/** De dónde sale el plan: contrato pagado, gratis, prueba de 14 días, pareja PRO, acceso interno o sin conexión con Authoriza. */
+export type PlanFuente = "contrato" | "gratis" | "prueba" | "pareja" | "acceso" | "sin_conexion"
+
 export interface PlanData {
   planName: string
-  contractId?: string
+  tier?: PlanTier
+  fuente?: PlanFuente
+  contractId?: string | null
   isBillable?: boolean
   features: Record<string, boolean>
   limits: Record<string, { displayName: string; maxValue: number }>
   hasPlan: boolean
+  /** Fin de la prueba de KIRI PLUS (registro o por invitar amigos). */
+  pruebaHasta?: string | null
+  /** Pareja con KIRI PRO que le da PLUS. */
+  parejaNombre?: string | null
 }
+
+/** Cantidades "sin límite" (Authoriza guarda 999999). */
+export const ILIMITADO = 999999
 
 export interface AvailablePlan {
   packageId: string
@@ -40,6 +53,9 @@ interface PlanContextValue {
   plan: PlanData | null
   loading: boolean
   hasFeature: (featureName: string) => boolean
+  /** Tope de una variable del plan (nCategorias, mesesProyeccion…); null si no se conoce. */
+  limite: (variable: string) => number | null
+  tier: PlanTier
   refreshPlan: () => Promise<void>
   welcomePackage: string | null
   welcomePlanPrice: number | null
@@ -55,25 +71,27 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<PlanData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Features included in the FREE plan (available even without an active contract)
+  // KIRI FREE (si /plan no responde): lo mismo que la matriz del backend (lib/planes.ts)
   const FREE_FEATURES: Record<string, boolean> = {
-    budgetManagement: true,
-    debtsTracking: true,
-    fixedExpenses: true,
-    savingsPockets: true,
-    // Everything else is locked
-    basicReports: false,
-    impulseExpenses: false,
-    extraIncomes: false,
-    emergencyFund: false,
-    gamification: false,
-    aiCoach: false,
-    advancedReports: false,
-    debtStrategies: false,
-    socialConnections: false,
-    sharedPockets: false,
-    p2pLoans: false,
+    budgetManagement: true, impulseExpenses: true, debtsTracking: true, fixedExpenses: true,
+    savingsPockets: true, emergencyFund: true, extraIncomes: true, gamification: true,
+    basicReports: true, aiCoach: true, socialConnections: true,
+    advancedReports: false, debtStrategies: false, p2pLoans: false, sharedDebts: false, sharedPockets: false,
+    householdBudget: false, openBanking: false, receiptItems: false, savedScenarios: false,
+    exclusiveBadges: false, prioritySupport: false,
   }
+  const FREE_LIMITS: PlanData["limits"] = {
+    nCategorias: { displayName: "categorías", maxValue: 5 },
+    nDeudas: { displayName: "deudas", maxValue: 5 },
+    nGastosFijos: { displayName: "gastos fijos", maxValue: 8 },
+    nBolsillos: { displayName: "bolsillos", maxValue: 3 },
+    nMeDeben: { displayName: "personas que te deben", maxValue: 3 },
+    nIngresosExtra: { displayName: "ingresos extra", maxValue: 2 },
+    nConexiones: { displayName: "conexiones", maxValue: 2 },
+    mesesProyeccion: { displayName: "meses de proyección", maxValue: 3 },
+    mesesHistorial: { displayName: "meses de historial", maxValue: 3 },
+  }
+  const PLAN_FREE: PlanData = { planName: "KIRI FREE", tier: "FREE", fuente: "gratis", features: FREE_FEATURES, limits: FREE_LIMITS, hasPlan: false }
 
   const [welcomePackage, setWelcomePackage] = useState<string | null>(null)
   const [welcomePlanPrice, setWelcomePlanPrice] = useState<number | null>(null)
@@ -103,22 +121,12 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       if (error || !data || !data.hasPlan) {
         // No active plan — apply FREE features as defaults.
         // A PENDING upgrade (unsigned) also lands here, so the user stays on FREE.
-        setPlan({
-          planName: "KIRI FREE",
-          features: FREE_FEATURES,
-          limits: {},
-          hasPlan: false,
-        })
+        setPlan(PLAN_FREE)
       } else {
         setPlan(data)
       }
     } catch {
-      setPlan({
-        planName: "KIRI FREE",
-        features: FREE_FEATURES,
-        limits: {},
-        hasPlan: false,
-      })
+      setPlan(PLAN_FREE)
     } finally {
       setLoading(false)
     }
@@ -137,6 +145,19 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     [plan]
   )
 
+  const limite = useCallback(
+    (variable: string): number | null => plan?.limits?.[variable]?.maxValue ?? null,
+    [plan]
+  )
+  const tier: PlanTier = plan?.tier ?? "FREE"
+
+  // Al cambiar de plan (webhook de activación, prueba por invitar) se refresca solo
+  useEffect(() => {
+    const h = () => { fetchPlan() }
+    window.addEventListener("kiri:plan-cambio", h)
+    return () => window.removeEventListener("kiri:plan-cambio", h)
+  }, [fetchPlan])
+
   const refreshPlan = useCallback(async () => {
     setLoading(true)
     await fetchPlan()
@@ -145,7 +166,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const dismissWelcome = useCallback(() => setWelcomePackage(null), [])
 
   return (
-    <PlanContext.Provider value={{ plan, loading, hasFeature, refreshPlan, welcomePackage, welcomePlanPrice, dismissWelcome }}>
+    <PlanContext.Provider value={{ plan, loading, hasFeature, limite, tier, refreshPlan, welcomePackage, welcomePlanPrice, dismissWelcome }}>
       {children}
     </PlanContext.Provider>
   )

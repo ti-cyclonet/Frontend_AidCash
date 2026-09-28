@@ -15,7 +15,7 @@
  */
 
 import type { LucideIcon } from "lucide-react"
-import { Sprout, Wallet, Building2, BarChart3, Users, PiggyBank, Mic } from "lucide-react"
+import { Sprout, Wallet, Building2, BarChart3, Users, PiggyBank, Mic, Crown } from "lucide-react"
 
 export interface GuideItem {
   icon: string
@@ -184,6 +184,26 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
       { icon: "🎙️", title: "Dictado por voz", description: "Di algo como \"almorcé 18 mil, pagué el arriendo y ahorré 100 mil para el viaje\". Kiri separa cada cosa y la ubica: el gasto en su categoría, el pago en tu obligación, el ahorro en tu bolsillo. También entiende ingresos, préstamos (\"le presté 50 mil a Juan\"), deudas nuevas y categorías nuevas. Si prefieres, escríbelo." },
       { icon: "📷", title: "Escáner de recibos", description: "Toma o sube la foto de un recibo o factura: Kiri lee el comercio, el total y los productos. Puedes registrarlo todo en uno o separar por productos, y si reconoce una factura de tus gastos fijos (luz, internet…) la registra como pago. Si lee el valor pero no sabe a qué corresponde, tú eliges a dónde va." },
       { icon: "💬", title: "Kiri Coach", description: "Pregúntale lo que sea de la app (\"¿cómo funciona el presupuesto del hogar?\") o de tu plata (\"¿cómo voy este mes?\", \"¿qué deuda pago primero?\"). Conoce tus datos reales, te explica cada movimiento y también puede dejar listo un registro para que lo confirmes." },
+      { icon: "🔋", title: "Tu cuota de IA", description: "Cada plan trae mensajes, dictados y escaneos al mes (FREE 10/10/3, PLUS 150/100/30, PRO 500/300/100). Kiri te muestra cuántos te quedan y se renuevan el día 1. Separar un recibo por productos es de KIRI PRO." },
+    ],
+  },
+  {
+    id: "mi-plan",
+    number: 8,
+    title: "Tu plan Kiri",
+    Icon: Crown,
+    navBlurb: "FREE, PLUS y PRO: qué incluye cada uno",
+    subtitle: "Empieza gratis y crece cuando lo necesites.",
+    description: "En Mi plan (desde Perfil) ves tu plan, cuánto llevas usado este mes y los tres planes con sus precios, mensual o anual. Te cambias desde ahí mismo con tu contraseña de Kiri, y tu contrato y tus facturas los ves en FactoNet con los mismos datos de Kiri.",
+    textColor: "text-amber-600 dark:text-amber-400",
+    badgeSolid: "bg-amber-600",
+    bgGradient: "from-amber-500/10 to-amber-900/5",
+    borderColor: "border-amber-500/20",
+    items: [
+      { icon: "🌱", title: "KIRI FREE · $0", description: "Registra gastos, ingresos y pagos sin límite, con árbol, misiones y fondo de emergencia. Incluye 5 categorías, 3 bolsillos, 5 deudas, 8 gastos fijos, 2 conexiones, 3 meses de historial y proyecciones a 3 meses." },
+      { icon: "✨", title: "KIRI PLUS · $12.900/mes", description: "O $119.000 al año. 20 categorías, 10 bolsillos y deudas sin límite; préstamos y deudas compartidas, 3 bolsillos compartidos, proyecciones a 24 meses con recorte de gastos hormiga, 24 meses de historial y PDF." },
+      { icon: "👑", title: "KIRI PRO · $24.900/mes", description: "O $229.000 al año. Todo sin límite, presupuesto del hogar (tu pareja recibe PLUS gratis), conexión con tu banco, escenarios guardados, historial completo, insignias exclusivas y soporte prioritario." },
+      { icon: "🎁", title: "Prueba y premios", description: "Al registrarte tienes 14 días de KIRI PLUS gratis, y por cada amigo que invites y se registre ganas 7 días más. Si llegas a un límite, Kiri te avisa y te lleva a Mi plan: nunca pierdes lo que ya registraste." },
     ],
   },
 ]

@@ -162,6 +162,13 @@ export default function BalancePage() {
               )}>{tf.label}</button>
             ))}
           </div>
+          {/* El plan recortó el rango (KIRI FREE ve 3 meses; PLUS 24) */}
+          {report?.historialLimitado && (
+            <Link href="/mi-plan" className="text-[11px] text-center text-muted-foreground bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1.5 hover:bg-amber-500/15">
+              Tu plan muestra los últimos {report.historialLimitado.meses} meses.
+              {report.historialLimitado.mejora && <strong className="text-amber-700 dark:text-amber-400"> Con {report.historialLimitado.mejora.plan} ves más →</strong>}
+            </Link>
+          )}
           <div className="flex flex-wrap items-center justify-center gap-2">
             {/* Rango de fechas */}
             {dateRange && (

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Calendar, History, Search, Trash2, X } from "lucide-react"
+import { ArrowLeft, Calendar, History, Search, Trash2, X, Lock } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +17,7 @@ import { getCurrentQuincena, getPeriodDateRange, getQuincenasDelMes } from "@/li
 import { ExportButtons } from "@/components/balance/ExportButtons"
 import { MovementList, MOVEMENT_FILTERS, esEntrada } from "@/components/balance/MovementList"
 import { FeatureGate } from "@/components/plan/feature-gate"
+import { usePlan } from "@/lib/plan-context"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -42,11 +43,12 @@ const nombreMes = (year: number, month: number) => {
 /** Rango [start, end) → "15 sept – 29 sept" (end es exclusivo). */
 const fmtRango = (start: Date, end: Date) => `${fmtDia(start)} – ${fmtDia(new Date(end.getTime() - DIA))}`
 
-function ultimos12Meses() {
+/** Últimos meses para elegir: 12, o 24 si el plan guarda 24 meses o más. */
+function ultimosMeses(mesesPlan: number) {
   const now = new Date()
-  return Array.from({ length: 12 }, (_, i) => {
+  return Array.from({ length: mesesPlan >= 24 ? 24 : 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    return { year: d.getFullYear(), month: d.getMonth(), label: nombreMes(d.getFullYear(), d.getMonth()), actual: i === 0 }
+    return { year: d.getFullYear(), month: d.getMonth(), label: nombreMes(d.getFullYear(), d.getMonth()), actual: i === 0, bloqueado: i >= mesesPlan }
   })
 }
 
@@ -66,6 +68,9 @@ export default function HistorialPage() {
   const [filtro, setFiltro] = useState<"todos" | MovementType>("todos")
   const [busqueda, setBusqueda] = useState("")
   const [mesModalOpen, setMesModalOpen] = useState(false)
+  // Cuántos meses de historial ve según el plan (FREE 3, PLUS 24, PRO sin límite)
+  const { limite } = usePlan()
+  const mesesPlan = limite("mesesHistorial") ?? 999999
   const { refetch } = useFinanceData()
   const { toast } = useToast()
 
@@ -293,16 +298,26 @@ export default function HistorialPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-2 max-h-[320px] overflow-y-auto py-1">
-              {ultimos12Meses().map(m => {
+              {ultimosMeses(mesesPlan).map(m => {
                 const activo = vista.tipo === "mes" && vista.year === m.year && vista.month === m.month
                 return (
                   <button
                     key={`${m.year}-${m.month}`}
-                    onClick={() => { setVista({ tipo: "mes", year: m.year, month: m.month }); setMesModalOpen(false) }}
+                    onClick={() => {
+                      setMesModalOpen(false)
+                      if (m.bloqueado) {
+                        window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
+                          codigo: "FUNCION", mejora: { plan: "KIRI PLUS" },
+                          mensaje: `En tu plan ves los últimos ${mesesPlan} meses de historial. Con KIRI PLUS ves 24 meses y con KIRI PRO todo tu historial.`,
+                        } }))
+                        return
+                      }
+                      setVista({ tipo: "mes", year: m.year, month: m.month })
+                    }}
                     className={cn("p-3 rounded-xl border-2 text-left transition-colors",
-                      activo ? "border-cyclon-lavender bg-cyclon-lavender/5" : "border-muted hover:border-cyclon-lavender/40")}
+                      m.bloqueado ? "border-muted/60 opacity-60" : activo ? "border-cyclon-lavender bg-cyclon-lavender/5" : "border-muted hover:border-cyclon-lavender/40")}
                   >
-                    <p className="text-xs font-bold">{m.label}</p>
+                    <p className="text-xs font-bold flex items-center gap-1">{m.bloqueado && <Lock className="h-3 w-3" />}{m.label}</p>
                     {m.actual && <p className="text-[8px] text-kiri-emerald font-bold">Mes actual</p>}
                   </button>
                 )

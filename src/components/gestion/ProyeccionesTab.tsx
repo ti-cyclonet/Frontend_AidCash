@@ -6,13 +6,15 @@ import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import {
   TrendingUp, TrendingDown, Target, ChevronRight, ChevronDown, Calendar, Zap, Shield,
-  PiggyBank, AlertTriangle, Sparkles, Flag, MessageCircle, Info,
+  PiggyBank, AlertTriangle, Sparkles, Flag, MessageCircle, Info, Lock, Bookmark, Trash2, Plus,
 } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { getUserId, projectionsApi } from "@/lib/api-client"
+import { getUserId, projectionsApi, type EscenarioProyeccion } from "@/lib/api-client"
+import { usePlan } from "@/lib/plan-context"
+import { Input } from "@/components/ui/input"
 import {
   calculateProjections, aMensual, promedioMensual,
   type ProjectionResult, type ProjectionHito,
@@ -29,14 +31,31 @@ import Link from "next/link"
 
 const claveAporte = () => `kiri_proyeccion_aporte_${getUserId() ?? "anon"}`
 const fechaLarga = (d: Date | null) => d ? d.toLocaleDateString("es-CO", { month: "long", year: "numeric" }) : ""
+/** Aviso "esto es de otro plan" (lo muestra <LimitePlanDialog>). */
+const pedirPlan = (mensaje: string, plan: string) =>
+  window.dispatchEvent(new CustomEvent("kiri:limite", { detail: { codigo: "FUNCION", mensaje, mejora: { plan } } }))
+
 const mesesTxt = (n: number) => n === 1 ? "1 mes" : n < 24 ? `${n} meses` : `${Math.floor(n / 12)} años${n % 12 ? ` y ${n % 12} meses` : ""}`
 
 export function ProyeccionesTab() {
   const { formatAmount, income, incomeFrequency } = useAppContext()
   const { debts, fixedExpenses, totalAhorrado, extraIncomes, loading } = useFinanceData()
 
+  const { limite, hasFeature } = usePlan()
+  // FREE ve hasta 3 meses; PLUS y PRO hasta 24
+  const maxMeses = limite("mesesProyeccion") ?? 24
+  const puedeHormiga = maxMeses > 3
+  const puedeEscenarios = hasFeature("savedScenarios")
   const [activeRoute, setActiveRoute] = useState<"kiri" | "actual">("kiri")
-  const [meses, setMeses] = useState(12)
+  const [mesesElegidos, setMeses] = useState(12)
+  const meses = Math.min(mesesElegidos, maxMeses)
+  const [escenarios, setEscenarios] = useState<EscenarioProyeccion[]>([])
+  const [nombreEscenario, setNombreEscenario] = useState("")
+  const [guardandoEsc, setGuardandoEsc] = useState(false)
+  useEffect(() => {
+    if (!puedeEscenarios) return
+    projectionsApi.escenarios().then(({ data }) => setEscenarios(data?.escenarios ?? []))
+  }, [puedeEscenarios])
   // null = sigue la sugerencia de Kiri; un número = lo que el usuario eligió
   const [aporte, setAporte] = useState<number | null>(null)
   // El slider puede emitir cambios solo (al ajustar su máximo): solo cuenta lo que mueve el usuario
@@ -97,7 +116,7 @@ export function ProyeccionesTab() {
   }
 
   const aporteElegido = aporte ?? base?.aporteSugerido ?? 0
-  const extraHormiga = recortarHormiga ? Math.round(datos.hormigaMensual / 2) : 0
+  const extraHormiga = recortarHormiga && puedeHormiga ? Math.round(datos.hormigaMensual / 2) : 0
   const aporteTotal = aporteElegido + extraHormiga
   const projection = useMemo((): ProjectionResult | null => listo && datos.ingresoMensual > 0
     ? calculateProjections({ ...datos, ahorroInicial: totalAhorrado, aporteExtra: aporteTotal, meses })
@@ -165,12 +184,17 @@ export function ProyeccionesTab() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex bg-muted/30 rounded-xl p-1">
-            {[3, 6, 12, 24].map(m => (
-              <button key={m} onClick={() => setMeses(m)} className={cn(
-                "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
-                meses === m ? "bg-kiri-emerald text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}>{m} meses</button>
-            ))}
+            {[3, 6, 12, 24].map(m => {
+              const bloqueado = m > maxMeses
+              return (
+                <button key={m}
+                  onClick={() => bloqueado ? pedirPlan(`Proyectar a ${m} meses es parte de KIRI PLUS. En KIRI FREE ves hasta ${maxMeses} meses.`, "KIRI PLUS") : setMeses(m)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors flex items-center gap-1",
+                    meses === m ? "bg-kiri-emerald text-white shadow-sm" : bloqueado ? "text-muted-foreground/60" : "text-muted-foreground hover:text-foreground"
+                  )}>{bloqueado && <Lock className="h-2.5 w-2.5" />}{m} meses</button>
+              )
+            })}
           </div>
           <span className="text-[10px] text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg flex items-center gap-1">
             <Calendar className="h-3 w-3" /> hasta {rangeEnd}
@@ -250,10 +274,61 @@ export function ProyeccionesTab() {
               <span className="text-[11px]">
                 <strong>Recortar la mitad de los gastos hormiga</strong>
                 <span className="text-muted-foreground"> · +{formatAmount(Math.round(datos.hormigaMensual / 2))} al mes al plan</span>
+                {!puedeHormiga && <span className="ml-1 text-[9px] font-black text-kiri-emerald">PLUS</span>}
               </span>
-              <Switch checked={recortarHormiga} onCheckedChange={setRecortarHormiga} />
+              <Switch checked={recortarHormiga && puedeHormiga}
+                onCheckedChange={v => puedeHormiga ? setRecortarHormiga(v) : pedirPlan("Simular el recorte de tus gastos hormiga es parte de KIRI PLUS.", "KIRI PLUS")} />
             </label>
           )}
+
+          {/* Escenarios guardados (KIRI PRO) */}
+          <div className="rounded-xl border border-dashed border-border px-3 py-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold flex items-center gap-1"><Bookmark className="h-3.5 w-3.5 text-amber-500" /> Mis escenarios</p>
+              {!puedeEscenarios && <span className="text-[9px] font-black text-amber-600">PRO</span>}
+            </div>
+            {puedeEscenarios ? (
+              <>
+                {escenarios.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {escenarios.map(e => (
+                      <span key={e.id} className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 text-[10px] font-bold pl-2.5 pr-1 py-1">
+                        <button onClick={() => { tocado.current = true; elegirAporte(e.aporteExtra); setRecortarHormiga(e.recortarHormiga); setMeses(e.meses) }}
+                          title={`${formatAmount(e.aporteExtra)} al mes · ${e.meses} meses${e.recortarHormiga ? " · recortando hormiga" : ""}`}>
+                          {e.nombre}
+                        </button>
+                        <button onClick={async () => { const { error } = await projectionsApi.borrarEscenario(e.id); if (!error) setEscenarios(p => p.filter(x => x.id !== e.id)) }}
+                          className="h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive" aria-label={`Borrar ${e.nombre}`}>
+                          <Trash2 className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <form className="flex gap-2" onSubmit={async ev => {
+                  ev.preventDefault()
+                  const nombre = nombreEscenario.trim()
+                  if (!nombre || guardandoEsc) return
+                  setGuardandoEsc(true)
+                  const { data } = await projectionsApi.guardarEscenario({ nombre, aporteExtra: aporteElegido, recortarHormiga: recortarHormiga && puedeHormiga, meses })
+                  setGuardandoEsc(false)
+                  if (data?.escenario) { setEscenarios(p => [data.escenario, ...p]); setNombreEscenario("") }
+                }}>
+                  <Input value={nombreEscenario} onChange={e => setNombreEscenario(e.target.value)} maxLength={60}
+                    placeholder="Ej: Plan agresivo, Con prima…" className="h-8 text-xs" />
+                  <button type="submit" disabled={!nombreEscenario.trim() || guardandoEsc}
+                    className="h-8 px-3 rounded-lg bg-amber-500 text-white text-[11px] font-bold flex items-center gap-1 disabled:opacity-50 shrink-0">
+                    <Plus className="h-3.5 w-3.5" /> Guardar
+                  </button>
+                </form>
+              </>
+            ) : (
+              <button onClick={() => pedirPlan("Guardar escenarios para compararlos es parte de KIRI PRO.", "KIRI PRO")}
+                className="text-[11px] text-muted-foreground text-left hover:text-foreground">
+                Guarda este plan (aporte, horizonte y recorte) y compáralo con otros. <span className="font-bold text-amber-600">Disponible en KIRI PRO</span>
+              </button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

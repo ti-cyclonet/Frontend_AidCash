@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
+import { ConexionBancoCard } from "@/components/plan/ConexionBancoCard"
 import { api, userApi, supportApi } from "@/lib/api-client"
 import { prepararFotoPerfil, resizeImageToDataUrl } from "@/lib/avatar-upload"
 import { activarNotificaciones, enviarPrueba, estadoPush, registrarDispositivo, type EstadoPush } from "@/lib/push-client"
@@ -32,7 +33,18 @@ export default function PerfilPage() {
   const { signOut, user: authUser } = useAuth()
   const { plan } = usePlan()
   const displayEmail = authUser?.correo ?? user.correo
-  const isPlus = plan?.planName?.toLowerCase().includes("plus")
+  const tier = plan?.tier ?? (/pro|cyclon/i.test(plan?.planName ?? "") ? "PRO" : /plus/i.test(plan?.planName ?? "") ? "PLUS" : "FREE")
+  const isPlus = tier !== "FREE"
+  const diasPrueba = plan?.fuente === "prueba" && plan.pruebaHasta
+    ? Math.max(0, Math.ceil((new Date(plan.pruebaHasta).getTime() - Date.now()) / 86_400_000))
+    : null
+  const detallePlan = diasPrueba !== null
+    ? `Prueba gratis · ${diasPrueba <= 1 ? "termina hoy" : `te quedan ${diasPrueba} días`}`
+    : plan?.fuente === "pareja"
+      ? "Gratis gracias al KIRI PRO de tu pareja"
+      : tier === "PRO" ? "Todo sin límite, hogar y conexión con tu banco"
+      : tier === "PLUS" ? "Más espacio, PDF, préstamos y más IA"
+      : "Plan gratis · mira lo que desbloqueas"
 
   const handleLogout = async () => {
     await signOut()
@@ -171,14 +183,12 @@ export default function PerfilPage() {
                   {isPlus ? <Crown className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                 </div>
                 <div>
-                  <span className="font-medium">{plan?.planName || "Sin plan"}</span>
-                  <p className="text-[10px] text-muted-foreground">
-                    {isPlus ? "Todas las funcionalidades desbloqueadas" : "Funcionalidades básicas"}
-                  </p>
+                  <span className="font-medium">{plan?.planName || "KIRI FREE"}</span>
+                  <p className="text-[10px] text-muted-foreground">{detallePlan}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {!isPlus && (
+                {tier !== "PRO" && (
                   <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                     Mejorar
                   </span>
@@ -186,6 +196,9 @@ export default function PerfilPage() {
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>
             </button>
+            <div className="border-t border-border">
+              <ConexionBancoCard />
+            </div>
           </CardContent>
         </Card>
       </div>

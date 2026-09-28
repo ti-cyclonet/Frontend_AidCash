@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Heart, Plus, Pencil, Trash2, ReceiptText, Loader2 } from "lucide-react"
+import { Heart, Plus, Pencil, Trash2, ReceiptText, Loader2, Crown } from "lucide-react"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -76,6 +77,29 @@ export function HogarPresupuesto() {
 
   const pareja = data.pareja?.nombre.split(" ")[0] ?? "tu pareja"
   const cats = data.categorias ?? []
+  // Ninguno de los dos tiene KIRI PRO: se muestra lo que ya tenían, sin crear ni registrar
+  const bloqueado = data.habilitado === false
+  const pedirPro = () => window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
+    codigo: "FUNCION", mejora: { plan: "KIRI PRO" },
+    mensaje: `El presupuesto del hogar es parte de KIRI PRO. Basta con que uno de los dos lo tenga, y ${pareja} recibe KIRI PLUS gratis.`,
+  } }))
+
+  if (bloqueado && cats.length === 0) {
+    return (
+      <Card className="border-none bg-card shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-4 space-y-3 bg-gradient-to-br from-pink-500/10 via-card to-amber-400/10">
+          <h3 className="text-sm font-bold flex items-center gap-1.5"><Heart className="h-4 w-4 text-pink-500" /> Presupuesto del hogar <span className="text-[9px] font-black text-amber-600 bg-amber-400/20 rounded px-1.5 py-0.5">PRO</span></h3>
+          <p className="text-xs text-muted-foreground">
+            Con {pareja} pueden tener topes compartidos para comida, mercado, renta o salidas: cada uno registra sus gastos y los dos ven cuánto llevan.
+            Con <strong className="text-foreground">KIRI PRO</strong> en uno de los dos, lo usan ambos y {pareja} recibe <strong className="text-foreground">KIRI PLUS gratis</strong>.
+          </p>
+          <Button asChild size="sm" className="h-8 rounded-xl gap-1 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white">
+            <Link href="/mi-plan"><Crown className="h-3.5 w-3.5" /> Ver KIRI PRO</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
   const total = data.total ?? { limite: 0, gastado: 0 }
   const pctTotal = total.limite > 0 ? Math.min(100, Math.round((total.gastado / total.limite) * 100)) : 0
   const quincenal = data.periodo === "quincenal"
@@ -143,10 +167,16 @@ export function HogarPresupuesto() {
               ))}
             </div>
           </div>
-          <Button size="sm" onClick={() => setForm(vacio())} className="h-8 rounded-xl gap-1 text-xs font-bold bg-pink-500 hover:bg-pink-600 text-white">
+          <Button size="sm" onClick={() => bloqueado ? pedirPro() : setForm(vacio())} className="h-8 rounded-xl gap-1 text-xs font-bold bg-pink-500 hover:bg-pink-600 text-white">
             <Plus className="h-3.5 w-3.5" /> Categoría
           </Button>
         </div>
+
+        {bloqueado && (
+          <button onClick={pedirPro} className="w-full text-left text-[11px] rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+            Ninguno de los dos tiene KIRI PRO: pueden ver lo que llevan, pero para crear categorías o registrar gastos del hogar uno de los dos necesita PRO. <strong className="text-amber-700 dark:text-amber-400">Ver KIRI PRO →</strong>
+          </button>
+        )}
 
         {cats.length === 0 ? (
           <div className="space-y-2">
