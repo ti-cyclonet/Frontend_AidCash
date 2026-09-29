@@ -10,6 +10,7 @@ import { userApi, isAuthenticated, getUserId } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { saveAvatar, loadAvatar } from "@/lib/avatar-storage"
 import { InactivityTimeout } from "@/hooks/use-inactivity-timeout"
+import { ingresoMensual, ingresoDelPeriodo, type PerfilIngreso, type TipoIngreso } from "@/lib/ingresos"
 export type { IncomeFrequency, InactivityTimeout }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -28,6 +29,22 @@ interface UserProfile {
   correo: string
   username: string
   avatarUrl: string
+  /** Partes del nombre (Perfil las edita por separado) */
+  primerNombre?: string
+  segundoNombre?: string
+  primerApellido?: string
+  segundoApellido?: string
+}
+
+/** Todo lo de "cómo recibo mi plata", para guardarlo de una vez. */
+export interface ConfigIngreso {
+  tipo: TipoIngreso
+  frecuencia: IncomeFrequency
+  /** Mensual: sueldo del mes (fijo) o estimación (variable, 0 = no sabe) */
+  ingresoBase: number
+  quincena1?: number | null
+  quincena2?: number | null
+  diasCobro?: string
 }
 
 interface AppContextValue {
@@ -37,8 +54,20 @@ interface AppContextValue {
   setCurrency: (c: Currency) => void
   isDarkMode: boolean
   setIsDarkMode: (v: boolean) => void
+  /** Ingreso MENSUAL con el que se planea (sueldo, o estimación/promedio si es variable) */
   income: number
   setIncome: (v: number) => void
+  /** Lo que le entra en el periodo en curso (quincena actual o mes) */
+  ingresoPeriodo: number
+  tipoIngreso: TipoIngreso
+  /** Montos de cada quincena si son distintos (null = iguales) */
+  quincenas: [number | null, number | null]
+  /** Promedio mensual real registrado (ingresos variables) */
+  ingresoPromedio: number
+  /** Lo que el usuario dejó como sueldo/estimación mensual (sin promedio) */
+  ingresoEstimado: number
+  perfilIngreso: PerfilIngreso
+  configurarIngreso: (cfg: ConfigIngreso) => Promise<void>
   incomeFrequency: IncomeFrequency
   setIncomeFrequency: (v: IncomeFrequency) => void
   diasCobro: string
@@ -66,6 +95,7 @@ const LS = {
   metaAhorro:  "kiri_meta_ahorro",
   cachedUserId: "kiri_cached_uid",
   inactivityTimeout: "kiri_inactivity_timeout",
+  ingresoCfg:  "kiri_ingreso_cfg",
 } as const
 
 const defaultUser: UserProfile = { nombre: "", correo: "", username: "", avatarUrl: "" }
@@ -79,7 +109,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<UserProfile>(defaultUser)
   const [currency, setCurrencyState] = useState<Currency>("USD")
   const [isDarkMode, setDarkModeState] = useState(false)
-  const [income, setIncomeState] = useState(0)
+  const [incomeRaw, setIncomeState] = useState(0)
+  const [tipoIngreso, setTipoIngreso] = useState<TipoIngreso>("fijo")
+  const [quincenas, setQuincenas] = useState<[number | null, number | null]>([null, null])
+  const [ingresoPromedio, setIngresoPromedio] = useState(0)
   const [incomeFrequency, setIncomeFrequencyState] = useState<IncomeFrequency>("mensual")
   const [diasCobro, setDiasCobroState] = useState("1,16")
   const [onboardingDone, setOnboardingDoneState] = useState(false)
@@ -132,6 +165,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setUserState({ ...parsed, avatarUrl: "" }) // avatarUrl se carga desde IndexedDB arriba
       }
       if (cachedIncome)     setIncomeState(Number(cachedIncome))
+      try {
+        const cfg = JSON.parse(localStorage.getItem(LS.ingresoCfg) || "null")
+        if (cfg) { setTipoIngreso(cfg.tipo ?? "fijo"); setQuincenas([cfg.q1 ?? null, cfg.q2 ?? null]); setIngresoPromedio(Number(cfg.promedio) || 0) }
+      } catch { /* caché dañada */ }
       if (cachedFrequency)  setIncomeFrequencyState(cachedFrequency as IncomeFrequency)
       if (cachedOnboarding) setOnboardingDoneState(cachedOnboarding === "true")
       if (cachedMeta)       setMetaAhorroState(Number(cachedMeta))
@@ -172,7 +209,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const diasPagoArr  = (u.diasPago as number[] | undefined) ?? []
       const dias_cobro   = diasPagoArr.length > 0 ? diasPagoArr.join(",") : (localStorage.getItem("kiri_dias_cobro") || "1,16")
 
-      setUserState(prev => ({ ...prev, nombre, correo, username, avatarUrl: avatarUrl || prev.avatarUrl }))
+      const partes = {
+        primerNombre: (u.primerNombre as string) ?? "", segundoNombre: (u.segundoNombre as string) ?? "",
+        primerApellido: (u.primerApellido as string) ?? "", segundoApellido: (u.segundoApellido as string) ?? "",
+      }
+      setUserState(prev => ({ ...prev, nombre, correo, username, ...partes, avatarUrl: avatarUrl || prev.avatarUrl }))
       if (avatarUrl && userId) saveAvatar(userId, avatarUrl).catch(() => {})
       // Fotos que antes quedaron guardadas solo en este navegador (el guardado
       // en el backend falló sin avisar): se suben ahora para que se vean en
@@ -186,6 +227,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }).catch(() => {})
       }
       setIncomeState(ingreso_base)
+      const tipo = (u.tipoIngreso as TipoIngreso) === "variable" ? "variable" : "fijo"
+      const q1 = u.ingresoQuincena1 != null ? Number(u.ingresoQuincena1) : null
+      const q2 = u.ingresoQuincena2 != null ? Number(u.ingresoQuincena2) : null
+      const promedio = Number(u.ingresoPromedio ?? 0) || 0
+      setTipoIngreso(tipo)
+      setQuincenas([q1, q2])
+      setIngresoPromedio(promedio)
+      localStorage.setItem(LS.ingresoCfg, JSON.stringify({ tipo, q1, q2, promedio }))
       setIncomeFrequencyState(frecuencia)
       setDiasCobroState(dias_cobro)
       setOnboardingDoneState(onboarding)
@@ -301,6 +350,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LS.inactivityTimeout, v)
   }, [])
 
+  // ── Cómo recibe su plata (fijo igual, fijo por quincena, variable) ─────────
+  const perfilIngreso = useMemo<PerfilIngreso>(() => ({
+    tipo: tipoIngreso, frecuencia: incomeFrequency, ingresoBase: incomeRaw,
+    quincena1: quincenas[0], quincena2: quincenas[1], promedio: ingresoPromedio, diasCobro,
+  }), [tipoIngreso, incomeFrequency, incomeRaw, quincenas, ingresoPromedio, diasCobro])
+  const income = ingresoMensual(perfilIngreso)
+  const ingresoPeriodo = ingresoDelPeriodo(perfilIngreso)
+  const ingresoEstimado = incomeRaw
+
+  /** Guarda de una vez la forma de recibir ingresos (el backend la deja coherente). */
+  const configurarIngreso = useCallback(async (cfg: ConfigIngreso) => {
+    const variable = cfg.tipo === "variable"
+    const frecuencia: IncomeFrequency = variable ? "mensual" : cfg.frecuencia
+    const distintas = !variable && frecuencia === "quincenal" && (cfg.quincena1 ?? 0) > 0 && (cfg.quincena2 ?? 0) > 0 && cfg.quincena1 !== cfg.quincena2
+    const q1 = distintas ? cfg.quincena1! : null
+    const q2 = distintas ? cfg.quincena2! : null
+    const base = distintas ? q1! + q2! : Math.max(0, cfg.ingresoBase)
+    const dias = variable ? "1" : cfg.diasCobro
+    setTipoIngreso(variable ? "variable" : "fijo")
+    setIncomeFrequencyState(frecuencia)
+    setIncomeState(base)
+    setQuincenas([q1, q2])
+    if (dias) setDiasCobroState(dias)
+    localStorage.setItem(LS.income, String(base))
+    localStorage.setItem(LS.frequency, frecuencia)
+    if (dias) localStorage.setItem(LS.diasCobro, dias)
+    if (!isAuthenticated()) return
+    const diasPago = dias ? dias.split(",").map(d => parseInt(d.trim(), 10)).filter(d => d >= 1 && d <= 31) : undefined
+    await userApi.updateProfile({
+      tipoIngreso: variable ? "variable" : "fijo", frecuenciaIngreso: frecuencia, ingresoBase: base,
+      ingresoQuincena1: q1, ingresoQuincena2: q2, ...(diasPago?.length ? { diasPago } : {}),
+    })
+    // El promedio real (ingresos variables) lo calcula el backend
+    let prom = ingresoPromedio
+    if (variable) {
+      const { data } = await userApi.getProfile()
+      prom = Number(data?.user?.ingresoPromedio ?? 0) || 0
+      setIngresoPromedio(prom)
+    }
+    localStorage.setItem(LS.ingresoCfg, JSON.stringify({ tipo: variable ? "variable" : "fijo", q1, q2, promedio: prom }))
+  }, [ingresoPromedio])
+
+  // Ingresos variables: al registrar un ingreso cambia su promedio real
+  useEffect(() => {
+    if (tipoIngreso !== "variable") return
+    const h = () => {
+      userApi.getProfile().then(({ data }) => {
+        const prom = Number(data?.user?.ingresoPromedio ?? 0) || 0
+        setIngresoPromedio(prom)
+      })
+    }
+    window.addEventListener("kiri:wallet-updated", h)
+    window.addEventListener("kiri:income-registered", h)
+    return () => { window.removeEventListener("kiri:wallet-updated", h); window.removeEventListener("kiri:income-registered", h) }
+  }, [tipoIngreso])
+
   // ── Derivados ──────────────────────────────────────────────────────────────
   // savingsAmount como referencia: basado en ingreso sin obligaciones (caso ideal)
   // Los componentes usan usePeriodBudget() para cálculos dinámicos reales.
@@ -328,6 +433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isDarkMode, setIsDarkMode,
     formatAmount,
     income, setIncome,
+    ingresoPeriodo, tipoIngreso, quincenas, ingresoPromedio, ingresoEstimado, perfilIngreso, configurarIngreso,
     incomeFrequency, setIncomeFrequency,
     diasCobro, setDiasCobro,
     savingsAmount,
@@ -341,6 +447,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isDarkMode, setIsDarkMode,
     formatAmount,
     income, setIncome,
+    ingresoPeriodo, tipoIngreso, quincenas, ingresoPromedio, ingresoEstimado, perfilIngreso, configurarIngreso,
     incomeFrequency, setIncomeFrequency,
     diasCobro, setDiasCobro,
     savingsAmount,

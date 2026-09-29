@@ -95,8 +95,13 @@ export default function PerfilPage() {
 
   const handleSaveProfile = async () => {
     // Build concatenated nombre for Kiri DB
-    const fullName = [editForm.firstName, editForm.secondName, editForm.firstSurname, editForm.secondSurname].filter(Boolean).join(' ')
-    const updatedForm = { ...editForm, nombre: fullName }
+    const limpio = (v: string) => v.replace(/\s+/g, ' ').trim()
+    const partes = {
+      primerNombre: limpio(editForm.firstName), segundoNombre: limpio(editForm.secondName),
+      primerApellido: limpio(editForm.firstSurname), segundoApellido: limpio(editForm.secondSurname),
+    }
+    const fullName = [partes.primerNombre, partes.segundoNombre, partes.primerApellido, partes.segundoApellido].filter(Boolean).join(' ')
+    const updatedForm = { ...editForm, nombre: fullName, ...partes }
     setUsernameError(null)
 
     // Send extra fields to backend (which syncs con Authoriza) — el avatar solo
@@ -106,10 +111,10 @@ export default function PerfilPage() {
       correo: editForm.correo,
       username: editForm.username,
       ...(avatarChanged ? { avatarUrl: editForm.avatarUrl } : {}),
-      firstName: editForm.firstName,
-      secondName: editForm.secondName,
-      firstSurname: editForm.firstSurname,
-      secondSurname: editForm.secondSurname,
+      firstName: partes.primerNombre,
+      secondName: partes.segundoNombre,
+      firstSurname: partes.primerApellido,
+      secondSurname: partes.segundoApellido,
     })
 
     if (error) {
@@ -130,10 +135,17 @@ export default function PerfilPage() {
       correo: user.correo || displayEmail || "",
       username: user.username,
       avatarUrl: user.avatarUrl,
-      firstName: parts[0] || '',
-      secondName: parts.length === 4 ? parts[1] : '',
-      firstSurname: parts.length >= 3 ? parts[parts.length - 2] : (parts[1] || ''),
-      secondSurname: parts.length >= 3 ? parts[parts.length - 1] : '',
+      // Las partes guardadas (el backend las trae de Kiri o de Authoriza).
+      // Solo si no hay, la suposición a partir del nombre completo.
+      ...(user.primerNombre ? {
+        firstName: user.primerNombre, secondName: user.segundoNombre ?? '',
+        firstSurname: user.primerApellido ?? '', secondSurname: user.segundoApellido ?? '',
+      } : {
+        firstName: parts[0] || '',
+        secondName: parts.length >= 4 ? parts.slice(1, parts.length - 2).join(' ') : '',
+        firstSurname: parts.length >= 3 ? parts[parts.length - 2] : (parts[1] || ''),
+        secondSurname: parts.length >= 3 ? parts[parts.length - 1] : '',
+      }),
     })
     setAvatarChanged(false)
     setAvatarError(null)

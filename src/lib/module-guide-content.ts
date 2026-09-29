@@ -79,7 +79,7 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     bgGradient: "from-teal-500/10 to-teal-900/5",
     borderColor: "border-teal-500/20",
     items: [
-      { icon: "💰", title: "Billetera", description: "Registra tus ingresos, mira tu saldo real y activa pagos automáticos al recibir tu sueldo. Tu Sueldo Base es el planificado y el Sueldo Real se actualiza al pagar obligaciones." },
+      { icon: "💰", title: "Billetera", description: "Registra tus ingresos, mira tu saldo real y activa pagos automáticos al recibir tu sueldo. Tu Sueldo Base es el planificado y el Sueldo Real se actualiza al pagar obligaciones. Con el lápiz eliges cómo recibes tu plata: sueldo fijo, quincenas con montos distintos o ingresos variables sin sueldo fijo." },
       { icon: "📊", title: "Presupuesto", description: "Crea categorías con límite, vincúlalas a tus gastos fijos y mira cuánto llevas en cada una — gastos hormiga incluidos. Toca una categoría para ver su detalle, editarla con el lápiz o registrar un gasto con el botón Gasto. Kiri sugiere la categoría según tu historial y te avisa al llegar al 80% y al 100%." },
       { icon: "📈", title: "Proyecciones", description: "Te muestra el día en que quedas libre de deudas y cuánto te ahorras en intereses. Mueve el \"aporte extra al mes\" (Kiri te sugiere uno que te cabe) y mira en vivo cómo se adelantan tus logros: cada deuda pagada, tu colchón de emergencia y tu patrimonio en positivo. Todo sale de tus promedios reales de los últimos 3 meses." },
     ],

@@ -38,7 +38,7 @@ const pedirPlan = (mensaje: string, plan: string) =>
 const mesesTxt = (n: number) => n === 1 ? "1 mes" : n < 24 ? `${n} meses` : `${Math.floor(n / 12)} años${n % 12 ? ` y ${n % 12} meses` : ""}`
 
 export function ProyeccionesTab() {
-  const { formatAmount, income, incomeFrequency } = useAppContext()
+  const { formatAmount, income, incomeFrequency, tipoIngreso, ingresoEstimado } = useAppContext()
   const { debts, fixedExpenses, totalAhorrado, extraIncomes, loading } = useFinanceData()
 
   const { limite, hasFeature } = usePlan()
@@ -76,8 +76,9 @@ export function ProyeccionesTab() {
   // ── Datos reales del mes ─────────────────────────────────────────────────
   const datos = useMemo(() => {
     const now = new Date()
-    // El ingreso base se guarda POR PERIODO (quincena si cobra quincenal)
-    const sueldoMensual = incomeFrequency === "quincenal" ? income * 2 : income
+    // `income` ya es MENSUAL (sueldo del mes; con ingresos variables, su
+    // estimación o su promedio real). Antes se duplicaba a quien cobra quincenal.
+    const sueldoMensual = income
     const extrasRecurrentes = extraIncomes
       .filter(e => e.temporalidad === "indefinido" || (e.temporalidad === "definido" && (e.mesesRestantes ?? 0) > 0))
       .reduce((a, e) => a + e.monto, 0)
@@ -446,7 +447,7 @@ export function ProyeccionesTab() {
           </button>
           {verDatos && (
             <div className="px-4 pb-4 space-y-1.5 text-[11px]">
-              <Fila label={`Ingreso al mes${incomeFrequency === "quincenal" ? " (2 quincenas)" : ""}`} valor={formatAmount(datos.sueldoMensual)} />
+              <Fila label={tipoIngreso === "variable" ? (ingresoEstimado > 0 ? "Ingreso al mes (tu estimación)" : "Ingreso al mes (tu promedio real)") : `Ingreso al mes${incomeFrequency === "quincenal" ? " (2 quincenas)" : ""}`} valor={formatAmount(datos.sueldoMensual)} />
               {datos.extrasRecurrentes > 0 && <Fila label="Ingresos extra recurrentes" valor={`+${formatAmount(datos.extrasRecurrentes)}`} />}
               <Fila label="Gastos fijos al mes" valor={`-${formatAmount(datos.gastosFijosMensual)}`} />
               <Fila label="Cuotas de deudas al mes" valor={`-${formatAmount(projection.obligacionesMensual - datos.gastosFijosMensual)}`} />

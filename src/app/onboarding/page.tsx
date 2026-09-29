@@ -23,7 +23,7 @@ import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuesti
 
 const STEPS = [
   "Bienvenida",
-  "Frecuencia de ingresos",
+  "Cómo recibes tu plata",
   "Sueldo base",
   "Ingreso extra",
   "Situación de deudas",
@@ -44,7 +44,7 @@ interface OnboardingObligation {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { setIncome, setOnboardingDone, setUser, user, setIncomeFrequency, setDiasCobro } = useAppContext()
+  const { setOnboardingDone, setUser, user, configurarIngreso, formatAmount } = useAppContext()
   const { updateUserProfile, addDebt, addFixedExpense, addExtraIncome } = useFinanceData()
   const { user: authUser } = useAuth()
 
@@ -52,7 +52,12 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
 
   // Form data
+  // Sueldo fijo, o ingresos variables (independiente, ventas, comisiones: sin sueldo fijo)
+  const [tipoIngreso, setTipoIngreso] = useState<"fijo" | "variable" | null>(null)
   const [frecuencia, setFrecuencia] = useState<"mensual" | "quincenal">("mensual")
+  // Quincenal: ¿las dos quincenas son iguales? Si no, un monto para cada una
+  const [quincenasIguales, setQuincenasIguales] = useState(true)
+  const [incomeValue2, setIncomeValue2] = useState("")
   const [diaPago1, setDiaPago1] = useState("")
   const [diaPago2, setDiaPago2] = useState("")
   const [incomeValue, setIncomeValue] = useState("")
@@ -143,8 +148,13 @@ export default function OnboardingPage() {
   }
 
   const canNext = () => {
-    if (step === 1) return diasPagoValidos()
-    if (step === 2) return !!incomeValue && Number(incomeValue) > 0
+    if (step === 1) return tipoIngreso === "variable" || (tipoIngreso === "fijo" && diasPagoValidos())
+    // Con ingresos variables la estimación es opcional (sin ella se usa el promedio real)
+    if (step === 2) {
+      if (tipoIngreso === "variable") return true
+      if (frecuencia === "quincenal" && !quincenasIguales) return Number(incomeValue) > 0 && Number(incomeValue2) > 0
+      return !!incomeValue && Number(incomeValue) > 0
+    }
     if (step === 3) return tieneIngresoExtra !== null && (tieneIngresoExtra === false || (!!extraNombre && !!extraMonto))
     if (step === 4) return tieneDeudas !== null
     if (step === 5) return quiereRegistrar !== null
@@ -224,18 +234,26 @@ export default function OnboardingPage() {
   const handleFinish = async () => {
     setSaving(true)
     try {
+      // Cómo recibe su plata: sueldo fijo (mensual, quincenal igual o
+      // quincenal con montos distintos) o ingresos variables sin sueldo fijo
+      const variable = tipoIngreso === "variable"
       const rawIncome = Number(incomeValue) || 0
-      const parsedIncome = frecuencia === "quincenal" ? rawIncome * 2 : rawIncome
-      const diasPago = frecuencia === "quincenal"
+      const quincenal = !variable && frecuencia === "quincenal"
+      const distintas = quincenal && !quincenasIguales
+      const diasPago = variable ? [1] : quincenal
         ? [Number(diaPago1), Number(diaPago2)].sort((a, b) => a - b)
         : [Number(diaPago1)]
-
-      await updateUserProfile({
-        ingreso_base: parsedIncome,
-        frecuencia_ingreso: frecuencia,
-        onboarding_done: true,
-        diasPago,
+      await configurarIngreso({
+        tipo: variable ? "variable" : "fijo",
+        frecuencia: variable ? "mensual" : frecuencia,
+        // Siempre MENSUAL: quincena × 2, o la suma de las dos quincenas
+        ingresoBase: variable ? rawIncome : distintas ? rawIncome + (Number(incomeValue2) || 0) : quincenal ? rawIncome * 2 : rawIncome,
+        // incomeValue es lo del primer día de pago del mes (el menor)
+        quincena1: distintas ? rawIncome : null,
+        quincena2: distintas ? Number(incomeValue2) || 0 : null,
+        diasCobro: diasPago.join(","),
       })
+      await updateUserProfile({ onboarding_done: true })
 
       // El ingreso extra se guarda hasta el final, junto con todo lo demás —
       // no apenas se llena el formulario en el paso 3 (mismo patrón que ya
@@ -249,12 +267,6 @@ export default function OnboardingPage() {
         })
       }
 
-      if (parsedIncome > 0) setIncome(parsedIncome)
-      setIncomeFrequency(frecuencia)
-      // Mismo campo que ya usa PaydaySelector en Gestión (diasCobro) — así el
-      // día(s) de pago elegidos acá quedan reflejados ahí de inmediato, sin
-      // que el usuario tenga que volver a configurarlos.
-      setDiasCobro(diasPago.join(","))
       setOnboardingDone(true)
       router.replace("/dashboard")
     } catch {
@@ -336,14 +348,38 @@ export default function OnboardingPage() {
                     <Calendar className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black">¿Con qué frecuencia recibes tus ingresos principales?</h2>
+                    <h2 className="text-lg font-black">¿Cómo recibes tu plata?</h2>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Esto nos ayudará a organizar tu presupuesto correctamente.
                 </p>
 
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { v: "fijo", icon: Wallet, t: "Tengo un sueldo fijo", d: "Me pagan en fechas fijas (aunque el monto cambie un poco)" },
+                    { v: "variable", icon: Sparkles, t: "Mis ingresos varían", d: "Independiente, ventas, comisiones, domicilios…" },
+                  ] as const).map(o => (
+                    <button key={o.v} onClick={() => setTipoIngreso(o.v)}
+                      className={cn("flex flex-col gap-1.5 p-4 rounded-2xl border-2 transition-colors text-left",
+                        tipoIngreso === o.v ? "border-kiri-emerald bg-kiri-emerald/5" : "border-muted hover:border-kiri-emerald/30")}>
+                      <o.icon className={cn("h-5 w-5", tipoIngreso === o.v ? "text-kiri-emerald" : "text-muted-foreground")} />
+                      <p className="text-sm font-bold leading-tight">{o.t}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{o.d}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {tipoIngreso === "variable" && (
+                  <div className="rounded-2xl bg-kiri-emerald/5 border border-kiri-emerald/20 p-4 text-xs text-muted-foreground space-y-1.5">
+                    <p className="font-bold text-foreground">¡Perfecto! No necesitas un sueldo fijo.</p>
+                    <p>Cada vez que te entre plata la registras (o se la dictas a Kiri) y Kiri organiza tus gastos con lo que de verdad tienes. Con el tiempo aprende tu promedio para planear mejor tus meses.</p>
+                  </div>
+                )}
+
+                {tipoIngreso === "fijo" && (
                 <div className="space-y-3">
+                <p className="text-xs font-bold">¿Cada cuánto te pagan?</p>
                   <button
                     onClick={() => setFrecuencia("mensual")}
                     className={cn(
@@ -386,11 +422,13 @@ export default function OnboardingPage() {
                     </div>
                   </button>
                 </div>
+                )}
 
                 {/* Fecha(s) de pago — un cuadro si es mensual, dos si es
                     quincenal. Se guardan junto con todo lo demás al terminar
                     el test y quedan reflejadas de inmediato en Gestión
                     (mismo campo que usa el selector de días de pago ahí). */}
+                {tipoIngreso === "fijo" && (
                 <div className="space-y-2 pt-1">
                   <Label className="text-xs font-bold">
                     {frecuencia === "quincenal" ? "¿Qué días te pagan?" : "¿Qué día te pagan?"}
@@ -421,46 +459,94 @@ export default function OnboardingPage() {
                     )}
                   </div>
                 </div>
+                )}
 
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
                   <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  Podrás cambiar esto cuando quieras desde configuración.
+                  Podrás cambiar esto cuando quieras desde Gestión → Billetera.
                 </p>
               </div>
             )}
 
-            {/* ═══ PASO 2: Sueldo base ═══ */}
-            {step === 2 && (
+            {/* ═══ PASO 2: Cuánto te entra ═══ */}
+            {step === 2 && (() => {
+              const [diaA, diaB] = [Number(diaPago1), Number(diaPago2)].sort((a, b) => a - b)
+              const variable = tipoIngreso === "variable"
+              const distintas = !variable && frecuencia === "quincenal" && !quincenasIguales
+              return (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
                     <Wallet className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black">¿Cuál es tu ingreso base, aproximado por periodo?</h2>
+                    <h2 className="text-lg font-black">
+                      {variable ? "¿Cuánto te entra en un mes normal?" : frecuencia === "quincenal" ? "¿Cuánto te pagan cada quincena?" : "¿Cuánto te pagan al mes?"}
+                    </h2>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Esta será la base para calcular tu presupuesto inteligente.
+                  {variable
+                    ? "Es solo una idea para planear: si no lo sabes, déjalo vacío y Kiri usará tu promedio real apenas registres tus ingresos."
+                    : "Esta será la base para calcular tu presupuesto inteligente."}
                 </p>
 
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold">Ingresa tu sueldo {frecuencia === "quincenal" ? "quincenal" : "mensual"}</Label>
-                  <MoneyInput
-                    value={incomeValue}
-                    onChange={v => setIncomeValue(v)}
-                    className="h-14 text-2xl font-bold rounded-2xl"
-                    placeholder="0"
-                    autoFocus
-                  />
-                </div>
+                {!variable && frecuencia === "quincenal" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold">¿Te pagan lo mismo las dos quincenas?</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ v: true, t: "Sí, lo mismo" }, { v: false, t: "No, cambia" }].map(o => (
+                        <button key={String(o.v)} onClick={() => setQuincenasIguales(o.v)}
+                          className={cn("h-11 rounded-xl border-2 text-sm font-bold transition-colors",
+                            quincenasIguales === o.v ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
+                          {o.t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {distintas ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold">Lo que te pagan el día {diaA}</Label>
+                      <MoneyInput value={incomeValue} onChange={v => setIncomeValue(v)} className="h-14 text-xl font-bold rounded-2xl" placeholder="0" autoFocus />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold">Lo que te pagan el día {diaB}</Label>
+                      <MoneyInput value={incomeValue2} onChange={v => setIncomeValue2(v)} className="h-14 text-xl font-bold rounded-2xl" placeholder="0" />
+                    </div>
+                    {Number(incomeValue) > 0 && Number(incomeValue2) > 0 && (
+                      <p className="col-span-2 text-xs text-muted-foreground">Al mes te entran <strong className="text-foreground">{formatAmount(Number(incomeValue) + Number(incomeValue2))}</strong>. Cada quincena Kiri usará lo que corresponde a esa fecha.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold">
+                      {variable ? "Estimación mensual (opcional)" : frecuencia === "quincenal" ? "Lo que te pagan cada quincena" : "Tu sueldo del mes"}
+                    </Label>
+                    <MoneyInput
+                      value={incomeValue}
+                      onChange={v => setIncomeValue(v)}
+                      className="h-14 text-2xl font-bold rounded-2xl"
+                      placeholder={variable ? "No lo sé" : "0"}
+                      autoFocus
+                    />
+                    {variable && (
+                      <button onClick={() => { setIncomeValue(""); goNext() }} className="text-xs font-bold text-kiri-emerald hover:underline">
+                        No lo sé todavía, sigamos →
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
                   <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  Ingresa el valor antes de impuestos de lo que recibes en cada periodo.
+                  {variable ? "Registra cada ingreso cuando te llegue: así Kiri siempre sabe con cuánto cuentas." : "Pon lo que de verdad te llega a la cuenta (después de descuentos)."}
                 </p>
               </div>
-            )}
+              )
+            })()}
 
             {/* ═══ PASO 3: Ingreso extra (opcional) ═══ */}
             {step === 3 && (
@@ -470,11 +556,13 @@ export default function OnboardingPage() {
                     <Zap className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black">¿Tienes algún ingreso extra?</h2>
+                    <h2 className="text-lg font-black">{tipoIngreso === "variable" ? "¿Tienes algún ingreso fijo aparte?" : "¿Tienes algún ingreso extra?"}</h2>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Freelance, comisiones, un negocio aparte — cualquier plata que te entre además de tu sueldo base.
+                  {tipoIngreso === "variable"
+                    ? "Un arriendo que cobras, una pensión, una mesada… algo que te llegue siempre, además de lo que te entra por tu trabajo."
+                    : "Freelance, comisiones, un negocio aparte — cualquier plata que te entre además de tu sueldo base."}
                 </p>
 
                 <div className="space-y-3">
@@ -493,7 +581,7 @@ export default function OnboardingPage() {
                       {tieneIngresoExtra === true && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
                     </div>
                     <CheckCircle2 className="h-5 w-5 text-kiri-emerald shrink-0" />
-                    <p className="text-sm font-bold">Sí, tengo un ingreso extra</p>
+                    <p className="text-sm font-bold">{tipoIngreso === "variable" ? "Sí, tengo un ingreso fijo" : "Sí, tengo un ingreso extra"}</p>
                   </button>
 
                   <button
@@ -511,7 +599,7 @@ export default function OnboardingPage() {
                       {tieneIngresoExtra === false && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
                     </div>
                     <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <p className="text-sm font-bold">No, solo mi sueldo base</p>
+                    <p className="text-sm font-bold">{tipoIngreso === "variable" ? "No, solo lo de mi trabajo" : "No, solo mi sueldo base"}</p>
                   </button>
                 </div>
 

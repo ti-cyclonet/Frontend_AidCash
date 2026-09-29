@@ -279,7 +279,9 @@ export function getPeriodData(
   debts: Debt[],
   fixedExpenses: FixedExpense[],
   frequency: IncomeFrequency,
-  diasCobro: string = ''
+  diasCobro: string = '',
+  /** Lo que entra en ESTA quincena si no es la mitad del mes (quincenas distintas) */
+  ingresoPeriodo?: number
 ): PeriodInfo {
   if (frequency === 'mensual') {
     // Mensual: todas las obligaciones PENDIENTES del mes completo
@@ -330,7 +332,7 @@ export function getPeriodData(
   }, 0)
 
   return {
-    effectiveIncome: Math.round((income / 2) + extraIncome),
+    effectiveIncome: Math.round((ingresoPeriodo ?? income / 2) + extraIncome),
     periodDebts,
     periodFixed,
     totalObligations,
