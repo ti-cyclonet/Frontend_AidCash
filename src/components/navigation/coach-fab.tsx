@@ -273,47 +273,84 @@ export function CoachFab() {
   // ══════════════════════════════════════════════════════════════════════════
   // VOZ
   // ══════════════════════════════════════════════════════════════════════════
-  const detenerVoz = () => { recRef.current?.stop() }
+  // Terminar la escucha actual (el usuario tocó el micrófono otra vez)
+  const detenerRef = useRef<(() => void) | null>(null)
+  const detenerVoz = () => { detenerRef.current?.() }
+  /** Corta la escucha sin entregar el texto (al cerrar el dictado o empezar otra). */
+  const cancelarVoz = () => {
+    const r = recRef.current
+    recRef.current = null
+    detenerRef.current = null
+    try { r?.abort() } catch { /* ya terminó */ }
+  }
 
+  /**
+   * Escucha hasta que el usuario toque el micrófono otra vez o deje de hablar.
+   * Antes el `onend` de una escucha anterior (abortada al tocar de nuevo)
+   * llegaba tarde y apagaba la nueva: al segundo toque paraba sola. Ahora cada
+   * escucha solo responde a su propio reconocedor, y si el navegador corta
+   * solo (Chrome en el celular corta tras cada frase) se reanuda hasta que haya
+   * silencio de verdad.
+   */
   const escuchar = (onFin: (texto: string) => void, onParcial: (texto: string) => void) => {
-    recRef.current?.abort()
+    cancelarVoz()
     const r = crearReconocimiento()
     if (!r) { onFin(""); return false }
     r.lang = "es-CO"
     r.continuous = true
     r.interimResults = true
     let final = ""
+    let parcial = ""
+    let terminado = false
     let silencio: ReturnType<typeof setTimeout> | null = null
-    const maximo = setTimeout(() => r.stop(), 60000)
-    const reiniciarSilencio = () => {
+    const terminar = () => {
+      if (terminado) return
+      terminado = true
+      clearTimeout(maximo)
       if (silencio) clearTimeout(silencio)
-      silencio = setTimeout(() => r.stop(), 2500)
+      try { r.stop() } catch { /* ya terminó */ }
+    }
+    const maximo = setTimeout(terminar, 90000)
+    // Al empezar hay más tiempo para arrancar a hablar; después de hablar, 3 s de silencio terminan
+    const esperarSilencio = (ms: number) => {
+      if (silencio) clearTimeout(silencio)
+      silencio = setTimeout(terminar, ms)
     }
     r.onresult = (e: SpeechRecognitionEvent) => {
-      let parcial = ""
+      if (recRef.current !== r) return
+      parcial = ""
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript
         if (e.results[i].isFinal) final += (final ? " " : "") + t.trim()
         else parcial += t
       }
       onParcial(`${final} ${parcial}`.trim())
-      reiniciarSilencio()
+      esperarSilencio(3000)
     }
     r.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      if (recRef.current !== r) return
+      if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
+        terminado = true
         setVoiceError("Kiri no tiene permiso para usar el micrófono. Actívalo en tu navegador, o escríbelo aquí abajo.")
         setEscribiendo(true)
       }
     }
     r.onend = () => {
+      if (recRef.current !== r) return // escucha vieja (cancelada): no toca la nueva
+      if (!terminado) {
+        // El navegador cortó solo: se sigue escuchando hasta que haya silencio
+        try { r.start(); return } catch { /* no se pudo reanudar: termina */ }
+      }
       clearTimeout(maximo)
       if (silencio) clearTimeout(silencio)
       recRef.current = null
-      onFin(final.trim())
+      detenerRef.current = null
+      onFin(`${final} ${final ? "" : parcial}`.trim())
     }
     recRef.current = r
-    try { r.start() } catch { onFin(""); return false }
-    reiniciarSilencio()
+    detenerRef.current = terminar
+    try { r.start() } catch { recRef.current = null; detenerRef.current = null; onFin(""); return false }
+    esperarSilencio(8000)
     return true
   }
 
@@ -334,6 +371,10 @@ export function CoachFab() {
 
   const abrirVoz = () => {
     setShowSatellites(false)
+    // El chat (z-60) tapaba el diálogo del dictado: se cierra para que se vea
+    setIsOpen(false)
+    setChatEscuchando(false)
+    cancelarVoz()
     setVoiceOpen(true)
     setVoiceError(null); setTranscript(""); setVoiceAcciones([]); setVoiceResumen(""); setVoiceConfianza(null); setVoiceErrores({})
     const puede = soportaVoz()
@@ -341,12 +382,13 @@ export function CoachFab() {
     if (!puede) { setVoicePhase("idle"); return }
     setVoicePhase("listening")
     setTimeout(() => {
-      escuchar(t => { if (t) interpretar(t); else setVoicePhase(p => p === "listening" ? "idle" : p) }, setTranscript)
+      const ok = escuchar(t => { if (t) interpretar(t); else setVoicePhase(p => p === "listening" ? "idle" : p) }, setTranscript)
+      if (!ok) { setVoicePhase("idle"); setEscribiendo(true) }
     }, 250)
   }
 
   const cerrarVoz = () => {
-    recRef.current?.abort()
+    cancelarVoz()
     setVoiceOpen(false)
     setVoicePhase("idle")
   }

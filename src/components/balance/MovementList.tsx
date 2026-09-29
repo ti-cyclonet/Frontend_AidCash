@@ -29,14 +29,14 @@ export const MOVEMENT_META: Record<MovementType, { color: string; icon: React.Co
 /** Un movimiento suma al disponible (ingreso, retiro de ahorro, abono recibido). */
 export const esEntrada = (m: Movement) => m.tipo === "ingresos" || m.direccion === "entrada"
 
-/** Gastos registrados (tabla de gastos variables): los únicos que se pueden eliminar desde el historial. */
-export const esGastoEliminable = (m: Movement) => m.tipo === "hormiga"
+/** Gastos registrados e ingresos: se pueden eliminar desde el historial (y se revierte todo). */
+export const esGastoEliminable = (m: Movement) => m.tipo === "hormiga" || (m.tipo === "ingresos" && !m.id.startsWith("ir-"))
 
 export function MovementList({ movements, formatAmount, vacio = "No hay movimientos que mostrar.", onEliminar }: {
   movements: Movement[]
   formatAmount: (n: number) => string
   vacio?: string
-  /** Si viene, los gastos registrados muestran un botón para eliminarlos (y revertir todo). */
+  /** Si viene, los gastos e ingresos registrados muestran un botón para eliminarlos (y revertir todo). */
   onEliminar?: (m: Movement) => void
 }) {
   const [expanded, setExpanded] = useState<string | null>(null)
