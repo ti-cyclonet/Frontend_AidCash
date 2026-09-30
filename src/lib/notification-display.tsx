@@ -3,6 +3,7 @@ import {
   CalendarClock, Wallet, ArrowRightLeft, Droplet, Bell, PartyPopper, Target, Home, Receipt,
 } from "lucide-react"
 import { SOCKET_EVENTS, KiriNotification } from "@/lib/socket-context"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -49,51 +50,51 @@ export function notifTitle(n: KiriNotification): string {
   const d = n.data
   switch (n.event) {
     case SOCKET_EVENTS.NEW_INVITE:
-      return `${(d.from as { nombre?: string })?.nombre ?? "Alguien"} te invitó`
+      return tr("{0} te invitó", [(d.from as { nombre?: string })?.nombre ?? tr("Alguien")])
     case SOCKET_EVENTS.INVITE_ACCEPTED:
-      return `${(d.by as { nombre?: string })?.nombre ?? "Tu contacto"} aceptó tu invitación`
+      return tr("{0} aceptó tu invitación", [(d.by as { nombre?: string })?.nombre ?? tr("Tu contacto")])
     case SOCKET_EVENTS.INVITE_REJECTED:
-      return "Tu invitación fue rechazada"
+      return tr("Tu invitación fue rechazada")
     case SOCKET_EVENTS.SHARED_DEPOSIT:
       return d.type === "deposit"
-        ? `${(d.by as { nombre?: string })?.nombre ?? "Tu contacto"} depositó en "${d.pocketName ?? d.nombre}"`
-        : `${(d.by as { nombre?: string })?.nombre ?? "Tu contacto"} creó el bolsillo "${d.nombre}"`
+        ? tr("{0} depositó en \"{1}\"", [(d.by as { nombre?: string })?.nombre ?? tr("Tu contacto"), d.pocketName ?? d.nombre])
+        : tr("{0} creó el bolsillo \"{1}\"", [(d.by as { nombre?: string })?.nombre ?? tr("Tu contacto"), d.nombre])
     case SOCKET_EVENTS.LOAN_REQUESTED:
-      return `${(d.borrower as { nombre?: string })?.nombre ?? "Alguien"} solicita un préstamo`
+      return tr("{0} solicita un préstamo", [(d.borrower as { nombre?: string })?.nombre ?? tr("Alguien")])
     case SOCKET_EVENTS.LOAN_APPROVED:
-      return "Tu solicitud de préstamo fue aprobada"
+      return tr("Tu solicitud de préstamo fue aprobada")
     case SOCKET_EVENTS.LOAN_REJECTED:
-      return "Tu solicitud de préstamo fue rechazada"
+      return tr("Tu solicitud de préstamo fue rechazada")
     case SOCKET_EVENTS.LOAN_PAYMENT:
-      return `${(d.borrower as { nombre?: string })?.nombre ?? "Tu deudor"} registró un abono`
+      return tr("{0} registró un abono", [(d.borrower as { nombre?: string })?.nombre ?? tr("Tu deudor")])
     case SOCKET_EVENTS.LOAN_PAYMENT_CONFIRMED:
-      return "Tu abono fue confirmado"
+      return tr("Tu abono fue confirmado")
     case SOCKET_EVENTS.LOAN_PAYMENT_REJECTED:
-      return "Tu abono fue rechazado"
+      return tr("Tu abono fue rechazado")
     case SOCKET_EVENTS.ROLE_CHANGE_REQUESTED:
-      return `${(d.requesterName as string) ?? "Tu contacto"} propone cambiar su conexión contigo`
+      return tr("{0} propone cambiar su conexión contigo", [(d.requesterName as string) ?? tr("Tu contacto")])
     case SOCKET_EVENTS.ROLE_CHANGE_ACCEPTED:
-      return `${(d.responderName as string) ?? "Tu contacto"} aceptó el cambio de rol`
+      return tr("{0} aceptó el cambio de rol", [(d.responderName as string) ?? tr("Tu contacto")])
     case SOCKET_EVENTS.ROLE_CHANGE_REJECTED:
-      return `${(d.responderName as string) ?? "Tu contacto"} rechazó el cambio de rol`
+      return tr("{0} rechazó el cambio de rol", [(d.responderName as string) ?? tr("Tu contacto")])
     case SOCKET_EVENTS.GARDEN_WATERED:
-      return `${(d.fromName as string) ?? "Alguien"} regó tu árbol${d.xpGiven ? ` (+${d.xpGiven} XP)` : ""}`
+      return tr("{0} regó tu árbol{1}", [(d.fromName as string) ?? tr("Alguien"), d.xpGiven ? tr(" (+{0} XP)", [d.xpGiven]) : ""])
     case SOCKET_EVENTS.HOGAR_GASTO:
-      return (d.message as string) ?? "Movimiento en el presupuesto del hogar"
+      return (d.message as string) ?? tr("Movimiento en el presupuesto del hogar")
     case SOCKET_EVENTS.REFERRAL_JOINED:
-      return (d.message as string) ?? `${(d.nombre as string) ?? "Alguien"} se unió a Kiri con tu enlace`
+      return (d.message as string) ?? tr("{0} se unió a Kiri con tu enlace", [(d.nombre as string) ?? tr("Alguien")])
     case SOCKET_EVENTS.MISSION_REMINDER:
-      return (d.message as string) ?? "Tus misiones de hoy te esperan"
+      return (d.message as string) ?? tr("Tus misiones de hoy te esperan")
     case SOCKET_EVENTS.AVISO:
-      return (d.message as string) ?? "Aviso de Kiri"
+      return (d.message as string) ?? tr("Aviso de Kiri")
     case SOCKET_EVENTS.ALERT_PAYMENT_PROXIMITY:
-      return (d.message as string) ?? "Se acerca tu fecha de pago"
+      return (d.message as string) ?? tr("Se acerca tu fecha de pago")
     case SOCKET_EVENTS.ALERT_INCOME_REMINDER:
-      return (d.message as string) ?? "¿Ya registraste tu ingreso?"
+      return (d.message as string) ?? tr("¿Ya registraste tu ingreso?")
     case SOCKET_EVENTS.ALERT_PERIOD_ASSIGNED:
-      return (d.message as string) ?? "Ingreso asignado al periodo"
+      return (d.message as string) ?? tr("Ingreso asignado al periodo")
     default:
-      return "Nueva notificación"
+      return tr("Nueva notificación")
   }
 }
 

@@ -7,6 +7,7 @@ import {
   type BudgetCategory, type SavingsPocket, type ExternalLoan, type HogarCategoria,
 } from "@/lib/api-client"
 import { useFinanceData } from "@/hooks/use-finance-data"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -37,6 +38,8 @@ export interface Accion {
   tipoIngreso?: "salario" | "extra" | null
   obligacionId?: string | null
   obligacionTipo?: "deuda" | "fijo" | null
+  /** Pago de obligación por un valor distinto a la cuota: "con este valor quedó pagada" */
+  cuotaCompleta?: boolean | null
   bolsilloId?: string | null
   cuota?: number | null
   diaPago?: number | null
@@ -52,31 +55,31 @@ export interface Accion {
 
 /** Destinos que el usuario puede elegir para un monto (el "¿a dónde va?"). */
 export const DESTINOS: { tipo: TipoAccion; label: string; emoji: string; ayuda: string }[] = [
-  { tipo: "gasto", label: "Gasto", emoji: "🧾", ayuda: "Algo que compraste o pagaste" },
-  { tipo: "pago_obligacion", label: "Pago de obligación", emoji: "🏦", ayuda: "Cuota de una deuda o gasto fijo" },
-  { tipo: "ingreso", label: "Ingreso", emoji: "💰", ayuda: "Plata que te entró" },
-  { tipo: "ahorro", label: "Ahorro", emoji: "🐷", ayuda: "Depósito a un bolsillo" },
-  { tipo: "me_deben", label: "Le presté", emoji: "🤝", ayuda: "Me deben" },
-  { tipo: "abono_me_deben", label: "Me pagaron un préstamo", emoji: "↩️", ayuda: "Abono de alguien que te debe" },
-  { tipo: "crear_deuda", label: "Deuda nueva", emoji: "💳", ayuda: "Préstamo o tarjeta nueva" },
-  { tipo: "crear_gasto_fijo", label: "Gasto fijo nuevo", emoji: "📅", ayuda: "Pago que se repite" },
-  { tipo: "crear_bolsillo", label: "Meta de ahorro nueva", emoji: "🎯", ayuda: "Bolsillo nuevo" },
-  { tipo: "crear_categoria", label: "Categoría nueva", emoji: "🏷️", ayuda: "Categoría de presupuesto" },
+  { tipo: "gasto", label: tr("Gasto"), emoji: "🧾", ayuda: tr("Algo que compraste o pagaste") },
+  { tipo: "pago_obligacion", label: tr("Pago de obligación"), emoji: "🏦", ayuda: tr("Cuota de una deuda o gasto fijo") },
+  { tipo: "ingreso", label: tr("Ingreso"), emoji: "💰", ayuda: tr("Plata que te entró") },
+  { tipo: "ahorro", label: tr("Ahorro"), emoji: "🐷", ayuda: tr("Depósito a un bolsillo") },
+  { tipo: "me_deben", label: tr("Le presté"), emoji: "🤝", ayuda: tr("Me deben") },
+  { tipo: "abono_me_deben", label: tr("Me pagaron un préstamo"), emoji: "↩️", ayuda: tr("Abono de alguien que te debe") },
+  { tipo: "crear_deuda", label: tr("Deuda nueva"), emoji: "💳", ayuda: tr("Préstamo o tarjeta nueva") },
+  { tipo: "crear_gasto_fijo", label: tr("Gasto fijo nuevo"), emoji: "📅", ayuda: tr("Pago que se repite") },
+  { tipo: "crear_bolsillo", label: tr("Meta de ahorro nueva"), emoji: "🎯", ayuda: tr("Bolsillo nuevo") },
+  { tipo: "crear_categoria", label: tr("Categoría nueva"), emoji: "🏷️", ayuda: tr("Categoría de presupuesto") },
 ]
 
-export const etiquetaTipo = (t: TipoAccion) => DESTINOS.find(d => d.tipo === t) ?? { tipo: t, label: "¿A dónde va?", emoji: "❓", ayuda: "Elige a qué corresponde" }
+export const etiquetaTipo = (t: TipoAccion) => DESTINOS.find(d => d.tipo === t) ?? { tipo: t, label: tr("¿A dónde va?"), emoji: "❓", ayuda: tr("Elige a qué corresponde") }
 
 /** ¿Qué le falta a esta acción para poder guardarse? (se recalcula al editar) */
 export function faltantes(a: Accion): string[] {
   const f: string[] = []
-  if (a.tipo === "sin_destino") f.push("Elige a dónde va este monto")
-  if (!(a.monto > 0) && a.tipo !== "crear_categoria") f.push("Escribe el monto")
-  if (!a.nombre.trim() && a.tipo !== "sin_destino") f.push("Escribe un nombre")
-  if (a.tipo === "pago_obligacion" && !a.obligacionId) f.push("Elige qué obligación pagaste")
-  if (a.tipo === "ahorro" && !a.bolsilloId) f.push("Elige el bolsillo")
-  if (a.tipo === "crear_deuda" && !(Number(a.cuota) > 0)) f.push("Escribe la cuota")
-  if (a.tipo === "me_deben" && !a.persona?.trim()) f.push("¿A quién le prestaste?")
-  if (a.tipo === "abono_me_deben" && !a.meDebenId) f.push("Elige quién te pagó")
+  if (a.tipo === "sin_destino") f.push(tr("Elige a dónde va este monto"))
+  if (!(a.monto > 0) && a.tipo !== "crear_categoria") f.push(tr("Escribe el monto"))
+  if (!a.nombre.trim() && a.tipo !== "sin_destino") f.push(tr("Escribe un nombre"))
+  if (a.tipo === "pago_obligacion" && !a.obligacionId) f.push(tr("Elige qué obligación pagaste"))
+  if (a.tipo === "ahorro" && !a.bolsilloId) f.push(tr("Elige el bolsillo"))
+  if (a.tipo === "crear_deuda" && !(Number(a.cuota) > 0)) f.push(tr("Escribe la cuota"))
+  if (a.tipo === "me_deben" && !a.persona?.trim()) f.push(tr("¿A quién le prestaste?"))
+  if (a.tipo === "abono_me_deben" && !a.meDebenId) f.push(tr("Elige quién te pagó"))
   return f
 }
 
@@ -108,7 +111,7 @@ export function useDestinos(activo = true): Destinos {
       setCategorias(c.data?.categories ?? [])
       setBolsillos(b.data?.pockets ?? [])
       setMeDeben((l.data?.loans ?? []).filter(x => x.estado === "activo"))
-      setHogar(h.data?.conectado && h.data.habilitado !== false ? { pareja: h.data.pareja?.nombre.split(" ")[0] ?? "tu pareja", categorias: h.data.categorias ?? [] } : null)
+      setHogar(h.data?.conectado && h.data.habilitado !== false ? { pareja: h.data.pareja?.nombre.split(" ")[0] ?? tr("tu pareja"), categorias: h.data.categorias ?? [] } : null)
       setCargando(false)
     })
     return () => { vivo = false }
@@ -119,12 +122,8 @@ export function useDestinos(activo = true): Destinos {
 
 // ─── Ejecutar (solo tras confirmar) ───────────────────────────────────────────
 
-const hoyMasDia = (dia: number | null | undefined) => {
-  const now = new Date()
-  const d = Math.min(Math.max(dia ?? now.getDate(), 1), 28)
-  const f = new Date(now.getFullYear(), now.getMonth() + (dia && dia < now.getDate() ? 1 : 0), d)
-  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`
-}
+/** Día de pago que dijo el usuario, dentro de 1–31 (sin día: hoy). */
+const diaDelMes = (dia: number | null | undefined) => String(Math.min(Math.max(Math.round(dia ?? new Date().getDate()), 1), 31))
 
 export function useEjecutarAcciones() {
   const { addImpulseExpense, addDebt, addFixedExpense, refetch } = useFinanceData()
@@ -135,8 +134,8 @@ export function useEjecutarAcciones() {
       case "gasto": {
         let categoriaId = a.categoriaId ?? null
         if (!categoriaId && a.categoriaNueva?.trim()) {
-          const { data, error } = await budgetCategoriesApi.create({ nombre: a.categoriaNueva.trim(), tipo: "gasto", icono: "more", montoLimite: 0 })
-          if (error || !data) return `No se pudo crear la categoría ${a.categoriaNueva}`
+          const { data, error } = await budgetCategoriesApi.create({ nombre: a.categoriaNueva.trim().slice(0, 50), tipo: "gasto", icono: "more", montoLimite: 0 })
+          if (error || !data) return tr("No se pudo crear la categoría {0}", [a.categoriaNueva])
           categoriaId = data.category.id
         }
         const r = await addImpulseExpense({
@@ -145,57 +144,61 @@ export function useEjecutarAcciones() {
           budgetCategoryId: categoriaId,
           sharedCategoryId: a.hogarCategoriaId ?? null,
         })
-        return r ? null : `No se pudo registrar el gasto "${nombre}"`
+        return r ? null : tr("No se pudo registrar el gasto \"{0}\"", [nombre])
       }
       case "ingreso": {
         const { error } = await userApi.walletIncome(a.monto, a.tipoIngreso === "salario" ? "salario" : "extra")
-        return error ? `No se pudo registrar el ingreso: ${error}` : null
+        return error ? tr("No se pudo registrar el ingreso: {0}", [error]) : null
       }
       case "pago_obligacion": {
-        if (!a.obligacionId) return "Falta elegir la obligación"
+        if (!a.obligacionId) return tr("Falta elegir la obligación")
+        const cuotaCompleta = !!a.cuotaCompleta
         const { error } = a.obligacionTipo === "fijo"
-          ? await fixedExpensesApi.pay(a.obligacionId, a.monto)
-          : await debtsApi.pay(a.obligacionId, a.monto)
-        return error ? `No se pudo pagar "${nombre}": ${error}` : null
+          ? await fixedExpensesApi.pay(a.obligacionId, a.monto, undefined, cuotaCompleta)
+          : await debtsApi.pay(a.obligacionId, a.monto, undefined, cuotaCompleta ? { cuotaCompleta } : {})
+        return error ? tr("No se pudo pagar \"{0}\": {1}", [nombre, error]) : null
       }
       case "ahorro": {
-        if (!a.bolsilloId) return "Falta elegir el bolsillo"
+        if (!a.bolsilloId) return tr("Falta elegir el bolsillo")
         const { error } = await savingsPocketsApi.deposit(a.bolsilloId, a.monto)
-        return error ? `No se pudo ahorrar: ${error}` : null
+        return error ? tr("No se pudo ahorrar: {0}", [error]) : null
       }
       case "crear_categoria": {
-        const { error } = await budgetCategoriesApi.create({ nombre, tipo: "gasto", icono: a.icono ?? "more", montoLimite: a.monto || 0 })
-        return error ? `No se pudo crear la categoría: ${error}` : null
+        // Las categorías admiten 50 letras; la IA a veces propone nombres más largos
+        const { error } = await budgetCategoriesApi.create({ nombre: nombre.slice(0, 50), tipo: "gasto", icono: a.icono ?? "more", montoLimite: a.monto || 0 })
+        return error ? tr("No se pudo crear la categoría: {0}", [error]) : null
       }
       case "crear_deuda": {
         const saved = await addDebt({
           nombre, montoTotal: a.monto, saldoRestante: a.monto, cuotaPeriodo: Number(a.cuota),
-          diasPago: String(a.diaPago ?? 1), tasaInteres: a.tasaMensual ?? undefined,
+          diasPago: a.diaPago ? diaDelMes(a.diaPago) : "1", tasaInteres: a.tasaMensual ?? undefined,
           tipoDeuda: a.esTarjeta ? "TARJETA_CREDITO" : "PRESTAMO",
           frecuenciaPago: a.frecuencia === "quincenal" ? "quincenal" : "mensual",
           nuevaProximoPeriodo: true,
         })
-        return saved ? null : `No se pudo crear la deuda "${nombre}"`
+        return saved ? null : tr("No se pudo crear la deuda \"{0}\"", [nombre])
       }
       case "crear_gasto_fijo": {
-        const saved = await addFixedExpense({ nombre, monto: a.monto, fechaCorte: hoyMasDia(a.diaPago), frecuencia: a.frecuencia ?? "mensual", nuevaProximoPeriodo: true })
-        return saved ? null : `No se pudo crear el gasto fijo "${nombre}"`
+        // El día tal cual ("30"), como lo guarda el formulario: la fecha que se
+        // mandaba antes topaba el día en 28 (el arriendo del 30 quedaba el 28)
+        const saved = await addFixedExpense({ nombre, monto: a.monto, fechaCorte: diaDelMes(a.diaPago), frecuencia: a.frecuencia ?? "mensual", nuevaProximoPeriodo: true })
+        return saved ? null : tr("No se pudo crear el gasto fijo \"{0}\"", [nombre])
       }
       case "crear_bolsillo": {
         const { error } = await savingsPocketsApi.create({ nombre, meta: a.monto, icono: "piggy-bank", color: "#10B981" })
-        return error ? `No se pudo crear el bolsillo: ${error}` : null
+        return error ? tr("No se pudo crear el bolsillo: {0}", [error]) : null
       }
       case "me_deben": {
         const { error } = await externalLoansApi.create({ persona: a.persona?.trim() || nombre, monto: a.monto, fechaCompromiso: a.fechaCompromiso ?? null, salioDeBilletera: true })
-        return error ? `No se pudo registrar el préstamo: ${error}` : null
+        return error ? tr("No se pudo registrar el préstamo: {0}", [error]) : null
       }
       case "abono_me_deben": {
-        if (!a.meDebenId) return "Falta elegir quién te pagó"
+        if (!a.meDebenId) return tr("Falta elegir quién te pagó")
         const { error } = await externalLoansApi.abono(a.meDebenId, { monto: a.monto, entraABilletera: true })
-        return error ? `No se pudo registrar el abono: ${error}` : null
+        return error ? tr("No se pudo registrar el abono: {0}", [error]) : null
       }
       default:
-        return "Elige a dónde va este monto"
+        return tr("Elige a dónde va este monto")
     }
   }, [addImpulseExpense, addDebt, addFixedExpense])
 
@@ -245,8 +248,8 @@ export const iaApi = {
 /** Nombre legible de la pantalla actual, para que el coach sepa dónde está el usuario. */
 export function pantallaActual(pathname: string): string {
   const mapa: Record<string, string> = {
-    "/jardin": "Árbol Kiri", "/dashboard": "Inicio", "/gestion": "Gestión", "/obligaciones": "Obligaciones",
-    "/balance": "Balance", "/ahorro": "Ahorro", "/social": "Social", "/misiones": "Misiones", "/perfil": "Perfil",
+    "/jardin": tr("Árbol Kiri"), "/dashboard": tr("Inicio"), "/gestion": tr("Gestión"), "/obligaciones": tr("Obligaciones"),
+    "/balance": tr("Balance"), "/ahorro": tr("Ahorro"), "/social": tr("Social"), "/misiones": tr("Misiones"), "/perfil": tr("Perfil"),
   }
   const base = Object.keys(mapa).find(k => pathname.startsWith(k))
   const tab = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null

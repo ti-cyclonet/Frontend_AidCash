@@ -17,6 +17,7 @@ import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { useToast } from "@/hooks/use-toast"
 import { useAppContext } from "@/lib/app-context"
 import type { SharedPocket, Connection } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     const { error } = aprobar ? await sharedPocketsApi.approveDeposit(pocketId, depositId) : await sharedPocketsApi.rejectDeposit(pocketId, depositId)
     setAprobandoId(null)
     if (error) { toast({ title: error, variant: "destructive" }); return }
-    toast({ title: aprobar ? "Retiro aprobado — la plata volvió a su billetera" : "Retiro rechazado" })
+    toast({ title: aprobar ? tr("Retiro aprobado — la plata volvió a su billetera") : tr("Retiro rechazado") })
     load()
   }
 
@@ -90,7 +91,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     setLoading(true)
     const { data, error } = await sharedPocketsApi.list()
     if (error || !data) {
-      toast({ title: "Error al cargar bolsillos", variant: "destructive" })
+      toast({ title: tr("Error al cargar bolsillos"), variant: "destructive" })
     } else {
       setPockets(data.pockets as unknown as SharedPocket[])
     }
@@ -121,7 +122,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: "Ahorro compartido creado ✓" })
+      toast({ title: tr("Ahorro compartido creado ✓") })
       setCreateOpen(false)
       setCreateForm({ partnerId: "", nombre: "", meta: "", yaTienen: false, montoInicial: "" })
       load()
@@ -147,8 +148,8 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     } else {
       const needsApproval = (data as any)?.requiresApproval
       toast({
-        title: esRetiro ? `Retiro de ${formatAmount(Number(depositForm.monto))} solicitado` : `Aporte de ${formatAmount(Number(depositForm.monto))} registrado`,
-        description: needsApproval ? "Esperando aprobación del otro miembro" : depositForm.yaAhorrado ? "Sumado al bolsillo sin tocar tu billetera" : "Aplicado exitosamente",
+        title: esRetiro ? tr("Retiro de {0} solicitado", [formatAmount(Number(depositForm.monto))]) : tr("Aporte de {0} registrado", [formatAmount(Number(depositForm.monto))]),
+        description: needsApproval ? tr("Esperando aprobación del otro miembro") : depositForm.yaAhorrado ? tr("Sumado al bolsillo sin tocar tu billetera") : tr("Aplicado exitosamente"),
       })
       setDepositOpen(false)
       setDepositForm({ pocketId: "", monto: "", nota: "", yaAhorrado: false })
@@ -163,7 +164,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     const { data, error } = await sharedPocketsApi.splitCalculator(calcForm.partnerId, Number(calcForm.gasto))
     setCalculating(false)
     if (error || !data) {
-      toast({ title: error ?? "Error al calcular", variant: "destructive" })
+      toast({ title: error ?? tr("Error al calcular"), variant: "destructive" })
     } else {
       setCalcResult({
         userA: { ...(data.userA as { nombre: string; monto: number; pct: number; id: string }) },
@@ -177,7 +178,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-cyclon-lavender" />
-        <p className="text-sm">Cargando bolsillos...</p>
+        <p className="text-sm">{tr("Cargando bolsillos...")}</p>
       </div>
     )
   }
@@ -193,7 +194,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
           disabled={acceptedConnections.length === 0}
         >
           <Plus className="h-4 w-4" />
-          <span className="text-[10px] font-bold">Crear</span>
+          <span className="text-[10px] font-bold">{tr("Crear")}</span>
         </Button>
         <Button
           onClick={() => setDepositOpen(true)}
@@ -202,7 +203,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
           disabled={pockets.length === 0}
         >
           <ArrowDownToLine className="h-4 w-4" />
-          <span className="text-[10px] font-bold">Depositar</span>
+          <span className="text-[10px] font-bold">{tr("Depositar")}</span>
         </Button>
         <Button
           onClick={() => { setCalcResult(null); setCalcOpen(true) }}
@@ -211,14 +212,12 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
           disabled={acceptedConnections.length === 0}
         >
           <Calculator className="h-4 w-4" />
-          <span className="text-[10px] font-bold">Dividir</span>
+          <span className="text-[10px] font-bold">{tr("Dividir")}</span>
         </Button>
       </div>
 
       {acceptedConnections.length === 0 && (
-        <p className="text-xs text-muted-foreground text-center py-2">
-          Necesitas al menos una conexión activa para crear bolsillos.
-        </p>
+        <p className="text-xs text-muted-foreground text-center py-2">{tr("Necesitas al menos una conexión activa para crear bolsillos.")}</p>
       )}
 
       {/* ── Lista de bolsillos ── */}
@@ -226,8 +225,8 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
         <Card className="border-none bg-muted/30 rounded-3xl">
           <CardContent className="py-10 flex flex-col items-center gap-3 text-muted-foreground">
             <PiggyBank className="h-10 w-10 opacity-30" />
-            <p className="text-sm font-medium">Sin bolsillos compartidos</p>
-            <p className="text-xs opacity-70">Crea uno con un contacto conectado</p>
+            <p className="text-sm font-medium">{tr("Sin bolsillos compartidos")}</p>
+            <p className="text-xs opacity-70">{tr("Crea uno con un contacto conectado")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -250,12 +249,12 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm">{pocket.nombre}</p>
                     {peer && (
-                      <p className="text-xs text-muted-foreground">Con {peer.nombre}</p>
+                      <p className="text-xs text-muted-foreground">{tr("Con {0}", [peer.nombre])}</p>
                     )}
                     <div className="mt-1.5 space-y-1">
                       <div className="flex justify-between text-[10px] font-bold">
                         <span>{formatAmount(pocket.balance)}</span>
-                        {pocket.meta > 0 && <span className="text-muted-foreground">meta: {formatAmount(pocket.meta)}</span>}
+                        {pocket.meta > 0 && <span className="text-muted-foreground">{tr("meta:")}{" "}{formatAmount(pocket.meta)}</span>}
                       </div>
                       {pocket.meta > 0 && (
                         <Progress value={progress} className="h-1.5 bg-muted" indicatorClassName="bg-cyclon-lavender" />
@@ -277,16 +276,14 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                         onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "", yaAhorrado: false }); setDepositOpen(true) }}
                         className="rounded-xl bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none font-bold text-xs h-9 gap-1"
                       >
-                        <ArrowDownToLine className="h-3.5 w-3.5" /> Abonar
-                      </Button>
+                        <ArrowDownToLine className="h-3.5 w-3.5" />{" "}{tr("Abonar")}</Button>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "[RETIRO]", yaAhorrado: false }); setDepositOpen(true) }}
                         className="rounded-xl font-bold text-xs h-9 gap-1 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
                       >
-                        <ChevronUp className="h-3.5 w-3.5" /> Retirar
-                      </Button>
+                        <ChevronUp className="h-3.5 w-3.5" />{" "}{tr("Retirar")}</Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -294,13 +291,12 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                           e.stopPropagation()
                           const { data, error } = await sharedPocketsApi.remove(pocket.id)
                           if (error) toast({ title: error, variant: "destructive" })
-                          else toast({ title: data?.message ?? "Solicitud enviada" })
+                          else toast({ title: data?.message ?? tr("Solicitud enviada") })
                           load()
                         }}
                         className="rounded-xl font-bold text-xs h-9 gap-1 text-destructive hover:bg-destructive/10"
                       >
-                        <Trash2 className="h-3.5 w-3.5" /> Eliminar
-                      </Button>
+                        <Trash2 className="h-3.5 w-3.5" />{" "}{tr("Eliminar")}</Button>
                     </div>
                   </div>
                 )}
@@ -308,9 +304,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                 {/* Depósitos recientes */}
                 {isExpanded && pocket.deposits && pocket.deposits.length > 0 && (
                   <div className="border-t border-border/50 px-4 pb-4">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-3 mb-2">
-                      Últimos movimientos
-                    </p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-3 mb-2">{tr("Últimos movimientos")}</p>
                     <ul className="space-y-2">
                       {pocket.deposits.filter(dep => !dep.nota?.includes("DELETE_REQUEST")).map(dep => {
                         const nota0 = dep.nota ?? ""
@@ -319,20 +313,20 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                         const pendiente = nota0.includes("RETIRO_PENDIENTE")
                         const nota = nota0.replace(/^\[[A-Z_]+\]\s*/, "").trim()
                         const mio = dep.userId === myId
-                        const quien = mio ? "Tú" : (peer?.nombre ?? "Pareja")
-                        const verbo = retiro ? (pendiente ? "pidió retirar" : "retiró") : previo ? "registró" : "depositó"
+                        const quien = mio ? tr("Tú") : (peer?.nombre ?? "Pareja")
+                        const verbo = retiro ? (pendiente ? tr("pidió retirar") : tr("retiró")) : previo ? tr("registró") : tr("depositó")
                         return (
                           <li key={dep.id} className="text-xs space-y-1.5">
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6 shrink-0">
                                 <AvatarFallback className="text-[9px] font-bold bg-muted">
-                                  {mio ? "Yo" : initials(peer?.nombre ?? "?")}
+                                  {mio ? tr("Yo") : initials(peer?.nombre ?? "?")}
                                 </AvatarFallback>
                               </Avatar>
                               <span className="text-muted-foreground flex-1 min-w-0">
                                 {quien} {mio && !retiro && !previo ? "depositaste" : mio && previo ? "registraste" : mio && retiro ? (pendiente ? "pediste retirar" : "retiraste") : verbo}
-                                {previo && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted">ya ahorrado</span>}
-                                {pendiente && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400">por aprobar</span>}
+                                {previo && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted">{tr("ya ahorrado")}</span>}
+                                {pendiente && <span className="ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400">{tr("por aprobar")}</span>}
                                 {nota && ` · "${nota}"`}
                               </span>
                               <span className={cn("font-bold shrink-0", retiro ? "text-cyclon-pink" : "text-kiri-emerald")}>
@@ -344,15 +338,13 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                               <div className="flex gap-2 pl-8">
                                 <Button size="sm" disabled={aprobandoId === dep.id} onClick={() => responderRetiro(pocket.id, dep.id, true)}
                                   className="h-7 px-3 rounded-xl bg-kiri-emerald text-white font-bold text-[10px]">
-                                  {aprobandoId === dep.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Aprobar retiro"}
+                                  {aprobandoId === dep.id ? <Loader2 className="h-3 w-3 animate-spin" /> : tr("Aprobar retiro")}
                                 </Button>
                                 <Button size="sm" variant="ghost" disabled={aprobandoId === dep.id} onClick={() => responderRetiro(pocket.id, dep.id, false)}
-                                  className="h-7 px-3 rounded-xl text-destructive hover:bg-destructive/10 font-bold text-[10px]">
-                                  Rechazar
-                                </Button>
+                                  className="h-7 px-3 rounded-xl text-destructive hover:bg-destructive/10 font-bold text-[10px]">{tr("Rechazar")}</Button>
                               </div>
                             )}
-                            {pendiente && mio && <p className="pl-8 text-[10px] text-muted-foreground">Esperando que {peer?.nombre?.split(" ")[0] ?? "la otra persona"} lo apruebe.</p>}
+                            {pendiente && mio && <p className="pl-8 text-[10px] text-muted-foreground">{tr("Esperando que {0} lo apruebe.", [peer?.nombre?.split(" ")[0] ?? tr("la otra persona")])}</p>}
                           </li>
                         )
                       })}
@@ -370,15 +362,14 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <PiggyBank className="h-5 w-5 text-cyclon-lavender" /> Nuevo bolsillo compartido
-            </DialogTitle>
+              <PiggyBank className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("Nuevo bolsillo compartido")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Pareja / amigo</Label>
+              <Label className="text-xs font-bold">{tr("Pareja / amigo")}</Label>
               <Select value={createForm.partnerId} onValueChange={v => setCreateForm(f => ({ ...f, partnerId: v }))}>
                 <SelectTrigger className="h-11 rounded-2xl">
-                  <SelectValue placeholder="Selecciona un contacto" />
+                  <SelectValue placeholder={tr("Selecciona un contacto")} />
                 </SelectTrigger>
                 <SelectContent>
                   {acceptedConnections.map(conn => {
@@ -393,38 +384,38 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nombre del bolsillo</Label>
+              <Label className="text-xs font-bold">{tr("Nombre del bolsillo")}</Label>
               <Input
-                placeholder="Ej: Viaje a México, Renta, Emergencias..."
+                placeholder={tr("Ej: Viaje a México, Renta, Emergencias...")}
                 value={createForm.nombre}
                 onChange={e => setCreateForm(f => ({ ...f, nombre: e.target.value }))}
                 className="h-11 rounded-2xl"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Meta de ahorro (opcional)</Label>
+              <Label className="text-xs font-bold">{tr("Meta de ahorro (opcional)")}</Label>
               <MoneyInput value={createForm.meta} onChange={v => setCreateForm(f => ({ ...f, meta: v }))} className="h-11 rounded-2xl" placeholder="0" />
             </div>
             {/* Ahorro que ya tenían antes de Kiri */}
             <label className="flex items-start gap-2 text-xs cursor-pointer">
               <input type="checkbox" checked={createForm.yaTienen} onChange={e => setCreateForm(f => ({ ...f, yaTienen: e.target.checked }))} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
-              <span>Ya tenemos algo ahorrado para esto <span className="block text-[10px] text-muted-foreground">Se suma al bolsillo sin descontarlo de tu billetera.</span></span>
+              <span>{tr("Ya tenemos algo ahorrado para esto")}{" "}<span className="block text-[10px] text-muted-foreground">{tr("Se suma al bolsillo sin descontarlo de tu billetera.")}</span></span>
             </label>
             {createForm.yaTienen && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">¿Cuánto tienen ahorrado?</Label>
+                <Label className="text-xs font-bold">{tr("¿Cuánto tienen ahorrado?")}</Label>
                 <MoneyInput value={createForm.montoInicial} onChange={v => setCreateForm(f => ({ ...f, montoInicial: v }))} className="h-11 rounded-2xl font-bold" placeholder="0" />
               </div>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setCreateOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button variant="ghost" onClick={() => setCreateOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
             <Button
               disabled={!createForm.partnerId || !createForm.nombre.trim() || creating}
               onClick={handleCreate}
               className="rounded-xl bg-cyclon-lavender text-white font-bold px-6"
             >
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crear"}
+              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : tr("Crear")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -435,15 +426,15 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowDownToLine className="h-5 w-5 text-kiri-emerald" /> {esRetiro ? "Retirar del bolsillo" : "Depositar en bolsillo"}
+              <ArrowDownToLine className="h-5 w-5 text-kiri-emerald" /> {esRetiro ? tr("Retirar del bolsillo") : tr("Depositar en bolsillo")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Bolsillo</Label>
+              <Label className="text-xs font-bold">{tr("Bolsillo")}</Label>
               <Select value={depositForm.pocketId} onValueChange={v => setDepositForm(f => ({ ...f, pocketId: v }))}>
                 <SelectTrigger className="h-11 rounded-2xl">
-                  <SelectValue placeholder="Selecciona un bolsillo" />
+                  <SelectValue placeholder={tr("Selecciona un bolsillo")} />
                 </SelectTrigger>
                 <SelectContent>
                   {pockets.map(p => (
@@ -455,7 +446,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto</Label>
+              <Label className="text-xs font-bold">{tr("Monto")}</Label>
               <Input
                 type="number"
                 placeholder="0.00"
@@ -465,9 +456,9 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nota (opcional)</Label>
+              <Label className="text-xs font-bold">{tr("Nota (opcional)")}</Label>
               <Input
-                placeholder={esRetiro ? "Ej: Para el pasaje" : "Ej: Quincena de marzo"}
+                placeholder={esRetiro ? tr("Ej: Para el pasaje") : tr("Ej: Quincena de marzo")}
                 value={depositForm.nota.replace(/^\[RETIRO\]\s*/, "")}
                 onChange={e => setDepositForm(f => ({ ...f, nota: (esRetiro ? "[RETIRO] " : "") + e.target.value }))}
                 className="h-11 rounded-2xl"
@@ -476,18 +467,18 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
             {!depositForm.nota.startsWith("[RETIRO]") && (
               <label className="flex items-start gap-2 text-xs cursor-pointer">
                 <input type="checkbox" checked={depositForm.yaAhorrado} onChange={e => setDepositForm(f => ({ ...f, yaAhorrado: e.target.checked }))} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
-                <span>Esta plata ya la tenía ahorrada <span className="block text-[10px] text-muted-foreground">Se suma al bolsillo sin descontarla de tu billetera (ej. lo que ya tenían guardado antes de Kiri).</span></span>
+                <span>{tr("Esta plata ya la tenía ahorrada")}{" "}<span className="block text-[10px] text-muted-foreground">{tr("Se suma al bolsillo sin descontarla de tu billetera (ej. lo que ya tenían guardado antes de Kiri).")}</span></span>
               </label>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setDepositOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button variant="ghost" onClick={() => setDepositOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
             <Button
               disabled={!depositForm.pocketId || !depositForm.monto || Number(depositForm.monto) <= 0 || depositing}
               onClick={handleDeposit}
               className="rounded-xl bg-kiri-emerald text-white font-bold px-6"
             >
-              {depositing ? <Loader2 className="h-4 w-4 animate-spin" /> : esRetiro ? "Pedir retiro" : "Depositar"}
+              {depositing ? <Loader2 className="h-4 w-4 animate-spin" /> : esRetiro ? tr("Pedir retiro") : tr("Depositar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -498,18 +489,15 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5 text-cyclon-sky" /> División proporcional
-            </DialogTitle>
+              <Calculator className="h-5 w-5 text-cyclon-sky" />{" "}{tr("División proporcional")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
-            <p className="text-xs text-muted-foreground">
-              Calcula cuánto debe pagar cada uno según sus ingresos registrados en Kiri.
-            </p>
+            <p className="text-xs text-muted-foreground">{tr("Calcula cuánto debe pagar cada uno según sus ingresos registrados en Kiri.")}</p>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Con quién calcular</Label>
+              <Label className="text-xs font-bold">{tr("Con quién calcular")}</Label>
               <Select value={calcForm.partnerId} onValueChange={v => { setCalcForm(f => ({ ...f, partnerId: v })); setCalcResult(null) }}>
                 <SelectTrigger className="h-11 rounded-2xl">
-                  <SelectValue placeholder="Selecciona un contacto" />
+                  <SelectValue placeholder={tr("Selecciona un contacto")} />
                 </SelectTrigger>
                 <SelectContent>
                   {acceptedConnections.map(conn => {
@@ -524,7 +512,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Gasto total a dividir</Label>
+              <Label className="text-xs font-bold">{tr("Gasto total a dividir")}</Label>
               <Input
                 type="number"
                 placeholder="0.00"
@@ -536,9 +524,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
 
             {calcResult && (
               <div className="bg-muted/50 rounded-2xl p-4 space-y-3">
-                <p className="text-xs font-bold text-center text-muted-foreground">
-                  Gasto total: {formatAmount(calcResult.gasto)}
-                </p>
+                <p className="text-xs font-bold text-center text-muted-foreground">{tr("Gasto total: {0}", [formatAmount(calcResult.gasto)])}</p>
                 {[calcResult.userA, calcResult.userB].map((u, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -547,7 +533,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                           {initials(u.nombre ?? "?")}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm font-semibold">{u.nombre ?? "Tú"}</span>
+                      <span className="text-sm font-semibold">{u.nombre ?? tr("Tú")}</span>
                     </div>
                     <div className="text-right">
                       <p className="font-black text-sm">{formatAmount(u.monto)}</p>
@@ -559,13 +545,13 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setCalcOpen(false)} className="rounded-xl">Cerrar</Button>
+            <Button variant="ghost" onClick={() => setCalcOpen(false)} className="rounded-xl">{tr("Cerrar")}</Button>
             <Button
               disabled={!calcForm.partnerId || !calcForm.gasto || Number(calcForm.gasto) <= 0 || calculating}
               onClick={handleCalc}
               className="rounded-xl bg-cyclon-sky text-white font-bold px-6"
             >
-              {calculating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Calcular"}
+              {calculating ? <Loader2 className="h-4 w-4 animate-spin" /> : tr("Calcular")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -4,6 +4,7 @@ import { CreditCard } from "lucide-react"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
 import { isCreditCard } from "@/lib/debt-utils"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -33,25 +34,22 @@ export function CreditCardSelector({ value, onChange }: Props) {
   return (
     <div className="space-y-1.5">
       <label className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5">
-        <CreditCard className="h-3 w-3" /> ¿Se paga con tarjeta de crédito?
-      </label>
+        <CreditCard className="h-3 w-3" />{" "}{tr("¿Se paga con tarjeta de crédito?")}</label>
       <select
         value={value ?? ""}
         onChange={e => onChange(e.target.value || null)}
         className="w-full h-10 rounded-xl bg-muted/30 border border-border px-3 text-sm font-medium appearance-none cursor-pointer"
       >
-        <option value="">No, pago directo</option>
+        <option value="">{tr("No, pago directo")}</option>
         {tarjetas.map(t => (
           <option key={t.id} value={t.id}>
-            {t.nombre} (Saldo: {formatAmount(t.saldoRestante)})
+            {t.nombre}{" "}{tr("(Saldo:")}{" "}{formatAmount(t.saldoRestante)})
           </option>
         ))}
       </select>
       {value && (
         <p className="text-[8px] text-amber-500 flex items-center gap-1">
-          <CreditCard className="h-3 w-3" />
-          Al pagar, se sumará al saldo de tu tarjeta sin descontar de tu disponible.
-        </p>
+          <CreditCard className="h-3 w-3" />{tr("Al pagar, se sumará al saldo de tu tarjeta sin descontar de tu disponible.")}</p>
       )}
     </div>
   )

@@ -5,15 +5,16 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Landmark, TrendingUp, Plus, BookOpen, PiggyBank, ScanLine, Sprout, Mic } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { tr } from "@/lib/i18n"
 
 const leftItems = [
-  { label: "Gestión",       icon: TrendingUp, href: "/gestion" },
-  { label: "Obligaciones",  icon: Landmark,   href: "/obligaciones" },
+  { label: tr("Gestión"),       icon: TrendingUp, href: "/gestion" },
+  { label: tr("Obligaciones"),  icon: Landmark,   href: "/obligaciones" },
 ]
 
 const rightItems = [
-  { label: "Balance",       icon: BookOpen,   href: "/balance" },
-  { label: "Ahorro",        icon: PiggyBank,  href: "/ahorro" },
+  { label: tr("Balance"),       icon: BookOpen,   href: "/balance" },
+  { label: tr("Ahorro"),        icon: PiggyBank,  href: "/ahorro" },
 ]
 
 export function BottomNav() {
@@ -29,11 +30,11 @@ export function BottomNav() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setActionsOpen(false)} />
           <div className="relative flex items-center gap-5 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
             {/* Dictado (izquierda) */}
-            <ActionButton icon={<Mic className="h-6 w-6" />} label="Dictar" color="bg-kiri-emerald" onClick={() => { setActionsOpen(false); window.dispatchEvent(new CustomEvent('kiri:open-voice')) }} />
+            <ActionButton icon={<Mic className="h-6 w-6" />} label={tr("Dictar")} color="bg-kiri-emerald" onClick={() => { setActionsOpen(false); window.dispatchEvent(new CustomEvent('kiri:open-voice')) }} />
             {/* Árbol de Kiri (centro) */}
-            <ActionButton icon={<Sprout className="h-7 w-7" />} label="Árbol Kiri" color="bg-gradient-to-br from-kiri-emerald to-kiri-forest" large onClick={() => { setActionsOpen(false); router.push('/jardin') }} />
+            <ActionButton icon={<Sprout className="h-7 w-7" />} label={tr("Árbol Kiri")} color="bg-gradient-to-br from-kiri-emerald to-kiri-forest" large onClick={() => { setActionsOpen(false); router.push('/jardin') }} />
             {/* Escáner (derecha) */}
-            <ActionButton icon={<ScanLine className="h-6 w-6" />} label="Escáner" color="bg-cyclon-periwinkle" onClick={() => { setActionsOpen(false); window.dispatchEvent(new CustomEvent('kiri:open-scanner')) }} />
+            <ActionButton icon={<ScanLine className="h-6 w-6" />} label={tr("Escáner")} color="bg-cyclon-periwinkle" onClick={() => { setActionsOpen(false); window.dispatchEvent(new CustomEvent('kiri:open-scanner')) }} />
           </div>
         </div>
       )}

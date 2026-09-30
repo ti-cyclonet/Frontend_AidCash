@@ -7,6 +7,7 @@ import { Users, Droplet, Flame } from "lucide-react"
 import { UserAvatar } from "@/components/social/UserAvatar"
 import { useToast } from "@/hooks/use-toast"
 import type { FriendGardenEntry } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 interface NeighborGardensProps {
   friends: FriendGardenEntry[]
@@ -31,26 +32,24 @@ export function NeighborGardens({ friends, friendsWhoWateredYouToday, onWater }:
     const xpGiven = await onWater(connectionId)
     setWatering(null)
     if (xpGiven != null) {
-      const peer = friends.find(f => f.connectionId === connectionId)?.peer.nombre ?? "su jardín"
-      toast({ title: `💧 Le diste +${xpGiven} XP al árbol de ${peer}` })
+      const peer = friends.find(f => f.connectionId === connectionId)?.peer.nombre ?? tr("su jardín")
+      toast({ title: tr("💧 Le diste +{0} XP al árbol de {1}", [xpGiven, peer]) })
     }
   }
 
   return (
     <>
       {friendsWhoWateredYouToday > 0 && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-4 py-2 text-center text-xs text-emerald-700 dark:text-emerald-300">
-          💧 {friendsWhoWateredYouToday} {friendsWhoWateredYouToday === 1 ? "amigo regó" : "amigos regaron"} tu jardín hoy
-        </div>
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-4 py-2 text-center text-xs text-emerald-700 dark:text-emerald-300">{tr("💧 {0} {1} tu jardín hoy", [friendsWhoWateredYouToday, friendsWhoWateredYouToday === 1 ? tr("amigo regó") : tr("amigos regaron")])}</div>
       )}
 
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-5">
           <div className="flex items-center gap-2 mb-1">
             <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-sm font-bold">Jardines vecinos</span>
+            <span className="text-sm font-bold">{tr("Jardines vecinos")}</span>
           </div>
-          <p className="text-[11px] text-muted-foreground mb-3">Visita y riega el jardín de un amigo — un gesto, no dinero.</p>
+          <p className="text-[11px] text-muted-foreground mb-3">{tr("Visita y riega el jardín de un amigo — un gesto, no dinero.")}</p>
 
           <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
             {friends.map((f) => {
@@ -62,8 +61,7 @@ export function NeighborGardens({ friends, friendsWhoWateredYouToday, onWater }:
                   </div>
                   <p className="text-[11px] font-bold mt-2 truncate">{f.peer.nombre}</p>
                   <p className="text-[9px] text-muted-foreground flex items-center justify-center gap-0.5 mb-2">
-                    <Flame className="h-2.5 w-2.5 text-orange-500" /> {f.streak} días de racha
-                  </p>
+                    <Flame className="h-2.5 w-2.5 text-orange-500" />{" "}{tr("{0} días de racha", [f.streak])}</p>
                   <Button
                     size="sm"
                     variant={f.wateredByMeToday ? "outline" : "default"}
@@ -71,7 +69,7 @@ export function NeighborGardens({ friends, friendsWhoWateredYouToday, onWater }:
                     onClick={() => handleWater(f.connectionId)}
                     className="h-7 w-full gap-1 rounded-lg text-[10px] font-bold px-2 bg-emerald-500 hover:bg-emerald-600 text-white disabled:bg-transparent"
                   >
-                    <Droplet className="h-3 w-3" /> {f.wateredByMeToday ? "Regado" : watering === f.connectionId ? "..." : "Regar"}
+                    <Droplet className="h-3 w-3" /> {f.wateredByMeToday ? tr("Regado") : watering === f.connectionId ? "..." : tr("Regar")}
                   </Button>
                 </div>
               )

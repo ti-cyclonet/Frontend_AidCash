@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button"
 import { PartyPopper, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { tr } from "@/lib/i18n"
 
 export type RecommendationType = "no_obligations" | "extra_income" | null
 
@@ -57,9 +58,7 @@ export function RecommendationModal({ type, open, onClose, formatAmount }: Recom
           "rounded-2xl p-4 text-center space-y-1",
           config.suggestionBg
         )}>
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            💡 Sugerencia Kiri
-          </p>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("💡 Sugerencia Kiri")}</p>
           <p className="text-sm font-medium">
             {config.suggestion}
           </p>
@@ -69,9 +68,7 @@ export function RecommendationModal({ type, open, onClose, formatAmount }: Recom
           <Button
             onClick={onClose}
             className="w-full h-12 rounded-2xl bg-cyclon-lavender hover:bg-cyclon-lavender/90 text-white font-bold text-sm"
-          >
-            Entendido
-          </Button>
+          >{tr("Entendido")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -89,17 +86,17 @@ const RECOMMENDATIONS: Record<NonNullable<RecommendationType>, {
   suggestionBg: string
 }> = {
   no_obligations: {
-    title: "¡Excelente! 🎉",
-    message: "No tienes obligaciones que pagar este periodo. Todo tu presupuesto está libre para avanzar en tus metas.",
-    suggestion: "Puedes ir abonando a tus obligaciones futuras para salir pronto de ellas y liberar capacidad financiera.",
+    title: tr("¡Excelente! 🎉"),
+    message: tr("No tienes obligaciones que pagar este periodo. Todo tu presupuesto está libre para avanzar en tus metas."),
+    suggestion: tr("Puedes ir abonando a tus obligaciones futuras para salir pronto de ellas y liberar capacidad financiera."),
     icon: <PartyPopper className="h-8 w-8 text-emerald-600" />,
     iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
     suggestionBg: "bg-emerald-50 dark:bg-emerald-950/20",
   },
   extra_income: {
-    title: "¡Excelente! 💰",
-    message: "Recibiste más de lo esperado. Tu presupuesto total supera tu ingreso base configurado.",
-    suggestion: "Puedes abonar un poco más en tus deudas para salir pronto de ellas y reducir los intereses acumulados.",
+    title: tr("¡Excelente! 💰"),
+    message: tr("Recibiste más de lo esperado. Tu presupuesto total supera tu ingreso base configurado."),
+    suggestion: tr("Puedes abonar un poco más en tus deudas para salir pronto de ellas y reducir los intereses acumulados."),
     icon: <TrendingUp className="h-8 w-8 text-cyclon-lavender" />,
     iconBg: "bg-cyclon-lavender/10",
     suggestionBg: "bg-cyclon-lavender/5",

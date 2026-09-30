@@ -26,6 +26,7 @@ import { ConfigIngresoDialog } from "./ConfigIngresoDialog"
 import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/ingresos"
 import { Debt, FixedExpense } from "@/lib/types"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
+import { tr } from "@/lib/i18n"
 
 // ─── Animated Amount ──────────────────────────────────────────────────────────
 
@@ -127,19 +128,19 @@ function BalanceAura({ total, formatAmount, children }: {
 // ─── Pocket config ────────────────────────────────────────────────────────────
 
 const POCKETS = [
-  { key: "ahorro" as const, allocKey: "savingsPct" as const, title: "Ahorro", emoji: "💚",
+  { key: "ahorro" as const, allocKey: "savingsPct" as const, title: tr("Ahorro"), emoji: "💚",
     bg: "bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/20",
     ringStroke: "stroke-emerald-400", ringBg: "stroke-emerald-100 dark:stroke-emerald-900/40",
     badgeBg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300", illustration: "🐷" },
-  { key: "obligaciones" as const, allocKey: "obligationsPct" as const, title: "Obligaciones", emoji: "🔒",
+  { key: "obligaciones" as const, allocKey: "obligationsPct" as const, title: tr("Obligaciones"), emoji: "🔒",
     bg: "bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20",
     ringStroke: "stroke-amber-400", ringBg: "stroke-amber-100 dark:stroke-amber-900/40",
     badgeBg: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300", illustration: "📋" },
-  { key: "libre" as const, allocKey: "dailyFreePct" as const, title: "Gasto libre", emoji: "😎",
+  { key: "libre" as const, allocKey: "dailyFreePct" as const, title: tr("Gasto libre"), emoji: "😎",
     bg: "bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/20",
     ringStroke: "stroke-blue-400", ringBg: "stroke-blue-100 dark:stroke-blue-900/40",
     badgeBg: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300", illustration: "🎮" },
-  { key: "endeudamiento" as const, allocKey: "debtCapacityPct" as const, title: "Capacidad de endeudamiento", emoji: "💪",
+  { key: "endeudamiento" as const, allocKey: "debtCapacityPct" as const, title: tr("Capacidad de endeudamiento"), emoji: "💪",
     bg: "bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-violet-950/20",
     ringStroke: "stroke-purple-400", ringBg: "stroke-purple-100 dark:stroke-purple-900/40",
     badgeBg: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300", illustration: "💳" },
@@ -238,10 +239,10 @@ export function BilleteraTab() {
   const periodNum = incomeFrequency === "mensual" ? 1 : getCurrentQuincena(diasCobro)
   const [diaA, diaB] = diasDeQuincenas(diasCobro)
   const descripcionIngreso = variable
-    ? (ingresoEstimado > 0 ? `Estimado al mes${ingresoPromedio > 0 ? ` · promedio real ${formatAmount(ingresoPromedio)}` : ""}` : ingresoPromedio > 0 ? "Tu promedio real al mes" : "Registra lo que te entre y Kiri calcula tu promedio")
+    ? (ingresoEstimado > 0 ? tr("Estimado al mes{0}", [ingresoPromedio > 0 ? tr(" · promedio real {0}", [formatAmount(ingresoPromedio)]) : ""]) : ingresoPromedio > 0 ? tr("Tu promedio real al mes") : tr("Registra lo que te entre y Kiri calcula tu promedio"))
     : distintas
-      ? `Te pagan ${formatAmount(ingresoDeQuincena(perfilIngreso, 1))} el ${diaA} y ${formatAmount(ingresoDeQuincena(perfilIngreso, 2))} el ${diaB}`
-      : incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"
+      ? tr("Te pagan {0} el {1} y {2} el {3}", [formatAmount(ingresoDeQuincena(perfilIngreso, 1)), diaA, formatAmount(ingresoDeQuincena(perfilIngreso, 2)), diaB])
+      : incomeFrequency === "quincenal" ? tr("Quincenal (De {0} al mes)", [formatAmount(income)]) : tr("Mensual")
   const periodRange = getPeriodRangeLabel(incomeFrequency, diasCobro)
   const nextPeriodLabel = getNextPeriodLabel(incomeFrequency, diasCobro)
 
@@ -379,20 +380,18 @@ export function BilleteraTab() {
       {/* ═══ SUELDO REAL (centro, grande) ═══ */}
       <Card className="border-none bg-gradient-to-br from-emerald-600 to-kiri-emerald rounded-2xl overflow-hidden shadow-lg">
         <CardContent className="p-6 text-center space-y-2">
-          <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Sueldo Real (disponible)</p>
+          <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">{tr("Sueldo Real (disponible)")}</p>
           <BalanceAura total={total > 0 ? total : 0} formatAmount={formatAmount}>
             <OdometerAmount value={total > 0 ? total : 0} formatAmount={formatAmount} className="text-4xl font-black text-white" />
           </BalanceAura>
-          <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
+          <p className="text-white/50 text-[9px]">{tr("Se actualiza conforme pagues tus obligaciones")}</p>
           <div className="flex items-center justify-center gap-3 pt-3">
             <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(sugeridoSueldo > 0 ? String(sugeridoSueldo) : ""); setSelectedExtras([]) }} size="sm"
               className="bg-white text-kiri-emerald hover:bg-white/90 font-bold rounded-xl gap-1.5 h-10 px-5 text-sm shadow-lg shadow-black/10">
-              <Plus className="h-4 w-4" /> Registrar Ingreso
-            </Button>
+              <Plus className="h-4 w-4" />{" "}{tr("Registrar Ingreso")}</Button>
             <Button variant="ghost" size="sm" onClick={() => setResetConfirmOpen(true)} disabled={resetting || total === 0}
               className="text-white/40 hover:text-white/70 hover:bg-white/10 rounded-xl h-10 px-3 text-xs gap-1">
-              <RefreshCw className={cn("h-3 w-3", resetting && "animate-spin")} /> Reiniciar
-            </Button>
+              <RefreshCw className={cn("h-3 w-3", resetting && "animate-spin")} />{" "}{tr("Reiniciar")}</Button>
           </div>
         </CardContent>
       </Card>
@@ -401,14 +400,12 @@ export function BilleteraTab() {
       <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>¿Reiniciar tu billetera?</DialogTitle>
-            <DialogDescription>
-              Esto pondrá tu saldo disponible en $0. No se puede deshacer.
-            </DialogDescription>
+            <DialogTitle>{tr("¿Reiniciar tu billetera?")}</DialogTitle>
+            <DialogDescription>{tr("Esto pondrá tu saldo disponible en $0. No se puede deshacer.")}</DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setResetConfirmOpen(false)} className="rounded-xl">Cancelar</Button>
-            <Button variant="destructive" onClick={handleReset} className="rounded-xl">Sí, reiniciar</Button>
+            <Button variant="ghost" onClick={() => setResetConfirmOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
+            <Button variant="destructive" onClick={handleReset} className="rounded-xl">{tr("Sí, reiniciar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -419,9 +416,9 @@ export function BilleteraTab() {
         <Card className="border-none bg-gray-900 dark:bg-gray-800 rounded-2xl">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <p className="text-white/50 text-[9px] font-bold uppercase tracking-wider">{variable ? "Ingreso variable" : "Sueldo Base del periodo"}</p>
+              <p className="text-white/50 text-[9px] font-bold uppercase tracking-wider">{variable ? tr("Ingreso variable") : tr("Sueldo Base del periodo")}</p>
               <div className="flex items-center gap-2">
-                <button onClick={() => setEditIncomeOpen(true)} aria-label="Cómo recibo mi plata"
+                <button onClick={() => setEditIncomeOpen(true)} aria-label={tr("Cómo recibo mi plata")}
                   className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors">
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -441,11 +438,11 @@ export function BilleteraTab() {
           onClick={() => setObligationsExpanded(v => !v)}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <p className="text-amber-400 text-[9px] font-bold uppercase tracking-wider">Balance obligaciones</p>
+              <p className="text-amber-400 text-[9px] font-bold uppercase tracking-wider">{tr("Balance obligaciones")}</p>
               {obligationsExpanded ? <ChevronUp className="h-3.5 w-3.5 text-amber-400/60" /> : <ChevronDown className="h-3.5 w-3.5 text-amber-400/60" />}
             </div>
             <AnimatedAmount value={displayObligationsTotal} formatAmount={formatAmount} className="text-xl font-black text-white block mt-1" />
-            <p className="text-amber-400/60 text-[8px] mt-0.5">Pendientes de pago</p>
+            <p className="text-amber-400/60 text-[8px] mt-0.5">{tr("Pendientes de pago")}</p>
           </CardContent>
         </Card>
       </div>
@@ -461,15 +458,14 @@ export function BilleteraTab() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-sm">💰</span>
-                  <p className="text-xs font-bold">Ingresos extra</p>
+                  <p className="text-xs font-bold">{tr("Ingresos extra")}</p>
                 </div>
                 {!extraIncomeFormOpen && (
                   <button
                     onClick={() => setExtraIncomeFormOpen(true)}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-kiri-emerald/10 text-kiri-emerald text-[10px] font-bold hover:bg-kiri-emerald/20 transition-colors"
                   >
-                    <Plus className="h-3 w-3" /> Agregar
-                  </button>
+                    <Plus className="h-3 w-3" />{" "}{tr("Agregar")}</button>
                 )}
               </div>
 
@@ -477,11 +473,11 @@ export function BilleteraTab() {
                 <Card className="border-2 border-kiri-emerald/30 rounded-xl shadow-sm">
                   <CardContent className="p-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold text-kiri-emerald">Nuevo ingreso extra</p>
-                      <button onClick={() => setExtraIncomeFormOpen(false)} className="text-[9px] text-muted-foreground hover:text-foreground">Cancelar</button>
+                      <p className="text-[10px] font-bold text-kiri-emerald">{tr("Nuevo ingreso extra")}</p>
+                      <button onClick={() => setExtraIncomeFormOpen(false)} className="text-[9px] text-muted-foreground hover:text-foreground">{tr("Cancelar")}</button>
                     </div>
                     <input
-                      placeholder="Nombre (ej: Freelance, Bono)"
+                      placeholder={tr("Nombre (ej: Freelance, Bono)")}
                       value={extraName}
                       onChange={e => setExtraName(e.target.value)}
                       className="w-full h-9 rounded-lg bg-background border border-border px-3 text-sm"
@@ -490,46 +486,36 @@ export function BilleteraTab() {
                       value={extraMonto}
                       onChange={v => setExtraMonto(v)}
                       className="h-9 rounded-lg text-sm"
-                      placeholder="Monto"
+                      placeholder={tr("Monto")}
                     />
                     <div className="space-y-1.5">
-                      <p className="text-[9px] font-bold text-muted-foreground">¿Cada cuánto recibes esto?</p>
+                      <p className="text-[9px] font-bold text-muted-foreground">{tr("¿Cada cuánto recibes esto?")}</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         <button onClick={() => setExtraFreq("mensual")}
                           className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                            extraFreq === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Mensual
-                        </button>
+                            extraFreq === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Mensual")}</button>
                         <button onClick={() => setExtraFreq("quincenal")}
                           className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                            extraFreq === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Quincenal
-                        </button>
+                            extraFreq === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Quincenal")}</button>
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <p className="text-[9px] font-bold text-muted-foreground">¿Por cuánto tiempo recibirás esto?</p>
+                      <p className="text-[9px] font-bold text-muted-foreground">{tr("¿Por cuánto tiempo recibirás esto?")}</p>
                       <div className="grid grid-cols-3 gap-1.5">
                         <button onClick={() => setExtraTemp("una_vez")}
                           className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                            extraTemp === "una_vez" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Una vez
-                        </button>
+                            extraTemp === "una_vez" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Una vez")}</button>
                         <button onClick={() => setExtraTemp("definido")}
                           className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                            extraTemp === "definido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Definido
-                        </button>
+                            extraTemp === "definido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Definido")}</button>
                         <button onClick={() => setExtraTemp("indefinido")}
                           className={cn("h-8 rounded-lg text-[9px] font-bold border transition-colors",
-                            extraTemp === "indefinido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Siempre
-                        </button>
+                            extraTemp === "indefinido" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Siempre")}</button>
                       </div>
                       {extraTemp === "definido" && (
                         <input
                           type="number" min="1" max="60"
-                          placeholder="¿Cuántos periodos?"
+                          placeholder={tr("¿Cuántos periodos?")}
                           value={extraMeses}
                           onChange={e => setExtraMeses(e.target.value)}
                           className="w-full h-8 rounded-lg bg-background border border-border px-3 text-xs"
@@ -539,15 +525,15 @@ export function BilleteraTab() {
                     {/* Día de recepción */}
                     {extraTemp !== "una_vez" && (
                       <div className="space-y-1.5">
-                        <p className="text-[9px] font-bold text-muted-foreground">¿Qué día del mes lo recibes?</p>
+                        <p className="text-[9px] font-bold text-muted-foreground">{tr("¿Qué día del mes lo recibes?")}</p>
                         <input
                           type="number" min="1" max="31"
-                          placeholder="Ej: 5, 15, 28..."
+                          placeholder={tr("Ej: 5, 15, 28...")}
                           value={extraDiaRecepcion}
                           onChange={e => setExtraDiaRecepcion(e.target.value)}
                           className="w-full h-8 rounded-lg bg-background border border-border px-3 text-xs"
                         />
-                        <p className="text-[8px] text-muted-foreground">Te notificaremos cuando se acerque este pago.</p>
+                        <p className="text-[8px] text-muted-foreground">{tr("Te notificaremos cuando se acerque este pago.")}</p>
                       </div>
                     )}
                     <button
@@ -555,7 +541,7 @@ export function BilleteraTab() {
                       disabled={!extraName || !extraMonto || savingExtra}
                       className="w-full h-9 rounded-lg bg-kiri-emerald text-white font-bold text-xs disabled:opacity-50"
                     >
-                      {savingExtra ? "Guardando..." : "Registrar ingreso extra"}
+                      {savingExtra ? "Guardando..." : tr("Registrar ingreso extra")}
                     </button>
                   </CardContent>
                 </Card>
@@ -572,29 +558,29 @@ export function BilleteraTab() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold truncate">{e.nombre}</p>
                         <p className="text-[9px] text-muted-foreground">
-                          {e.temporalidad === "una_vez" ? "⏱ Una vez" : e.temporalidad === "definido" ? `📅 ${e.mesesRestantes} periodos` : "♾️ Recurrente"}
-                          {(e as any).fechaRecepcion && ` · Día ${new Date((e as any).fechaRecepcion).getDate()}`}
+                          {e.temporalidad === "una_vez" ? tr("⏱ Una vez") : e.temporalidad === "definido" ? tr("📅 {0} periodos", [e.mesesRestantes]) : tr("♾️ Recurrente")}
+                          {(e as any).fechaRecepcion && tr(" · Día {0}", [new Date((e as any).fechaRecepcion).getDate()])}
                         </p>
                       </div>
                       <span className="text-sm font-black text-kiri-emerald shrink-0">{formatAmount(e.monto)}</span>
                       <button
                         onClick={() => { setExtraName(e.nombre); setExtraMonto(String(e.monto)); setExtraTemp(e.temporalidad as any); setExtraMeses(e.mesesRestantes ? String(e.mesesRestantes) : ""); removeExtraIncome(e.id); setExtraIncomeFormOpen(true) }}
                         className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-kiri-emerald hover:bg-kiri-emerald/10 transition-colors shrink-0"
-                        title="Editar"
+                        title={tr("Editar")}
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => removeExtraIncome(e.id)}
                         className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
-                        title="Eliminar"
+                        title={tr("Eliminar")}
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   ))}
                   <div className="flex items-center justify-between pt-2 px-1">
-                    <span className="text-[10px] text-muted-foreground font-medium">Total extras activos</span>
+                    <span className="text-[10px] text-muted-foreground font-medium">{tr("Total extras activos")}</span>
                     <span className="text-sm font-black text-kiri-emerald">{formatAmount(extraIncomes.reduce((a, e) => a + e.monto, 0))}</span>
                   </div>
                 </div>
@@ -608,18 +594,13 @@ export function BilleteraTab() {
       {obligationsExpanded && (
         <Card data-panel="obligations" className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 space-y-3">
-            <h3 className="font-bold text-sm">
-              Obligaciones del período actual
-              <span className="text-muted-foreground font-normal text-xs ml-1">({periodRange})</span>
+            <h3 className="font-bold text-sm">{tr("Obligaciones del período actual")}<span className="text-muted-foreground font-normal text-xs ml-1">({periodRange})</span>
             </h3>
             {incomeFrequency === "quincenal" && (
-              <p className="text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">
-                💡 Las obligaciones con frecuencia <span className="font-bold">quincenal</span> se dividen entre las 2 quincenas.
-                Solo se muestra la mitad correspondiente a este periodo.
-              </p>
+              <p className="text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{tr("💡 Las obligaciones con frecuencia")}{" "}<span className="font-bold">{tr("quincenal")}</span>{" "}{tr("se dividen entre las 2 quincenas. Solo se muestra la mitad correspondiente a este periodo.")}</p>
             )}
             {periodDebts.length === 0 && periodFixed.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">🎉 No tienes obligaciones pendientes</p>
+              <p className="text-xs text-muted-foreground py-4 text-center">{tr("🎉 No tienes obligaciones pendientes")}</p>
             ) : (
               <div className="divide-y divide-border/50">
                 {periodDebts.map(d => (
@@ -638,9 +619,7 @@ export function BilleteraTab() {
                 ))}
               </div>
             )}
-            <Link href="/obligaciones" className="block text-center text-kiri-emerald font-bold text-xs hover:underline">
-              Ver todas las obligaciones
-            </Link>
+            <Link href="/obligaciones" className="block text-center text-kiri-emerald font-bold text-xs hover:underline">{tr("Ver todas las obligaciones")}</Link>
           </CardContent>
         </Card>
       )}
@@ -650,8 +629,8 @@ export function BilleteraTab() {
         <Card className="border-none bg-muted/30 rounded-2xl opacity-80">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-sm text-muted-foreground">Próximo período ({nextPeriodLabel})</h3>
-              <p className="text-[10px] text-muted-foreground">Congeladas hasta el inicio del periodo</p>
+              <h3 className="font-bold text-sm text-muted-foreground">{tr("Próximo período ({0})", [nextPeriodLabel])}</h3>
+              <p className="text-[10px] text-muted-foreground">{tr("Congeladas hasta el inicio del periodo")}</p>
               {nextPeriodObligations.total > 0 && <p className="text-xs font-bold text-muted-foreground mt-1">{formatAmount(nextPeriodObligations.total)}</p>}
             </div>
             <Lock className="h-6 w-6 text-muted-foreground/50" />
@@ -661,7 +640,7 @@ export function BilleteraTab() {
 
       {/* ═══ BOLSILLOS PRESUPUESTO ═══ */}
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold flex items-center gap-2">Gestión inteligente 💰</h2>
+        <h2 className="text-base font-bold flex items-center gap-2">{tr("Gestión inteligente 💰")}</h2>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {POCKETS.map(pocket => <PocketCard key={pocket.key} pocket={pocket} amount={pocketValues[pocket.key]} pct={pocketPcts[pocket.key]} formatAmount={formatAmount} />)}
@@ -686,26 +665,26 @@ export function BilleteraTab() {
                   : "text-emerald-700 dark:text-emerald-300"
               )}>
                 {realAllocation.isOverloaded
-                  ? "Tus obligaciones superan tu saldo disponible"
+                  ? tr("Tus obligaciones superan tu saldo disponible")
                   : realAllocation.isTight
-                    ? "Tu presupuesto está ajustado"
+                    ? tr("Tu presupuesto está ajustado")
                     : total <= 0 && displayObligationsTotal > 0
-                      ? "Registra tu ingreso para distribuir tu presupuesto"
+                      ? tr("Registra tu ingreso para distribuir tu presupuesto")
                       : total > 0 && displayObligationsTotal === 0
-                        ? "¡Todas tus obligaciones están al día! 🎉"
-                        : "¡Tu presupuesto está equilibrado!"
+                        ? tr("¡Todas tus obligaciones están al día! 🎉")
+                        : tr("¡Tu presupuesto está equilibrado!")
                 }
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {realAllocation.isOverloaded
-                  ? `Tienes ${formatAmount(displayObligationsTotal)} en obligaciones pero solo ${formatAmount(total)} disponibles. Considera usar la estrategia Bola de Nieve o renegociar tus deudas.`
+                  ? tr("Tienes {0} en obligaciones pero solo {1} disponibles. Considera usar la estrategia Bola de Nieve o renegociar tus deudas.", [formatAmount(displayObligationsTotal), formatAmount(total)])
                   : realAllocation.isTight
-                    ? `El ${Math.round(realAllocation.obligationsPct)}% de tu saldo va a obligaciones. Intenta reducir gastos fijos o generar un ingreso extra para tener más margen.`
+                    ? tr("El {0}% de tu saldo va a obligaciones. Intenta reducir gastos fijos o generar un ingreso extra para tener más margen.", [Math.round(realAllocation.obligationsPct)])
                     : total <= 0 && displayObligationsTotal > 0
-                      ? `Tienes ${formatAmount(displayObligationsTotal)} en obligaciones pendientes. Registra tu ingreso para ver cómo se distribuye tu dinero.`
+                      ? tr("Tienes {0} en obligaciones pendientes. Registra tu ingreso para ver cómo se distribuye tu dinero.", [formatAmount(displayObligationsTotal)])
                       : total > 0 && realAllocation.savingsAmount > 0
-                        ? `Puedes destinar ${formatAmount(Math.round(realAllocation.savingsAmount))} al ahorro (${Math.round(realAllocation.savingsPct)}%) y ${formatAmount(Math.round(realAllocation.freeAmount))} a gastos libres este periodo.`
-                        : "Estás distribuyendo tu dinero de forma inteligente."
+                        ? tr("Puedes destinar {0} al ahorro ({1}%) y {2} a gastos libres este periodo.", [formatAmount(Math.round(realAllocation.savingsAmount)), Math.round(realAllocation.savingsPct), formatAmount(pocketValues.libre)]) /* el mismo "Gasto libre" de la tarjeta de arriba (antes solo la parte libre: $251.985 vs $945.020 en la misma pantalla) */
+                        : tr("Estás distribuyendo tu dinero de forma inteligente.")
                 }
               </p>
             </div>
@@ -717,22 +696,21 @@ export function BilleteraTab() {
       <Dialog open={incomeOpen} onOpenChange={setIncomeOpen}>
         <DialogContent className="sm:max-w-lg lg:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-kiri-emerald" /> Registrar Ingreso</DialogTitle>
-            <DialogDescription>Se distribuirá en tus 4 bolsillos según tu distribución inteligente.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-kiri-emerald" />{" "}{tr("Registrar Ingreso")}</DialogTitle>
+            <DialogDescription>{tr("Se distribuirá en tus 4 bolsillos según tu distribución inteligente.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Tipo */}
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo</Label>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Tipo")}</Label>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => { setTipo("salario"); setMonto(sugeridoSueldo > 0 ? String(sugeridoSueldo) : ""); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
                   tipo === "salario" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
-                  <Wallet className="h-4 w-4" /> {variable ? "De mi trabajo" : "Sueldo"}
+                  <Wallet className="h-4 w-4" /> {variable ? tr("De mi trabajo") : tr("Sueldo")}
                 </button>
                 <button onClick={() => { setTipo("extra"); setMonto(""); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
                   tipo === "extra" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
-                  <Zap className="h-4 w-4" /> Extra
-                </button>
+                  <Zap className="h-4 w-4" />{" "}{tr("Extra")}</button>
               </div>
             </div>
 
@@ -740,19 +718,18 @@ export function BilleteraTab() {
             {tipo === "salario" && (
               <>
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Monto recibido")}</Label>
                   <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
                   <p className="text-[10px] text-muted-foreground">
                     {variable
-                      ? "Escribe lo que te entró (una venta, un trabajo, tus comisiones). Kiri aprende tu promedio con cada registro."
-                      : <>Sugerido: {formatAmount(sugeridoSueldo)} ({distintas ? `lo que te pagan en esta quincena; la otra es de ${formatAmount(ingresoDeQuincena(perfilIngreso, periodNum === 1 ? 2 : 1))}` : "sueldo base del periodo"})</>}
+                      ? tr("Escribe lo que te entró (una venta, un trabajo, tus comisiones). Kiri aprende tu promedio con cada registro.")
+                      : <>{tr("Sugerido: {0} ({1})", [formatAmount(sugeridoSueldo), distintas ? tr("lo que te pagan en esta quincena; la otra es de {0}", [formatAmount(ingresoDeQuincena(perfilIngreso, periodNum === 1 ? 2 : 1))]) : tr("sueldo base del periodo")])}</>}
                   </p>
                 </div>
                 {incomeFrequency === "quincenal" && !variable && (
                   <div className="flex items-center gap-2 bg-kiri-mint/30 rounded-xl px-3 py-2">
                     <CheckCircle2 className="h-4 w-4 text-kiri-emerald shrink-0" />
-                    <p className="text-xs text-kiri-forest font-medium">
-                      Ingreso asignado a <span className="font-bold">Quincena {periodNum}</span> ({periodRange})
+                    <p className="text-xs text-kiri-forest font-medium">{tr("Ingreso asignado a")}{" "}<span className="font-bold">{tr("Quincena {0}", [periodNum])}</span> ({periodRange})
                     </p>
                   </div>
                 )}
@@ -764,33 +741,29 @@ export function BilleteraTab() {
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => setExtraSubMode("variado")} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
-                    extraSubMode === "variado" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>
-                    Ingreso variado
-                  </button>
+                    extraSubMode === "variado" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>{tr("Ingreso variado")}</button>
                   <button onClick={() => setExtraSubMode("sueldo_extra")} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
-                    extraSubMode === "sueldo_extra" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>
-                    Sueldo extra
-                  </button>
+                    extraSubMode === "sueldo_extra" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>{tr("Sueldo extra")}</button>
                 </div>
 
                 {extraSubMode === "variado" && (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Monto recibido")}</Label>
                       <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">¿Qué es?</Label>
-                      <Input value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder="Ej: Freelance, venta, regalo..." className="rounded-xl" />
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿Qué es?")}</Label>
+                      <Input value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder={tr("Ej: Freelance, venta, regalo...")} className="rounded-xl" />
                     </div>
                   </div>
                 )}
 
                 {extraSubMode === "sueldo_extra" && (
                   <div className="space-y-3">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selecciona tus ingresos extra</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Selecciona tus ingresos extra")}</Label>
                     {extraIncomes.length === 0 ? (
-                      <p className="text-xs text-muted-foreground text-center py-3">No tienes ingresos extra registrados. Agrégalos desde la sección de frecuencia.</p>
+                      <p className="text-xs text-muted-foreground text-center py-3">{tr("No tienes ingresos extra registrados. Agrégalos desde la sección de frecuencia.")}</p>
                     ) : (
                       <div className="space-y-2">
                         {extraIncomes.map(e => {
@@ -812,7 +785,7 @@ export function BilleteraTab() {
                               <div>
                                 <p className="text-sm font-bold">{e.nombre}</p>
                                 <p className="text-[9px] text-muted-foreground">
-                                  {e.temporalidad === "una_vez" ? "Una vez" : e.temporalidad === "definido" ? `${e.mesesRestantes} periodos` : "Siempre"}
+                                  {e.temporalidad === "una_vez" ? tr("Una vez") : e.temporalidad === "definido" ? `${e.mesesRestantes} periodos` : tr("Siempre")}
                                 </p>
                               </div>
                               <span className={cn("text-sm font-bold", isSelected ? "text-kiri-emerald" : "text-muted-foreground")}>
@@ -824,7 +797,7 @@ export function BilleteraTab() {
                       </div>
                     )}
                     <div className="space-y-2 pt-2 border-t border-border/50">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto total a registrar</Label>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Monto total a registrar")}</Label>
                       <MoneyInput value={monto} onChange={setMonto} className="h-12 text-xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
                     </div>
                   </div>
@@ -833,10 +806,10 @@ export function BilleteraTab() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc(""); setSelectedExtras([]) }}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc(""); setSelectedExtras([]) }}>{tr("Cancelar")}</Button>
             <Button onClick={handleRegisterIncome} disabled={saving || !monto || Number(monto) <= 0}
               className={cn("font-bold rounded-xl px-6", tipo === "salario" ? "bg-kiri-emerald text-white" : "bg-cyclon-lavender text-white")}>
-              {saving ? "Distribuyendo..." : tipo === "salario" ? (variable ? "Registrar ingreso" : "Sí, registrar mi Sueldo Base") : "Registrar"}
+              {saving ? "Distribuyendo..." : tipo === "salario" ? (variable ? tr("Registrar ingreso") : tr("Sí, registrar mi Sueldo Base")) : tr("Registrar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -862,20 +835,20 @@ function ObligationRow({ name, day, amount, fullAmount, isQuincenal, isOverdue, 
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium truncate block">{name}</span>
         {isQuincenal && (
-          <span className="text-[9px] text-muted-foreground">Quincenal · Total: {formatAmount(fullAmount)}</span>
+          <span className="text-[9px] text-muted-foreground">{tr("Quincenal · Total: {0}", [formatAmount(fullAmount)])}</span>
         )}
         {isOverdue && (
-          <span className="text-[9px] text-red-500 font-medium">Venció el día {dayLabel} de este mes</span>
+          <span className="text-[9px] text-red-500 font-medium">{tr("Venció el día {0} de este mes", [dayLabel])}</span>
         )}
       </div>
       <div className="flex items-center gap-2.5 shrink-0">
-        <span className="text-[10px] text-muted-foreground">Día {dayLabel}</span>
+        <span className="text-[10px] text-muted-foreground">{tr("Día {0}", [dayLabel])}</span>
         <span className="text-sm font-bold">{formatAmount(amount)}</span>
         <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full",
           paid ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
             : isOverdue ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
             : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-        )}>{paid ? "Pagado" : isOverdue ? "Vencido" : "Pendiente"}</span>
+        )}>{paid ? tr("Pagado") : isOverdue ? tr("Vencido") : tr("Pendiente")}</span>
       </div>
     </div>
   )

@@ -1,3 +1,5 @@
+
+import { tr, localeFecha } from "@/lib/i18n"
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
  * Proyecciones Financieras — Kiri Finance
@@ -167,7 +169,7 @@ function pagarMes(deudas: EstadoDeuda[], mes: number, extra: number, orden: Esta
 
 function etiquetaMes(now: Date, m: number, larga = false): string {
   const f = new Date(now.getFullYear(), now.getMonth() + m, 1)
-  return f.toLocaleDateString("es-CO", larga ? { month: "long", year: "numeric" } : { month: "short", year: "2-digit" })
+  return f.toLocaleDateString(localeFecha(), larga ? { month: "long", year: "numeric" } : { month: "short", year: "2-digit" })
 }
 
 export function calculateProjections(input: ProjectionInput): ProjectionResult {
@@ -222,12 +224,12 @@ export function calculateProjections(input: ProjectionInput): ProjectionResult {
       ahorroK += input.ahorroMensualActual + sobrante
       for (const d of kiri) {
         if (d.pagadaEn === m && m <= meses) {
-          hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: `Terminas de pagar ${d.nombre}`, descripcion: `Su cuota de ${fmt(d.cuota)} pasa a la siguiente deuda.`, tipo: "deuda" })
+          hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: tr("Terminas de pagar {0}", [d.nombre]), descripcion: tr("Su cuota de {0} pasa a la siguiente deuda.", [fmt(d.cuota)]), tipo: "deuda" })
         }
       }
       if (libreK === null && !kiri.some(d => d.saldo > 0)) {
         libreK = m
-        if (m <= meses) hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: "¡Libre de deudas! 🎉", descripcion: "Desde aquí todo lo que pagabas en cuotas va a tu ahorro.", tipo: "meta" })
+        if (m <= meses) hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: tr("¡Libre de deudas! 🎉"), descripcion: tr("Desde aquí todo lo que pagabas en cuotas va a tu ahorro."), tipo: "meta" })
       }
     } else {
       ahorroK += input.ahorroMensualActual + extraKiri + cuotasMes
@@ -247,15 +249,15 @@ export function calculateProjections(input: ProjectionInput): ProjectionResult {
     // Hitos de ahorro (ruta Kiri), solo si pasan de verdad en este mes
     if (obligacionesMensual > 0 && !hitoFondo.uno && ahorroK >= obligacionesMensual) {
       hitoFondo.uno = true
-      hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: "Colchón de 1 mes", descripcion: `Tus ahorros ya cubren un mes de obligaciones (${fmt(obligacionesMensual)}).`, tipo: "emergencia" })
+      hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: tr("Colchón de 1 mes"), descripcion: tr("Tus ahorros ya cubren un mes de obligaciones ({0}).", [fmt(obligacionesMensual)]), tipo: "emergencia" })
     }
     if (obligacionesMensual > 0 && !hitoFondo.tres && ahorroK >= obligacionesMensual * 3) {
       hitoFondo.tres = true
-      hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: "Fondo de emergencia completo 🛡️", descripcion: `3 meses de obligaciones cubiertos (${fmt(obligacionesMensual * 3)}).`, tipo: "emergencia" })
+      hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: tr("Fondo de emergencia completo 🛡️"), descripcion: tr("3 meses de obligaciones cubiertos ({0}).", [fmt(obligacionesMensual * 3)]), tipo: "emergencia" })
     }
     if (!patrimonioPositivo && ahorroK - deudaK >= 0) {
       patrimonioPositivo = true
-      hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: "Patrimonio en positivo", descripcion: "Lo que tienes ahorrado ya supera lo que debes.", tipo: "ahorro" })
+      hitos.push({ mes: m, mesLabel: etiquetaMes(now, m, true), titulo: tr("Patrimonio en positivo"), descripcion: tr("Lo que tienes ahorrado ya supera lo que debes."), tipo: "ahorro" })
     }
   }
   hitos.sort((a, b) => a.mes - b.mes)

@@ -8,6 +8,7 @@ import { BilleteraTab } from "@/components/gestion/BilleteraTab"
 import { PresupuestoTab } from "@/components/gestion/PresupuestoTab"
 import { ProyeccionesTab } from "@/components/gestion/ProyeccionesTab"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
+import { tr } from "@/lib/i18n"
 
 type GestionTab = "billetera" | "presupuesto" | "proyecciones"
 
@@ -38,8 +39,7 @@ export default function GestionPage() {
               : "border-muted text-muted-foreground hover:border-cyclon-lavender/40"
           )}
         >
-          <Wallet className="h-4 w-4" /> Billetera
-        </button>
+          <Wallet className="h-4 w-4" />{" "}{tr("Billetera")}</button>
         <button
           onClick={() => setActiveTab("presupuesto")}
           className={cn(
@@ -49,8 +49,7 @@ export default function GestionPage() {
               : "border-muted text-muted-foreground hover:border-cyclon-lavender/40"
           )}
         >
-          <PieChart className="h-4 w-4" /> Presupuesto
-        </button>
+          <PieChart className="h-4 w-4" />{" "}{tr("Presupuesto")}</button>
         <button
           onClick={() => setActiveTab("proyecciones")}
           className={cn(
@@ -60,8 +59,7 @@ export default function GestionPage() {
               : "border-muted text-muted-foreground hover:border-cyclon-lavender/40"
           )}
         >
-          <TrendingUp className="h-4 w-4" /> Proyecciones
-        </button>
+          <TrendingUp className="h-4 w-4" />{" "}{tr("Proyecciones")}</button>
       </div>
 
       {activeTab === "billetera" && <BilleteraTab />}

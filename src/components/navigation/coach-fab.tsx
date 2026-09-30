@@ -23,6 +23,8 @@ import {
   type Accion, type RespuestaRecibo, type UsoIA, type UsoIAMes,
 } from "@/lib/kiri-acciones"
 import { usePlan } from "@/lib/plan-context"
+import { tr } from "@/lib/i18n"
+import { unirFrases, esIOS, esAndroid } from "@/lib/dictado-voz"
 
 /** "Te quedan 7 mensajes este mes" (nada si es ilimitado o aún no se sabe). */
 function CuotaIA({ uso, que }: { uso?: UsoIA | null; que: string }) {
@@ -30,7 +32,7 @@ function CuotaIA({ uso, que }: { uso?: UsoIA | null; que: string }) {
   const poco = uso.restantes <= Math.max(1, Math.round(uso.limite * 0.2))
   return (
     <span className={cn("text-[10px] font-bold tabular-nums", uso.restantes === 0 ? "text-destructive" : poco ? "text-amber-600" : "text-muted-foreground")}>
-      {uso.restantes === 0 ? `Sin ${que} este mes` : `Te quedan ${uso.restantes} ${que} este mes`}
+      {uso.restantes === 0 ? tr("Sin {0} este mes", [tr(que)]) : tr("Te quedan {0} {1} este mes", [uso.restantes, tr(que)])}
     </span>
   )
 }
@@ -220,7 +222,7 @@ export function CoachFab() {
     if (!t || loading) return
     const historial = messages.filter(m => !m.error).slice(-10).map(m => ({
       rol: (m.role === "assistant" ? "coach" : "usuario") as "coach" | "usuario",
-      texto: m.texto + (m.acciones?.length ? `\n[Propuse ${m.acciones.length} registro(s); el usuario ${m.estado === "guardado" ? "los guardó" : m.estado === "descartado" ? "los descartó" : "aún no confirma"}]` : ""),
+      texto: m.texto + (m.acciones?.length ? tr("\n[Propuse {0} registro(s); el usuario {1}]", [m.acciones.length, m.estado === "guardado" ? tr("los guardó") : m.estado === "descartado" ? tr("los descartó") : tr("aún no confirma")]) : ""),
     }))
     setMessages(p => [...p, { id: nuevoId(), role: "user", texto: t }])
     setInput("")
@@ -228,7 +230,7 @@ export function CoachFab() {
     const { data, error } = await iaApi.coach(t, historial, pantallaActual(pathname))
     setLoading(false)
     if (!data) {
-      setMessages(p => [...p, { id: nuevoId(), role: "assistant", texto: error ?? "No pude responder ahora. Intenta de nuevo.", error: true }])
+      setMessages(p => [...p, { id: nuevoId(), role: "assistant", texto: error ?? tr("No pude responder ahora. Intenta de nuevo."), error: true }])
       return
     }
     actualizarUso("coach", data.uso)
@@ -266,8 +268,8 @@ export function CoachFab() {
     setMessages(p => p.map(m => m.id === msg.id ? { ...m, estado: "guardando" } : m))
     const { ok, errores } = await ejecutar(acciones)
     setMessages(p => p.map(m => m.id !== msg.id ? m : errores.length
-      ? { ...m, estado: "pendiente", acciones: acciones.filter(a => errores.some(e => e.id === a.id)), errores: Object.fromEntries(errores.map(e => [e.id, e.mensaje])), resultado: ok ? `✅ ${ok} guardado${ok === 1 ? "" : "s"}. Revisa lo que falló:` : undefined }
-      : { ...m, estado: "guardado", resultado: `✅ Listo: ${ok} movimiento${ok === 1 ? "" : "s"} guardado${ok === 1 ? "" : "s"}.` }))
+      ? { ...m, estado: "pendiente", acciones: acciones.filter(a => errores.some(e => e.id === a.id)), errores: Object.fromEntries(errores.map(e => [e.id, e.mensaje])), resultado: ok ? tr("✅ {0} guardado{1}. Revisa lo que falló:", [ok, ok === 1 ? "" : "s"]) : undefined }
+      : { ...m, estado: "guardado", resultado: tr("✅ Listo: {0} movimiento{1} guardado{2}.", [ok, ok === 1 ? "" : "s", ok === 1 ? "" : "s"]) }))
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -275,81 +277,123 @@ export function CoachFab() {
   // ══════════════════════════════════════════════════════════════════════════
   // Terminar la escucha actual (el usuario tocó el micrófono otra vez)
   const detenerRef = useRef<(() => void) | null>(null)
+  const anularRef = useRef<(() => void) | null>(null)
   const detenerVoz = () => { detenerRef.current?.() }
   /** Corta la escucha sin entregar el texto (al cerrar el dictado o empezar otra). */
   const cancelarVoz = () => {
     const r = recRef.current
+    anularRef.current?.()
     recRef.current = null
     detenerRef.current = null
+    anularRef.current = null
     try { r?.abort() } catch { /* ya terminó */ }
   }
 
   /**
    * Escucha hasta que el usuario toque el micrófono otra vez o deje de hablar.
-   * Antes el `onend` de una escucha anterior (abortada al tocar de nuevo)
-   * llegaba tarde y apagaba la nueva: al segundo toque paraba sola. Ahora cada
-   * escucha solo responde a su propio reconocedor, y si el navegador corta
-   * solo (Chrome en el celular corta tras cada frase) se reanuda hasta que haya
-   * silencio de verdad.
+   * Se llama DENTRO del toque del usuario: Safari en iPhone no enciende el
+   * micrófono si `start()` llega después (antes iba en un setTimeout y en
+   * iPhone "escuchaba" sin oír nada).
+   *
+   * - Cada escucha solo responde a su propio reconocedor (el `onend` tardío de
+   *   una anterior no apaga la nueva).
+   * - Parar SIEMPRE funciona: si el navegador no confirma el fin en 1,5 s, se
+   *   aborta y se entrega lo que se alcanzó a oír (en iPhone el `onend` a veces
+   *   no llega y quedaba "Escuchando…" sin forma de salir).
+   * - Si en 6 s no llegó audio ni texto, el micrófono no arrancó: se avisa.
+   * - Android: una frase por sesión y se reanuda sola hasta que haya silencio;
+   *   en modo continuo Chrome repetía lo dicho. iPhone no se reanuda (fuera del
+   *   toque no puede) y termina al primer corte.
    */
-  const escuchar = (onFin: (texto: string) => void, onParcial: (texto: string) => void) => {
+  const escuchar = (onFin: (texto: string, sinAudio?: boolean) => void, onParcial: (texto: string) => void) => {
     cancelarVoz()
     const r = crearReconocimiento()
     if (!r) { onFin(""); return false }
+    const ios = esIOS()
     r.lang = "es-CO"
-    r.continuous = true
+    r.continuous = !esAndroid()
     r.interimResults = true
-    let final = ""
+    r.maxAlternatives = 1
+    let previas: string[] = []   // frases de sesiones anteriores (Android se reanuda)
+    let sesion: string[] = []    // finales de la sesión actual
     let parcial = ""
+    let hubo = false             // llegó audio o texto: el micrófono sí arrancó
     let terminado = false
+    let entregado = false
     let silencio: ReturnType<typeof setTimeout> | null = null
+    let respaldo: ReturnType<typeof setTimeout> | null = null
+    const texto = () => unirFrases([...previas, ...sesion, parcial])
+    /** Apaga todo lo de esta escucha; true si todavía no se había entregado. */
+    const apagar = () => {
+      if (entregado) return false
+      entregado = true
+      terminado = true
+      clearTimeout(maximo)
+      clearTimeout(arranque)
+      if (silencio) clearTimeout(silencio)
+      if (respaldo) clearTimeout(respaldo)
+      if (recRef.current === r) { recRef.current = null; detenerRef.current = null; anularRef.current = null }
+      r.onresult = r.onerror = r.onend = r.onstart = r.onaudiostart = null
+      return true
+    }
+    const entregar = () => { if (apagar()) onFin(texto(), !hubo) }
     const terminar = () => {
       if (terminado) return
       terminado = true
-      clearTimeout(maximo)
       if (silencio) clearTimeout(silencio)
       try { r.stop() } catch { /* ya terminó */ }
+      respaldo = setTimeout(() => { try { r.abort() } catch { /* ya terminó */ } entregar() }, 1500)
     }
     const maximo = setTimeout(terminar, 90000)
+    const arranque = setTimeout(() => { if (!hubo) terminar() }, 6000)
     // Al empezar hay más tiempo para arrancar a hablar; después de hablar, 3 s de silencio terminan
     const esperarSilencio = (ms: number) => {
       if (silencio) clearTimeout(silencio)
       silencio = setTimeout(terminar, ms)
     }
+    r.onaudiostart = () => { hubo = true }
     r.onresult = (e: SpeechRecognitionEvent) => {
       if (recRef.current !== r) return
+      hubo = true
+      // Se reconstruye con la lista completa de la sesión (no se va sumando):
+      // así una frase que el navegador corrige no queda dos veces
+      sesion = []
       parcial = ""
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript
-        if (e.results[i].isFinal) final += (final ? " " : "") + t.trim()
+      for (let i = 0; i < e.results.length; i++) {
+        const t = e.results[i][0]?.transcript ?? ""
+        if (e.results[i].isFinal) sesion.push(t)
         else parcial += t
       }
-      onParcial(`${final} ${parcial}`.trim())
+      onParcial(texto())
       esperarSilencio(3000)
     }
     r.onerror = (e: SpeechRecognitionErrorEvent) => {
       if (recRef.current !== r) return
       if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
-        terminado = true
-        setVoiceError("Kiri no tiene permiso para usar el micrófono. Actívalo en tu navegador, o escríbelo aquí abajo.")
+        hubo = true // no es "sin audio": es falta de permiso, con su propio mensaje
+        setVoiceError(tr("Kiri no tiene permiso para usar el micrófono. Actívalo en tu navegador, o escríbelo aquí abajo."))
         setEscribiendo(true)
+        terminado = true
+        try { r.abort() } catch { /* ya terminó */ }
+        entregar()
       }
     }
     r.onend = () => {
       if (recRef.current !== r) return // escucha vieja (cancelada): no toca la nueva
-      if (!terminado) {
+      // Lo de esta sesión pasa a las anteriores (un parcial sin final también cuenta)
+      previas = [...previas, ...(sesion.length ? sesion : parcial ? [parcial] : [])]
+      sesion = []
+      parcial = ""
+      if (!terminado && !ios) {
         // El navegador cortó solo: se sigue escuchando hasta que haya silencio
         try { r.start(); return } catch { /* no se pudo reanudar: termina */ }
       }
-      clearTimeout(maximo)
-      if (silencio) clearTimeout(silencio)
-      recRef.current = null
-      detenerRef.current = null
-      onFin(`${final} ${final ? "" : parcial}`.trim())
+      entregar()
     }
     recRef.current = r
     detenerRef.current = terminar
-    try { r.start() } catch { recRef.current = null; detenerRef.current = null; onFin(""); return false }
+    anularRef.current = apagar
+    try { r.start() } catch { apagar(); onFin(""); return false }
     esperarSilencio(8000)
     return true
   }
@@ -360,7 +404,7 @@ export function CoachFab() {
     setVoicePhase("processing")
     setVoiceError(null)
     const { data, error } = await iaApi.dictado(texto)
-    if (!data) { setVoiceError(error ?? "No pude interpretar lo que dijiste."); setVoicePhase("idle"); setEscribiendo(true); return }
+    if (!data) { setVoiceError(error ?? tr("No pude interpretar lo que dijiste.")); setVoicePhase("idle"); setEscribiendo(true); return }
     actualizarUso("dictado", data.uso)
     setVoiceResumen(data.resumen)
     setVoiceConfianza(data.confianza)
@@ -381,10 +425,16 @@ export function CoachFab() {
     setEscribiendo(!puede)
     if (!puede) { setVoicePhase("idle"); return }
     setVoicePhase("listening")
-    setTimeout(() => {
-      const ok = escuchar(t => { if (t) interpretar(t); else setVoicePhase(p => p === "listening" ? "idle" : p) }, setTranscript)
-      if (!ok) { setVoicePhase("idle"); setEscribiendo(true) }
-    }, 250)
+    // Sin setTimeout: el micrófono tiene que encenderse en el mismo toque (iPhone)
+    const ok = escuchar((t, sinAudio) => {
+      if (t) { interpretar(t); return }
+      setVoicePhase(p => p === "listening" ? "idle" : p)
+      if (sinAudio) {
+        setVoiceError(e => e ?? tr("No te pude escuchar en este dispositivo. Escríbelo aquí abajo y Kiri lo ubica igual."))
+        setEscribiendo(true)
+      }
+    }, setTranscript)
+    if (!ok) { setVoicePhase("idle"); setEscribiendo(true) }
   }
 
   const cerrarVoz = () => {
@@ -402,7 +452,7 @@ export function CoachFab() {
     if (errores.length) {
       setVoiceAcciones(prev => prev.filter(a => errores.some(e => e.id === a.id)))
       setVoiceErrores(Object.fromEntries(errores.map(e => [e.id, e.mensaje])))
-      setVoiceError(ok ? `Se guardaron ${ok}; revisa lo que falló.` : null)
+      setVoiceError(ok ? tr("Se guardaron {0}; revisa lo que falló.", [ok]) : null)
       return
     }
     setSavedCount(ok)
@@ -412,9 +462,13 @@ export function CoachFab() {
   // Micrófono dentro del chat: dicta la pregunta
   const vozEnChat = () => {
     if (chatEscuchando) { detenerVoz(); return }
-    const ok = escuchar(t => { setChatEscuchando(false); if (t) setInput(t) }, t => setInput(t))
+    const ok = escuchar((t, sinAudio) => {
+      setChatEscuchando(false)
+      if (t) setInput(t)
+      else if (sinAudio) setMessages(p => [...p, { id: nuevoId(), role: "assistant", texto: tr("No te pude escuchar en este dispositivo. Escríbeme tu pregunta."), error: true }])
+    }, t => setInput(t))
     setChatEscuchando(ok)
-    if (!ok) setMessages(p => [...p, { id: nuevoId(), role: "assistant", texto: "Tu navegador no permite dictar por voz. Escríbeme tu pregunta.", error: true }])
+    if (!ok) setMessages(p => [...p, { id: nuevoId(), role: "assistant", texto: tr("Tu navegador no permite dictar por voz. Escríbeme tu pregunta."), error: true }])
   }
 
   // Botones del "+" de la barra inferior (celular)
@@ -453,15 +507,15 @@ export function CoachFab() {
       const dataUrl = await resizeImageToDataUrl(file, 1600, 0.85)
       setScanPreview(dataUrl)
       const { data, error } = await iaApi.recibo(dataUrl.split(",")[1], "image/jpeg")
-      if (!data) { setScanError(error ?? "No se pudo leer el recibo."); setScanState("error"); return }
+      if (!data) { setScanError(error ?? tr("No se pudo leer el recibo.")); setScanState("error"); return }
       actualizarUso("escaneo", data.uso)
-      if (!data.esRecibo) { setScanError("Esa foto no parece un recibo o factura. Intenta con otra más cerca y con buena luz."); setScanState("error"); return }
+      if (!data.esRecibo) { setScanError(tr("Esa foto no parece un recibo o factura. Intenta con otra más cerca y con buena luz.")); setScanState("error"); return }
       setScanResult(data)
       setScanAcciones(data.acciones)
       setScanErrores({})
       setScanState("result")
     } catch (e) {
-      setScanError(e instanceof Error ? e.message : "No se pudo leer la imagen.")
+      setScanError(e instanceof Error ? e.message : tr("No se pudo leer la imagen."))
       setScanState("error")
     }
   }
@@ -478,7 +532,7 @@ export function CoachFab() {
     // Separar el recibo en un gasto por producto es de KIRI PRO
     if (v && !hasFeature("receiptItems")) {
       window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
-        codigo: "FUNCION", mensaje: "Separar un recibo en un gasto por cada producto es parte de KIRI PRO.", mejora: { plan: "KIRI PRO" },
+        codigo: "FUNCION", mensaje: tr("Separar un recibo en un gasto por cada producto es parte de KIRI PRO."), mejora: { plan: tr("KIRI PRO") },
       } }))
       return
     }
@@ -520,7 +574,7 @@ export function CoachFab() {
   const avisoIA = iaActiva === false && (
     <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
-      <span>La IA de Kiri todavía no está activada. Mientras tanto puedes registrar todo desde los formularios de la app.</span>
+      <span>{tr("La IA de Kiri todavía no está activada. Mientras tanto puedes registrar todo desde los formularios de la app.")}</span>
     </div>
   )
 
@@ -535,9 +589,9 @@ export function CoachFab() {
           <div className={cn("flex-col items-center gap-3 transition-all duration-300 ease-out hidden lg:flex",
             showSatellites ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none")}>
             {[
-              { onClick: abrirScanner, icon: <ScanLine className="h-5 w-5" />, label: "Escanear recibo", color: "bg-cyclon-periwinkle shadow-cyclon-periwinkle/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.1s_both]" },
-              { onClick: () => { setShowSatellites(false); setSimOpen(true) }, icon: <Calculator className="h-5 w-5" />, label: "Simulador", color: "bg-cyclon-lavender shadow-cyclon-lavender/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.05s_both]" },
-              { onClick: abrirVoz, icon: <Mic className="h-5 w-5" />, label: "Dictar datos", color: "bg-kiri-emerald shadow-kiri-emerald/30", anim: "animate-[satellite-enter_0.3s_ease-out_0s_both]" },
+              { onClick: abrirScanner, icon: <ScanLine className="h-5 w-5" />, label: tr("Escanear recibo"), color: "bg-cyclon-periwinkle shadow-cyclon-periwinkle/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.1s_both]" },
+              { onClick: () => { setShowSatellites(false); setSimOpen(true) }, icon: <Calculator className="h-5 w-5" />, label: tr("Simulador"), color: "bg-cyclon-lavender shadow-cyclon-lavender/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.05s_both]" },
+              { onClick: abrirVoz, icon: <Mic className="h-5 w-5" />, label: tr("Dictar datos"), color: "bg-kiri-emerald shadow-kiri-emerald/30", anim: "animate-[satellite-enter_0.3s_ease-out_0s_both]" },
             ].map(s => (
               <div key={s.label} className="relative group/sat">
                 <button onClick={s.onClick} aria-label={s.label}
@@ -555,7 +609,7 @@ export function CoachFab() {
             <button onClick={() => setIsOpen(true)} onTouchEnd={(e) => { e.preventDefault(); setIsOpen(true) }}
               className={cn("relative h-11 w-11 lg:h-16 lg:w-16 rounded-full bg-kiri-emerald shadow-lg shadow-kiri-emerald/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95",
                 showSatellites && "scale-95 shadow-xl")}
-              aria-label="Abrir Kiri Coach">
+              aria-label={tr("Abrir Kiri Coach")}>
               <KiriLogo className="h-7 w-7 lg:h-10 lg:w-10" />
             </button>
             <div className="absolute inset-0 rounded-full bg-kiri-emerald/40 animate-ping pointer-events-none" />
@@ -571,25 +625,25 @@ export function CoachFab() {
           {voicePhase === "done" ? (
             <div className="py-4 text-center">
               <div className="h-16 w-16 rounded-full bg-kiri-emerald/15 flex items-center justify-center mx-auto"><CheckCircle2 className="h-8 w-8 text-kiri-emerald" /></div>
-              <p className="text-base font-bold mt-4">¡Listo! 🌿</p>
-              <p className="text-sm text-muted-foreground mt-1">Guardamos {savedCount} movimiento{savedCount !== 1 ? "s" : ""} en tu app.</p>
+              <p className="text-base font-bold mt-4">{tr("¡Listo! 🌿")}</p>
+              <p className="text-sm text-muted-foreground mt-1">{tr("Guardamos {0} movimiento{1} en tu app.", [savedCount, savedCount !== 1 ? "s" : ""])}</p>
               <div className="flex gap-2 mt-5">
-                <Button variant="outline" size="sm" onClick={abrirVoz} className="flex-1 rounded-xl h-9 text-xs font-bold gap-1.5"><Mic className="h-3.5 w-3.5" /> Dictar otro</Button>
-                <Button size="sm" onClick={cerrarVoz} className="flex-1 rounded-xl h-9 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs">Listo</Button>
+                <Button variant="outline" size="sm" onClick={abrirVoz} className="flex-1 rounded-xl h-9 text-xs font-bold gap-1.5"><Mic className="h-3.5 w-3.5" />{" "}{tr("Dictar otro")}</Button>
+                <Button size="sm" onClick={cerrarVoz} className="flex-1 rounded-xl h-9 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs">{tr("Listo")}</Button>
               </div>
             </div>
           ) : voicePhase === "review" ? (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-kiri-emerald" /> Kiri entendió esto</DialogTitle>
-                <DialogDescription>Revisa, ajusta lo que haga falta y confirma. Nada se guarda sin tu confirmación.</DialogDescription>
+                <DialogTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-kiri-emerald" />{" "}{tr("Kiri entendió esto")}</DialogTitle>
+                <DialogDescription>{tr("Revisa, ajusta lo que haga falta y confirma. Nada se guarda sin tu confirmación.")}</DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="bg-kiri-mint/10 rounded-2xl p-3 space-y-1.5">
                   <p className="text-[11px] italic text-muted-foreground">&ldquo;{transcript}&rdquo;</p>
                   {voiceResumen && <p className="text-xs text-foreground/85 leading-relaxed">{voiceResumen}</p>}
                   {voiceConfianza && voiceConfianza !== "alta" && (
-                    <span className="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400">Confianza {voiceConfianza}: revisa bien</span>
+                    <span className="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400">{tr("Confianza {0}: revisa bien", [voiceConfianza])}</span>
                   )}
                 </div>
                 <AccionesReview acciones={voiceAcciones} destinos={destinos} errores={voiceErrores}
@@ -599,13 +653,12 @@ export function CoachFab() {
               </div>
               <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
                 <Button variant="outline" size="sm" onClick={() => { setEscribiendo(true); setVoicePhase("idle") }} disabled={guardando} className="w-full rounded-xl h-9 text-xs font-bold gap-1.5 border-dashed">
-                  <RotateCcw className="h-3.5 w-3.5" /> Corregir lo que dije
-                </Button>
+                  <RotateCcw className="h-3.5 w-3.5" />{" "}{tr("Corregir lo que dije")}</Button>
                 <div className="flex gap-2 w-full">
-                  <Button variant="ghost" size="sm" onClick={cerrarVoz} disabled={guardando} className="flex-1 rounded-xl h-10 text-xs font-bold">Cancelar</Button>
+                  <Button variant="ghost" size="sm" onClick={cerrarVoz} disabled={guardando} className="flex-1 rounded-xl h-10 text-xs font-bold">{tr("Cancelar")}</Button>
                   <Button size="sm" onClick={confirmarVoz} disabled={guardando || voiceAcciones.length === 0} className="flex-1 rounded-xl h-10 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs gap-1.5">
                     {guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                    {guardando ? "Guardando..." : `Confirmar (${voiceAcciones.length})`}
+                    {guardando ? "Guardando..." : tr("Confirmar ({0})", [voiceAcciones.length])}
                   </Button>
                 </div>
               </DialogFooter>
@@ -613,8 +666,8 @@ export function CoachFab() {
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2"><Mic className="h-4 w-4 text-kiri-emerald" /> Dictado inteligente</DialogTitle>
-                <DialogDescription>Cuéntale a Kiri qué hiciste con tu plata: gastos, ingresos, pagos, ahorros o préstamos. Él lo ubica en su lugar.</DialogDescription>
+                <DialogTitle className="flex items-center gap-2"><Mic className="h-4 w-4 text-kiri-emerald" />{" "}{tr("Dictado inteligente")}</DialogTitle>
+                <DialogDescription>{tr("Cuéntale a Kiri qué hiciste con tu plata: gastos, ingresos, pagos, ahorros o préstamos. Él lo ubica en su lugar.")}</DialogDescription>
                 <CuotaIA uso={usoIA?.dictado} que="dictados" />
               </DialogHeader>
               <div className="py-2 space-y-4">
@@ -623,19 +676,23 @@ export function CoachFab() {
                   <div className="flex flex-col items-center gap-3">
                     <div className="relative">
                       <span className="absolute inset-0 rounded-full bg-kiri-emerald/25 animate-ping" />
-                      <button onClick={detenerVoz} className="relative h-16 w-16 rounded-full bg-kiri-emerald flex items-center justify-center" aria-label="Terminar">
+                      <button onClick={detenerVoz} className="relative h-16 w-16 rounded-full bg-kiri-emerald flex items-center justify-center" aria-label={tr("Terminar")}>
                         <Mic className="h-7 w-7 text-white" />
                       </button>
                     </div>
                     <VoiceWaveform />
-                    <p className="text-sm font-bold text-kiri-emerald">Escuchando…</p>
-                    <p className="text-xs text-muted-foreground min-h-[1.5rem] px-2 text-center">{transcript || "Ej: \"gasté 18 mil en almuerzo y pagué el arriendo\". Toca el micrófono al terminar."}</p>
+                    <p className="text-sm font-bold text-kiri-emerald">{tr("Escuchando…")}</p>
+                    <p className="text-xs text-muted-foreground min-h-[1.5rem] px-2 text-center">{transcript || tr("Ej: \"gasté 18 mil en almuerzo y pagué el arriendo\". Toca el micrófono al terminar.")}</p>
+                    <div className="flex items-center gap-4">
+                      <button onClick={detenerVoz} className="text-xs font-bold text-kiri-emerald">{tr("Terminar")}</button>
+                      <button onClick={() => { cancelarVoz(); setVoicePhase("idle"); setEscribiendo(true) }} className="text-xs text-muted-foreground font-bold flex items-center gap-1 hover:text-foreground"><Keyboard className="h-3.5 w-3.5" />{" "}{tr("Prefiero escribir")}</button>
+                    </div>
                   </div>
                 )}
                 {voicePhase === "processing" && (
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="h-10 w-10 text-kiri-emerald animate-spin" />
-                    <p className="text-sm font-bold">Ubicando cada movimiento…</p>
+                    <p className="text-sm font-bold">{tr("Ubicando cada movimiento…")}</p>
                     <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 px-4 py-3">
                       <p className="text-xs text-foreground/80 italic leading-relaxed relative z-10">&ldquo;{transcript}&rdquo;</p>
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-kiri-emerald/20 to-transparent bg-[length:200%_100%] animate-[kiriShimmer_1.4s_ease-in-out_infinite]" />
@@ -648,12 +705,11 @@ export function CoachFab() {
                     {escribiendo ? (
                       <>
                         <Textarea value={transcript} onChange={e => setTranscript(e.target.value)} rows={3} autoFocus
-                          placeholder='Ej: "Me pagaron la quincena, gasté 25 mil en mercado y le presté 50 mil a Juan"' className="text-sm rounded-xl" />
+                          placeholder={tr("Ej: \"Me pagaron la quincena, gasté 25 mil en mercado y le presté 50 mil a Juan\"")} className="text-sm rounded-xl" />
                         <Button onClick={() => interpretar(transcript)} disabled={!transcript.trim()} className="w-full rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold gap-1.5">
-                          <Sparkles className="h-4 w-4" /> Interpretar
-                        </Button>
+                          <Sparkles className="h-4 w-4" />{" "}{tr("Interpretar")}</Button>
                         {soportaVoz() && (
-                          <button onClick={abrirVoz} className="w-full text-xs text-kiri-emerald font-bold flex items-center justify-center gap-1"><Mic className="h-3.5 w-3.5" /> Mejor hablar</button>
+                          <button onClick={abrirVoz} className="w-full text-xs text-kiri-emerald font-bold flex items-center justify-center gap-1"><Mic className="h-3.5 w-3.5" />{" "}{tr("Mejor hablar")}</button>
                         )}
                       </>
                     ) : (
@@ -661,8 +717,8 @@ export function CoachFab() {
                         <button onClick={abrirVoz} className="h-20 w-20 rounded-full bg-kiri-emerald/10 border-2 border-kiri-emerald/30 flex items-center justify-center hover:bg-kiri-emerald/20">
                           <Mic className="h-9 w-9 text-kiri-emerald" />
                         </button>
-                        <p className="text-sm text-muted-foreground">Toca para hablar</p>
-                        <button onClick={() => setEscribiendo(true)} className="text-xs text-muted-foreground font-bold flex items-center gap-1 hover:text-foreground"><Keyboard className="h-3.5 w-3.5" /> Prefiero escribir</button>
+                        <p className="text-sm text-muted-foreground">{tr("Toca para hablar")}</p>
+                        <button onClick={() => setEscribiendo(true)} className="text-xs text-muted-foreground font-bold flex items-center gap-1 hover:text-foreground"><Keyboard className="h-3.5 w-3.5" />{" "}{tr("Prefiero escribir")}</button>
                       </div>
                     )}
                   </div>
@@ -677,8 +733,8 @@ export function CoachFab() {
       <Dialog open={scanOpen} onOpenChange={v => { if (!v) { setScanOpen(false); resetScan() } }}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto [&>*]:min-w-0">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5 text-cyclon-periwinkle" /> Escanear recibo</DialogTitle>
-            <DialogDescription>Toma o sube la foto de un recibo o factura. Kiri lee el total, el comercio y los productos.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><ScanLine className="h-5 w-5 text-cyclon-periwinkle" />{" "}{tr("Escanear recibo")}</DialogTitle>
+            <DialogDescription>{tr("Toma o sube la foto de un recibo o factura. Kiri lee el total, el comercio y los productos.")}</DialogDescription>
             <CuotaIA uso={usoIA?.escaneo} que="escaneos" />
           </DialogHeader>
           <div className="space-y-3">
@@ -687,13 +743,13 @@ export function CoachFab() {
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-dashed border-cyclon-periwinkle/30 hover:border-cyclon-periwinkle/60 hover:bg-cyclon-periwinkle/5">
-                    <Camera className="h-7 w-7 text-cyclon-periwinkle" /><span className="text-xs font-bold text-cyclon-periwinkle">Tomar foto</span>
+                    <Camera className="h-7 w-7 text-cyclon-periwinkle" /><span className="text-xs font-bold text-cyclon-periwinkle">{tr("Tomar foto")}</span>
                   </button>
                   <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-dashed border-muted hover:border-muted-foreground/30">
-                    <Upload className="h-7 w-7 text-muted-foreground" /><span className="text-xs font-bold text-muted-foreground">Subir imagen</span>
+                    <Upload className="h-7 w-7 text-muted-foreground" /><span className="text-xs font-bold text-muted-foreground">{tr("Subir imagen")}</span>
                   </button>
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center">Consejo: recibo completo, plano y con buena luz.</p>
+                <p className="text-[10px] text-muted-foreground text-center">{tr("Consejo: recibo completo, plano y con buena luz.")}</p>
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onArchivo} />
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onArchivo} />
               </>
@@ -702,24 +758,24 @@ export function CoachFab() {
               <div className="flex flex-col items-center gap-4 py-4">
                 {scanPreview && <img src={scanPreview} alt="" className="w-full max-h-40 object-cover rounded-2xl opacity-50" />}
                 <Loader2 className="h-10 w-10 text-cyclon-periwinkle animate-spin" />
-                <p className="text-sm font-bold">Leyendo el recibo…</p>
+                <p className="text-sm font-bold">{tr("Leyendo el recibo…")}</p>
               </div>
             )}
             {scanState === "error" && (
               <div className="flex flex-col items-center gap-3 py-4">
                 <AlertTriangle className="h-10 w-10 text-destructive" />
                 <p className="text-sm font-bold text-destructive text-center">{scanError}</p>
-                <Button size="sm" variant="outline" onClick={resetScan} className="rounded-xl">Intentar con otra foto</Button>
+                <Button size="sm" variant="outline" onClick={resetScan} className="rounded-xl">{tr("Intentar con otra foto")}</Button>
               </div>
             )}
             {scanState === "done" && (
               <div className="py-4 text-center">
                 <div className="h-16 w-16 rounded-full bg-kiri-emerald/15 flex items-center justify-center mx-auto"><CheckCircle2 className="h-8 w-8 text-kiri-emerald" /></div>
-                <p className="text-base font-bold mt-4">¡Recibo registrado! 🧾</p>
-                <p className="text-sm text-muted-foreground mt-1">{savedCount} movimiento{savedCount !== 1 ? "s" : ""} guardado{savedCount !== 1 ? "s" : ""}.</p>
+                <p className="text-base font-bold mt-4">{tr("¡Recibo registrado! 🧾")}</p>
+                <p className="text-sm text-muted-foreground mt-1">{savedCount}{" "}{tr("movimiento")}{savedCount !== 1 ? "s" : ""}{" "}{tr("guardado")}{savedCount !== 1 ? "s" : ""}.</p>
                 <div className="flex gap-2 mt-5">
-                  <Button variant="outline" size="sm" onClick={resetScan} className="flex-1 rounded-xl h-9 text-xs font-bold">Escanear otro</Button>
-                  <Button size="sm" onClick={() => { setScanOpen(false); resetScan() }} className="flex-1 rounded-xl h-9 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs">Listo</Button>
+                  <Button variant="outline" size="sm" onClick={resetScan} className="flex-1 rounded-xl h-9 text-xs font-bold">{tr("Escanear otro")}</Button>
+                  <Button size="sm" onClick={() => { setScanOpen(false); resetScan() }} className="flex-1 rounded-xl h-9 bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-xs">{tr("Listo")}</Button>
                 </div>
               </div>
             )}
@@ -728,36 +784,36 @@ export function CoachFab() {
                 <div className="flex gap-3 rounded-2xl bg-muted/30 p-3">
                   {scanPreview && <img src={scanPreview} alt="" className="h-16 w-16 rounded-xl object-cover shrink-0" />}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold truncate">{scanResult.establecimiento || "Comercio no legible"}</p>
-                    <p className="text-[11px] text-muted-foreground">{scanResult.fecha ?? "Sin fecha"} · {scanResult.items.length} producto{scanResult.items.length !== 1 ? "s" : ""}</p>
+                    <p className="text-sm font-bold truncate">{scanResult.establecimiento || tr("Comercio no legible")}</p>
+                    <p className="text-[11px] text-muted-foreground">{scanResult.fecha ?? tr("Sin fecha")} · {scanResult.items.length}{" "}{tr("producto")}{scanResult.items.length !== 1 ? "s" : ""}</p>
                     <p className="text-lg font-black text-cyclon-periwinkle">{formatAmount(scanResult.total)}</p>
                   </div>
                   <span className={cn("self-start text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
                     scanResult.confianza === "alta" ? "bg-kiri-emerald/15 text-kiri-emerald" : scanResult.confianza === "media" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400" : "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400")}>
-                    {scanResult.confianza === "alta" ? "Se lee bien" : scanResult.confianza === "media" ? "Revisa" : "Borroso"}
+                    {scanResult.confianza === "alta" ? tr("Se lee bien") : scanResult.confianza === "media" ? tr("Revisa") : tr("Borroso")}
                   </span>
                 </div>
                 {scanResult.items.length > 1 && (
                   <div className="flex bg-muted/40 rounded-xl p-1 text-[11px] font-bold">
-                    <button onClick={() => cambiarModoItems(false)} className={cn("flex-1 py-1.5 rounded-lg", !porItems ? "bg-background shadow-sm" : "text-muted-foreground")}>Todo en uno</button>
-                    <button onClick={() => cambiarModoItems(true)} className={cn("flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1", porItems ? "bg-background shadow-sm" : "text-muted-foreground")}>{hasFeature("receiptItems") ? <ListChecks className="h-3.5 w-3.5" /> : <Lock className="h-3 w-3" />} Separar por productos{!hasFeature("receiptItems") && <span className="text-[9px] font-black text-amber-600 ml-0.5">PRO</span>}</button>
+                    <button onClick={() => cambiarModoItems(false)} className={cn("flex-1 py-1.5 rounded-lg", !porItems ? "bg-background shadow-sm" : "text-muted-foreground")}>{tr("Todo en uno")}</button>
+                    <button onClick={() => cambiarModoItems(true)} className={cn("flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1", porItems ? "bg-background shadow-sm" : "text-muted-foreground")}>{hasFeature("receiptItems") ? <ListChecks className="h-3.5 w-3.5" /> : <Lock className="h-3 w-3" />}{" "}{tr("Separar por productos")}{!hasFeature("receiptItems") && <span className="text-[9px] font-black text-amber-600 ml-0.5">{tr("PRO")}</span>}</button>
                   </div>
                 )}
                 <AccionesReview acciones={scanAcciones} destinos={destinos} errores={scanErrores} compacto={porItems}
                   onChange={(id, patch) => { setScanAcciones(p => p.map(a => a.id === id ? { ...a, ...patch } : a)); setScanErrores(e => ({ ...e, [id]: "" })) }}
                   onRemove={id => setScanAcciones(p => p.filter(a => a.id !== id))} />
                 {porItems && scanAcciones.length > 0 && (
-                  <p className="text-[10px] text-muted-foreground text-right">Suma: {formatAmount(scanAcciones.reduce((s, a) => s + a.monto, 0))} de {formatAmount(scanResult.total)}</p>
+                  <p className="text-[10px] text-muted-foreground text-right">{tr("Suma:")}{" "}{formatAmount(scanAcciones.reduce((s, a) => s + a.monto, 0))}{" "}{tr("de")}{" "}{formatAmount(scanResult.total)}</p>
                 )}
               </>
             )}
           </div>
           {scanState === "result" && (
             <DialogFooter className="gap-2 pt-3 border-t border-border">
-              <Button variant="ghost" onClick={resetScan} disabled={guardando}>Otra foto</Button>
+              <Button variant="ghost" onClick={resetScan} disabled={guardando}>{tr("Otra foto")}</Button>
               <Button onClick={confirmarScan} disabled={guardando || scanAcciones.length === 0} className="bg-cyclon-periwinkle hover:bg-cyclon-periwinkle/90 text-white font-bold rounded-xl px-6 gap-2">
                 {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                {guardando ? "Guardando..." : `Confirmar (${scanAcciones.length})`}
+                {guardando ? "Guardando..." : tr("Confirmar ({0})", [scanAcciones.length])}
               </Button>
             </DialogFooter>
           )}
@@ -769,12 +825,12 @@ export function CoachFab() {
         <div className="fixed z-[60] bg-card border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden inset-x-0 top-0 bottom-0 sm:inset-auto sm:bottom-4 sm:right-4 sm:top-4 sm:w-[400px] sm:rounded-2xl lg:bottom-8 lg:right-8 lg:top-auto lg:w-[420px] lg:h-[640px] lg:rounded-2xl">
           <div className="flex items-center gap-3 px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:pt-3 border-b border-border bg-kiri-emerald/5">
             <div className="h-10 w-10 bg-kiri-emerald rounded-xl flex items-center justify-center shrink-0"><KiriLogo className="h-6 w-6" ojos="#fff" /></div>
-            <div className="flex-1 min-w-0"><p className="text-sm font-bold">Kiri Coach</p>{usoIA?.coach && !usoIA.coach.ilimitado && usoIA.coach.restantes != null
+            <div className="flex-1 min-w-0"><p className="text-sm font-bold">{tr("Kiri Coach")}</p>{usoIA?.coach && !usoIA.coach.ilimitado && usoIA.coach.restantes != null
               ? <p className="truncate leading-tight"><CuotaIA uso={usoIA.coach} que="mensajes" /></p>
-              : <p className="text-[10px] text-muted-foreground truncate">Tu experto en Kiri Finance y en tu plata</p>}</div>
-            <button onClick={abrirVoz} title="Dictar movimientos" className="h-8 w-8 rounded-lg bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 flex items-center justify-center"><Mic className="h-4 w-4" /></button>
-            <button onClick={() => { setIsOpen(false); abrirScanner() }} title="Escanear recibo" className="h-8 w-8 rounded-lg bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 flex items-center justify-center"><ScanLine className="h-4 w-4" /></button>
-            <button onClick={() => setIsOpen(false)} className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted" aria-label="Cerrar"><X className="h-4 w-4" /></button>
+              : <p className="text-[10px] text-muted-foreground truncate">{tr("Tu experto en Kiri Finance y en tu plata")}</p>}</div>
+            <button onClick={abrirVoz} title={tr("Dictar movimientos")} className="h-8 w-8 rounded-lg bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 flex items-center justify-center"><Mic className="h-4 w-4" /></button>
+            <button onClick={() => { setIsOpen(false); abrirScanner() }} title={tr("Escanear recibo")} className="h-8 w-8 rounded-lg bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 flex items-center justify-center"><ScanLine className="h-4 w-4" /></button>
+            <button onClick={() => setIsOpen(false)} className="h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={tr("Cerrar")}><X className="h-4 w-4" /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -782,14 +838,14 @@ export function CoachFab() {
               <div className="flex flex-col items-center justify-center min-h-full gap-4 text-center px-4">
                 <div className="h-20 w-20 bg-kiri-mint/30 rounded-full flex items-center justify-center"><KiriLogo className="h-12 w-12" /></div>
                 <div>
-                  <p className="font-bold">¡Hola{user.nombre ? `, ${user.nombre.split(" ")[0]}` : ""}! Soy Kiri 🌱</p>
-                  <p className="text-sm text-muted-foreground mt-1">Te explico cualquier parte de la app, analizo tus finanzas y registro lo que me digas.</p>
+                  <p className="font-bold">{tr("¡Hola{0}! Soy Kiri 🌱", [user.nombre ? `, ${user.nombre.split(" ")[0]}` : ""])}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{tr("Te explico cualquier parte de la app, analizo tus finanzas y registro lo que me digas.")}</p>
                 </div>
                 {avisoIA}
                 <div className="grid grid-cols-1 gap-2 w-full max-w-xs">
-                  <button onClick={abrirVoz} className="flex items-center gap-2 text-left text-xs bg-kiri-emerald/10 hover:bg-kiri-emerald/20 px-3 py-2.5 rounded-xl text-kiri-emerald font-bold"><Mic className="h-4 w-4 shrink-0" /> Dictar mis movimientos</button>
-                  <button onClick={() => { setIsOpen(false); abrirScanner() }} className="flex items-center gap-2 text-left text-xs bg-cyclon-periwinkle/10 hover:bg-cyclon-periwinkle/20 px-3 py-2.5 rounded-xl text-cyclon-periwinkle font-bold"><ScanLine className="h-4 w-4 shrink-0" /> Escanear un recibo</button>
-                  {["¿Cómo voy este mes?", "Registra un gasto de 20 mil en almuerzo", "¿Qué deuda debería pagar primero?", "Explícame cómo funciona el presupuesto del hogar"].map(q => (
+                  <button onClick={abrirVoz} className="flex items-center gap-2 text-left text-xs bg-kiri-emerald/10 hover:bg-kiri-emerald/20 px-3 py-2.5 rounded-xl text-kiri-emerald font-bold"><Mic className="h-4 w-4 shrink-0" />{" "}{tr("Dictar mis movimientos")}</button>
+                  <button onClick={() => { setIsOpen(false); abrirScanner() }} className="flex items-center gap-2 text-left text-xs bg-cyclon-periwinkle/10 hover:bg-cyclon-periwinkle/20 px-3 py-2.5 rounded-xl text-cyclon-periwinkle font-bold"><ScanLine className="h-4 w-4 shrink-0" />{" "}{tr("Escanear un recibo")}</button>
+                  {[tr("¿Cómo voy este mes?"), tr("Registra un gasto de 20 mil en almuerzo"), tr("¿Qué deuda debería pagar primero?"), tr("Explícame cómo funciona el presupuesto del hogar")].map(q => (
                     <button key={q} onClick={() => enviar(q)} className="text-left text-xs bg-muted/50 hover:bg-kiri-mint/20 px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground">{q}</button>
                   ))}
                 </div>
@@ -812,16 +868,15 @@ export function CoachFab() {
                         onChange={(id, patch) => editarAccionMsg(msg.id, id, patch)} onRemove={id => quitarAccionMsg(msg.id, id)} />
                       {msg.acciones.length > 0 && (
                         <div className="flex gap-2">
-                          <Button size="sm" variant="ghost" disabled={msg.estado === "guardando"} onClick={() => setMessages(p => p.map(m => m.id === msg.id ? { ...m, estado: "descartado" } : m))} className="flex-1 h-8 rounded-xl text-xs">Descartar</Button>
+                          <Button size="sm" variant="ghost" disabled={msg.estado === "guardando"} onClick={() => setMessages(p => p.map(m => m.id === msg.id ? { ...m, estado: "descartado" } : m))} className="flex-1 h-8 rounded-xl text-xs">{tr("Descartar")}</Button>
                           <Button size="sm" disabled={msg.estado === "guardando"} onClick={() => confirmarMsg(msg)} className="flex-1 h-8 rounded-xl text-xs font-bold bg-kiri-emerald hover:bg-kiri-sage text-white gap-1">
-                            {msg.estado === "guardando" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Confirmar ({msg.acciones.length})
-                          </Button>
+                            {msg.estado === "guardando" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}{" "}{tr("Confirmar ({0})", [msg.acciones.length])}</Button>
                         </div>
                       )}
                     </div>
                   )}
                   {msg.estado === "guardado" && <p className="text-[11px] font-bold text-kiri-emerald">{msg.resultado}</p>}
-                  {msg.estado === "descartado" && <p className="text-[11px] text-muted-foreground">Descartado — no se guardó nada.</p>}
+                  {msg.estado === "descartado" && <p className="text-[11px] text-muted-foreground">{tr("Descartado — no se guardó nada.")}</p>}
 
                   {msg.ir && (
                     <button onClick={() => { router.push(msg.ir!.ruta); if (isMobile) setIsOpen(false) }}
@@ -843,7 +898,7 @@ export function CoachFab() {
               <div className="flex justify-start">
                 <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-2">
                   <Loader2 className="h-4 w-4 text-kiri-emerald animate-spin" />
-                  <span className="text-xs text-muted-foreground">Kiri está pensando…</span>
+                  <span className="text-xs text-muted-foreground">{tr("Kiri está pensando…")}</span>
                 </div>
               </div>
             )}
@@ -851,15 +906,15 @@ export function CoachFab() {
           </div>
 
           <div className="border-t border-border px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3 flex items-center gap-2">
-            <button onClick={vozEnChat} aria-label="Dictar pregunta"
+            <button onClick={vozEnChat} aria-label={tr("Dictar pregunta")}
               className={cn("h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
                 chatEscuchando ? "bg-destructive/10 text-destructive animate-pulse" : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted")}>
               <Mic className="h-4 w-4" />
             </button>
             <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(input) } }}
-              placeholder={chatEscuchando ? "Escuchando…" : "Pregúntale o pídele algo a Kiri…"}
+              placeholder={chatEscuchando ? "Escuchando…" : tr("Pregúntale o pídele algo a Kiri…")}
               className="flex-1 h-10 rounded-xl bg-muted/40 border-none text-sm" disabled={loading} />
-            <Button onClick={() => enviar(input)} disabled={!input.trim() || loading} size="icon" className="h-10 w-10 rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white shrink-0" aria-label="Enviar">
+            <Button onClick={() => enviar(input)} disabled={!input.trim() || loading} size="icon" className="h-10 w-10 rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white shrink-0" aria-label={tr("Enviar")}>
               <Send className="h-4 w-4" />
             </Button>
           </div>

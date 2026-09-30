@@ -5,6 +5,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { usePushNotifications } from "@/hooks/use-push-notifications"
 import { getCurrentQuincena, getPeriodRangeLabel } from "@/lib/period-filter"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -50,7 +51,7 @@ export function getIncomeQuincenaLabel(
 
   const quincena = getCurrentQuincena(diasCobro, registrationDate)
   const range = getPeriodRangeLabel(frequency, diasCobro, registrationDate)
-  return `Ingreso asignado a Quincena ${quincena} (${range})`
+  return tr("Ingreso asignado a Quincena {0} ({1})", [quincena, range])
 }
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
@@ -105,20 +106,20 @@ export function useSmartAlerts() {
       // Una vez por semana, a partir del viernes (cuando más suele entrar plata)
       if (today.getDay() === 0 || today.getDay() >= 5) {
         shouldAlert = true
-        alertMessage = '¿Te entró plata esta semana? Regístrala para que Kiri sepa con cuánto cuentas.'
+        alertMessage = tr("¿Te entró plata esta semana? Regístrala para que Kiri sepa con cuánto cuentas.")
       }
     } else if (incomeFrequency === 'quincenal' && payDays.length >= 2) {
       const [d1, d2] = payDays
       // Proximidad al fin del periodo 1 (3 días antes de d2)
       if (day >= d1 && day < d2 && (d2 - day) <= 3) {
         shouldAlert = true
-        alertMessage = `Se acerca el fin del periodo (día ${d2}). ¿Ya recibiste tu sueldo?`
+        alertMessage = tr("Se acerca el fin del periodo (día {0}). ¿Ya recibiste tu sueldo?", [d2])
       }
       // Proximidad al fin del periodo 2 (3 días antes de d1 del siguiente mes)
       const lastDay = new Date(year, month + 1, 0).getDate()
       if (day >= d2 && (lastDay - day) <= 3) {
         shouldAlert = true
-        alertMessage = `Se acerca el fin del periodo y tu fecha de pago (día ${d1}). ¿Ya recibiste tu sueldo?`
+        alertMessage = tr("Se acerca el fin del periodo y tu fecha de pago (día {0}). ¿Ya recibiste tu sueldo?", [d1])
       }
     } else {
       // Mensual: alertar 3 días antes del día de cobro
@@ -127,7 +128,7 @@ export function useSmartAlerts() {
       const daysUntilPay = payDay > day ? payDay - day : lastDay - day + payDay
       if (daysUntilPay <= 3 && daysUntilPay > 0) {
         shouldAlert = true
-        alertMessage = `Se acerca tu fecha de pago (día ${payDay}). ¿Ya recibiste tu sueldo?`
+        alertMessage = tr("Se acerca tu fecha de pago (día {0}). ¿Ya recibiste tu sueldo?", [payDay])
       }
     }
 
@@ -141,7 +142,7 @@ export function useSmartAlerts() {
 
       // Native push notification (pantalla de inicio con sonido)
       sendNotification({
-        title: "Kiri Finance",
+        title: tr("Kiri Finance"),
         body: alertMessage,
         tag: `proximity-${periodKey}`,
         url: "/gestion?tab=billetera",

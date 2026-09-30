@@ -46,7 +46,7 @@ const SYNC_TAG = 'kiri-background-sync'
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB no disponible'))
+      reject(new Error("IndexedDB no disponible"))
       return
     }
 
@@ -234,6 +234,7 @@ async function registerBackgroundSync(): Promise<void> {
 // ─── Procesamiento de la cola (usado tanto por SW como por fallback) ──────────
 
 import { api, getAccessToken } from './api-client'
+
 
 /**
  * Procesa todas las peticiones pendientes en la cola.

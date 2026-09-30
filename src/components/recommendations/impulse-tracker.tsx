@@ -19,14 +19,15 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useRouter } from "next/navigation"
 import { ImpulseCategory } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 const CATEGORIES: { value: ImpulseCategory; label: string; emoji: string }[] = [
-  { value: 'cafe',       label: 'Café',       emoji: '☕' },
-  { value: 'comida',     label: 'Comida',     emoji: '🍔' },
-  { value: 'transporte', label: 'Transporte', emoji: '🚕' },
-  { value: 'antojo',     label: 'Antojo',     emoji: '🍫' },
-  { value: 'salida',     label: 'Salida',     emoji: '🎉' },
-  { value: 'otro',       label: 'Otro',       emoji: '💸' },
+  { value: 'cafe',       label: tr("Café"),       emoji: '☕' },
+  { value: 'comida',     label: tr("Comida"),     emoji: '🍔' },
+  { value: 'transporte', label: tr("Transporte"), emoji: '🚕' },
+  { value: 'antojo',     label: tr("Antojo"),     emoji: '🍫' },
+  { value: 'salida',     label: tr("Salida"),     emoji: '🎉' },
+  { value: 'otro',       label: tr("Otro"),       emoji: '💸' },
 ]
 
 interface Props {
@@ -111,8 +112,8 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
                 <Coffee className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-sm">Gastos Hormiga</h3>
-                <p className="text-[10px] text-muted-foreground">Café, antojos, día a día</p>
+                <h3 className="font-bold text-sm">{tr("Gastos Hormiga")}</h3>
+                <p className="text-[10px] text-muted-foreground">{tr("Café, antojos, día a día")}</p>
               </div>
             </div>
             <Button
@@ -120,19 +121,14 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
               onClick={() => setAddOpen(true)}
               className="h-8 rounded-xl bg-cyclon-pink/10 text-cyclon-pink hover:bg-cyclon-pink/20 border-none font-bold gap-1 px-3"
             >
-              <Plus className="h-3.5 w-3.5" /> Agregar
-            </Button>
+              <Plus className="h-3.5 w-3.5" />{" "}{tr("Agregar")}</Button>
           </div>
 
           {/* Barra de progreso */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-[10px] font-bold">
-              <span className={isOver ? "text-red-500" : "text-muted-foreground"}>
-                Gastado: {formatAmount(totalImpulseThisPeriod)}
-              </span>
-              <span className="text-muted-foreground">
-                Libre: {formatAmount(remaining)}
-              </span>
+              <span className={isOver ? "text-red-500" : "text-muted-foreground"}>{tr("Gastado: {0}", [formatAmount(totalImpulseThisPeriod)])}</span>
+              <span className="text-muted-foreground">{tr("Libre: {0}", [formatAmount(remaining)])}</span>
             </div>
             <Progress
               value={usagePct}
@@ -141,9 +137,7 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
                 usagePct >= 100 ? "bg-red-500" : usagePct >= 75 ? "bg-yellow-500" : "bg-cyclon-pink"
               )}
             />
-            <p className="text-[9px] text-muted-foreground text-right">
-              de {formatAmount(dailyFreeAmount)} blindado
-            </p>
+            <p className="text-[9px] text-muted-foreground text-right">{tr("de")}{" "}{formatAmount(dailyFreeAmount)}{" "}{tr("blindado")}</p>
           </div>
 
           {/* Lista de gastos recientes */}
@@ -166,9 +160,7 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
                 )
               })}
               {impulseThisPeriod.length > 5 && (
-                <p className="text-[9px] text-muted-foreground text-center">
-                  +{impulseThisPeriod.length - 5} más este periodo
-                </p>
+                <p className="text-[9px] text-muted-foreground text-center">{tr("+{0} más este periodo", [impulseThisPeriod.length - 5])}</p>
               )}
             </div>
           )}
@@ -180,16 +172,14 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShoppingBag className="h-5 w-5 text-cyclon-pink" />
-              Gasto hormiga
-            </DialogTitle>
-            <DialogDescription>¿En qué gastaste?</DialogDescription>
+              <ShoppingBag className="h-5 w-5 text-cyclon-pink" />{tr("Gasto hormiga")}</DialogTitle>
+            <DialogDescription>{tr("¿En qué gastaste?")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción</Label>
+              <Label className="text-xs font-bold">{tr("Descripción")}</Label>
               <Input
-                placeholder="Ej: Café en Starbucks"
+                placeholder={tr("Ej: Café en Starbucks")}
                 value={nombre}
                 onChange={e => setNombre(e.target.value)}
                 className="h-10 rounded-xl"
@@ -197,7 +187,7 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto</Label>
+              <Label className="text-xs font-bold">{tr("Monto")}</Label>
               <MoneyInput
                 value={monto}
                 onChange={v => setMonto(v)}
@@ -206,7 +196,7 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Categoría</Label>
+              <Label className="text-xs font-bold">{tr("Categoría")}</Label>
               <div className="grid grid-cols-3 gap-2">
                 {CATEGORIES.map(cat => (
                   <button
@@ -237,20 +227,20 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                 <span>
                   {(totalImpulseThisPeriod + Number(monto)) > dailyFreeAmount
-                    ? "Este gasto excede tu presupuesto blindado."
-                    : "Estás usando más del 80% de tu gasto libre."}
+                    ? tr("Este gasto excede tu presupuesto blindado.")
+                    : tr("Estás usando más del 80% de tu gasto libre.")}
                 </span>
               </div>
             )}
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>{tr("Cancelar")}</Button>
             <Button
               onClick={handleAdd}
               disabled={saving || !nombre || !monto || Number(monto) <= 0}
               className="bg-cyclon-pink text-white font-bold rounded-xl px-6"
             >
-              {saving ? "Guardando..." : "Registrar"}
+              {saving ? "Guardando..." : tr("Registrar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -261,21 +251,15 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-500">
-              <AlertTriangle className="h-5 w-5" />
-              Te pasaste del presupuesto blindado
-            </DialogTitle>
-            <DialogDescription>
-              Tus gastos hormiga superaron el monto asignado para tu día a día. ¿Tuviste que endeudarte para cubrir este gasto?
-            </DialogDescription>
+              <AlertTriangle className="h-5 w-5" />{tr("Te pasaste del presupuesto blindado")}</DialogTitle>
+            <DialogDescription>{tr("Tus gastos hormiga superaron el monto asignado para tu día a día. ¿Tuviste que endeudarte para cubrir este gasto?")}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <Card className="border-none bg-red-500/5 rounded-2xl">
               <CardContent className="p-4 space-y-2 text-center">
-                <p className="text-xs text-muted-foreground">Presupuesto blindado</p>
+                <p className="text-xs text-muted-foreground">{tr("Presupuesto blindado")}</p>
                 <p className="text-lg font-black">{formatAmount(dailyFreeAmount)}</p>
-                <p className="text-xs text-red-500 font-bold">
-                  Gastaste: {formatAmount(totalImpulseThisPeriod)} (+{formatAmount(totalImpulseThisPeriod - dailyFreeAmount)} extra)
-                </p>
+                <p className="text-xs text-red-500 font-bold">{tr("Gastaste: {0} (+{1} extra)", [formatAmount(totalImpulseThisPeriod), formatAmount(totalImpulseThisPeriod - dailyFreeAmount)])}</p>
               </CardContent>
             </Card>
           </div>
@@ -283,16 +267,12 @@ export function ImpulseTracker({ dailyFreeAmount }: Props) {
             <Button
               onClick={handleRedirect}
               className="w-full bg-cyclon-periwinkle text-white font-bold rounded-xl h-12"
-            >
-              Registrar nueva obligación
-            </Button>
+            >{tr("Registrar nueva obligación")}</Button>
             <Button
               variant="ghost"
               onClick={handleCancel}
               className="w-full text-muted-foreground"
-            >
-              Cancelar (eliminar último gasto)
-            </Button>
+            >{tr("Cancelar (eliminar último gasto)")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

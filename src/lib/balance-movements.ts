@@ -1,4 +1,5 @@
 import type { BalanceReport, Movement } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 /**
  * Lista unificada de movimientos (pagos de deudas y gastos fijos, gastos
@@ -15,16 +16,16 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
     movements.push({
       id: (p.id as string) ?? `dp-${Math.random()}`,
       fecha: p.createdAt as string,
-      nombre: (p.debtName as string) ?? 'Deuda',
+      nombre: (p.debtName as string) ?? tr("Deuda"),
       tipo: "deudas",
-      tipoLabel: "Pago de deuda",
+      tipoLabel: tr("Pago de deuda"),
       monto: p.montoPagado as number,
       estado: 'pagado',
       abonoCapital: p.abonoCapital as number,
       pagoInteres: p.pagoInteres as number,
       saldoAnterior: p.saldoAnterior as number,
       saldoPosterior: p.saldoPosterior as number,
-      tasaInteres: p.tasaAplicada ? `${Number(p.tasaAplicada).toFixed(2)}% M.V.` : undefined,
+      tasaInteres: p.tasaAplicada ? tr("{0}% M.V.", [Number(p.tasaAplicada).toFixed(2)]) : undefined,
       acreedor: p.acreedor as string | undefined,
       tarjetaNombre: p.tarjetaNombre as string | null | undefined,
     })
@@ -41,7 +42,7 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       fecha: p.createdAt as string,
       nombre: p.nombre as string,
       tipo: "gastos_fijos",
-      tipoLabel: "Gasto fijo",
+      tipoLabel: tr("Gasto fijo"),
       monto: p.montoPagado as number,
       estado: 'pagado',
       tarjetaNombre: p.tarjetaNombre as string | null | undefined,
@@ -56,7 +57,7 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       tipo: "hormiga",
       // La tabla de gastos variables guarda TODO (no solo hormiga) — antes
       // cualquier gasto, hasta un vuelo, salía rotulado "Gasto hormiga".
-      tipoLabel: `${e.esHormiga ? 'Gasto hormiga' : 'Gasto variable'} · ${e.categoria as string}`,
+      tipoLabel: `${e.esHormiga ? tr("Gasto hormiga") : tr("Gasto variable")} · ${e.categoria as string}`,
       monto: e.monto as number,
       estado: 'pagado',
       tarjetaNombre: e.tarjetaNombre as string | null | undefined,
@@ -67,9 +68,9 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
     movements.push({
       id: (r.id as string) ?? `ir-${Math.random()}`,
       fecha: r.createdAt as string,
-      nombre: (r.tipo as string) === 'salario' ? 'Sueldo' : 'Ingreso extra',
+      nombre: (r.tipo as string) === 'salario' ? tr("Sueldo") : tr("Ingreso extra"),
       tipo: "ingresos",
-      tipoLabel: (r.tipo as string) === 'salario' ? 'Salario' : 'Extra',
+      tipoLabel: (r.tipo as string) === 'salario' ? tr("Salario") : tr("Extra"),
       monto: r.monto as number,
       estado: 'pagado',
     })
@@ -81,9 +82,9 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       movements.push({
         id: sv.id as string,
         fecha: sv.createdAt as string,
-        nombre: `Ahorro — ${sv.periodo as string}`,
+        nombre: tr("Ahorro — {0}", [sv.periodo as string]),
         tipo: "ahorros",
-        tipoLabel: "Ahorro",
+        tipoLabel: tr("Ahorro"),
         monto: sv.monto as number,
         estado: 'pagado',
       })
@@ -94,9 +95,9 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       movements.push({
         id: sv.id as string,
         fecha: sv.createdAt as string,
-        nombre: `Retiro de ahorro — ${sv.periodo as string}`,
+        nombre: tr("Retiro de ahorro — {0}", [sv.periodo as string]),
         tipo: "ahorros",
-        tipoLabel: "Retiro de ahorro",
+        tipoLabel: tr("Retiro de ahorro"),
         monto: sv.monto as number,
         estado: 'pagado',
         direccion: 'entrada',
@@ -108,15 +109,16 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
   // gasto ni ingreso — se listan para explicar el movimiento del saldo.
   for (const p of report.prestamosExternos?.prestamos ?? []) {
     movements.push({
-      id: `pe-${p.id}`, fecha: p.fecha, nombre: `Préstamo a ${p.persona}`, tipo: "prestamos",
-      tipoLabel: p.desdeBilletera ? "Prestaste (salió de tu billetera)" : "Préstamo registrado",
+      id: `pe-${p.id}`, fecha: p.fecha, nombre: tr("Préstamo a {0}", [p.persona]), tipo: "prestamos",
+      tipoLabel: p.desdeBilletera ? tr("Prestaste (salió de tu billetera)") : tr("Préstamo registrado"),
       monto: p.monto, estado: 'pagado', direccion: 'salida',
+      noMueveBilletera: !p.desdeBilletera,
     })
   }
   for (const a of report.prestamosExternos?.abonos ?? []) {
     movements.push({
-      id: `pa-${a.id}`, fecha: a.fecha, nombre: `${a.persona} te devolvió`, tipo: "prestamos",
-      tipoLabel: a.entraABilletera ? "Abono recibido" : "Abono recibido (fuera de Kiri)",
+      id: `pa-${a.id}`, fecha: a.fecha, nombre: tr("{0} te devolvió", [a.persona]), tipo: "prestamos",
+      tipoLabel: a.entraABilletera ? tr("Abono recibido") : tr("Abono recibido (fuera de Kiri)"),
       monto: a.monto, estado: 'pagado', direccion: 'entrada',
     })
   }
@@ -127,28 +129,29 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
     const primero = p.conQuien.split(" ")[0]
     movements.push({
       id: `sp-${p.id}`, fecha: p.fecha, tipo: "prestamos", estado: 'pagado',
-      nombre: p.rol === 'preste' ? `Préstamo a ${primero}` : `Préstamo de ${primero}`,
+      nombre: p.rol === 'preste' ? tr("Préstamo a {0}", [primero]) : tr("Préstamo de {0}", [primero]),
       tipoLabel: p.previo
-        ? "Social · préstamo previo (no movió tu billetera)"
-        : p.rol === 'preste' ? "Social · prestaste (salió de tu billetera)" : "Social · te prestaron (entró a tu billetera)",
+        ? tr("Social · préstamo previo (no movió tu billetera)")
+        : p.rol === 'preste' ? tr("Social · prestaste (salió de tu billetera)") : tr("Social · te prestaron (entró a tu billetera)"),
       monto: p.monto,
       direccion: p.previo ? undefined : p.rol === 'preste' ? 'salida' : 'entrada',
+      noMueveBilletera: !!p.previo,
     })
   }
   for (const a of report.social?.abonos ?? []) {
     const primero = a.conQuien.split(" ")[0]
     movements.push({
       id: `sa-${a.id}`, fecha: a.fecha, tipo: "prestamos", estado: 'pagado',
-      nombre: a.rol === 'recibi' ? `${primero} te abonó` : `Abono a ${primero}`,
-      tipoLabel: a.rol === 'recibi' ? "Social · abono recibido" : "Social · abono a un préstamo",
+      nombre: a.rol === 'recibi' ? tr("{0} te abonó", [primero]) : tr("Abono a {0}", [primero]),
+      tipoLabel: a.rol === 'recibi' ? tr("Social · abono recibido") : tr("Social · abono a un préstamo"),
       monto: a.monto, direccion: a.rol === 'recibi' ? 'entrada' : 'salida',
     })
   }
   for (const s of report.social?.ahorros ?? []) {
     movements.push({
       id: `sh-${s.id}`, fecha: s.fecha, tipo: "ahorros", estado: 'pagado',
-      nombre: s.tipo === 'retiro' ? `Retiro de ${s.bolsillo}` : `Aporte a ${s.bolsillo}`,
-      tipoLabel: s.tipo === 'previo' ? "Ahorro compartido · ya ahorrado (no movió tu billetera)" : s.tipo === 'retiro' ? "Ahorro compartido · retiro" : "Ahorro compartido",
+      nombre: s.tipo === 'retiro' ? tr("Retiro de {0}", [s.bolsillo]) : tr("Aporte a {0}", [s.bolsillo]),
+      tipoLabel: s.tipo === 'previo' ? tr("Ahorro compartido · ya ahorrado (no movió tu billetera)") : s.tipo === 'retiro' ? tr("Ahorro compartido · retiro") : tr("Ahorro compartido"),
       monto: s.monto, direccion: s.tipo === 'retiro' ? 'entrada' : undefined,
     })
   }

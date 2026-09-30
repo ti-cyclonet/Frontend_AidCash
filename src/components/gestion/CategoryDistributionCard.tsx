@@ -7,6 +7,7 @@ import { ArrowRight } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAppContext } from "@/lib/app-context"
 import { useBudgetCategories, useCategoryResumen } from "@/hooks/use-budget-categories"
+import { tr } from "@/lib/i18n"
 
 /**
  * "Distribución por categoría" — gasto del periodo actual por categoría de
@@ -29,7 +30,7 @@ export function CategoryDistributionCard({ verMas }: { verMas?: { href: string; 
     <Card className="border-none bg-card shadow-sm rounded-2xl">
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-3 gap-2">
-          <h2 className="font-bold text-sm">Distribución por categoría</h2>
+          <h2 className="font-bold text-sm">{tr("Distribución por categoría")}</h2>
           {verMas && (
             <Link href={verMas.href} className="text-[10px] font-bold text-kiri-emerald hover:underline flex items-center gap-1 shrink-0">
               {verMas.label} <ArrowRight className="h-3 w-3" />
@@ -61,7 +62,7 @@ export function CategoryDistributionCard({ verMas }: { verMas?: { href: string; 
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-[8px] text-muted-foreground">Total</span>
+                <span className="text-[8px] text-muted-foreground">{tr("Total")}</span>
                 <span className="text-xs font-black">{formatAmount(total)}</span>
               </div>
             </div>
@@ -79,15 +80,11 @@ export function CategoryDistributionCard({ verMas }: { verMas?: { href: string; 
           </div>
         ) : budgetCategories.length === 0 ? (
           <div className="h-[150px] flex flex-col items-center justify-center gap-2 text-center px-4">
-            <p className="text-muted-foreground text-xs">Aún no has creado categorías de presupuesto.</p>
-            <Link href="/gestion" className="text-[10px] font-bold text-kiri-emerald hover:underline">
-              Crear una categoría →
-            </Link>
+            <p className="text-muted-foreground text-xs">{tr("Aún no has creado categorías de presupuesto.")}</p>
+            <Link href="/gestion" className="text-[10px] font-bold text-kiri-emerald hover:underline">{tr("Crear una categoría →")}</Link>
           </div>
         ) : (
-          <div className="h-[150px] flex items-center justify-center text-muted-foreground text-xs">
-            Sin gasto registrado en tus categorías este periodo
-          </div>
+          <div className="h-[150px] flex items-center justify-center text-muted-foreground text-xs">{tr("Sin gasto registrado en tus categorías este periodo")}</div>
         )}
       </CardContent>
     </Card>

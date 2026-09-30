@@ -1,4 +1,5 @@
 import { Debt, FixedExpense, IncomeFrequency } from './types'
+import { localeFecha, tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -113,10 +114,10 @@ export function getPeriodDateRange(frequency: IncomeFrequency, diasCobro: string
 export function getPeriodRangeLabel(frequency: IncomeFrequency, diasCobro: string, now: Date = new Date()): string {
   const { start, end } = getPeriodDateRange(frequency, diasCobro, now)
   const lastInclusive = new Date(end.getTime() - 1)
-  const startMonth = start.toLocaleString('es', { month: 'long' })
-  const endMonth = lastInclusive.toLocaleString('es', { month: 'long' })
-  if (startMonth === endMonth) return `${start.getDate()} - ${lastInclusive.getDate()} de ${startMonth}`
-  return `${start.getDate()} de ${startMonth} - ${lastInclusive.getDate()} de ${endMonth}`
+  const startMonth = start.toLocaleString(localeFecha(), { month: 'long' })
+  const endMonth = lastInclusive.toLocaleString(localeFecha(), { month: 'long' })
+  if (startMonth === endMonth) return tr("{0} - {1} de {2}", [start.getDate(), lastInclusive.getDate(), startMonth])
+  return tr("{0} de {1} - {2} de {3}", [start.getDate(), startMonth, lastInclusive.getDate(), endMonth])
 }
 
 /** Etiqueta con prefijo "Mensual ·"/"Quincenal ·", para mostrar junto a la frecuencia. */

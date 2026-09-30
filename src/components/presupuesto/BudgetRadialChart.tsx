@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { getCategoryInsight } from "@/lib/budget-insights"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -47,9 +48,9 @@ interface Props {
 const cop = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`
 
 function statusFor(ratio: number) {
-  if (ratio >= 1) return { label: 'Límite superado', color: '#f97362' }
-  if (ratio >= 0.85) return { label: 'Cerca del límite', color: '#fbbf24' }
-  return { label: 'Dentro del presupuesto', color: '#22c55e' }
+  if (ratio >= 1) return { label: tr("Límite superado"), color: '#f97362' }
+  if (ratio >= 0.85) return { label: tr("Cerca del límite"), color: '#fbbf24' }
+  return { label: tr("Dentro del presupuesto"), color: '#22c55e' }
 }
 
 function insightFor(cat: RadialCategory, frequency: 'mensual' | 'quincenal', diasCobro: string) {
@@ -131,11 +132,11 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-foreground text-base font-bold leading-tight break-words">{cat.name}</p>
-          <p className="text-muted-foreground text-xs">Presupuesto de esta categoría</p>
+          <p className="text-muted-foreground text-xs">{tr("Presupuesto de esta categoría")}</p>
         </div>
         <button
           onClick={onEdit}
-          aria-label="Editar categoría"
+          aria-label={tr("Editar categoría")}
           className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors shrink-0"
         >
           <Pencil size={14} />
@@ -152,21 +153,21 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
           </div>
         </div>
         <div className="flex-1 space-y-2">
-          <div className="flex justify-between"><span className="text-muted-foreground text-xs">Presupuesto asignado</span><span className="text-foreground text-sm font-bold">{cop(cat.limit)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground text-xs">Gastado</span><span className="text-foreground text-sm font-bold">{cop(cat.spent)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground text-xs">Disponible</span><span className="text-kiri-emerald text-sm font-bold">{cop(Math.max(cat.limit - cat.spent, 0))}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground text-xs">{tr("Presupuesto asignado")}</span><span className="text-foreground text-sm font-bold">{cop(cat.limit)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground text-xs">{tr("Gastado")}</span><span className="text-foreground text-sm font-bold">{cop(cat.spent)}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground text-xs">{tr("Disponible")}</span><span className="text-kiri-emerald text-sm font-bold">{cop(Math.max(cat.limit - cat.spent, 0))}</span></div>
         </div>
       </div>
 
       {/* Consejo Kiri */}
       <div className="p-3 rounded-xl bg-muted/20 text-muted-foreground text-xs leading-relaxed">
-        📍 <strong className="text-foreground">Consejo Kiri:</strong> {insightFor(cat, frequency, diasCobro)}
+        📍 <strong className="text-foreground">{tr("Consejo Kiri:")}</strong> {insightFor(cat, frequency, diasCobro)}
       </div>
 
       {/* Desglose */}
       {cat.items.length > 0 && (
         <div>
-          <p className="text-foreground text-sm font-bold mb-2">Desglose de gastos</p>
+          <p className="text-foreground text-sm font-bold mb-2">{tr("Desglose de gastos")}</p>
           <div className="space-y-2.5 max-h-[190px] overflow-y-auto pr-1">
             {cat.items.map((it, idx) => {
               const pct = Math.round((it.amount / totalItems) * 100)
@@ -195,8 +196,7 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
         onClick={goRegisterExpense}
         className="w-full flex items-center justify-center gap-1.5 h-10 rounded-xl bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 text-sm font-bold transition-colors"
       >
-        <ReceiptText size={15} /> Gasto
-      </button>
+        <ReceiptText size={15} />{" "}{tr("Gasto")}</button>
     </div>
   )
 }
@@ -267,7 +267,7 @@ export function BudgetRadialChart({ categories, onEdit, incomeFrequency, onSelec
         {/* Glow */}
         <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-kiri-emerald/5 blur-3xl pointer-events-none" />
 
-        <h3 className="text-foreground text-lg font-bold relative">Distribución actual</h3>
+        <h3 className="text-foreground text-lg font-bold relative">{tr("Distribución actual")}</h3>
 
         {/* SVG Chart */}
         <div className="relative w-full max-w-[380px] mx-auto aspect-square mt-1">
@@ -289,7 +289,7 @@ export function BudgetRadialChart({ categories, onEdit, incomeFrequency, onSelec
                   key={s.id}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${s.name}, ${Math.round(s.ratio * 100)}% de ${cop(s.limit)}`}
+                  aria-label={tr("{0}, {1}% de {2}", [s.name, Math.round(s.ratio * 100), cop(s.limit)])}
                   style={{ cursor: 'pointer', outline: 'none' }}
                   onMouseEnter={() => setHovered(i)}
                   onMouseLeave={() => setHovered(null)}
@@ -332,7 +332,7 @@ export function BudgetRadialChart({ categories, onEdit, incomeFrequency, onSelec
               onClick={handleCenter}
               role="button"
               tabIndex={0}
-              aria-label="Ver todas las categorías"
+              aria-label={tr("Ver todas las categorías")}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCenter() }}
             />
           </svg>
@@ -345,21 +345,21 @@ export function BudgetRadialChart({ categories, onEdit, incomeFrequency, onSelec
           >
             {!shown ? (
               <>
-                <span className="text-muted-foreground text-[10px]">Total gastado</span>
+                <span className="text-muted-foreground text-[10px]">{tr("Total gastado")}</span>
                 <span className="text-foreground text-base font-bold">{cop(total)}</span>
-                <span className="text-kiri-emerald text-xs font-semibold">{pct}% usado</span>
+                <span className="text-kiri-emerald text-xs font-semibold">{tr("{0}% usado", [pct])}</span>
               </>
             ) : (
               <>
                 <span className="text-muted-foreground text-[10px]">{shown.name}</span>
                 <span className="text-foreground text-sm font-bold">{cop(shown.spent)}</span>
-                <span className="text-xs font-semibold" style={{ color: shown.color }}>{Math.round(shown.ratio * 100)}% del límite</span>
+                <span className="text-xs font-semibold" style={{ color: shown.color }}>{tr("{0}% del límite", [Math.round(shown.ratio * 100)])}</span>
               </>
             )}
           </div>
         </div>
 
-        <p className="text-center text-muted-foreground text-xs mt-2">Toca una categoría o el centro para ver el detalle</p>
+        <p className="text-center text-muted-foreground text-xs mt-2">{tr("Toca una categoría o el centro para ver el detalle")}</p>
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import { uploadAvatarToAuthoriza } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 /**
  * Foto de perfil lista para guardar en el backend (y así verse igual en
@@ -16,10 +17,10 @@ const AVATAR_QUALITY = 0.85
 export function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, quality = AVATAR_QUALITY): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo"))
+    reader.onerror = () => reject(new Error(tr("No se pudo leer el archivo")))
     reader.onload = () => {
       const img = new Image()
-      img.onerror = () => reject(new Error("El archivo no es una imagen válida"))
+      img.onerror = () => reject(new Error(tr("El archivo no es una imagen válida")))
       img.onload = () => {
         const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
         const w = Math.max(1, Math.round(img.width * scale))
@@ -28,7 +29,7 @@ export function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, qualit
         canvas.width = w
         canvas.height = h
         const ctx = canvas.getContext("2d")
-        if (!ctx) { reject(new Error("No se pudo procesar la imagen")); return }
+        if (!ctx) { reject(new Error(tr("No se pudo procesar la imagen"))); return }
         ctx.drawImage(img, 0, 0, w, h)
         resolve(canvas.toDataURL("image/jpeg", quality))
       }
@@ -39,10 +40,10 @@ export function resizeImageToDataUrl(file: File, maxDim = AVATAR_MAX_DIM, qualit
 }
 
 export async function prepararFotoPerfil(file: File): Promise<{ url: string | null; preview: string | null; error: string | null }> {
-  if (!file.type.startsWith("image/")) return { url: null, preview: null, error: "Selecciona un archivo de imagen." }
+  if (!file.type.startsWith("image/")) return { url: null, preview: null, error: tr("Selecciona un archivo de imagen.") }
   let preview: string | null = null
   try { preview = await resizeImageToDataUrl(file) } catch { /* sin preview no hay qué subir */ }
-  if (!preview) return { url: null, preview: null, error: "No se pudo procesar la foto. Intenta con otra." }
+  if (!preview) return { url: null, preview: null, error: tr("No se pudo procesar la foto. Intenta con otra.") }
   const { url } = await uploadAvatarToAuthoriza(preview)
   if (url) return { url, preview, error: null }
   // Si Authoriza no respondió se devuelve el preview: al guardar el perfil,

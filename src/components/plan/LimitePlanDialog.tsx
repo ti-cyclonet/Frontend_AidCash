@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import type { LimitePlanEvento } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 /**
  * Aviso global cuando el backend dice que el plan no alcanza: límite de
@@ -33,10 +34,10 @@ export function LimitePlanDialog() {
   const destino = aviso.mejora?.plan
   const esPro = destino?.includes("PRO")
   const titulo = aviso.codigo === "CUOTA_IA"
-    ? "Se acabó tu cuota de IA de este mes"
+    ? tr("Se acabó tu cuota de IA de este mes")
     : aviso.codigo === "FUNCION"
-      ? `Disponible en ${destino ?? "otro plan"}`
-      : "Llegaste al límite de tu plan"
+      ? tr("Disponible en {0}", [destino ?? tr("otro plan")])
+      : tr("Llegaste al límite de tu plan")
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) setAviso(null) }}>
@@ -50,19 +51,17 @@ export function LimitePlanDialog() {
           <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
             {aviso.mensaje}
-            {aviso.plan && <span className="block mt-1 text-xs">Tu plan actual: {aviso.plan}</span>}
+            {aviso.plan && <span className="block mt-1 text-xs">{tr("Tu plan actual: {0}", [aviso.plan])}</span>}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2 pt-2">
           {pathname !== "/mi-plan" && (
-            <Button className="gap-2 rounded-xl" onClick={() => { setAviso(null); window.dispatchEvent(new Event("kiri:ir-mi-plan")); router.push("/mi-plan") }}>
+            <Button className="gap-2 rounded-xl" onClick={() => { setAviso(null); window.dispatchEvent(new Event("kiri:ir-mi-plan")); router.push("/mi-plan#planes") }}>
               <Sparkles className="w-4 h-4" />
-              {destino ? `Ver ${destino}` : "Ver planes"}
+              {destino ? tr("Ver {0}", [destino]) : tr("Ver planes")}
             </Button>
           )}
-          <Button variant="ghost" className="rounded-xl" onClick={() => setAviso(null)}>
-            Ahora no
-          </Button>
+          <Button variant="ghost" className="rounded-xl" onClick={() => setAviso(null)}>{tr("Ahora no")}</Button>
         </div>
       </DialogContent>
     </Dialog>

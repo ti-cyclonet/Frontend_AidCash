@@ -34,6 +34,7 @@ import { calculateGardenXP } from "@/lib/garden-xp"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import type { Debt, FixedExpense, Loan } from "@/lib/types"
+import { tr, localeFecha } from "@/lib/i18n"
 
 // ─── Niveles del jardín ───────────────────────────────────────────────────────
 
@@ -45,15 +46,15 @@ interface GardenLevel {
 }
 
 const GARDEN_LEVELS: GardenLevel[] = [
-  { level: 1, name: "Semilla",             image: "/garden/tierra.png",          xpRequired: 0 },
+  { level: 1, name: tr("Semilla"),             image: "/garden/tierra.png",          xpRequired: 0 },
   // XP que pide cada nivel: 850 para el 2, luego +1000, +2500, +4000, +6000.
   // Con uso diario (racha + misiones) se llega al 2 en ~2 semanas y al último
   // en varios meses de constancia.
-  { level: 2, name: "Brote",               image: "/garden/brote.png",           xpRequired: 850 },
-  { level: 3, name: "Planta joven",        image: "/garden/arbol_pequeno.png",   xpRequired: 1850 },
-  { level: 4, name: "Árbol en crecimiento", image: "/garden/arbol_mediano.png",  xpRequired: 4350 },
-  { level: 5, name: "Árbol floreciente",   image: "/garden/arbol_grande.png",    xpRequired: 8350 },
-  { level: 6, name: "Jardín próspero",     image: "/garden/arbol_flores.png",    xpRequired: 14350 },
+  { level: 2, name: tr("Brote"),               image: "/garden/brote.png",           xpRequired: 850 },
+  { level: 3, name: tr("Planta joven"),        image: "/garden/arbol_pequeno.png",   xpRequired: 1850 },
+  { level: 4, name: tr("Árbol en crecimiento"), image: "/garden/arbol_mediano.png",  xpRequired: 4350 },
+  { level: 5, name: tr("Árbol floreciente"),   image: "/garden/arbol_grande.png",    xpRequired: 8350 },
+  { level: 6, name: tr("Jardín próspero"),     image: "/garden/arbol_flores.png",    xpRequired: 14350 },
 ]
 
 function getGardenHealth(
@@ -138,14 +139,14 @@ function getGardenRecommendation(
   hasBudgetCategories: boolean,
   streak: number,
 ): string {
-  if (!hasIncome) return "Registra tu sueldo real en Gestión → Billetera. Es el primer paso para que tu jardín crezca."
-  if (!hasObligations && !hasBudgetCategories) return "Registra tus obligaciones y crea tu presupuesto para tener el control total."
-  if (!hasBudgetCategories) return "Crea categorías de presupuesto en Gestión para saber exactamente a dónde va tu dinero."
-  if (!hasObligations) return "Registra tus deudas y gastos fijos en Obligaciones para visualizar tu balance real."
-  if (totalAhorrado <= 0) return "¡Es momento de ahorrar! Ve a Ahorro y crea tu primer bolsillo. Cada peso cuenta."
-  if (totalDeuda > 0 && streak < 3) return "Mantén tu racha pagando a tiempo. Cada periodo consistente fortalece tu jardín."
-  if (streak < 6) return "Sigue así, tu constancia está dando frutos. Cada periodo suma XP a tu jardín."
-  return "Excelente trabajo. Tu jardín florece gracias a tus decisiones financieras inteligentes."
+  if (!hasIncome) return tr("Registra tu sueldo real en Gestión → Billetera. Es el primer paso para que tu jardín crezca.")
+  if (!hasObligations && !hasBudgetCategories) return tr("Registra tus obligaciones y crea tu presupuesto para tener el control total.")
+  if (!hasBudgetCategories) return tr("Crea categorías de presupuesto en Gestión para saber exactamente a dónde va tu dinero.")
+  if (!hasObligations) return tr("Registra tus deudas y gastos fijos en Obligaciones para visualizar tu balance real.")
+  if (totalAhorrado <= 0) return tr("¡Es momento de ahorrar! Ve a Ahorro y crea tu primer bolsillo. Cada peso cuenta.")
+  if (totalDeuda > 0 && streak < 3) return tr("Mantén tu racha pagando a tiempo. Cada periodo consistente fortalece tu jardín.")
+  if (streak < 6) return tr("Sigue así, tu constancia está dando frutos. Cada periodo suma XP a tu jardín.")
+  return tr("Excelente trabajo. Tu jardín florece gracias a tus decisiones financieras inteligentes.")
 }
 
 /**
@@ -174,10 +175,10 @@ function getGardenWeather(hayVencidas: boolean, hayProximas: boolean, showRainCe
 }
 
 const WEATHER_META: Record<GardenWeather, { icon: string; label: string }> = {
-  sol: { icon: "☀️", label: "Todo en orden" },
-  lluvia: { icon: "🌧️", label: "¡Buen ahorro!" },
-  nubes: { icon: "☁️", label: "Pago próximo" },
-  tormenta: { icon: "⛈️", label: "Pagos vencidos" },
+  sol: { icon: "☀️", label: tr("Todo en orden") },
+  lluvia: { icon: "🌧️", label: tr("¡Buen ahorro!") },
+  nubes: { icon: "☁️", label: tr("Pago próximo") },
+  tormenta: { icon: "⛈️", label: tr("Pagos vencidos") },
 }
 
 /**
@@ -198,11 +199,11 @@ function moodFilter(health: number): string {
 // Frases cortas de "personalidad" — no reemplazan tu gardenRecommendation
 // (esa sigue siendo la instrucción accionable); esto es solo tono/carácter.
 const GARDEN_PHRASES: Record<string, string[]> = {
-  "Floreciendo": ["¡Hoy me siento espectacular! 🌳", "Gracias por cuidarme tan bien", "Este es tu mejor periodo hasta ahora"],
-  "Creciendo": ["Vamos bien, sigue así 🌿", "Un gasto hormiga menos hoy = más crecimiento", "Me gusta cómo vas esta semana"],
-  "Estable": ["Podemos llegar más lejos juntos 🌱", "Un pequeño ahorro hoy ayuda bastante", "Sigamos construyendo el hábito"],
-  "Necesita atención": ["Hace días que no me visitas... 🥺", "Necesito que registres algo hoy", "Mis hojas se sienten un poco tristes"],
-  "En tormenta": ["Tengo pagos vencidos encima... ⛈️", "Toca las nubes y te muestro qué falta", "Ponte al día y vuelve el sol ☀️"],
+  "Floreciendo": [tr("¡Hoy me siento espectacular! 🌳"), tr("Gracias por cuidarme tan bien"), tr("Este es tu mejor periodo hasta ahora")],
+  "Creciendo": [tr("Vamos bien, sigue así 🌿"), tr("Un gasto hormiga menos hoy = más crecimiento"), tr("Me gusta cómo vas esta semana")],
+  "Estable": [tr("Podemos llegar más lejos juntos 🌱"), tr("Un pequeño ahorro hoy ayuda bastante"), tr("Sigamos construyendo el hábito")],
+  "Necesita atención": [tr("Hace días que no me visitas... 🥺"), tr("Necesito que registres algo hoy"), tr("Mis hojas se sienten un poco tristes")],
+  "En tormenta": [tr("Tengo pagos vencidos encima... ⛈️"), tr("Toca las nubes y te muestro qué falta"), tr("Ponte al día y vuelve el sol ☀️")],
 }
 
 function useCyclePhrase(list: string[], intervalMs = 4500): string {
@@ -320,7 +321,7 @@ export default function JardinPage() {
   const rainTimer = useRef<number | null>(null)
   const celebrarAhorro = (monto?: number) => {
     setShowRainCelebration(true)
-    setRainMessage(monto ? `💧 Ahorraste ${formatAmount(monto)}. ¡Cae la lluvia del crecimiento!` : "💧 Ahorro registrado. ¡Cae la lluvia del crecimiento!")
+    setRainMessage(monto ? tr("💧 Ahorraste {0}. ¡Cae la lluvia del crecimiento!", [formatAmount(monto)]) : tr("💧 Ahorro registrado. ¡Cae la lluvia del crecimiento!"))
     if (rainTimer.current) window.clearTimeout(rainTimer.current)
     rainTimer.current = window.setTimeout(() => { setShowRainCelebration(false); setRainMessage(null) }, 8000)
   }
@@ -342,7 +343,7 @@ export default function JardinPage() {
   const incomeTimer = useRef<number | null>(null)
   const celebrarIngreso = (monto?: number) => {
     setShowIncome(true)
-    setIncomeMessage(monto ? `💰 Llegó tu ingreso de ${formatAmount(monto)}. ¡Sale el sol en tu jardín!` : "💰 Ingreso registrado. ¡Sale el sol en tu jardín!")
+    setIncomeMessage(monto ? tr("💰 Llegó tu ingreso de {0}. ¡Sale el sol en tu jardín!", [formatAmount(monto)]) : tr("💰 Ingreso registrado. ¡Sale el sol en tu jardín!"))
     if (incomeTimer.current) window.clearTimeout(incomeTimer.current)
     incomeTimer.current = window.setTimeout(() => { setShowIncome(false); setIncomeMessage(null) }, 6000)
   }
@@ -381,7 +382,7 @@ export default function JardinPage() {
   useEffect(() => {
     if (!socket) return
     const onWatered = (data: Record<string, unknown>) => {
-      celebrateWatered(`${(data.fromName as string) ?? "Un amigo"} regó tu árbol`)
+      celebrateWatered(tr("{0} regó tu árbol", [(data.fromName as string) ?? tr("Un amigo")]))
     }
     socket.on(SOCKET_EVENTS.GARDEN_WATERED, onWatered)
     return () => { socket.off(SOCKET_EVENTS.GARDEN_WATERED, onWatered) }
@@ -400,7 +401,7 @@ export default function JardinPage() {
       if (localStorage.getItem(LS_KEY) === today) return
       localStorage.setItem(LS_KEY, today)
       const count = data.friendsWhoWateredYouToday
-      celebrateWatered(count === 1 ? "Un amigo regó tu árbol hoy" : `${count} amigos regaron tu árbol hoy`)
+      celebrateWatered(count === 1 ? tr("Un amigo regó tu árbol hoy") : tr("{0} amigos regaron tu árbol hoy", [count]))
     }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -414,7 +415,7 @@ export default function JardinPage() {
   const [stormMessage, setStormMessage] = useState<string | null>(null)
   const stormTimer = useRef<number | null>(null)
   const dispararTormentaHormiga = (nombre?: string) => {
-    setStormMessage(nombre ? `🐜 Gasto hormiga: "${nombre}". La tormenta debilita el jardín` : "🐜 Gasto hormiga detectado. La tormenta debilita el jardín")
+    setStormMessage(nombre ? tr("🐜 Gasto hormiga: \"{0}\". La tormenta debilita el jardín", [nombre]) : tr("🐜 Gasto hormiga detectado. La tormenta debilita el jardín"))
     setShowStorm(true)
     if (stormTimer.current) window.clearTimeout(stormTimer.current)
     stormTimer.current = window.setTimeout(() => { setShowStorm(false); setStormMessage(null) }, 4500)
@@ -469,7 +470,9 @@ export default function JardinPage() {
   const healthEmoji = getHealthEmoji(gardenHealth, hayVencidas)
 
   const gardenRecommendation = hayVencidas
-    ? `Tienes ${clima.vencidas.length} obligaci${clima.vencidas.length === 1 ? "ón vencida" : "ones vencidas"} por ${formatAmount(clima.totalVencido)}. Toca las nubes para verlas y ponte al día.`
+    ? (clima.vencidas.length === 1
+      ? tr("Tienes 1 obligación vencida por {0}. Toca las nubes para verla y ponte al día.", [formatAmount(clima.totalVencido)])
+      : tr("Tienes {0} obligaciones vencidas por {1}. Toca las nubes para verlas y ponte al día.", [clima.vencidas.length, formatAmount(clima.totalVencido)]))
     : getGardenRecommendation(
       wallet.cashBalance > 0,
       totalAhorrado,
@@ -482,8 +485,8 @@ export default function JardinPage() {
   // Clima financiero — ver getGardenWeather.
   const gardenWeather = getGardenWeather(hayVencidas, clima.proximas.length > 0, showRainCelebration)
   const cloudBadge = hayVencidas
-    ? `⚡ ${clima.vencidas.length} vencida${clima.vencidas.length === 1 ? "" : "s"} · toca aquí`
-    : clima.proximas.length > 0 ? `☁️ ${clima.proximas.length} por vencer · toca aquí` : null
+    ? tr("⚡ {0} vencida{1} · toca aquí", [clima.vencidas.length, clima.vencidas.length === 1 ? "" : "s"])
+    : clima.proximas.length > 0 ? tr("☁️ {0} por vencer · toca aquí", [clima.proximas.length]) : null
 
   // ── Tu progreso general ─────────────────────────────────────────────────
   // Antes: "Sueldo 100%" (barra llena con cualquier saldo), "Deudas 93%" (lo
@@ -512,18 +515,18 @@ export default function JardinPage() {
   // generales; "Otro consejo" los recorre aquí mismo.
   const consejos = useMemo(() => {
     const lista: { texto: string; href?: string; cta?: string }[] = []
-    if (hayVencidas) lista.push({ texto: `Tienes ${clima.vencidas.length} pago${clima.vencidas.length === 1 ? "" : "s"} vencido${clima.vencidas.length === 1 ? "" : "s"}. Empieza por el más antiguo: los atrasos suelen cobrar intereses de mora. ⛈️`, href: "/obligaciones", cta: "Pagar" })
-    if (clima.proximas.length > 0) lista.push({ texto: `${clima.proximas[0].nombre} vence pronto (${clima.proximas[0].etiqueta.toLowerCase()}). Separa ese dinero desde ya para no gastarlo. ☁️`, href: "/obligaciones", cta: "Ver" })
-    if (wallet.cashBalance <= 0) lista.push({ texto: "Registra tu sueldo real cuando lo recibas: es la base para que Kiri reparta tu dinero y veas el sol en tu jardín. ☀️", href: "/gestion?tab=billetera", cta: "Registrar" })
-    if (totalAhorrado <= 0) lista.push({ texto: "Aún no tienes ahorros. Empieza con poco: un bolsillo con una meta pequeña ya hace llover en tu jardín. 🌧️", href: "/ahorro", cta: "Ahorrar" })
-    if (mesesColchon !== null && mesesColchon < 1) lista.push({ texto: "Tu colchón de emergencia cubre menos de un mes de obligaciones. La meta sana son 3 meses. 🛡️", href: "/ahorro", cta: "Ahorrar" })
-    if (!hasBudgetCategories) lista.push({ texto: "Crea categorías de presupuesto y Kiri te avisará cuando estés cerca del límite en cada una. 📊", href: "/gestion", cta: "Crear" })
+    if (hayVencidas) lista.push({ texto: tr("Tienes {0} pago{1} vencido{2}. Empieza por el más antiguo: los atrasos suelen cobrar intereses de mora. ⛈️", [clima.vencidas.length, clima.vencidas.length === 1 ? "" : "s", clima.vencidas.length === 1 ? "" : "s"]), href: "/obligaciones", cta: tr("Pagar") })
+    if (clima.proximas.length > 0) lista.push({ texto: tr("{0} vence pronto ({1}). Separa ese dinero desde ya para no gastarlo. ☁️", [clima.proximas[0].nombre, clima.proximas[0].etiqueta.toLowerCase()]), href: "/obligaciones", cta: tr("Ver") })
+    if (wallet.cashBalance <= 0) lista.push({ texto: tr("Registra tu sueldo real cuando lo recibas: es la base para que Kiri reparta tu dinero y veas el sol en tu jardín. ☀️"), href: "/gestion?tab=billetera", cta: tr("Registrar") })
+    if (totalAhorrado <= 0) lista.push({ texto: tr("Aún no tienes ahorros. Empieza con poco: un bolsillo con una meta pequeña ya hace llover en tu jardín. 🌧️"), href: "/ahorro", cta: tr("Ahorrar") })
+    if (mesesColchon !== null && mesesColchon < 1) lista.push({ texto: tr("Tu colchón de emergencia cubre menos de un mes de obligaciones. La meta sana son 3 meses. 🛡️"), href: "/ahorro", cta: tr("Ahorrar") })
+    if (!hasBudgetCategories) lista.push({ texto: tr("Crea categorías de presupuesto y Kiri te avisará cuando estés cerca del límite en cada una. 📊"), href: "/gestion", cta: tr("Crear") })
     lista.push(
-      { texto: "Cuando pagues una deuda, escribe el saldo que te muestra el banco: Kiri calcula el interés real que pagaste. 🏦" },
-      { texto: "¿Le prestaste plata a alguien que no usa Kiri? Regístralo en Obligaciones → Me deben y recuérdale por WhatsApp. 🤝", href: "/obligaciones?tab=me_deben", cta: "Ver" },
-      { texto: "Los gastos hormiga de $5.000 al día suman $150.000 al mes. Anótalos todos, así ves a dónde se va tu plata. 🐜" },
-      { texto: "Invita a alguien con tu enlace: quedan conectados en Social y avanzas tus misiones. 💌" },
-      { texto: "Completa tus misiones diarias: la racha de días es lo que más hace crecer tu árbol. 🔥", href: "/misiones", cta: "Misiones" },
+      { texto: tr("Cuando pagues una deuda, escribe el saldo que te muestra el banco: Kiri calcula el interés real que pagaste. 🏦") },
+      { texto: tr("¿Le prestaste plata a alguien que no usa Kiri? Regístralo en Obligaciones → Me deben y recuérdale por WhatsApp. 🤝"), href: "/obligaciones?tab=me_deben", cta: tr("Ver") },
+      { texto: tr("Los gastos hormiga de $5.000 al día suman $150.000 al mes. Anótalos todos, así ves a dónde se va tu plata. 🐜") },
+      { texto: tr("Invita a alguien con tu enlace: quedan conectados en Social y avanzas tus misiones. 💌") },
+      { texto: tr("Completa tus misiones diarias: la racha de días es lo que más hace crecer tu árbol. 🔥"), href: "/misiones", cta: tr("Misiones") },
     )
     return lista
   }, [hayVencidas, clima, wallet.cashBalance, totalAhorrado, mesesColchon, hasBudgetCategories])
@@ -538,15 +541,9 @@ export default function JardinPage() {
       {/* ═══ HEADER ═══ */}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-            🌿 Tu jardín financiero
-          </p>
-          <h1 className="text-xl font-black mt-0.5">
-            ¡Hola, {user.nombre?.split(" ")[0] || "Usuario"}! 👋
-          </h1>
-          <p className="text-muted-foreground text-xs">
-            Así va tu jardín financiero hoy, {new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}
-          </p>
+          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">{tr("🌿 Tu jardín financiero")}</p>
+          <h1 className="text-xl font-black mt-0.5">{tr("¡Hola, {0}! 👋", [user.nombre?.split(" ")[0] || tr("Usuario")])}</h1>
+          <p className="text-muted-foreground text-xs">{tr("Así va tu jardín financiero hoy, {0}", [new Date().toLocaleDateString(localeFecha(), { day: "numeric", month: "long", year: "numeric" })])}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -559,15 +556,15 @@ export default function JardinPage() {
           >
             <span className="text-base leading-none shrink-0">{WEATHER_META[gardenWeather].icon}</span>
             <div className="text-right min-w-0">
-              <p className="text-[8px] text-muted-foreground whitespace-nowrap">Clima financiero</p>
+              <p className="text-[8px] text-muted-foreground whitespace-nowrap">{tr("Clima financiero")}</p>
               <p className={cn("text-[11px] font-black whitespace-nowrap", hayVencidas && "text-red-500")}>{WEATHER_META[gardenWeather].label}</p>
             </div>
           </button>
           <div className="flex flex-1 sm:flex-none items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2">
             <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <div className="text-right min-w-0">
-              <p className="text-[8px] text-muted-foreground whitespace-nowrap">Racha actual</p>
-              <p className="text-sm font-black text-orange-600 dark:text-orange-400 whitespace-nowrap">{streakActual} días</p>
+              <p className="text-[8px] text-muted-foreground whitespace-nowrap">{tr("Racha actual")}</p>
+              <p className="text-sm font-black text-orange-600 dark:text-orange-400 whitespace-nowrap">{streakActual === 1 ? tr("1 día") : tr("{0} días", [streakActual])}</p>
             </div>
           </div>
         </div>
@@ -584,7 +581,7 @@ export default function JardinPage() {
           <div className="grid gap-4">
             <div>
               <h2 className={cn("text-2xl lg:text-3xl font-black flex items-center gap-2 whitespace-nowrap", hayVencidas ? "text-slate-600 dark:text-slate-300" : "text-emerald-600 dark:text-emerald-400")}>
-                {healthLabel} {healthEmoji}
+                {tr(healthLabel)} {healthEmoji}
               </h2>
               <p className="text-[11px] lg:text-xs text-muted-foreground mt-1">{gardenRecommendation}</p>
             </div>
@@ -620,8 +617,7 @@ export default function JardinPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1.5 font-bold">
-                  <Heart className={cn("h-3.5 w-3.5", hayVencidas ? "text-slate-500" : "text-emerald-600 dark:text-emerald-400")} /> Salud del jardín
-                </span>
+                  <Heart className={cn("h-3.5 w-3.5", hayVencidas ? "text-slate-500" : "text-emerald-600 dark:text-emerald-400")} />{" "}{tr("Salud del jardín")}</span>
                 <span className={cn("font-black", hayVencidas ? "text-slate-600 dark:text-slate-300" : "text-emerald-600 dark:text-emerald-400")}>{gardenHealth}%</span>
               </div>
               <Progress value={gardenHealth} className="h-1.5" indicatorClassName={hayVencidas ? "bg-slate-400" : "bg-emerald-500"} />
@@ -644,13 +640,11 @@ export default function JardinPage() {
             </div>
             <div className="flex-1 space-y-1.5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-bold">Próximo hito: Nivel {currentLevel.level + 1}</p>
-                <span className="text-xs text-muted-foreground">{currentXP} / {xpForNext} XP</span>
+                <p className="text-sm font-bold">{tr("Próximo hito: Nivel {0}", [currentLevel.level + 1])}</p>
+                <span className="text-xs text-muted-foreground">{currentXP} / {xpForNext}{" "}{tr("XP")}</span>
               </div>
               <Progress value={xpProgress} className="h-2" indicatorClassName="bg-amber-400" />
-              <p className="text-[9px] text-muted-foreground">
-                Te faltan {xpNeeded} XP para desbloquear nuevas recompensas
-              </p>
+              <p className="text-[9px] text-muted-foreground">{tr("Te faltan {0} XP para desbloquear nuevas recompensas", [xpNeeded])}</p>
             </div>
           </CardContent>
         </Card>
@@ -663,8 +657,8 @@ export default function JardinPage() {
                 <Gift className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-sm font-bold">Misiones</p>
-                <p className="text-[10px] text-muted-foreground">Recompensas y cofre sorpresa</p>
+                <p className="text-sm font-bold">{tr("Misiones")}</p>
+                <p className="text-[10px] text-muted-foreground">{tr("Recompensas y cofre sorpresa")}</p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </CardContent>
@@ -675,38 +669,36 @@ export default function JardinPage() {
       {/* ═══ TU PROGRESO GENERAL ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-4 lg:p-5 space-y-4">
-          <h3 className="text-sm font-bold flex items-center gap-2">
-            Tu progreso general <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          <h3 className="text-sm font-bold flex items-center gap-2">{tr("Tu progreso general")}{" "}<TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
           </h3>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Metrica
               icon={Wallet} color="text-emerald-600 dark:text-emerald-400" barra="bg-emerald-500"
-              titulo="Disponible" valor={<OdometerAmount value={wallet.cashBalance} formatAmount={formatAmount} className="text-sm font-black text-emerald-600 dark:text-emerald-400" />}
+              titulo={tr("Disponible")} valor={<OdometerAmount value={wallet.cashBalance} formatAmount={formatAmount} className="text-sm font-black text-emerald-600 dark:text-emerald-400" />}
               pct={disponiblePct}
-              detalle={ingresoPeriodo > 0 ? `${disponiblePct}% de tu ingreso del periodo` : "Registra tu ingreso para compararlo"}
+              detalle={ingresoPeriodo > 0 ? tr("{0}% de tu ingreso del periodo", [disponiblePct]) : tr("Registra tu ingreso para compararlo")}
             />
             <Metrica
               icon={PiggyBank} color="text-blue-600 dark:text-blue-400" barra="bg-blue-500"
-              titulo="Ahorros" valor={formatAmount(totalAhorrado)}
+              titulo={tr("Ahorros")} valor={formatAmount(totalAhorrado)}
               pct={savingsPct}
-              detalle={realPocketsMeta > 0 ? `${savingsPct}% de tu meta de ${formatAmount(realPocketsMeta)}` : "Ponle una meta a tus bolsillos"}
+              detalle={realPocketsMeta > 0 ? tr("{0}% de tu meta de {1}", [savingsPct, formatAmount(realPocketsMeta)]) : tr("Ponle una meta a tus bolsillos")}
             />
             <Metrica
               icon={TrendingDown} color="text-red-600 dark:text-red-400" barra="bg-emerald-500"
-              titulo="Deudas" valor={formatAmount(totalDeuda)}
+              titulo={tr("Deudas")} valor={formatAmount(totalDeuda)}
               pct={deudaPagadaPct}
-              detalle={deudasActivas.length > 0 ? `Llevas ${deudaPagadaPct}% pagado` : "Sin deudas 🎉"}
+              detalle={deudasActivas.length > 0 ? tr("Llevas {0}% pagado", [deudaPagadaPct]) : tr("Sin deudas 🎉")}
             />
             <Metrica
               icon={ShieldCheck} color="text-purple-600 dark:text-purple-400" barra="bg-purple-500"
-              titulo="Colchón de emergencia"
+              titulo={tr("Colchón de emergencia")}
               valor={textoColchon(mesesColchon)}
               pct={mesesColchon === null ? 0 : Math.min(100, Math.round((mesesColchon / COLCHON_META_MESES) * 100))}
-              detalle={mesesColchon === null ? "Registra tus obligaciones para calcularlo" : `Meses de obligaciones que cubren tus ahorros · meta ${COLCHON_META_MESES}`}
+              detalle={mesesColchon === null ? tr("Registra tus obligaciones para calcularlo") : tr("Meses de obligaciones que cubren tus ahorros · meta {0}", [COLCHON_META_MESES])}
             />
           </div>
-          <Link href="/balance" className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground pt-2 border-t border-border/50">
-            Ver detalle completo <ChevronRight className="h-3 w-3" />
+          <Link href="/balance" className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground pt-2 border-t border-border/50">{tr("Ver detalle completo")}{" "}<ChevronRight className="h-3 w-3" />
           </Link>
         </CardContent>
       </Card>
@@ -715,12 +707,8 @@ export default function JardinPage() {
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-5 space-y-4">
           <div>
-            <h3 className="text-sm font-bold flex items-center gap-2">
-              🌿 Así crece tu jardín
-            </h3>
-            <p className="text-[10px] text-muted-foreground">
-              Cada paso cuenta. Tú decides hasta dónde puede llegar.
-            </p>
+            <h3 className="text-sm font-bold flex items-center gap-2">{tr("🌿 Así crece tu jardín")}</h3>
+            <p className="text-[10px] text-muted-foreground">{tr("Cada paso cuenta. Tú decides hasta dónde puede llegar.")}</p>
           </div>
 
           {/* Niveles grid */}
@@ -748,29 +736,23 @@ export default function JardinPage() {
                   )}
                   {/* Label */}
                   <div className="text-center">
-                    <p className="text-[9px] font-bold">Nivel {level.level}</p>
+                    <p className="text-[9px] font-bold">{tr("Nivel {0}", [level.level])}</p>
                     <p className="text-[8px] text-muted-foreground">{level.name}</p>
                   </div>
                   {/* Badge */}
                   {isCompleted && (
                     <span className="text-[8px] font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                      <Check className="h-2.5 w-2.5" /> Completado
-                    </span>
+                      <Check className="h-2.5 w-2.5" />{" "}{tr("Completado")}</span>
                   )}
                   {isCurrent && (
-                    <span className="text-[8px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">
-                      Actual
-                    </span>
+                    <span className="text-[8px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">{tr("Actual")}</span>
                   )}
                   {isNext && (
-                    <span className="text-[8px] font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                      Próximo
-                    </span>
+                    <span className="text-[8px] font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{tr("Próximo")}</span>
                   )}
                   {isLocked && (
                     <span className="text-[8px] font-bold bg-muted/50 text-muted-foreground px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                      <Lock className="h-2.5 w-2.5" /> Bloqueado
-                    </span>
+                      <Lock className="h-2.5 w-2.5" />{" "}{tr("Bloqueado")}</span>
                   )}
                 </div>
               )
@@ -784,7 +766,7 @@ export default function JardinPage() {
         <CardContent className="px-5 py-3 flex items-center gap-3">
           <Lightbulb className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <p key={consejoIdx} className="text-[11px] text-muted-foreground flex-1" style={{ animation: "kiriBubblePop .4s ease" }}>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">Consejo Kiri:</span> {consejo.texto}
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">{tr("Consejo Kiri:")}</span> {consejo.texto}
           </p>
           <div className="flex items-center gap-2 shrink-0">
             {consejo.href && (
@@ -796,8 +778,7 @@ export default function JardinPage() {
               type="button"
               onClick={() => setConsejoIdx(i => i + 1)}
               className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
-            >
-              Otro consejo <ChevronRight className="h-3 w-3" />
+            >{tr("Otro consejo")}{" "}<ChevronRight className="h-3 w-3" />
             </button>
           </div>
         </CardContent>
@@ -826,15 +807,13 @@ function GardenActions({ onWater, onInvite }: { onWater: () => void; onInvite: (
         onClick={onWater}
         className="h-12 px-5 bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 rounded-2xl gap-2 font-bold"
       >
-        <Droplets className="h-5 w-5" /> Regar jardín
-      </Button>
+        <Droplets className="h-5 w-5" />{" "}{tr("Regar jardín")}</Button>
       <Button
         onClick={onInvite}
         variant="outline"
         className="h-12 px-4 rounded-2xl gap-1.5 font-bold border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10"
       >
-        <UserPlus className="h-5 w-5" /> Invitar
-      </Button>
+        <UserPlus className="h-5 w-5" />{" "}{tr("Invitar")}</Button>
     </>
   )
 }
@@ -844,7 +823,7 @@ function textoColchon(meses: number | null): string {
   if (meses === null) return "—"
   if (meses < 1) {
     const dias = Math.floor(meses * 30)
-    return dias < 1 ? "Menos de 1 día" : `${dias} día${dias === 1 ? "" : "s"}`
+    return dias < 1 ? tr("Menos de 1 día") : tr("{0} día{1}", [dias, dias === 1 ? "" : "s"])
   }
   const m = meses < 10 ? Math.round(meses * 10) / 10 : Math.round(meses)
   return `${m} ${m === 1 ? "mes" : "meses"}`
@@ -897,31 +876,27 @@ function ClimaObligacionesModal({ open, onClose, vencidas, proximas, formatAmoun
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto overflow-x-hidden [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {vencidas.length > 0 ? <CloudLightning className="h-5 w-5 text-red-500" /> : <CalendarClock className="h-5 w-5 text-amber-500" />}
-            El clima de tus obligaciones
-          </DialogTitle>
+            {vencidas.length > 0 ? <CloudLightning className="h-5 w-5 text-red-500" /> : <CalendarClock className="h-5 w-5 text-amber-500" />}{tr("El clima de tus obligaciones")}</DialogTitle>
           <DialogDescription>
             {vencidas.length > 0
-              ? "La tormenta sigue mientras haya pagos vencidos. Ponte al día y vuelve el sol ☀️"
-              : proximas.length > 0 ? "Nada vencido. Estos pagos se acercan:" : "¡Todo al día! No hay pagos vencidos ni próximos ☀️"}
+              ? tr("La tormenta sigue mientras haya pagos vencidos. Ponte al día y vuelve el sol ☀️")
+              : proximas.length > 0 ? tr("Nada vencido. Estos pagos se acercan:") : tr("¡Todo al día! No hay pagos vencidos ni próximos ☀️")}
           </DialogDescription>
         </DialogHeader>
         {vencidas.length > 0 && (
           <div className="space-y-2">
-            <p className="text-[11px] font-black uppercase tracking-wide text-red-500">⚡ Vencidas ({vencidas.length})</p>
+            <p className="text-[11px] font-black uppercase tracking-wide text-red-500">{tr("⚡ Vencidas ({0})", [vencidas.length])}</p>
             {vencidas.map(o => <Fila key={o.key} o={o} color="text-red-500" />)}
           </div>
         )}
         {proximas.length > 0 && (
           <div className="space-y-2">
-            <p className="text-[11px] font-black uppercase tracking-wide text-amber-600">☁️ Próximas a vencer ({proximas.length})</p>
+            <p className="text-[11px] font-black uppercase tracking-wide text-amber-600">{tr("☁️ Próximas a vencer ({0})", [proximas.length])}</p>
             {proximas.map(o => <Fila key={o.key} o={o} color="text-amber-600" />)}
           </div>
         )}
         {(vencidas.length > 0 || proximas.length > 0) && (
-          <Button onClick={onIr} className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold">
-            Ir a pagar en Obligaciones
-          </Button>
+          <Button onClick={onIr} className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold">{tr("Ir a pagar en Obligaciones")}</Button>
         )}
       </DialogContent>
     </Dialog>
@@ -1414,7 +1389,7 @@ function GardenTreeVisual({
             className="absolute -top-4 inset-x-0 z-20 flex justify-center items-start gap-1 cursor-pointer"
             onClick={onCloudsClick}
             role="button"
-            aria-label="Ver obligaciones próximas"
+            aria-label={tr("Ver obligaciones próximas")}
           >
             {[
               { w: "w-14", top: "mt-1", opacity: "opacity-70" },
@@ -1442,7 +1417,7 @@ function GardenTreeVisual({
               className="absolute -top-4 inset-x-0 z-20 flex justify-center items-start gap-1 cursor-pointer"
               onClick={onCloudsClick}
               role="button"
-              aria-label="Ver obligaciones vencidas"
+              aria-label={tr("Ver obligaciones vencidas")}
             >
               {[
                 { w: "w-16", top: "mt-1" },
@@ -1663,8 +1638,8 @@ function GardenTreeVisual({
             type="button"
             onClick={onToggleSound}
             className="absolute bottom-1 -right-2 z-40 h-7 w-7 rounded-full bg-card/80 border border-border/60 flex items-center justify-center text-muted-foreground/70 hover:text-foreground"
-            aria-label={soundOn ? "Silenciar truenos" : "Activar sonido de truenos"}
-            title={soundOn ? "Silenciar truenos" : "Activar sonido de truenos"}
+            aria-label={soundOn ? tr("Silenciar truenos") : tr("Activar sonido de truenos")}
+            title={soundOn ? tr("Silenciar truenos") : tr("Activar sonido de truenos")}
           >
             {soundOn ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
           </button>

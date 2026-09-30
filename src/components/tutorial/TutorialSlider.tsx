@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 import { MODULE_GUIDES, type ModuleGuideData, type GuideItem } from "@/lib/module-guide-content"
 import { getUserId } from "@/lib/api-client"
 import { guiaVista, marcarGuiaVista } from "@/lib/guias"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -43,15 +44,15 @@ const TUTORIAL_SLIDES: TutorialSlide[] = [
   {
     id: "final",
     number: MODULE_GUIDES.length + 1,
-    title: "¡Todo en orden!",
-    subtitle: "Ya conoces tu jardín financiero",
+    title: tr("¡Todo en orden!"),
+    subtitle: tr("Ya conoces tu jardín financiero"),
     textColor: "text-kiri-emerald",
     badgeSolid: "bg-kiri-emerald",
     bgGradient: "from-kiri-emerald/10 to-emerald-900/5",
     features: [
-      { icon: "🌱", title: "Usa cada módulo a tu ritmo", description: "" },
-      { icon: "💡", title: "Toma mejores decisiones", description: "" },
-      { icon: "🌳", title: "Y mira cómo tu jardín florece", description: "" },
+      { icon: "🌱", title: tr("Usa cada módulo a tu ritmo"), description: "" },
+      { icon: "💡", title: tr("Toma mejores decisiones"), description: "" },
+      { icon: "🌳", title: tr("Y mira cómo tu jardín florece"), description: "" },
     ],
   },
 ]
@@ -94,6 +95,17 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
     if (!isFirst) setCurrentIndex(i => i - 1)
   }
 
+  // Teclado: Escape cierra (antes quedaba atrapado sin mouse) y las flechas pasan de página
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+      else if (e.key === "ArrowRight") setCurrentIndex(i => Math.min(i + 1, slides.length - 1))
+      else if (e.key === "ArrowLeft") setCurrentIndex(i => Math.max(i - 1, 0))
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose, slides.length])
+
   if (!currentSlide) return null
 
   return (
@@ -101,6 +113,8 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
@@ -168,7 +182,7 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
             {/* Área visual — Qué debes hacer aquí */}
             <div className={cn("rounded-2xl p-5 mb-5 bg-gradient-to-br border border-border/50", currentSlide.bgGradient)}>
               {currentSlide.id !== "final" && (
-                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground mb-3">Qué debes hacer aquí:</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-foreground mb-3">{tr("Qué debes hacer aquí:")}</p>
               )}
               <div className="space-y-4">
                 {currentSlide.features.map((feat, i) => (
@@ -190,9 +204,7 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
               onClick={() => { onClose(); router.push("/guia-kiri") }}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-kiri-emerald/20 bg-kiri-emerald/5 text-kiri-emerald hover:bg-kiri-emerald/10 transition-colors text-xs font-bold"
             >
-              <BookOpen className="h-3.5 w-3.5" />
-              Ver guía completa
-            </button>
+              <BookOpen className="h-3.5 w-3.5" />{tr("Ver guía completa")}</button>
 
             {/* Footer: solo visible en tutorial completo (showAll) */}
             {showAll && (
@@ -200,9 +212,7 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
                 <button
                   onClick={onClose}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Omitir
-                </button>
+                >{tr("Omitir")}</button>
 
                 <div className="flex items-center gap-2">
                   {!isFirst && (
@@ -221,8 +231,8 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
                     className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-xs gap-1 px-4"
                 >
                   {isLast && currentSlide.id === "final"
-                    ? "¡Comenzar mi viaje en Kiri!"
-                    : "Siguiente"}
+                    ? tr("¡Comenzar mi viaje en Kiri!")
+                    : tr("Siguiente")}
                   {!isLast && <ChevronRight className="h-3.5 w-3.5" />}
                 </Button>
               </div>

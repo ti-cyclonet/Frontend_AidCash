@@ -18,6 +18,7 @@ import { ExportButtons } from "@/components/balance/ExportButtons"
 import { MovementList, MOVEMENT_FILTERS, esEntrada } from "@/components/balance/MovementList"
 import { FeatureGate } from "@/components/plan/feature-gate"
 import { usePlan } from "@/lib/plan-context"
+import { tr, localeFecha } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -35,9 +36,9 @@ type Vista = { tipo: "actual" } | { tipo: "mes"; year: number; month: number }
 
 const DIA = 86_400_000
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-const fmtDia = (d: Date) => d.toLocaleDateString("es-CO", { day: "numeric", month: "short" })
+const fmtDia = (d: Date) => d.toLocaleDateString(localeFecha(), { day: "numeric", month: "short" })
 const nombreMes = (year: number, month: number) => {
-  const s = new Date(year, month, 1).toLocaleDateString("es-CO", { month: "long", year: "numeric" })
+  const s = new Date(year, month, 1).toLocaleDateString(localeFecha(), { month: "long", year: "numeric" })
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 /** Rango [start, end) → "15 sept – 29 sept" (end es exclusivo). */
@@ -53,8 +54,10 @@ function ultimosMeses(mesesPlan: number) {
 }
 
 function totales(movs: Movement[]) {
-  const entradas = movs.filter(esEntrada).reduce((s, m) => s + m.monto, 0)
-  const salidas = movs.filter(m => !esEntrada(m)).reduce((s, m) => s + m.monto, 0)
+  // Lo que no movió la billetera (ej. "Préstamo registrado" sin sacar plata) no suma
+  const reales = movs.filter(m => !m.noMueveBilletera)
+  const entradas = reales.filter(esEntrada).reduce((s, m) => s + m.monto, 0)
+  const salidas = reales.filter(m => !esEntrada(m)).reduce((s, m) => s + m.monto, 0)
   return { entradas, salidas }
 }
 
@@ -89,10 +92,10 @@ export default function HistorialPage() {
       const { data, error } = await userApi.deleteIncome(aEliminar.id)
       setEliminando(false)
       if (error || !data) {
-        toast({ title: "No se pudo eliminar", description: error ?? "Intenta de nuevo.", variant: "destructive" })
+        toast({ title: tr("No se pudo eliminar"), description: error ?? tr("Intenta de nuevo."), variant: "destructive" })
         return
       }
-      toast({ title: `Eliminaste el ingreso de ${formatAmount(data.monto)}`, description: "Tu billetera quedó como si nunca lo hubieras registrado." })
+      toast({ title: tr("Eliminaste el ingreso de {0}", [formatAmount(data.monto)]), description: tr("Tu billetera quedó como si nunca lo hubieras registrado.") })
       setAEliminar(null)
       setRecarga(n => n + 1)
       window.dispatchEvent(new Event("kiri:wallet-updated"))
@@ -103,14 +106,14 @@ export default function HistorialPage() {
     const { data, error } = await impulseApi.delete(aEliminar.id)
     setEliminando(false)
     if (error || !data) {
-      toast({ title: "No se pudo eliminar", description: error ?? "Intenta de nuevo.", variant: "destructive" })
+      toast({ title: tr("No se pudo eliminar"), description: error ?? tr("Intenta de nuevo."), variant: "destructive" })
       return
     }
     toast({
-      title: `Eliminaste "${aEliminar.nombre}"`,
+      title: tr("Eliminaste \"{0}\"", [aEliminar.nombre]),
       description: data.reversion.tipo === "tarjeta"
-        ? `Se revirtieron ${formatAmount(data.reversion.monto)} de tu tarjeta${data.reversion.tarjetaNombre ? ` ${data.reversion.tarjetaNombre}` : ""}.`
-        : `Volvieron ${formatAmount(data.reversion.monto)} a tu gasto libre.`,
+        ? tr("Se revirtieron {0} de tu tarjeta{1}.", [formatAmount(data.reversion.monto), data.reversion.tarjetaNombre ? ` ${data.reversion.tarjetaNombre}` : ""])
+        : tr("Volvieron {0} a tu gasto libre.", [formatAmount(data.reversion.monto)]),
     })
     setAEliminar(null)
     setRecarga(n => n + 1)
@@ -157,7 +160,7 @@ export default function HistorialPage() {
     if (vista.tipo === "mes" && quincenal) {
       return getQuincenasDelMes(diasCobro, vista.year, vista.month).map(q => ({
         key: `p${q.periodo}`,
-        titulo: `Periodo ${q.periodo}`,
+        titulo: tr("Periodo {0}", [q.periodo]),
         subtitulo: fmtRango(q.start, q.end),
         movs: movimientos.filter(m => { const f = new Date(m.fecha); return f >= q.start && f < q.end }),
       }))
@@ -166,7 +169,7 @@ export default function HistorialPage() {
   }, [vista, quincenal, diasCobro, movimientos])
 
   const titulo = vista.tipo === "actual"
-    ? (quincenal ? `Quincena actual · Periodo ${getCurrentQuincena(diasCobro)}` : "Mes actual")
+    ? (quincenal ? tr("Quincena actual · Periodo {0}", [getCurrentQuincena(diasCobro)]) : tr("Mes actual"))
     : nombreMes(vista.year, vista.month)
   const total = totales(movimientos)
 
@@ -176,14 +179,12 @@ export default function HistorialPage() {
         {/* Encabezado */}
         <header className="space-y-3">
           <Link href="/balance" className="inline-flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-3.5 w-3.5" /> Balance
-          </Link>
+            <ArrowLeft className="h-3.5 w-3.5" />{" "}{tr("Balance")}</Link>
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="min-w-0">
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <History className="h-6 w-6" /> Historial
-              </h1>
-              <p className="text-muted-foreground text-sm">Todo lo que entró y salió de tu plata.</p>
+                <History className="h-6 w-6" />{" "}{tr("Historial")}</h1>
+              <p className="text-muted-foreground text-sm">{tr("Todo lo que entró y salió de tu plata.")}</p>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -192,8 +193,7 @@ export default function HistorialPage() {
                 onClick={() => setMesModalOpen(true)}
                 className="h-9 rounded-xl gap-1.5 border-muted text-muted-foreground hover:border-cyclon-lavender/40 hover:text-cyclon-lavender font-bold text-xs"
               >
-                <Calendar className="h-3.5 w-3.5" /> Elegir mes
-              </Button>
+                <Calendar className="h-3.5 w-3.5" />{" "}{tr("Elegir mes")}</Button>
               <ExportButtons />
             </div>
           </div>
@@ -209,24 +209,21 @@ export default function HistorialPage() {
               </div>
               {vista.tipo === "mes" && (
                 <button onClick={() => setVista({ tipo: "actual" })} className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-kiri-emerald bg-kiri-emerald/10 hover:bg-kiri-emerald/20 rounded-lg px-2.5 py-1.5">
-                  <X className="h-3 w-3" /> Volver al periodo actual
-                </button>
+                  <X className="h-3 w-3" />{" "}{tr("Volver al periodo actual")}</button>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-emerald-500/5 px-3 py-2">
-                <p className="text-[9px] font-bold uppercase text-muted-foreground">Entró</p>
+                <p className="text-[9px] font-bold uppercase text-muted-foreground">{tr("Entró")}</p>
                 <p className="text-sm font-black text-emerald-500">+{formatAmount(total.entradas)}</p>
               </div>
               <div className="rounded-xl bg-red-500/5 px-3 py-2">
-                <p className="text-[9px] font-bold uppercase text-muted-foreground">Salió</p>
+                <p className="text-[9px] font-bold uppercase text-muted-foreground">{tr("Salió")}</p>
                 <p className="text-sm font-black text-red-500">-{formatAmount(total.salidas)}</p>
               </div>
             </div>
             {vista.tipo === "actual" && (
-              <p className="text-[10px] text-muted-foreground">
-                Aquí ves solo tu {quincenal ? "quincena" : "mes"} en curso; cuando empiece el siguiente periodo, este se guarda y lo consultas con &ldquo;Elegir mes&rdquo;.
-              </p>
+              <p className="text-[10px] text-muted-foreground">{tr("Aquí ves solo tu {0} en curso; cuando empiece el siguiente periodo, este se guarda y lo consultas con “Elegir mes”.", [quincenal ? tr("quincena") : tr("mes")])}</p>
             )}
           </CardContent>
         </Card>
@@ -235,7 +232,7 @@ export default function HistorialPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre, acreedor, tipo..."
+            placeholder={tr("Buscar por nombre, acreedor, tipo...")}
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
             className="h-11 rounded-xl pl-10"
@@ -277,7 +274,7 @@ export default function HistorialPage() {
                   movements={sec.movs}
                   formatAmount={formatAmount}
                   onEliminar={setAEliminar}
-                  vacio={sec.titulo ? `Sin movimientos en el ${sec.titulo.toLowerCase()}.` : "No hay movimientos que mostrar."}
+                  vacio={sec.titulo ? tr("Sin movimientos en el {0}.", [sec.titulo.toLowerCase()]) : tr("No hay movimientos que mostrar.")}
                 />
               </section>
             )
@@ -288,28 +285,27 @@ export default function HistorialPage() {
         <Dialog open={!!aEliminar} onOpenChange={v => { if (!v && !eliminando) setAEliminar(null) }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-500"><Trash2 className="h-5 w-5" /> {esIngreso ? "¿Eliminar este ingreso?" : "¿Eliminar este gasto?"}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-red-500"><Trash2 className="h-5 w-5" /> {esIngreso ? tr("¿Eliminar este ingreso?") : tr("¿Eliminar este gasto?")}</DialogTitle>
               <DialogDescription>
-                <strong>{aEliminar?.nombre}</strong> por {formatAmount(aEliminar?.monto ?? 0)}. Todo queda como si no lo hubieras registrado:
-              </DialogDescription>
+                <strong>{aEliminar?.nombre}</strong>{" "}{tr("por {0}. Todo queda como si no lo hubieras registrado:", [formatAmount(aEliminar?.monto ?? 0)])}</DialogDescription>
             </DialogHeader>
             {esIngreso ? (
               <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5">
-                <li>Se descuentan {formatAmount(aEliminar?.monto ?? 0)} de tu disponible y de los bolsillos de tu billetera a los que fue.</li>
-                <li>Deja de contar en tus ingresos del Balance.</li>
-                <li>Los pagos que ya hiciste con esa plata siguen registrados (se ven aparte en el historial).</li>
-                <li>Desaparece de este historial. No se puede deshacer.</li>
+                <li>{tr("Se descuentan {0} de tu disponible y de los bolsillos de tu billetera a los que fue.", [formatAmount(aEliminar?.monto ?? 0)])}</li>
+                <li>{tr("Deja de contar en tus ingresos del Balance.")}</li>
+                <li>{tr("Los pagos que ya hiciste con esa plata siguen registrados (se ven aparte en el historial).")}</li>
+                <li>{tr("Desaparece de este historial. No se puede deshacer.")}</li>
               </ul>
             ) : (
             <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5">
-              <li>{aEliminar?.tarjetaNombre ? `Se revierte de tu tarjeta ${aEliminar.tarjetaNombre}.` : `Vuelven ${formatAmount(aEliminar?.monto ?? 0)} a tu gasto libre.`}</li>
-              <li>Deja de contar en su categoría de presupuesto y en gastos hormiga.</li>
-              <li>Desaparece de este historial. No se puede deshacer.</li>
+              <li>{aEliminar?.tarjetaNombre ? tr("Se revierte de tu tarjeta {0}.", [aEliminar.tarjetaNombre]) : tr("Vuelven {0} a tu gasto libre.", [formatAmount(aEliminar?.monto ?? 0)])}</li>
+              <li>{tr("Deja de contar en su categoría de presupuesto y en gastos hormiga.")}</li>
+              <li>{tr("Desaparece de este historial. No se puede deshacer.")}</li>
             </ul>
             )}
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" disabled={eliminando} onClick={() => setAEliminar(null)}>Cancelar</Button>
-              <Button variant="destructive" disabled={eliminando} onClick={confirmarEliminar}>{eliminando ? "Eliminando..." : "Eliminar gasto"}</Button>
+              <Button variant="ghost" disabled={eliminando} onClick={() => setAEliminar(null)}>{tr("Cancelar")}</Button>
+              <Button variant="destructive" disabled={eliminando} onClick={confirmarEliminar}>{eliminando ? "Eliminando..." : tr("Eliminar gasto")}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -318,9 +314,9 @@ export default function HistorialPage() {
         <Dialog open={mesModalOpen} onOpenChange={setMesModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><Calendar className="h-5 w-5 text-cyclon-lavender" /> Ver otro mes</DialogTitle>
+              <DialogTitle className="flex items-center gap-2"><Calendar className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("Ver otro mes")}</DialogTitle>
               <DialogDescription>
-                {quincenal ? "Verás los gastos, ingresos y préstamos de ese mes separados en Periodo 1 y Periodo 2." : "Verás los gastos, ingresos y préstamos de ese mes."}
+                {quincenal ? tr("Verás los gastos, ingresos y préstamos de ese mes separados en Periodo 1 y Periodo 2.") : tr("Verás los gastos, ingresos y préstamos de ese mes.")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-2 max-h-[320px] overflow-y-auto py-1">
@@ -333,8 +329,8 @@ export default function HistorialPage() {
                       setMesModalOpen(false)
                       if (m.bloqueado) {
                         window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
-                          codigo: "FUNCION", mejora: { plan: "KIRI PLUS" },
-                          mensaje: `En tu plan ves los últimos ${mesesPlan} meses de historial. Con KIRI PLUS ves 24 meses y con KIRI PRO todo tu historial.`,
+                          codigo: "FUNCION", mejora: { plan: tr("KIRI PLUS") },
+                          mensaje: tr("En tu plan ves los últimos {0} meses de historial. Con KIRI PLUS ves 24 meses y con KIRI PRO todo tu historial.", [mesesPlan]),
                         } }))
                         return
                       }
@@ -344,7 +340,7 @@ export default function HistorialPage() {
                       m.bloqueado ? "border-muted/60 opacity-60" : activo ? "border-cyclon-lavender bg-cyclon-lavender/5" : "border-muted hover:border-cyclon-lavender/40")}
                   >
                     <p className="text-xs font-bold flex items-center gap-1">{m.bloqueado && <Lock className="h-3 w-3" />}{m.label}</p>
-                    {m.actual && <p className="text-[8px] text-kiri-emerald font-bold">Mes actual</p>}
+                    {m.actual && <p className="text-[8px] text-kiri-emerald font-bold">{tr("Mes actual")}</p>}
                   </button>
                 )
               })}

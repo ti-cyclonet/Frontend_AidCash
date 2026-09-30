@@ -2,6 +2,7 @@
 
 import { useCallback } from "react"
 import { toast } from "@/hooks/use-toast"
+import { tr } from "@/lib/i18n"
 
 /**
  * Hook de celebraciones con confeti y toasts empáticos.
@@ -47,8 +48,8 @@ export function useCelebration() {
   const celebrateDebtPaid = useCallback(() => {
     fireConfetti()
     toast({
-      title: "🎉 ¡Deuda saldada!",
-      description: "Una obligación menos. Tu flujo libre acaba de crecer. ¡Sigue así!",
+      title: tr("🎉 ¡Deuda saldada!"),
+      description: tr("Una obligación menos. Tu flujo libre acaba de crecer. ¡Sigue así!"),
     })
   }, [fireConfetti])
 
@@ -56,8 +57,8 @@ export function useCelebration() {
   const celebrateSavingsGoal = useCallback(() => {
     fireConfetti()
     toast({
-      title: "🏆 ¡Meta de ahorro alcanzada!",
-      description: "Lo lograste. Tu disciplina tiene recompensa. Es momento de soñar más grande.",
+      title: tr("🏆 ¡Meta de ahorro alcanzada!"),
+      description: tr("Lo lograste. Tu disciplina tiene recompensa. Es momento de soñar más grande."),
     })
   }, [fireConfetti])
 
@@ -65,8 +66,8 @@ export function useCelebration() {
   const celebrateSavingsEntry = useCallback(() => {
     fireSmallConfetti()
     toast({
-      title: "💰 ¡Ahorro registrado!",
-      description: "Te pagaste a ti mismo primero. Tu yo del futuro te lo agradece.",
+      title: tr("💰 ¡Ahorro registrado!"),
+      description: tr("Te pagaste a ti mismo primero. Tu yo del futuro te lo agradece."),
     })
   }, [fireSmallConfetti])
 
@@ -78,16 +79,16 @@ export function useCelebration() {
       fireSmallConfetti()
     }
     const messages: Record<number, string> = {
-      1: "¡Primera semana! El viaje de mil pasos empieza con uno.",
-      2: "Dos semanas seguidas. La constancia es tu superpoder.",
-      3: "Tres semanas. Esto ya es un hábito, no suerte.",
-      4: "¡Un mes completo! Tu jardín financiero florece.",
-      8: "Dos meses. Eres de acero. 💪",
-      12: "Tres meses. Leyenda. Tu disciplina inspira.",
+      1: tr("¡Primera semana! El viaje de mil pasos empieza con uno."),
+      2: tr("Dos semanas seguidas. La constancia es tu superpoder."),
+      3: tr("Tres semanas. Esto ya es un hábito, no suerte."),
+      4: tr("¡Un mes completo! Tu jardín financiero florece."),
+      8: tr("Dos meses. Eres de acero. 💪"),
+      12: tr("Tres meses. Leyenda. Tu disciplina inspira."),
     }
-    const msg = messages[weeks] ?? `${weeks} semanas en racha. Imparable.`
+    const msg = messages[weeks] ?? tr("{0} semanas en racha. Imparable.", [weeks])
     toast({
-      title: `🔥 ¡Racha de ${weeks} semana${weeks > 1 ? 's' : ''}!`,
+      title: tr("🔥 ¡Racha de {0} semana{1}!", [weeks, weeks > 1 ? 's' : '']),
       description: msg,
     })
   }, [fireConfetti, fireSmallConfetti])
@@ -96,8 +97,8 @@ export function useCelebration() {
   const celebrateBadge = useCallback((emoji: string, nombre: string) => {
     fireConfetti()
     toast({
-      title: `${emoji} ¡Nueva insignia!`,
-      description: `Desbloqueaste "${nombre}". Tu esfuerzo tiene nombre propio.`,
+      title: tr("{0} ¡Nueva insignia!", [emoji]),
+      description: tr("Desbloqueaste \"{0}\". Tu esfuerzo tiene nombre propio.", [nombre]),
     })
   }, [fireConfetti])
 
@@ -105,8 +106,8 @@ export function useCelebration() {
   const celebrateEmergencyFund = useCallback(() => {
     fireConfetti()
     toast({
-      title: "🛡️ ¡Fondo de emergencia listo!",
-      description: "Ya tienes 3 meses de colchón. Puedes dormir más tranquilo.",
+      title: tr("🛡️ ¡Fondo de emergencia listo!"),
+      description: tr("Ya tienes 3 meses de colchón. Puedes dormir más tranquilo."),
     })
   }, [fireConfetti])
 

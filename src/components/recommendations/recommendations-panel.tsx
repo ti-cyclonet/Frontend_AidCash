@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { RecommendationResult, AlertLevel } from "@/lib/recommendations"
 import { useAppContext } from "@/lib/app-context"
 import Link from "next/link"
+import { tr } from "@/lib/i18n"
 
 interface Props {
   result: RecommendationResult
@@ -30,9 +31,7 @@ export function RecommendationsPanel({ result }: Props) {
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-        <TrendingDown className="h-4 w-4" />
-        Recomendaciones
-      </h2>
+        <TrendingDown className="h-4 w-4" />{tr("Recomendaciones")}</h2>
 
       {/* ── Alertas ── */}
       {alerts.map(alert => {
@@ -59,8 +58,8 @@ export function RecommendationsPanel({ result }: Props) {
                 <Snowflake className="h-4 w-4" />
               </div>
               <div>
-                <p className="font-bold text-sm">Estrategia Bola de Nieve</p>
-                <p className="text-[10px] text-muted-foreground">Liquida estas primero para liberar flujo de caja</p>
+                <p className="font-bold text-sm">{tr("Estrategia Bola de Nieve")}</p>
+                <p className="text-[10px] text-muted-foreground">{tr("Liquida estas primero para liberar flujo de caja")}</p>
               </div>
             </div>
             <div className="space-y-2">
@@ -73,7 +72,7 @@ export function RecommendationsPanel({ result }: Props) {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-black text-sm text-cyclon-periwinkle">{formatAmount(debt.montoTotal)}</p>
-                      <p className="text-[10px] text-muted-foreground">{periodsToFinish} cuotas</p>
+                      <p className="text-[10px] text-muted-foreground">{periodsToFinish}{" "}{tr("cuotas")}</p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                   </div>
@@ -93,18 +92,14 @@ export function RecommendationsPanel({ result }: Props) {
             </div>
             <div className="flex-1 space-y-2">
               <div>
-                <p className="font-bold text-sm text-cyclon-lavender">¿Pausar el ahorro temporalmente?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Podrías redirigir {formatAmount(savingsToRedirect)} de tu bloque de ahorro para atacar las deudas prioritarias y liberar flujo más rápido.
-                </p>
+                <p className="font-bold text-sm text-cyclon-lavender">{tr("¿Pausar el ahorro temporalmente?")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{tr("Podrías redirigir {0} de tu bloque de ahorro para atacar las deudas prioritarias y liberar flujo más rápido.", [formatAmount(savingsToRedirect)])}</p>
               </div>
               <Button
                 size="sm"
                 onClick={() => setPauseModalOpen(true)}
                 className="h-8 rounded-xl bg-cyclon-lavender text-white font-bold text-xs px-4 hover:bg-cyclon-lavender/90"
-              >
-                Ver recomendación
-              </Button>
+              >{tr("Ver recomendación")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -115,35 +110,27 @@ export function RecommendationsPanel({ result }: Props) {
         <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-cyclon-lavender">
-              <PiggyBank className="h-5 w-5" />
-              Pausar Ahorro Temporalmente
-            </DialogTitle>
-            <DialogDescription>
-              Esta es una recomendación estratégica, no una acción automática.
-            </DialogDescription>
+              <PiggyBank className="h-5 w-5" />{tr("Pausar Ahorro Temporalmente")}</DialogTitle>
+            <DialogDescription>{tr("Esta es una recomendación estratégica, no una acción automática.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <Card className="border-none bg-muted/40 rounded-2xl">
               <CardContent className="p-4 space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Ahorro actual por periodo</span>
+                  <span className="text-sm text-muted-foreground">{tr("Ahorro actual por periodo")}</span>
                   <span className="font-black text-cyclon-lavender">{formatAmount(savingsToRedirect)}</span>
                 </div>
                 <div className="border-t border-dashed border-border" />
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Si pausas el ahorro y destinas esos <strong>{formatAmount(savingsToRedirect)}</strong> a tus deudas prioritarias, podrías liquidarlas más rápido y recuperar capacidad de endeudamiento antes.
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Una vez liquidadas las deudas críticas, retoma el ahorro con el flujo liberado.
-                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{tr("Si pausas el ahorro y destinas esos")}{" "}<strong>{formatAmount(savingsToRedirect)}</strong>{" "}{tr("a tus deudas prioritarias, podrías liquidarlas más rápido y recuperar capacidad de endeudamiento antes.")}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{tr("Una vez liquidadas las deudas críticas, retoma el ahorro con el flujo liberado.")}</p>
               </CardContent>
             </Card>
             <div className="space-y-1.5">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Pasos sugeridos</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("Pasos sugeridos")}</p>
               {[
-                "Ve a Deudas y aplica pagos extra a las deudas de la lista Bola de Nieve",
-                "Usa el monto de ahorro como abono adicional cada periodo",
-                "Cuando liquides la primera deuda, retoma el ahorro normal",
+                tr("Ve a Deudas y aplica pagos extra a las deudas de la lista Bola de Nieve"),
+                tr("Usa el monto de ahorro como abono adicional cada periodo"),
+                tr("Cuando liquides la primera deuda, retoma el ahorro normal"),
               ].map((step, i) => (
                 <div key={i} className="flex gap-2 items-start">
                   <div className="h-5 w-5 rounded-full bg-cyclon-lavender/20 text-cyclon-lavender flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{i + 1}</div>
@@ -153,9 +140,7 @@ export function RecommendationsPanel({ result }: Props) {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setPauseModalOpen(false)} className="w-full bg-cyclon-lavender text-white font-bold rounded-xl h-12">
-              Entendido
-            </Button>
+            <Button onClick={() => setPauseModalOpen(false)} className="w-full bg-cyclon-lavender text-white font-bold rounded-xl h-12">{tr("Entendido")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -18,13 +18,14 @@
  */
 
 import type { BalanceReport } from '@/lib/api-client'
+import { tr, localeFecha } from "@/lib/i18n"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string | undefined | null): string {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleDateString('es-ES', {
+    return new Date(iso).toLocaleDateString(localeFecha(), {
       day: '2-digit', month: 'short', year: 'numeric',
     })
   } catch { return String(iso) }
@@ -49,8 +50,8 @@ function fmtMoney(n: number): string {
 function fmtCompact(n: number): string {
   const v = num(n)
   const abs = Math.abs(v)
-  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M`
-  if (abs >= 1_000) return `$${Math.round(v / 1000)}K`
+  if (abs >= 1_000_000) return tr("${0}M", [(v / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')])
+  if (abs >= 1_000) return tr("${0}K", [Math.round(v / 1000)])
   return fmtMoney(v)
 }
 
@@ -71,17 +72,17 @@ function hexToRgb(hex: string): [number, number, number] {
 function formatPeriodLabel(fromIso: string, toIso: string): string {
   const from = new Date(fromIso)
   const to = new Date(toIso)
-  if (isNaN(from.getTime()) || isNaN(to.getTime())) return new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  if (isNaN(from.getTime()) || isNaN(to.getTime())) return new Date().toLocaleDateString(localeFecha(), { month: 'long', year: 'numeric' })
 
   // "all" empieza en el año 2000 — tratarlo como histórico, no como un rango real.
-  if (from.getFullYear() <= 2000) return 'Todo el historial'
+  if (from.getFullYear() <= 2000) return tr("Todo el historial")
 
   const sameMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()
-  if (sameMonth) return from.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  if (sameMonth) return from.toLocaleDateString(localeFecha(), { month: 'long', year: 'numeric' })
 
   const sameYear = from.getFullYear() === to.getFullYear()
-  const fromLabel = from.toLocaleDateString('es-ES', sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' })
-  const toLabel = to.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const fromLabel = from.toLocaleDateString(localeFecha(), sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' })
+  const toLabel = to.toLocaleDateString(localeFecha(), { month: 'long', year: 'numeric' })
   return `${fromLabel} – ${toLabel}`
 }
 
@@ -90,7 +91,7 @@ function formatPeriodLabel(fromIso: string, toIso: string): string {
 function buildMovements(report: BalanceReport): { fecha: string; nombre: string; monto: number }[] {
   const rows: { fecha: string; nombre: string; monto: number }[] = []
   for (const p of (report.debtPayments ?? [])) {
-    rows.push({ fecha: p.createdAt as string, nombre: (p.debtName as string) ?? 'Deuda', monto: -num(p.montoPagado) })
+    rows.push({ fecha: p.createdAt as string, nombre: (p.debtName as string) ?? tr("Deuda"), monto: -num(p.montoPagado) })
   }
   // Ledger real (fixedExpensePayments), acotado por el rango pedido — antes
   // usaba fixedExpenses.pagadoEstePeriodo, que siempre refleja el periodo
@@ -102,15 +103,15 @@ function buildMovements(report: BalanceReport): { fecha: string; nombre: string;
     rows.push({ fecha: e.createdAt as string, nombre: e.nombre as string, monto: -num(e.monto) })
   }
   for (const r of (report.incomeRecords ?? [])) {
-    rows.push({ fecha: r.createdAt as string, nombre: (r.tipo as string) === 'salario' ? 'Sueldo' : 'Ingreso extra', monto: num(r.monto) })
+    rows.push({ fecha: r.createdAt as string, nombre: (r.tipo as string) === 'salario' ? tr("Sueldo") : tr("Ingreso extra"), monto: num(r.monto) })
   }
   for (const sv of report.savingsHistory.filter(e => (e.tipo as string) === 'ahorro')) {
-    rows.push({ fecha: sv.createdAt as string, nombre: `Ahorro — ${sv.periodo as string}`, monto: -num(sv.monto) })
+    rows.push({ fecha: sv.createdAt as string, nombre: tr("Ahorro — {0}", [sv.periodo as string]), monto: -num(sv.monto) })
   }
   // Retirar de un bolsillo devuelve dinero al saldo disponible — signo
   // positivo, como un ingreso (antes no dejaba ningún rastro en el PDF).
   for (const sv of report.savingsHistory.filter(e => (e.tipo as string) === 'retiro')) {
-    rows.push({ fecha: sv.createdAt as string, nombre: `Retiro de ahorro — ${sv.periodo as string}`, monto: num(sv.monto) })
+    rows.push({ fecha: sv.createdAt as string, nombre: tr("Retiro de ahorro — {0}", [sv.periodo as string]), monto: num(sv.monto) })
   }
   return rows.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
 }
@@ -174,7 +175,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   // mes pasado exportado desde "Elegir meses", donde nunca hay nada en
   // pantalla para capturar.
   const drawEvolutionChart = (series: BalanceReport['monthlySeries'], atX: number, atY: number, w: number, h: number): number => {
-    if (!series || series.length === 0) return emptyState('Sin datos suficientes para graficar.', atY)
+    if (!series || series.length === 0) return emptyState(tr("Sin datos suficientes para graficar."), atY)
 
     const maxVal = Math.max(1, ...series.flatMap(m => [m.ingresos, m.egresos]))
     const chartH = h
@@ -230,7 +231,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   // legible en un PDF que una dona, y no necesita ninguna librería de charts.
   const drawCategoryChart = (categories: BalanceReport['categoryDistribution'], atX: number, atY: number, w: number): number => {
     if (!categories || categories.length === 0) {
-      return emptyState('Sin gastos registrados en este periodo para distribuir por categoría.', atY)
+      return emptyState(tr("Sin gastos registrados en este periodo para distribuir por categoría."), atY)
     }
     const total = categories.reduce((a, c) => a + num(c.value), 0) || 1
     const labelW = 32
@@ -283,25 +284,25 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   doc.setTextColor(GREEN[0], GREEN[1], GREEN[2])
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.text('KIRI FINANCE', margin, 16)
+  doc.text(tr("KIRI FINANCE"), margin, 16)
 
   doc.setTextColor(20, 20, 20)
   doc.setFontSize(20)
   doc.setFont('helvetica', 'bold')
-  doc.text(`Balance · ${periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}`, margin, 26)
+  doc.text(tr("Balance · {0}", [periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)]), margin, 26)
 
   doc.setTextColor(120, 120, 120)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Reporte generado el ${now.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`, margin, 32)
+  doc.text(tr("Reporte generado el {0}", [now.toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long', year: 'numeric' })]), margin, 32)
 
   let y = 42
 
   // ── 3 KPIs principales ──
   const coverKpis = [
-    { label: 'Total recibido', value: s.totalIngreso, color: [17, 24, 39] as [number, number, number] },
-    { label: 'Total gastado', value: s.totalEgreso, color: RED },
-    { label: 'Ahorro del periodo', value: s.totalSaved, color: GREEN },
+    { label: tr("Total recibido"), value: s.totalIngreso, color: [17, 24, 39] as [number, number, number] },
+    { label: tr("Total gastado"), value: s.totalEgreso, color: RED },
+    { label: tr("Ahorro del periodo"), value: s.totalSaved, color: GREEN },
   ]
   const kpiWidth = (contentWidth - 6 * 2) / 3
   coverKpis.forEach((k, i) => {
@@ -320,15 +321,15 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   y += 26
 
   // ── Evolución del balance (gráfica real de ingresos vs egresos) ──
-  y = sectionTitle('Evolución del balance', y)
+  y = sectionTitle(tr("Evolución del balance"), y)
   y = drawEvolutionChart(report.monthlySeries, margin, y + 4, contentWidth, 38) + 2
 
   // ── Distribución de gastos (gráfica real por categoría) ──
-  y = sectionTitle('Distribución de gastos', y)
+  y = sectionTitle(tr("Distribución de gastos"), y)
   y = drawCategoryChart(report.categoryDistribution, margin, y + 3, contentWidth) + 2
 
   // ── Movimientos del periodo (lista limpia, los 6 más recientes) ──
-  y = sectionTitle('Movimientos del periodo', y)
+  y = sectionTitle(tr("Movimientos del periodo"), y)
 
   const recentMovements = buildMovements(report).slice(0, 6)
   if (recentMovements.length > 0) {
@@ -350,7 +351,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
     })
     y += recentMovements.length * 8 + 8
   } else {
-    y = emptyState('Sin movimientos en este periodo.', y)
+    y = emptyState(tr("Sin movimientos en este periodo."), y)
   }
 
   doc.setFontSize(7.5)
@@ -359,7 +360,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   // "→" (U+2192) no existe en las fuentes estándar de jsPDF (Helvetica) — se
   // renderizaba como un glifo roto ("!'" ilegible), mismo problema que ya
   // documentado arriba para los emojis. "->" en ASCII se ve igual de claro.
-  doc.text('El detalle completo de deudas, ahorros y transacciones sigue en las páginas siguientes ->', margin, 275)
+  doc.text(tr("El detalle completo de deudas, ahorros y transacciones sigue en las páginas siguientes ->"), margin, 275)
 
   // ══════════════════════════════════════════════════════════════════════════
   // PÁGINAS SIGUIENTES — mismo detalle exhaustivo que ya existía
@@ -370,11 +371,11 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   const balanceNeto = s.cashBalance
   const metrics = [
-    { label: 'Saldo Neto', value: fmtMoney(balanceNeto), color: GREEN },
-    { label: 'Ingresos del mes', value: fmtMoney(s.totalIngreso), color: GREEN },
-    { label: 'Gastos del mes', value: fmtMoney(s.totalEgreso), color: RED },
-    { label: 'Obligaciones', value: fmtMoney(totalObligacionesActuales), color: PURPLE },
-    { label: 'Ahorros', value: fmtMoney(s.totalSaved), color: GREEN },
+    { label: tr("Saldo Neto"), value: fmtMoney(balanceNeto), color: GREEN },
+    { label: tr("Ingresos del mes"), value: fmtMoney(s.totalIngreso), color: GREEN },
+    { label: tr("Gastos del mes"), value: fmtMoney(s.totalEgreso), color: RED },
+    { label: tr("Obligaciones"), value: fmtMoney(totalObligacionesActuales), color: PURPLE },
+    { label: tr("Ahorros"), value: fmtMoney(s.totalSaved), color: GREEN },
   ]
 
   const cardWidth = (pageWidth - margin * 2 - 4 * 3) / 5 // 5 cards con 3mm gap
@@ -400,7 +401,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   // RESUMEN DE DEUDAS
   // ══════════════════════════════════════════════════════════════════════════
 
-  y = sectionTitle('Resumen de deudas', y) + 1
+  y = sectionTitle(tr("Resumen de deudas"), y) + 1
 
   // Tabla de deudas
   const debtRows = activeDebts.map(d => [
@@ -408,14 +409,14 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
     (d.acreedor as string) || '—',
     fmtMoney(num(d.montoTotal)),
     fmtMoney(num(d.saldoRestante)),
-    d.tasaInteres ? `${num(d.tasaInteres).toFixed(2)}% M.V.` : '—',
+    d.tasaInteres ? tr("{0}% M.V.", [num(d.tasaInteres).toFixed(2)]) : '—',
     fmtMoney(num(d.cuotaPeriodo)),
   ])
 
   if (debtRows.length > 0) {
     autoTable(doc, {
       startY: y,
-      head: [['Obligación', 'Acreedor', 'Saldo total', 'Saldo restante', 'Interés', 'Cuota']],
+      head: [[tr("Obligación"), tr("Acreedor"), tr("Saldo total"), tr("Saldo restante"), tr("Interés"), tr("Cuota")]],
       body: debtRows,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: DARK_GREEN, textColor: 255, fontStyle: 'bold', fontSize: 7 },
@@ -433,7 +434,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
     y = (doc as any).lastAutoTable.finalY + 4
   } else {
-    y = emptyState('No hay deudas activas. ¡Felicidades!', y)
+    y = emptyState(tr("No hay deudas activas. ¡Felicidades!"), y)
   }
 
   // Resumen de intereses — usa totalDeudaActual/totalMontoOriginal (ya
@@ -451,11 +452,11 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   // amortización comparando el plan original vs el proyectado desde el saldo
   // actual), no una estimación — ver summary.interesEvitado en el backend.
   const interestCards = [
-    { label: 'Total de deudas', value: fmtMoney(totalMontoOriginal) },
-    { label: 'Saldo restante', value: fmtMoney(totalDeudaActual) },
-    { label: `${pctPagado}% Pagado`, value: '' },
-    { label: 'Interés evitado', value: fmtMoney(s.interesEvitado) },
-    { label: 'Capital abonado este periodo', value: fmtMoney(s.totalCapitalAbonado) },
+    { label: tr("Total de deudas"), value: fmtMoney(totalMontoOriginal) },
+    { label: tr("Saldo restante"), value: fmtMoney(totalDeudaActual) },
+    { label: tr("{0}% Pagado", [pctPagado]), value: '' },
+    { label: tr("Interés evitado"), value: fmtMoney(s.interesEvitado) },
+    { label: tr("Capital abonado este periodo"), value: fmtMoney(s.totalCapitalAbonado) },
   ]
 
   const icWidth = (pageWidth - margin * 2 - 4 * 2) / 3
@@ -484,7 +485,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   if (y > 250) { doc.addPage(); y = 20 }
 
-  y = sectionTitle('Resumen de ahorros', y) + 1
+  y = sectionTitle(tr("Resumen de ahorros"), y) + 1
 
   const savingsRows = report.savingsHistory
     .filter(e => (e.tipo as string) === 'ahorro')
@@ -497,7 +498,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   if (savingsRows.length > 0) {
     autoTable(doc, {
       startY: y,
-      head: [['Periodo', 'Monto ahorrado', 'Fecha']],
+      head: [[tr("Periodo"), tr("Monto ahorrado"), tr("Fecha")]],
       body: savingsRows,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: GREEN, textColor: 255, fontStyle: 'bold', fontSize: 7 },
@@ -507,7 +508,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
     })
     y = (doc as any).lastAutoTable.finalY + 6
   } else {
-    y = emptyState('Sin registros de ahorro en este periodo.', y)
+    y = emptyState(tr("Sin registros de ahorro en este periodo."), y)
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -516,11 +517,11 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   if (y > 235) { doc.addPage(); y = 20 }
 
-  y = sectionTitle('Registro de consumos', y) + 1
+  y = sectionTitle(tr("Registro de consumos"), y) + 1
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(140, 140, 150)
-  doc.text('Gastos hormiga registrados en el periodo, el tipo de compra que más se siente al final del mes.', margin, y)
+  doc.text(tr("Gastos hormiga registrados en el periodo, el tipo de compra que más se siente al final del mes."), margin, y)
   y += 5
 
   if (report.impulseExpenses.length > 0) {
@@ -538,10 +539,10 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
     doc.setFontSize(7.5)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(180, 83, 9)
-    doc.text(`Total en gastos hormiga: ${fmtMoney(totalHormiga)}`, margin + 4, y + 6.5)
+    doc.text(tr("Total en gastos hormiga: {0}", [fmtMoney(totalHormiga)]), margin + 4, y + 6.5)
     if (topCategoria) {
       doc.setFont('helvetica', 'normal')
-      doc.text(`Categoría más frecuente: ${topCategoria[0]}`, margin + contentWidth / 2, y + 6.5)
+      doc.text(tr("Categoría más frecuente: {0}", [topCategoria[0]]), margin + contentWidth / 2, y + 6.5)
     }
     y += 14
 
@@ -558,7 +559,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
     autoTable(doc, {
       startY: y,
-      head: [['Fecha', 'Consumo', 'Categoría', 'Monto']],
+      head: [[tr("Fecha"), tr("Consumo"), tr("Categoría"), tr("Monto")]],
       body: consumoRows,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [255, 179, 198], textColor: [90, 30, 45], fontStyle: 'bold', fontSize: 7 },
@@ -573,7 +574,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
     })
     y = (doc as any).lastAutoTable.finalY + 6
   } else {
-    y = emptyState('Sin gastos hormiga registrados en este periodo. ¡Buen control!', y)
+    y = emptyState(tr("Sin gastos hormiga registrados en este periodo. ¡Buen control!"), y)
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -587,17 +588,17 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
     if (y > 240) { doc.addPage(); y = 20 }
 
-    y = sectionTitle('Comparación vs mes anterior', y) + 1
+    y = sectionTitle(tr("Comparación vs mes anterior"), y) + 1
 
     const compData = [
-      { label: 'Ingresos', current: current.ingresos, previous: previous.ingresos },
-      { label: 'Egresos', current: current.egresos, previous: previous.egresos },
-      { label: 'Balance', current: current.ingresos - current.egresos, previous: previous.ingresos - previous.egresos },
+      { label: tr("Ingresos"), current: current.ingresos, previous: previous.ingresos },
+      { label: tr("Egresos"), current: current.egresos, previous: previous.egresos },
+      { label: tr("Balance"), current: current.ingresos - current.egresos, previous: previous.ingresos - previous.egresos },
     ]
 
     autoTable(doc, {
       startY: y,
-      head: [['Concepto', 'Mes actual', 'Mes anterior', 'Variación']],
+      head: [[tr("Concepto"), tr("Mes actual"), tr("Mes anterior"), tr("Variación")]],
       body: compData.map(c => {
         const variation = previous.ingresos > 0 || previous.egresos > 0
           ? ((c.current - c.previous) / Math.max(Math.abs(c.previous), 1)) * 100
@@ -631,7 +632,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   if (y > 230) { doc.addPage(); y = 20 }
 
-  y = sectionTitle('Detalle de transacciones', y) + 1
+  y = sectionTitle(tr("Detalle de transacciones"), y) + 1
 
   const txRows: string[][] = []
 
@@ -639,8 +640,8 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   for (const r of (report.incomeRecords ?? [])) {
     txRows.push([
       fmtDate(r.createdAt as string),
-      (r.tipo as string) === 'salario' ? 'Sueldo' : 'Ingreso Extra',
-      (r.tipo as string) === 'salario' ? 'Salario registrado' : 'Ingreso extra',
+      (r.tipo as string) === 'salario' ? 'Sueldo' : tr("Ingreso Extra"),
+      (r.tipo as string) === 'salario' ? tr("Salario registrado") : tr("Ingreso extra"),
       `+${fmtMoney(num(r.monto))}`,
     ])
   }
@@ -649,8 +650,8 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   for (const p of (report.debtPayments ?? [])) {
     txRows.push([
       fmtDate(p.createdAt as string),
-      'Pago deuda',
-      `${p.debtName ?? 'Deuda'} (Capital: ${fmtMoney(num(p.abonoCapital))}, Interés: ${fmtMoney(num(p.pagoInteres))})`,
+      tr("Pago deuda"),
+      tr("{0} (Capital: {1}, Interés: {2})", [p.debtName ?? tr("Deuda"), fmtMoney(num(p.abonoCapital)), fmtMoney(num(p.pagoInteres))]),
       `-${fmtMoney(num(p.montoPagado))}`,
     ])
   }
@@ -660,7 +661,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   for (const p of (report.fixedExpensePayments ?? [])) {
     txRows.push([
       fmtDate(p.createdAt as string),
-      'Gasto fijo',
+      tr("Gasto fijo"),
       p.nombre as string,
       `-${fmtMoney(num(p.montoPagado))}`,
     ])
@@ -670,7 +671,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   for (const e of report.impulseExpenses.slice(0, 15)) {
     txRows.push([
       fmtDate(e.createdAt as string),
-      'Gasto hormiga',
+      tr("Gasto hormiga"),
       `${e.nombre as string} (${e.categoria as string})`,
       `-${fmtMoney(num(e.monto))}`,
     ])
@@ -682,7 +683,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   if (txRows.length > 0) {
     autoTable(doc, {
       startY: y,
-      head: [['Fecha', 'Tipo', 'Descripción', 'Monto']],
+      head: [[tr("Fecha"), tr("Tipo"), tr("Descripción"), tr("Monto")]],
       body: txRows,
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: DARK_GREEN, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
@@ -698,7 +699,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
     y = (doc as any).lastAutoTable.finalY + 6
   } else {
-    y = emptyState('Sin transacciones registradas en este periodo.', y)
+    y = emptyState(tr("Sin transacciones registradas en este periodo."), y)
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -727,7 +728,7 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(DARK_GREEN[0], DARK_GREEN[1], DARK_GREEN[2])
-  doc.text('Resumen del mes', iconX + 8, y + 7)
+  doc.text(tr("Resumen del mes"), iconX + 8, y + 7)
 
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
@@ -735,8 +736,8 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
 
   const balanceChange = s.totalIngreso - s.totalEgreso
   const balanceMsg = balanceChange >= 0
-    ? `Tu saldo neto aumentó ${fmtMoney(balanceChange)}. ¡Vas por buen camino!`
-    : `Tu saldo neto disminuyó ${fmtMoney(Math.abs(balanceChange))}. Revisa tus gastos para el próximo mes.`
+    ? tr("Tu saldo neto aumentó {0}. ¡Vas por buen camino!", [fmtMoney(balanceChange)])
+    : tr("Tu saldo neto disminuyó {0}. Revisa tus gastos para el próximo mes.", [fmtMoney(Math.abs(balanceChange))])
   doc.text(balanceMsg, margin + 5, y + 13)
 
   // Mini stats en el banner
@@ -744,13 +745,13 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
   doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(GREEN[0], GREEN[1], GREEN[2])
-  doc.text(`Ahorrado: ${fmtMoney(s.totalSaved)}`, margin + 5, statsY)
+  doc.text(tr("Ahorrado: {0}", [fmtMoney(s.totalSaved)]), margin + 5, statsY)
 
   doc.setTextColor(RED[0], RED[1], RED[2])
-  doc.text(`Interés pagado: ${fmtMoney(s.totalInteresPagado)}`, margin + 55, statsY)
+  doc.text(tr("Interés pagado: {0}", [fmtMoney(s.totalInteresPagado)]), margin + 55, statsY)
 
   doc.setTextColor(PURPLE[0], PURPLE[1], PURPLE[2])
-  doc.text(`Capital abonado: ${fmtMoney(s.totalCapitalAbonado)}`, margin + 110, statsY)
+  doc.text(tr("Capital abonado: {0}", [fmtMoney(s.totalCapitalAbonado)]), margin + 110, statsY)
 
   // ── Pie de página en todas las páginas ──
   const pageCount = (doc as any).internal.getNumberOfPages()
@@ -758,9 +759,9 @@ export async function exportToPdf(report: BalanceReport, filename = 'kiri-balanc
     doc.setPage(i)
     doc.setFontSize(7)
     doc.setTextColor(160, 160, 180)
-    doc.text('Este reporte fue generado automáticamente por Kiri Finance.', pageWidth / 2, 286, { align: 'center' })
-    doc.text('Cuida tu dinero, cultiva tu tranquilidad.', pageWidth / 2, 290, { align: 'center' })
-    doc.text(`Página ${i} de ${pageCount}`, pageWidth - margin, 290, { align: 'right' })
+    doc.text(tr("Este reporte fue generado automáticamente por Kiri Finance."), pageWidth / 2, 286, { align: 'center' })
+    doc.text(tr("Cuida tu dinero, cultiva tu tranquilidad."), pageWidth / 2, 290, { align: 'center' })
+    doc.text(tr("Página {0} de {1}", [i, pageCount]), pageWidth - margin, 290, { align: 'right' })
   }
 
   doc.save(`${filename}.pdf`)

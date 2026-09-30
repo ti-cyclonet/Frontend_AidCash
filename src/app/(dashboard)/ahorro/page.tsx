@@ -33,6 +33,7 @@ import { AnimatedBalance } from "@/components/ui/animated-balance"
 import { CelebrationModal } from "@/components/ui/celebration-modal"
 import { FeatureGate } from "@/components/plan/feature-gate"
 import type { SharedPocket } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
 type PocketIcon = "piggybank" | "plane" | "home" | "education" | "car" | "health" | "star" | "wallet"
@@ -55,14 +56,14 @@ interface SavingPocket {
 }
 
 const POCKET_ICONS: { value: PocketIcon; icon: React.ReactNode; label: string }[] = [
-  { value: "piggybank",  icon: <PiggyBank className="h-5 w-5" />,      label: "Ahorro" },
-  { value: "plane",      icon: <Plane className="h-5 w-5" />,           label: "Viaje" },
-  { value: "home",       icon: <Home className="h-5 w-5" />,            label: "Casa" },
-  { value: "education",  icon: <GraduationCap className="h-5 w-5" />,   label: "Educación" },
-  { value: "car",        icon: <Car className="h-5 w-5" />,             label: "Vehículo" },
-  { value: "health",     icon: <Heart className="h-5 w-5" />,           label: "Salud" },
-  { value: "star",       icon: <Star className="h-5 w-5" />,            label: "Meta" },
-  { value: "wallet",     icon: <Wallet className="h-5 w-5" />,          label: "General" },
+  { value: "piggybank",  icon: <PiggyBank className="h-5 w-5" />,      label: tr("Ahorro") },
+  { value: "plane",      icon: <Plane className="h-5 w-5" />,           label: tr("Viaje") },
+  { value: "home",       icon: <Home className="h-5 w-5" />,            label: tr("Casa") },
+  { value: "education",  icon: <GraduationCap className="h-5 w-5" />,   label: tr("Educación") },
+  { value: "car",        icon: <Car className="h-5 w-5" />,             label: tr("Vehículo") },
+  { value: "health",     icon: <Heart className="h-5 w-5" />,           label: tr("Salud") },
+  { value: "star",       icon: <Star className="h-5 w-5" />,            label: tr("Meta") },
+  { value: "wallet",     icon: <Wallet className="h-5 w-5" />,          label: tr("General") },
 ]
 
 const POCKET_COLORS: { value: PocketColor; bg: string; text: string; bar: string; ring: string }[] = [
@@ -198,6 +199,7 @@ function AhorroContent() {
     // Verificar saldo disponible antes de aportar
     const { data: walletData } = await userApi.getWallet()
     const available = walletData?.wallet?.cashBalance ?? 0
+      setWallet({ cashBalance: available }) // el aviso de saldo insuficiente muestra este valor
     if (available <= 0 || monto > available) {
       setInsufficientSavingsOpen(true)
       return
@@ -205,7 +207,7 @@ function AhorroContent() {
     // El backend descuenta la billetera y suma al fondo en una sola transacción
     const { data, error } = await emergencyFundApi.transaction(monto, "aporte")
     if (error || !data) {
-      toast({ title: "No se pudo registrar el aporte", description: error ?? "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
+      toast({ title: tr("No se pudo registrar el aporte"), description: error ?? tr("Tu saldo no se descontó. Intenta de nuevo."), variant: "destructive" })
       return
     }
     setFondoActual(data.fondoActual)
@@ -220,7 +222,7 @@ function AhorroContent() {
     // El backend resta del fondo y devuelve a la billetera en una sola transacción
     const { data, error } = await emergencyFundApi.transaction(monto, "retiro")
     if (error || !data) {
-      toast({ title: "No se pudo registrar el retiro", description: error ?? "Intenta de nuevo.", variant: "destructive" })
+      toast({ title: tr("No se pudo registrar el retiro"), description: error ?? tr("Intenta de nuevo."), variant: "destructive" })
       return
     }
     setFondoActual(data.fondoActual)
@@ -318,7 +320,7 @@ function AhorroContent() {
     })
     if (error || !data?.pocket) {
       setSavingPocket(false)
-      toast({ title: "No se pudo crear el bolsillo", description: "Intenta de nuevo.", variant: "destructive" })
+      toast({ title: tr("No se pudo crear el bolsillo"), description: tr("Intenta de nuevo."), variant: "destructive" })
       return
     }
     let pocket = mapApiPocket(data.pocket)
@@ -332,7 +334,7 @@ function AhorroContent() {
         pocket = mapApiPocket(dep.data.pocket)
         window.dispatchEvent(new Event("kiri:wallet-updated"))
       } else {
-        toast({ title: "Bolsillo creado sin saldo inicial", description: "No tenías saldo suficiente para aplicarlo — puedes aportarlo después.", variant: "destructive" })
+        toast({ title: tr("Bolsillo creado sin saldo inicial"), description: tr("No tenías saldo suficiente para aplicarlo — puedes aportarlo después."), variant: "destructive" })
       }
     }
 
@@ -345,7 +347,7 @@ function AhorroContent() {
   const handleDeletePocket = async (id: string) => {
     const { data, error } = await savingsPocketsApi.delete(id)
     if (error) {
-      toast({ title: "No se pudo eliminar el bolsillo", description: "Intenta de nuevo.", variant: "destructive" })
+      toast({ title: tr("No se pudo eliminar el bolsillo"), description: tr("Intenta de nuevo."), variant: "destructive" })
       return
     }
     setPockets(p => p.filter(x => x.id !== id))
@@ -367,7 +369,7 @@ function AhorroContent() {
     }
     const { data, error } = await savingsPocketsApi.update(editPocket.id, patch)
     if (error || !data?.pocket) {
-      toast({ title: "No se pudo guardar el bolsillo", description: "Intenta de nuevo.", variant: "destructive" })
+      toast({ title: tr("No se pudo guardar el bolsillo"), description: tr("Intenta de nuevo."), variant: "destructive" })
       return
     }
     const updated = mapApiPocket(data.pocket)
@@ -388,6 +390,7 @@ function AhorroContent() {
       // Verificar que hay saldo disponible antes de intentar el aporte
       const { data: walletData } = await userApi.getWallet()
       const available = walletData?.wallet?.cashBalance ?? 0
+      setWallet({ cashBalance: available }) // el aviso de saldo insuficiente muestra este valor
       if (available <= 0 || amt > available) {
         setSavingTx(false)
         setInsufficientSavingsOpen(true)
@@ -398,7 +401,7 @@ function AhorroContent() {
       const { data, error } = await savingsPocketsApi.deposit(txPocket.id, amt)
       if (error || !data?.pocket) {
         setSavingTx(false)
-        toast({ title: "No se pudo registrar el aporte", description: "Tu saldo no se descontó. Intenta de nuevo.", variant: "destructive" })
+        toast({ title: tr("No se pudo registrar el aporte"), description: error ?? tr("Tu saldo no se descontó. Intenta de nuevo."), variant: "destructive" })
         return
       }
       const updatedPocket = mapApiPocket(data.pocket)
@@ -414,8 +417,8 @@ function AhorroContent() {
       if (updatedPocket.meta > 0 && txPocket.acumulado < txPocket.meta && updatedPocket.acumulado >= updatedPocket.meta) {
         setCelebration({
           icon: "🎉",
-          title: `¡Alcanzaste tu meta de "${updatedPocket.nombre}"!`,
-          subtitle: `Ahorraste ${formatAmount(updatedPocket.meta)}. ¡Bien hecho!`,
+          title: tr("¡Alcanzaste tu meta de \"{0}\"!", [updatedPocket.nombre]),
+          subtitle: tr("Ahorraste {0}. ¡Bien hecho!", [formatAmount(updatedPocket.meta)]),
         })
       }
     } else {
@@ -424,7 +427,7 @@ function AhorroContent() {
       const { data, error } = await savingsPocketsApi.withdraw(txPocket.id, amt)
       if (error || !data?.pocket) {
         setSavingTx(false)
-        toast({ title: "No se pudo registrar el retiro", description: "Intenta de nuevo.", variant: "destructive" })
+        toast({ title: tr("No se pudo registrar el retiro"), description: error ?? tr("Intenta de nuevo."), variant: "destructive" })
         return
       }
       setPockets(p => p.map(x => x.id === txPocket.id ? mapApiPocket(data.pocket) : x))
@@ -443,6 +446,7 @@ function AhorroContent() {
     // Verificar disponible antes de ahorrar
     const { data: walletData } = await userApi.getWallet()
     const available = walletData?.wallet?.cashBalance ?? 0
+      setWallet({ cashBalance: available }) // el aviso de saldo insuficiente muestra este valor
     if (available <= 0 || monto > available) {
       setInsufficientSavingsOpen(true)
       return
@@ -475,8 +479,8 @@ function AhorroContent() {
     <div className="space-y-6 pb-8">
       <header className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">Ahorro</h1>
-          <p className="text-muted-foreground text-sm">Tu banco personal, a tu ritmo.</p>
+          <h1 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{tr("Ahorro")}</h1>
+          <p className="text-muted-foreground text-sm">{tr("Tu banco personal, a tu ritmo.")}</p>
         </div>
         {/* Acciones a la izquierda y el saldo siempre en el extremo derecho
             (mismo orden que Obligaciones). */}
@@ -486,21 +490,21 @@ function AhorroContent() {
               size="icon"
               className="rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30 text-white"
               onClick={() => setNewPocketOpen(true)}
-              aria-label="Nuevo bolsillo de ahorro"
+              aria-label={tr("Nuevo bolsillo de ahorro")}
             >
               <Plus className="h-6 w-6" />
             </Button>
           )}
           {/* Saldo en tiempo real con efecto */}
-          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo disponible" />
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label={tr("Saldo disponible")} />
         </div>
       </header>
 
       {/* ── Tabs principales: Ahorro / Emergencia ── */}
       <div className="grid grid-cols-2 gap-2">
         {([
-          { key: "ahorro",     label: "Ahorro",     icon: <PiggyBank className="h-3.5 w-3.5 inline mr-1.5" /> },
-          { key: "emergencia", label: "Emergencia", icon: <ShieldCheck className="h-3.5 w-3.5 inline mr-1.5" /> },
+          { key: "ahorro",     label: tr("Ahorro"),     icon: <PiggyBank className="h-3.5 w-3.5 inline mr-1.5" /> },
+          { key: "emergencia", label: tr("Emergencia"), icon: <ShieldCheck className="h-3.5 w-3.5 inline mr-1.5" /> },
         ] as const).map(tab => (
           <button
             key={tab.key}
@@ -531,22 +535,19 @@ function AhorroContent() {
                 <PiggyBank className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-muted-foreground text-sm font-medium tracking-wide">TOTAL AHORRADO</p>
+                <p className="text-muted-foreground text-sm font-medium tracking-wide">{tr("TOTAL AHORRADO")}</p>
                 <h2 className="text-4xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{formatAmount(totalAcumuladoBolsillos)}</h2>
                 {pockets.length > 0 && (
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    en {pockets.length} {pockets.length === 1 ? "bolsillo" : "bolsillos"}
+                  <p className="text-[11px] text-muted-foreground mt-1">{tr("en")}{" "}{pockets.length} {pockets.length === 1 ? "bolsillo" : "bolsillos"}
                   </p>
                 )}
               </div>
               {savingsAmount > 0 && (
                 <div className="flex items-center gap-2 pt-1 border-t border-white/30 w-full justify-center">
                   <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <p className="text-[11px] text-muted-foreground">
-                    Sugerido este periodo:{" "}
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">{formatAmount(realSavingsForPeriod)}</span>
+                  <p className="text-[11px] text-muted-foreground">{tr("Sugerido este periodo:{0}", [" "])}<span className="font-black text-emerald-600 dark:text-emerald-400">{formatAmount(realSavingsForPeriod)}</span>
                     {pockets.length > 1 && (
-                      <span> ({formatAmount(sugerenciaPorBolsillo)} por bolsillo)</span>
+                      <span>{" "}{tr("({0} por bolsillo)", [formatAmount(sugerenciaPorBolsillo)])}</span>
                     )}
                   </p>
                 </div>
@@ -557,8 +558,8 @@ function AhorroContent() {
           {/* ── Sub-tabs: Bolsillos / Historial ── */}
           <div className="grid grid-cols-2 gap-2">
             {([
-              { key: "bolsillos", label: "Bolsillos",  icon: <Sparkles className="h-3.5 w-3.5 inline mr-1.5" /> },
-              { key: "historial", label: "Historial",  icon: <History className="h-3.5 w-3.5 inline mr-1.5" /> },
+              { key: "bolsillos", label: tr("Bolsillos"),  icon: <Sparkles className="h-3.5 w-3.5 inline mr-1.5" /> },
+              { key: "historial", label: tr("Historial"),  icon: <History className="h-3.5 w-3.5 inline mr-1.5" /> },
             ] as const).map(sub => (
               <button
                 key={sub.key}
@@ -580,19 +581,17 @@ function AhorroContent() {
             <div className="space-y-3">
               {pocketsLoading ? (
                 <div className="text-center py-8">
-                  <p className="text-xs text-muted-foreground">Cargando tus bolsillos...</p>
+                  <p className="text-xs text-muted-foreground">{tr("Cargando tus bolsillos...")}</p>
                 </div>
               ) : pockets.length === 0 ? (
                 <div className="text-center py-8 space-y-3">
                   <div className="h-16 w-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
                     <PiggyBank className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  <p className="text-sm font-bold">Sin bolsillos aún</p>
-                  <p className="text-xs text-muted-foreground">Crea tu primer bolsillo con el botón <strong>+</strong></p>
+                  <p className="text-sm font-bold">{tr("Sin bolsillos aún")}</p>
+                  <p className="text-xs text-muted-foreground">{tr("Crea tu primer bolsillo con el botón")}{" "}<strong>+</strong></p>
                   {realSavingsForPeriod > 0 && (
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
-                      Tienes {formatAmount(realSavingsForPeriod)} sugerido para ahorrar este periodo
-                    </p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">{tr("Tienes {0} sugerido para ahorrar este periodo", [formatAmount(realSavingsForPeriod)])}</p>
                   )}
                 </div>
               ) : (
@@ -625,7 +624,7 @@ function AhorroContent() {
                                     savingsPocketsApi.update(pocket.id, { pagoAutomatico: next }).then(({ error }) => {
                                       if (error) setPockets(p => p.map(x => x.id === pocket.id ? { ...x, pagoAutomatico: !next } : x))
                                     })
-                                  }} title={pocket.pagoAutomatico ? "Desactivar pago automático" : "Activar pago automático"}
+                                  }} title={pocket.pagoAutomatico ? tr("Desactivar pago automático") : tr("Activar pago automático")}
                                     className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                                       pocket.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
                                     <span className="text-[10px]">⚡</span>
@@ -651,7 +650,7 @@ function AhorroContent() {
                                   <>
                                     <span className={cn("text-xl font-black", c.text)}>{formatAmount(pocket.acumulado)}</span>
                                     {pocket.meta > 0 && (
-                                      <span className="text-[10px] text-muted-foreground">de {formatAmount(pocket.meta)}</span>
+                                      <span className="text-[10px] text-muted-foreground">{tr("de")}{" "}{formatAmount(pocket.meta)}</span>
                                     )}
                                   </>
                                 )}
@@ -661,9 +660,7 @@ function AhorroContent() {
                           {sugerenciaPorBolsillo > 0 && (
                             <div className="flex items-center gap-1.5 px-1">
                               <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                              <p className="text-[10px] text-muted-foreground">
-                                Sugerido este periodo:{" "}
-                                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatAmount(sugerenciaPorBolsillo)}</span>
+                              <p className="text-[10px] text-muted-foreground">{tr("Sugerido este periodo:{0}", [" "])}<span className="font-bold text-emerald-600 dark:text-emerald-400">{formatAmount(sugerenciaPorBolsillo)}</span>
                               </p>
                             </div>
                           )}
@@ -675,10 +672,8 @@ function AhorroContent() {
                             return (
                               <div className="flex items-center gap-1.5 px-1">
                                 <Target className="h-3 w-3 text-violet-600 dark:text-violet-400 shrink-0" />
-                                <p className="text-[10px] text-muted-foreground">
-                                  Necesitas <span className="font-bold text-violet-600 dark:text-violet-400">{formatAmount(cuota)}/mes</span>
-                                  {" "}· {meses} {meses === 1 ? 'mes' : 'meses'} restantes
-                                </p>
+                                <p className="text-[10px] text-muted-foreground">{tr("Necesitas")}{" "}<span className="font-bold text-violet-600 dark:text-violet-400">{formatAmount(cuota)}{tr("/mes")}</span>
+                                  {" "}· {meses} {meses === 1 ? 'mes' : 'meses'}{" "}{tr("restantes")}</p>
                               </div>
                             )
                           })()}
@@ -686,8 +681,8 @@ function AhorroContent() {
                             <div className="space-y-1">
                               <Progress value={pct} className="h-2" indicatorClassName={cn(c.bar, done && "animate-pulse")} />
                               <div className="flex justify-between text-[10px] text-muted-foreground font-bold">
-                                <span>{Math.round(pct)}% completado</span>
-                                {done && <span className="text-emerald-600 dark:text-emerald-400">🎉 ¡Meta alcanzada!</span>}
+                                <span>{tr("{0}% completado", [Math.round(pct)])}</span>
+                                {done && <span className="text-emerald-600 dark:text-emerald-400">{tr("🎉 ¡Meta alcanzada!")}</span>}
                               </div>
                             </div>
                           )}
@@ -697,8 +692,7 @@ function AhorroContent() {
                               onClick={() => openTx(pocket, "aporte")}
                               className={cn("h-9 rounded-xl font-bold gap-1.5 text-xs border-none hover:opacity-90", c.bg, c.text)}
                             >
-                              <TrendingUp className="h-3.5 w-3.5" /> Aportar
-                            </Button>
+                              <TrendingUp className="h-3.5 w-3.5" />{" "}{tr("Aportar")}</Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -706,8 +700,7 @@ function AhorroContent() {
                               disabled={pocket.acumulado <= 0}
                               className="h-9 rounded-xl font-bold gap-1.5 text-xs border-2 border-dashed"
                             >
-                              <Minus className="h-3.5 w-3.5" /> Retirar
-                            </Button>
+                              <Minus className="h-3.5 w-3.5" />{" "}{tr("Retirar")}</Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -720,8 +713,7 @@ function AhorroContent() {
               {sharedPockets.length > 0 && (
                 <div className="space-y-2 pt-3 border-t border-border/50">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <Users className="h-3 w-3" /> Bolsillos compartidos
-                  </p>
+                    <Users className="h-3 w-3" />{" "}{tr("Bolsillos compartidos")}</p>
                   {sharedPockets.map(sp => {
                     const partnerName = sp.userA?.id === authUser?.id ? sp.userB?.nombre : sp.userA?.nombre
                     const pct = sp.meta > 0 ? Math.min((sp.balance / sp.meta) * 100, 100) : 0
@@ -738,19 +730,17 @@ function AhorroContent() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-sm truncate">{sp.nombre}</p>
-                              <p className="text-[10px] text-muted-foreground">Con {partnerName ?? "compañero"}</p>
+                              <p className="text-[10px] text-muted-foreground">{tr("Con {0}", [partnerName ?? tr("compañero")])}</p>
                             </div>
                             <div className="text-right shrink-0">
                               <p className="text-sm font-black">{formatAmount(sp.balance)}</p>
-                              {sp.meta > 0 && <p className="text-[9px] text-muted-foreground">meta: {formatAmount(sp.meta)}</p>}
+                              {sp.meta > 0 && <p className="text-[9px] text-muted-foreground">{tr("meta:")}{" "}{formatAmount(sp.meta)}</p>}
                             </div>
                           </div>
                           {sp.meta > 0 && (
                             <Progress value={pct} className="h-1.5" indicatorClassName="bg-violet-500" />
                           )}
-                          <p className="text-[8px] text-violet-600 dark:text-violet-400 font-bold text-center">
-                            Toca para gestionar en Social →
-                          </p>
+                          <p className="text-[8px] text-violet-600 dark:text-violet-400 font-bold text-center">{tr("Toca para gestionar en Social →")}</p>
                         </CardContent>
                       </Card>
                     )
@@ -765,17 +755,16 @@ function AhorroContent() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                  <History className="h-3.5 w-3.5" /> Historial de periodos
-                </h3>
+                  <History className="h-3.5 w-3.5" />{" "}{tr("Historial de periodos")}</h3>
                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <span>🔥 Racha: <strong>{streakCount}</strong></span>
-                  {lastSaving && <span>Último: <strong>{formatAmount(lastSaving.monto)}</strong></span>}
+                  <span>{tr("🔥 Racha:")}{" "}<strong>{streakCount}</strong></span>
+                  {lastSaving && <span>{tr("Último:")}{" "}<strong>{formatAmount(lastSaving.monto)}</strong></span>}
                 </div>
               </div>
               {loading ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Cargando...</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{tr("Cargando...")}</p>
               ) : savingsHistory.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Aún no hay registros.</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{tr("Aún no hay registros.")}</p>
               ) : (
                 <div className="space-y-2">
                   {savingsHistory.map(item => (
@@ -790,7 +779,7 @@ function AhorroContent() {
                         <div>
                           <p className="font-bold text-xs capitalize">{item.periodo}</p>
                           <p className="text-[9px] text-muted-foreground uppercase tracking-wider">
-                            {item.tipo === "ahorro" ? "Aporte realizado" : "Sin ahorro"}
+                            {item.tipo === "ahorro" ? tr("Aporte realizado") : tr("Sin ahorro")}
                           </p>
                         </div>
                       </div>
@@ -824,18 +813,17 @@ function AhorroContent() {
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Nuevo bolsillo de ahorro
-            </DialogTitle>
-            <DialogDescription>Define tu meta y personaliza tu bolsillo.</DialogDescription>
+              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />{" "}{tr("Nuevo bolsillo de ahorro")}</DialogTitle>
+            <DialogDescription>{tr("Define tu meta y personaliza tu bolsillo.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nombre del bolsillo</Label>
-              <Input placeholder="Ej: Viaje a Cartagena" value={pocketForm.nombre}
+              <Label className="text-xs font-bold">{tr("Nombre del bolsillo")}</Label>
+              <Input placeholder={tr("Ej: Viaje a Cartagena")} value={pocketForm.nombre}
                 onChange={e => setPocketForm(f => ({ ...f, nombre: e.target.value }))} className="h-11 rounded-xl" autoFocus />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Meta <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <Label className="text-xs font-bold">{tr("Meta")}{" "}<span className="font-normal text-muted-foreground">{tr("(opcional)")}</span></Label>
               <MoneyInput value={pocketForm.meta} onChange={v => setPocketForm(f => ({ ...f, meta: v }))}
                 className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
             </div>
@@ -843,7 +831,7 @@ function AhorroContent() {
             {/* ═══ SELECTOR: Tipo de meta (libre vs con fecha) ═══ */}
             {Number(pocketForm.meta) > 0 && (
               <div className="space-y-2">
-                <Label className="text-xs font-bold">Tipo de meta</Label>
+                <Label className="text-xs font-bold">{tr("Tipo de meta")}</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -856,8 +844,8 @@ function AhorroContent() {
                     )}
                   >
                     <PiggyBank className="h-5 w-5" />
-                    <span className="text-[10px] font-bold">Ahorro libre</span>
-                    <span className="text-[8px] text-muted-foreground">Sin fecha límite</span>
+                    <span className="text-[10px] font-bold">{tr("Ahorro libre")}</span>
+                    <span className="text-[8px] text-muted-foreground">{tr("Sin fecha límite")}</span>
                   </button>
                   <button
                     type="button"
@@ -870,15 +858,15 @@ function AhorroContent() {
                     )}
                   >
                     <Target className="h-5 w-5" />
-                    <span className="text-[10px] font-bold">Con fecha límite</span>
-                    <span className="text-[8px] text-muted-foreground">Meta con plazo</span>
+                    <span className="text-[10px] font-bold">{tr("Con fecha límite")}</span>
+                    <span className="text-[8px] text-muted-foreground">{tr("Meta con plazo")}</span>
                   </button>
                 </div>
 
                 {/* Date picker (mes/año) */}
                 {pocketForm.tipoMeta === 'fecha' && (
                   <div className="space-y-1.5 pt-1">
-                    <Label className="text-xs font-bold">¿Para cuándo necesitas esta meta?</Label>
+                    <Label className="text-xs font-bold">{tr("¿Para cuándo necesitas esta meta?")}</Label>
                     <Input
                       type="month"
                       value={pocketForm.fechaLimite}
@@ -906,8 +894,8 @@ function AhorroContent() {
                   if (faltante <= 0) {
                     return (
                       <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center space-y-1">
-                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">🎉 ¡Ya alcanzaste tu meta!</p>
-                        <p className="text-[10px] text-muted-foreground">El monto ahorrado ya cubre tu objetivo.</p>
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{tr("🎉 ¡Ya alcanzaste tu meta!")}</p>
+                        <p className="text-[10px] text-muted-foreground">{tr("El monto ahorrado ya cubre tu objetivo.")}</p>
                       </div>
                     )
                   }
@@ -915,8 +903,8 @@ function AhorroContent() {
                   if (meses <= 0) {
                     return (
                       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-center space-y-1">
-                        <p className="text-xs font-bold text-amber-500">⚠️ Fecha muy cercana</p>
-                        <p className="text-[10px] text-muted-foreground">Selecciona al menos el próximo mes para calcular tu cuota.</p>
+                        <p className="text-xs font-bold text-amber-500">{tr("⚠️ Fecha muy cercana")}</p>
+                        <p className="text-[10px] text-muted-foreground">{tr("Selecciona al menos el próximo mes para calcular tu cuota.")}</p>
                       </div>
                     )
                   }
@@ -925,18 +913,18 @@ function AhorroContent() {
                     <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 space-y-2">
                       <div className="flex items-center gap-2 justify-center">
                         <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                        <p className="text-xs font-bold text-center">Para lograr esta meta, necesitas ahorrar:</p>
+                        <p className="text-xs font-bold text-center">{tr("Para lograr esta meta, necesitas ahorrar:")}</p>
                       </div>
                       <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 text-center">
-                        {formatAmount(cuota!)} <span className="text-sm font-bold text-muted-foreground">/ mes</span>
+                        {formatAmount(cuota!)} <span className="text-sm font-bold text-muted-foreground">{tr("/ mes")}</span>
                       </p>
                       <div className="flex justify-center gap-4 pt-1 border-t border-emerald-500/20">
                         <div className="text-center">
-                          <p className="text-[9px] text-muted-foreground">Faltan</p>
+                          <p className="text-[9px] text-muted-foreground">{tr("Faltan")}</p>
                           <p className="text-xs font-bold">{formatAmount(faltante)}</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-[9px] text-muted-foreground">Plazo</p>
+                          <p className="text-[9px] text-muted-foreground">{tr("Plazo")}</p>
                           <p className="text-xs font-bold">{meses} {meses === 1 ? 'mes' : 'meses'}</p>
                         </div>
                       </div>
@@ -947,18 +935,18 @@ function AhorroContent() {
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">¿Ya llevas algo ahorrado? <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <Label className="text-xs font-bold">{tr("¿Ya llevas algo ahorrado?")}{" "}<span className="font-normal text-muted-foreground">{tr("(opcional)")}</span></Label>
               <MoneyInput value={pocketForm.acumuladoInicial} onChange={v => setPocketForm(f => ({ ...f, acumuladoInicial: v }))}
                 className="h-11 rounded-xl" placeholder="0" />
-              <p className="text-[9px] text-muted-foreground">Si ya tenías dinero ahorrado para esto, regístralo aquí para que tu progreso se refleje desde el inicio.</p>
+              <p className="text-[9px] text-muted-foreground">{tr("Si ya tenías dinero ahorrado para esto, regístralo aquí para que tu progreso se refleje desde el inicio.")}</p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción <span className="font-normal text-muted-foreground">(opcional)</span></Label>
-              <Input placeholder="Para qué es este ahorro..." value={pocketForm.descripcion}
+              <Label className="text-xs font-bold">{tr("Descripción")}{" "}<span className="font-normal text-muted-foreground">{tr("(opcional)")}</span></Label>
+              <Input placeholder={tr("Para qué es este ahorro...")} value={pocketForm.descripcion}
                 onChange={e => setPocketForm(f => ({ ...f, descripcion: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Ícono</Label>
+              <Label className="text-xs font-bold">{tr("Ícono")}</Label>
               <div className="grid grid-cols-4 gap-2">
                 {POCKET_ICONS.map(i => (
                   <button key={i.value} onClick={() => setPocketForm(f => ({ ...f, icono: i.value }))}
@@ -971,7 +959,7 @@ function AhorroContent() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Color</Label>
+              <Label className="text-xs font-bold">{tr("Color")}</Label>
               <div className="flex gap-2 flex-wrap">
                 {POCKET_COLORS.map(c => (
                   <button key={c.value} onClick={() => setPocketForm(f => ({ ...f, color: c.value }))}
@@ -982,10 +970,10 @@ function AhorroContent() {
             </div>
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setNewPocketOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setNewPocketOpen(false)}>{tr("Cancelar")}</Button>
             <Button onClick={handleCreatePocket} disabled={savingPocket || !pocketForm.nombre}
               className="bg-emerald-500 text-white font-bold rounded-xl px-8 hover:bg-emerald-500/80">
-              {savingPocket ? "Creando..." : "Crear bolsillo"}
+              {savingPocket ? "Creando..." : tr("Crear bolsillo")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -997,25 +985,27 @@ function AhorroContent() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {txType === "aporte" ? <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <TrendingDown className="h-5 w-5 text-pink-600 dark:text-pink-400" />}
-              {txType === "aporte" ? "Aportar a" : "Retirar de"} {txPocket?.nombre}
+              {txType === "aporte" ? tr("Aportar a") : tr("Retirar de")} {txPocket?.nombre}
             </DialogTitle>
             <DialogDescription>
-              {txType === "aporte" ? "Agrega dinero a este bolsillo." : "Retira fondos de este bolsillo."}
-              {txPocket && <span className="block font-bold mt-1">Disponible: {formatAmount(txPocket.acumulado)}</span>}
+              {txType === "aporte" ? tr("Agrega dinero a este bolsillo.") : tr("Retira fondos de este bolsillo.")}
+              {/* Al aportar, lo disponible es la billetera (antes mostraba el saldo del
+                  bolsillo: "Disponible: $0" con $1,6M en la billetera) */}
+              {txPocket && <span className="block font-bold mt-1">{tr("Disponible: {0}", [formatAmount(txType === "aporte" ? wallet.cashBalance : txPocket.acumulado)])}</span>}
             </DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <MoneyInput value={txAmount} onChange={setTxAmount} className="h-14 text-2xl font-bold rounded-2xl" placeholder="0" />
             {txType === "retiro" && txPocket && Number(txAmount) > txPocket.acumulado && (
-              <p className="text-xs text-destructive font-bold">No puedes retirar más de lo que tienes.</p>
+              <p className="text-xs text-destructive font-bold">{tr("No puedes retirar más de lo que tienes.")}</p>
             )}
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setTxPocket(null)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setTxPocket(null)}>{tr("Cancelar")}</Button>
             <Button onClick={handleTx}
               disabled={savingTx || !txAmount || Number(txAmount) <= 0 || (txType === "retiro" && txPocket !== null && Number(txAmount) > txPocket.acumulado)}
               className={cn("font-bold rounded-xl px-8", txType === "aporte" ? "bg-emerald-500 text-white" : "bg-pink-500 text-white")}>
-              {savingTx ? "Guardando..." : txType === "aporte" ? "Aportar" : "Retirar"}
+              {savingTx ? "Guardando..." : txType === "aporte" ? tr("Aportar") : tr("Retirar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1025,36 +1015,34 @@ function AhorroContent() {
       <Dialog open={isAhorroOpen} onOpenChange={setIsAhorroOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{isCustomMode ? "Retirar del ahorro" : "Registrar Ahorro"}</DialogTitle>
-            <DialogDescription>{isCustomMode ? "¿Cuánto estás retirando?" : "¿Cuánto vas a ahorrar este periodo?"}</DialogDescription>
+            <DialogTitle>{isCustomMode ? tr("Retirar del ahorro") : tr("Registrar Ahorro")}</DialogTitle>
+            <DialogDescription>{isCustomMode ? tr("¿Cuánto estás retirando?") : tr("¿Cuánto vas a ahorrar este periodo?")}</DialogDescription>
           </DialogHeader>
           <div className="py-4 flex flex-col gap-3">
             {!isCustomMode ? (
               <>
                 <Button onClick={() => handleSaveAhorro(savingsAmount)} disabled={savingAhorro || savingsAmount === 0}
                   className="h-16 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-500/80 font-bold text-base flex flex-col gap-0.5">
-                  <span className="text-xs opacity-70">Monto sugerido</span>
+                  <span className="text-xs opacity-70">{tr("Monto sugerido")}</span>
                   <span className="text-xl font-black">{formatAmount(realSavingsForPeriod)}</span>
                 </Button>
                 <Button variant="outline" onClick={() => setIsCustomMode(true)}
                   className="h-12 rounded-2xl border-dashed border-2 font-bold flex items-center gap-2">
-                  <Pencil className="h-4 w-4" /> Otro monto
-                </Button>
+                  <Pencil className="h-4 w-4" />{" "}{tr("Otro monto")}</Button>
                 <Button variant="ghost" onClick={handleSkipAhorro} disabled={savingAhorro}
                   className="h-11 rounded-2xl text-muted-foreground hover:text-pink-600 dark:hover:text-pink-400 font-medium flex items-center gap-2">
-                  <XCircle className="h-4 w-4" /> No ahorré este periodo
-                </Button>
+                  <XCircle className="h-4 w-4" />{" "}{tr("No ahorré este periodo")}</Button>
               </>
             ) : (
               <div className="space-y-4">
                 <MoneyInput value={customAmount} onChange={setCustomAmount}
                   className="h-14 text-2xl font-bold rounded-2xl" placeholder="0" />
                 <div className="flex gap-2">
-                  <Button variant="ghost" onClick={() => setIsCustomMode(false)} className="flex-1">Volver</Button>
+                  <Button variant="ghost" onClick={() => setIsCustomMode(false)} className="flex-1">{tr("Volver")}</Button>
                   <Button onClick={() => handleSaveAhorro(Number(customAmount))}
                     disabled={savingAhorro || !customAmount || Number(customAmount) <= 0}
                     className="flex-1 bg-emerald-500 text-white font-bold h-12 rounded-xl">
-                    {savingAhorro ? "Guardando..." : "Confirmar"}
+                    {savingAhorro ? "Guardando..." : tr("Confirmar")}
                   </Button>
                 </div>
               </div>
@@ -1068,9 +1056,8 @@ function AhorroContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-indigo-600 dark:text-indigo-400" /> Editar meta de ahorro
-            </DialogTitle>
-            <DialogDescription>Actualmente vas {Math.round(progress)}% del camino.</DialogDescription>
+              <Target className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />{" "}{tr("Editar meta de ahorro")}</DialogTitle>
+            <DialogDescription>{tr("Actualmente vas {0}% del camino.", [Math.round(progress)])}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="relative">
@@ -1081,10 +1068,10 @@ function AhorroContent() {
             </div>
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setIsMetaOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setIsMetaOpen(false)}>{tr("Cancelar")}</Button>
             <Button onClick={handleSaveMeta} disabled={savingMeta || !metaInput || Number(metaInput) <= 0}
               className="bg-emerald-500 text-white font-bold rounded-xl px-8 hover:bg-emerald-500/80">
-              {savingMeta ? "Guardando..." : "Guardar"}
+              {savingMeta ? "Guardando..." : tr("Guardar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1095,27 +1082,26 @@ function AhorroContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-violet-600 dark:text-violet-400" /> Editar bolsillo
-            </DialogTitle>
-            <DialogDescription>Modifica los datos de &quot;{editPocket?.nombre}&quot;.</DialogDescription>
+              <Pencil className="h-5 w-5 text-violet-600 dark:text-violet-400" />{" "}{tr("Editar bolsillo")}</DialogTitle>
+            <DialogDescription>{tr("Modifica los datos de \"{0}\".", [editPocket?.nombre])}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nombre</Label>
+              <Label className="text-xs font-bold">{tr("Nombre")}</Label>
               <Input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Meta</Label>
+              <Label className="text-xs font-bold">{tr("Meta")}</Label>
               <MoneyInput value={editForm.meta} onChange={v => setEditForm(f => ({ ...f, meta: v }))} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción</Label>
-              <Input value={editForm.descripcion} onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))} className="h-10 rounded-xl" placeholder="Para qué es..." />
+              <Label className="text-xs font-bold">{tr("Descripción")}</Label>
+              <Input value={editForm.descripcion} onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))} className="h-10 rounded-xl" placeholder={tr("Para qué es...")} />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setEditPocket(null)}>Cancelar</Button>
-            <Button onClick={handleSaveEditPocket} disabled={!editForm.nombre} className="bg-violet-500 text-white font-bold rounded-xl px-8">Guardar</Button>
+            <Button variant="ghost" onClick={() => setEditPocket(null)}>{tr("Cancelar")}</Button>
+            <Button onClick={handleSaveEditPocket} disabled={!editForm.nombre} className="bg-violet-500 text-white font-bold rounded-xl px-8">{tr("Guardar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1125,28 +1111,25 @@ function AhorroContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-500">
-              <AlertTriangle className="h-5 w-5" /> Saldo insuficiente
-            </DialogTitle>
-            <DialogDescription>
-              No tienes saldo disponible para registrar este ahorro. Primero registra tu sueldo real en la Billetera.
-            </DialogDescription>
+              <AlertTriangle className="h-5 w-5" />{" "}{tr("Saldo insuficiente")}</DialogTitle>
+            {/* Antes decía siempre "$0 · registra un ingreso primero", aunque el
+                problema fuera aportar más de lo que hay (ej. $5M con $1,6M) */}
+            <DialogDescription>{wallet.cashBalance > 0
+              ? tr("Ese valor es mayor que lo que tienes disponible. Puedes ahorrar hasta {0}.", [formatAmount(wallet.cashBalance)])
+              : tr("No tienes saldo disponible para registrar este ahorro. Primero registra tu sueldo real en la Billetera.")}</DialogDescription>
           </DialogHeader>
           <div className="py-3">
             <Card className="border-none bg-red-500/5 rounded-2xl">
               <CardContent className="p-4 text-center space-y-1">
-                <p className="text-xs text-muted-foreground">Tu saldo disponible actual</p>
-                <p className="text-lg font-black">$0</p>
-                <p className="text-xs text-red-500 font-bold">Registra un ingreso primero</p>
+                <p className="text-xs text-muted-foreground">{tr("Tu saldo disponible actual")}</p>
+                <p className="text-lg font-black">{formatAmount(Math.max(0, wallet.cashBalance))}</p>
+                {wallet.cashBalance <= 0 && <p className="text-xs text-red-500 font-bold">{tr("Registra un ingreso primero")}</p>}
               </CardContent>
             </Card>
           </div>
           <DialogFooter className="flex flex-col gap-2 pt-2">
-            <Button onClick={() => { setInsufficientSavingsOpen(false); window.location.href = '/gestion' }} className="w-full bg-kiri-emerald text-white font-bold rounded-xl h-12">
-              Ir a Billetera
-            </Button>
-            <Button variant="ghost" onClick={() => setInsufficientSavingsOpen(false)} className="w-full text-muted-foreground">
-              Cancelar
-            </Button>
+            <Button onClick={() => { setInsufficientSavingsOpen(false); window.location.href = '/gestion' }} className="w-full bg-kiri-emerald text-white font-bold rounded-xl h-12">{tr("Ir a Billetera")}</Button>
+            <Button variant="ghost" onClick={() => setInsufficientSavingsOpen(false)} className="w-full text-muted-foreground">{tr("Cancelar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

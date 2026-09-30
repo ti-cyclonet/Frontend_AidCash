@@ -6,6 +6,7 @@ import { impulseApi, TopConsumoItem } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
 import { Info, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { tr } from "@/lib/i18n"
 
 // Emojis por tipo de gasto detectado
 function getItemEmoji(nombre: string): string {
@@ -69,19 +70,17 @@ export function DesgloseGastosSection({ expenses, categoryName, categoryColor, t
     <div className="pt-4 border-t border-border/50">
       {/* Header */}
       <div className="flex items-center gap-2 mb-1">
-        <h4 className="text-xs font-bold">Desglose de gastos</h4>
+        <h4 className="text-xs font-bold">{tr("Desglose de gastos")}</h4>
         <Info className="h-3 w-3 text-muted-foreground" />
       </div>
-      <p className="text-[9px] text-muted-foreground mb-4">
-        Aquí puedes ver en qué se te va el dinero dentro de {categoryName}.
-      </p>
+      <p className="text-[9px] text-muted-foreground mb-4">{tr("Aquí puedes ver en qué se te va el dinero dentro de {0}.", [categoryName])}</p>
 
       {/* Table header */}
       <div className="grid grid-cols-[auto_1fr_80px_60px] gap-3 items-center px-2 mb-2">
         <span className="text-[9px] text-muted-foreground font-medium w-6"></span>
-        <span className="text-[9px] text-muted-foreground font-medium">Ítem</span>
-        <span className="text-[9px] text-muted-foreground font-medium text-right">Total gastado</span>
-        <span className="text-[9px] text-muted-foreground font-medium text-right">% del gasto en esta categoría</span>
+        <span className="text-[9px] text-muted-foreground font-medium">{tr("Ítem")}</span>
+        <span className="text-[9px] text-muted-foreground font-medium text-right">{tr("Total gastado")}</span>
+        <span className="text-[9px] text-muted-foreground font-medium text-right">{tr("% del gasto en esta categoría")}</span>
       </div>
 
       {/* Items */}
@@ -123,8 +122,7 @@ export function DesgloseGastosSection({ expenses, categoryName, categoryColor, t
 
       {/* Footer total */}
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30 px-2">
-        <p className="text-[10px] text-muted-foreground">
-          Total gastado en esta categoría: <strong className="text-foreground">{formatAmount(totalSpent)}</strong>
+        <p className="text-[10px] text-muted-foreground">{tr("Total gastado en esta categoría:")}{" "}<strong className="text-foreground">{formatAmount(totalSpent)}</strong>
         </p>
         <span className="text-[10px] font-bold text-muted-foreground">100%</span>
       </div>

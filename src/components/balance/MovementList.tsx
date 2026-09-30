@@ -5,15 +5,16 @@ import { ChevronDown, CreditCard, HandCoins, Home, PiggyBank, ReceiptText, Spark
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import type { Movement, MovementType } from "@/lib/api-client"
+import { tr, localeFecha } from "@/lib/i18n"
 
 export const MOVEMENT_FILTERS: { value: "todos" | MovementType; label: string }[] = [
-  { value: "todos", label: "Todos" },
-  { value: "deudas", label: "Deudas" },
-  { value: "gastos_fijos", label: "Gastos Fijos" },
-  { value: "hormiga", label: "Hormiga" },
-  { value: "ingresos", label: "Ingresos" },
-  { value: "ahorros", label: "Ahorros" },
-  { value: "prestamos", label: "Préstamos" },
+  { value: "todos", label: tr("Todos") },
+  { value: "deudas", label: tr("Deudas") },
+  { value: "gastos_fijos", label: tr("Gastos Fijos") },
+  { value: "hormiga", label: tr("Hormiga") },
+  { value: "ingresos", label: tr("Ingresos") },
+  { value: "ahorros", label: tr("Ahorros") },
+  { value: "prestamos", label: tr("Préstamos") },
 ]
 
 // Color de acento (borde izquierdo + ícono) por tipo de movimiento.
@@ -32,7 +33,7 @@ export const esEntrada = (m: Movement) => m.tipo === "ingresos" || m.direccion =
 /** Gastos registrados e ingresos: se pueden eliminar desde el historial (y se revierte todo). */
 export const esGastoEliminable = (m: Movement) => m.tipo === "hormiga" || (m.tipo === "ingresos" && !m.id.startsWith("ir-"))
 
-export function MovementList({ movements, formatAmount, vacio = "No hay movimientos que mostrar.", onEliminar }: {
+export function MovementList({ movements, formatAmount, vacio = tr("No hay movimientos que mostrar."), onEliminar }: {
   movements: Movement[]
   formatAmount: (n: number) => string
   vacio?: string
@@ -75,9 +76,9 @@ export function MovementList({ movements, formatAmount, vacio = "No hay movimien
                   <p className="text-[10px] text-muted-foreground">
                     {m.tipoLabel}
                     {m.acreedor && ` · ${m.acreedor}`}
-                    {m.tarjetaNombre && ` · 💳 pagado con ${m.tarjetaNombre}`}
+                    {m.tarjetaNombre && tr(" · 💳 pagado con {0}", [m.tarjetaNombre])}
                     {" · "}
-                    {m.fecha ? new Date(m.fecha).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                    {m.fecha ? new Date(m.fecha).toLocaleDateString(localeFecha(), { day: "numeric", month: "short", year: "numeric" }) : "—"}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -88,15 +89,14 @@ export function MovementList({ movements, formatAmount, vacio = "No hay movimien
                     <button
                       onClick={e => { e.stopPropagation(); onEliminar(m) }}
                       className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-bold text-muted-foreground hover:text-red-500"
-                      aria-label={`Eliminar ${m.nombre}`}
+                      aria-label={tr("Eliminar {0}", [m.nombre])}
                     >
-                      <Trash2 className="h-3 w-3" /> Eliminar
-                    </button>
+                      <Trash2 className="h-3 w-3" />{" "}{tr("Eliminar")}</button>
                   )}
                   {hasDetail && (
                     <p className="text-[8px] text-muted-foreground flex items-center gap-0.5 justify-end">
                       <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", isExpanded && "rotate-180")} />
-                      {isExpanded ? "Ocultar" : "Ver detalle"}
+                      {isExpanded ? tr("Ocultar") : tr("Ver detalle")}
                     </p>
                   )}
                 </div>
@@ -106,25 +106,24 @@ export function MovementList({ movements, formatAmount, vacio = "No hay movimien
                 <div className="bg-muted/10 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <p className="text-[9px] text-muted-foreground">Capital pagado</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Capital pagado")}</p>
                       <p className="text-xs font-black text-emerald-500">{formatAmount(m.abonoCapital!)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-muted-foreground">Intereses pagados</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Intereses pagados")}</p>
                       <p className="text-xs font-black text-red-500">{formatAmount(m.pagoInteres!)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-muted-foreground">Saldo anterior</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Saldo anterior")}</p>
                       <p className="text-xs font-bold">{formatAmount(m.saldoAnterior!)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-muted-foreground">Saldo actual</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Saldo actual")}</p>
                       <p className="text-xs font-bold">{formatAmount(m.saldoPosterior!)}</p>
                     </div>
                   </div>
                   {m.tasaInteres && (
-                    <p className="text-[9px] text-muted-foreground pt-1 border-t border-border/30">
-                      Interés aplicado: <span className="font-bold text-amber-500">{m.tasaInteres}</span>
+                    <p className="text-[9px] text-muted-foreground pt-1 border-t border-border/30">{tr("Interés aplicado:")}{" "}<span className="font-bold text-amber-500">{m.tasaInteres}</span>
                     </p>
                   )}
                 </div>

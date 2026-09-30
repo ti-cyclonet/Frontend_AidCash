@@ -10,11 +10,12 @@ import { userApi, connectionsApi } from "@/lib/api-client"
 import { UserAvatar } from "@/components/social/UserAvatar"
 import { InviteLinkPanel } from "@/components/social/InviteLinkPanel"
 import type { SocialUser, ConnectionRole } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 const TYPE_META: Record<ConnectionRole, { label: string; color: string; icon: typeof Heart; desc: string }> = {
-  PARTNER: { label: "Pareja", color: "text-pink-500 border-pink-500/40 bg-pink-500/5", icon: Heart, desc: "Deudas y ahorro conjunto, préstamos entre ustedes, presupuesto del hogar" },
-  FAMILY:  { label: "Familia", color: "text-amber-500 border-amber-500/40 bg-amber-500/5", icon: Home, desc: "Préstamos familiares, vaquitas para regalos o eventos, gastos de casa compartida" },
-  FRIEND:  { label: "Amigo", color: "text-blue-500 border-blue-500/40 bg-blue-500/5", icon: HandHeart, desc: "Préstamos puntuales, ahorro grupal para un plan, dividir cuentas, y racha/jardín social" },
+  PARTNER: { label: tr("Pareja"), color: "text-pink-500 border-pink-500/40 bg-pink-500/5", icon: Heart, desc: tr("Deudas y ahorro conjunto, préstamos entre ustedes, presupuesto del hogar") },
+  FAMILY:  { label: tr("Familia"), color: "text-amber-500 border-amber-500/40 bg-amber-500/5", icon: Home, desc: tr("Préstamos familiares, vaquitas para regalos o eventos, gastos de casa compartida") },
+  FRIEND:  { label: tr("Amigo"), color: "text-blue-500 border-blue-500/40 bg-blue-500/5", icon: HandHeart, desc: tr("Préstamos puntuales, ahorro grupal para un plan, dividir cuentas, y racha/jardín social") },
 }
 
 type Method = "username" | "correo"
@@ -70,9 +71,8 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-kiri-emerald" /> ¿Con quién es esta conexión?
-              </DialogTitle>
-              <DialogDescription>Esto decide qué pueden compartir juntos.</DialogDescription>
+                <UserPlus className="h-5 w-5 text-kiri-emerald" />{" "}{tr("¿Con quién es esta conexión?")}</DialogTitle>
+              <DialogDescription>{tr("Esto decide qué pueden compartir juntos.")}</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-2 py-1">
               {(Object.entries(TYPE_META) as [ConnectionRole, typeof TYPE_META[ConnectionRole]][]).map(([key, t]) => (
@@ -100,11 +100,10 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
               onClick={() => { setStep("type"); setSearched(false); setResult(null); setValue("") }}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1"
             >
-              <ChevronLeft className="h-3.5 w-3.5" /> Cambiar tipo
-            </button>
+              <ChevronLeft className="h-3.5 w-3.5" />{" "}{tr("Cambiar tipo")}</button>
             <DialogHeader>
-              <DialogTitle>Buscar {TYPE_META[role].label.toLowerCase()}</DialogTitle>
-              <DialogDescription>Solo se encuentra con una coincidencia exacta.</DialogDescription>
+              <DialogTitle>{tr("Buscar {0}", [TYPE_META[role].label.toLowerCase()])}</DialogTitle>
+              <DialogDescription>{tr("Solo se encuentra con una coincidencia exacta.")}</DialogDescription>
             </DialogHeader>
 
             <div className="flex gap-2 mt-1">
@@ -117,7 +116,7 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
                     method === m ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald" : "border-border text-muted-foreground"
                   )}
                 >
-                  {m === "username" ? "Usuario" : "Correo"}
+                  {m === "username" ? tr("Usuario") : tr("Correo")}
                 </button>
               ))}
             </div>
@@ -137,7 +136,7 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
             </div>
 
             {searched && !result && (
-              <p className="text-center text-xs text-destructive py-3">No encontramos a nadie con ese dato exacto.</p>
+              <p className="text-center text-xs text-destructive py-3">{tr("No encontramos a nadie con ese dato exacto.")}</p>
             )}
 
             {result && (
@@ -148,7 +147,7 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
                   {result.username && <p className="text-[10.5px] text-muted-foreground">@{result.username}</p>}
                 </div>
                 <Button size="sm" onClick={handleInvite} disabled={sending} className="h-8 rounded-lg bg-kiri-emerald hover:bg-kiri-emerald/90 text-white text-xs font-bold">
-                  {sending ? "..." : "Invitar"}
+                  {sending ? "..." : tr("Invitar")}
                 </Button>
               </div>
             )}
@@ -158,7 +157,7 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
             {/* ¿Todavía no usa Kiri? Enlace de invitación con este mismo rol:
                 al registrarse quedan conectados sin buscar ni aceptar nada. */}
             <div className="mt-4 pt-4 border-t border-border space-y-2">
-              <p className="text-xs font-bold">¿Todavía no usa Kiri? Envíale tu enlace</p>
+              <p className="text-xs font-bold">{tr("¿Todavía no usa Kiri? Envíale tu enlace")}</p>
               <InviteLinkPanel role={role} compact />
             </div>
           </>
@@ -169,9 +168,9 @@ export function AddConnectionModal({ open, onClose, onInvited }: AddConnectionMo
             <div className="h-11 w-11 rounded-full bg-kiri-emerald/10 flex items-center justify-center mx-auto mb-3">
               <Check className="h-5 w-5 text-kiri-emerald" />
             </div>
-            <p className="text-sm font-bold">Solicitud enviada</p>
-            <p className="text-xs text-muted-foreground mt-1">Se activará como {TYPE_META[role].label.toLowerCase()} cuando acepte.</p>
-            <Button onClick={handleClose} variant="outline" className="mt-4 rounded-xl">Listo</Button>
+            <p className="text-sm font-bold">{tr("Solicitud enviada")}</p>
+            <p className="text-xs text-muted-foreground mt-1">{tr("Se activará como {0} cuando acepte.", [TYPE_META[role].label.toLowerCase()])}</p>
+            <Button onClick={handleClose} variant="outline" className="mt-4 rounded-xl">{tr("Listo")}</Button>
           </div>
         )}
       </DialogContent>

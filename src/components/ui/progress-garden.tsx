@@ -8,6 +8,7 @@ import { IncomeFrequency } from "@/lib/types"
 import { Flame, Droplets, Trophy, Lock } from "lucide-react"
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { tr } from "@/lib/i18n"
 
 interface Props {
   /** true si el presupuesto del periodo actual se cumple (obligaciones ≤ ingreso) */
@@ -43,8 +44,8 @@ export function ProgressGarden({ budgetOnTrack, isOverloaded }: Props) {
         <CardContent className="p-6 flex items-center gap-5">
           <div className="text-5xl">🌰</div>
           <div className="flex-1 space-y-1">
-            <p className="font-bold text-sm">Tu jardín financiero</p>
-            <p className="text-[11px] text-muted-foreground">Cargando tu progreso...</p>
+            <p className="font-bold text-sm">{tr("Tu jardín financiero")}</p>
+            <p className="text-[11px] text-muted-foreground">{tr("Cargando tu progreso...")}</p>
           </div>
         </CardContent>
       </Card>
@@ -100,8 +101,7 @@ export function ProgressGarden({ budgetOnTrack, isOverloaded }: Props) {
               <p className="font-bold text-sm">{gardenConfig.titulo}</p>
               {needsWater && (
                 <span className="flex items-center gap-1 text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full animate-pulse">
-                  <Droplets className="h-3 w-3" /> Necesita agua
-                </span>
+                  <Droplets className="h-3 w-3" />{" "}{tr("Necesita agua")}</span>
               )}
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -121,9 +121,7 @@ export function ProgressGarden({ budgetOnTrack, isOverloaded }: Props) {
               </div>
               {streakMejor > streakActual && (
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Trophy className="h-3 w-3" />
-                  Mejor: {streakMejor}
-                </div>
+                  <Trophy className="h-3 w-3" />{tr("Mejor: {0}", [streakMejor])}</div>
               )}
             </div>
           </div>
@@ -138,7 +136,7 @@ export function ProgressGarden({ budgetOnTrack, isOverloaded }: Props) {
             )}>
               {gardenLevel}
             </div>
-            <p className="text-[9px] text-muted-foreground font-bold uppercase">Nivel</p>
+            <p className="text-[9px] text-muted-foreground font-bold uppercase">{tr("Nivel")}</p>
           </div>
         </CardContent>
       </Card>
@@ -169,12 +167,12 @@ export function ProgressGarden({ budgetOnTrack, isOverloaded }: Props) {
               <p className="font-bold text-xs">
                 {badgesDesbloqueados.length > 0
                   ? `${badgesDesbloqueados.length} insignia${badgesDesbloqueados.length > 1 ? 's' : ''} desbloqueada${badgesDesbloqueados.length > 1 ? 's' : ''}`
-                  : 'Sin insignias aún'}
+                  : tr("Sin insignias aún")}
               </p>
               <p className="text-[10px] text-muted-foreground truncate">
                 {badgesDesbloqueados.length > 0
-                  ? 'Toca para ver todas tus insignias'
-                  : 'Mantén tu racha para desbloquear'}
+                  ? tr("Toca para ver todas tus insignias")
+                  : tr("Mantén tu racha para desbloquear")}
               </p>
             </div>
             <Trophy className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -187,12 +185,8 @@ export function ProgressGarden({ budgetOnTrack, isOverloaded }: Props) {
         <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-cyclon-lavender" />
-              Insignias
-            </DialogTitle>
-            <DialogDescription>
-              Desbloquea insignias cumpliendo tu presupuesto semana a semana.
-            </DialogDescription>
+              <Trophy className="h-5 w-5 text-cyclon-lavender" />{tr("Insignias")}</DialogTitle>
+            <DialogDescription>{tr("Desbloquea insignias cumpliendo tu presupuesto semana a semana.")}</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 py-2">
             {BADGES.map(badge => (
@@ -222,7 +216,7 @@ function BadgeCard({ badge, unlocked, freq }: { badge: BadgeDefinition; unlocked
     )}>
       <CardContent className="p-3 flex flex-col items-center text-center gap-2 relative">
         {badge.pro && (
-          <span className="absolute top-1.5 right-1.5 text-[8px] font-black text-amber-700 dark:text-amber-300 bg-amber-400/25 px-1.5 py-0.5 rounded">PRO</span>
+          <span className="absolute top-1.5 right-1.5 text-[8px] font-black text-amber-700 dark:text-amber-300 bg-amber-400/25 px-1.5 py-0.5 rounded">{tr("PRO")}</span>
         )}
         <div className={cn(
           "text-3xl transition-transform",
@@ -237,9 +231,7 @@ function BadgeCard({ badge, unlocked, freq }: { badge: BadgeDefinition; unlocked
           </p>
         </div>
         {unlocked && (
-          <span className="text-[8px] font-black text-cyclon-lavender bg-cyclon-lavender/10 px-2 py-0.5 rounded-full uppercase">
-            Desbloqueada
-          </span>
+          <span className="text-[8px] font-black text-cyclon-lavender bg-cyclon-lavender/10 px-2 py-0.5 rounded-full uppercase">{tr("Desbloqueada")}</span>
         )}
       </CardContent>
     </Card>
@@ -251,44 +243,44 @@ function BadgeCard({ badge, unlocked, freq }: { badge: BadgeDefinition; unlocked
 const GARDEN_LEVELS = [
   {
     emoji: '🌰',
-    titulo: 'Semilla plantada',
+    titulo: tr("Semilla plantada"),
     bgClass: 'bg-amber-50/30',
-    mensajePositivo: 'Tu jardín financiero está empezando. Cumple una semana para ver el primer brote.',
-    mensajeNegativo: 'Tu jardín necesita atención. Ajusta tu presupuesto para que pueda crecer.',
+    mensajePositivo: tr("Tu jardín financiero está empezando. Cumple una semana para ver el primer brote."),
+    mensajeNegativo: tr("Tu jardín necesita atención. Ajusta tu presupuesto para que pueda crecer."),
   },
   {
     emoji: '🌱',
-    titulo: '¡Primer brote!',
+    titulo: tr("¡Primer brote!"),
     bgClass: 'bg-green-50/40',
-    mensajePositivo: '¡Buen inicio! Una semana cumpliendo tu plan. Sigue así para ver crecer tu jardín.',
-    mensajeNegativo: 'El brote necesita agua. Revisa tus gastos para mantener la racha.',
+    mensajePositivo: tr("¡Buen inicio! Una semana cumpliendo tu plan. Sigue así para ver crecer tu jardín."),
+    mensajeNegativo: tr("El brote necesita agua. Revisa tus gastos para mantener la racha."),
   },
   {
     emoji: '🌿',
-    titulo: 'Planta joven',
+    titulo: tr("Planta joven"),
     bgClass: 'bg-green-50/60',
-    mensajePositivo: 'Tu disciplina se nota. La planta está echando raíces fuertes.',
-    mensajeNegativo: 'La planta se está secando. Vuelve al presupuesto para recuperarla.',
+    mensajePositivo: tr("Tu disciplina se nota. La planta está echando raíces fuertes."),
+    mensajeNegativo: tr("La planta se está secando. Vuelve al presupuesto para recuperarla."),
   },
   {
     emoji: '🌻',
-    titulo: 'En flor',
+    titulo: tr("En flor"),
     bgClass: 'bg-cyclon-mint/10',
-    mensajePositivo: '¡Tu jardín está floreciendo! Un mes de disciplina financiera.',
-    mensajeNegativo: 'Las flores necesitan cuidado. No dejes que la racha se rompa.',
+    mensajePositivo: tr("¡Tu jardín está floreciendo! Un mes de disciplina financiera."),
+    mensajeNegativo: tr("Las flores necesitan cuidado. No dejes que la racha se rompa."),
   },
   {
     emoji: '🌳',
-    titulo: 'Árbol robusto',
+    titulo: tr("Árbol robusto"),
     bgClass: 'bg-cyclon-mint/15',
-    mensajePositivo: 'Dos meses de constancia. Tu árbol financiero da sombra y frutos.',
-    mensajeNegativo: 'Incluso los árboles necesitan agua. Revisa tu situación.',
+    mensajePositivo: tr("Dos meses de constancia. Tu árbol financiero da sombra y frutos."),
+    mensajeNegativo: tr("Incluso los árboles necesitan agua. Revisa tu situación."),
   },
   {
     emoji: '🏡',
-    titulo: 'Jardín completo',
+    titulo: tr("Jardín completo"),
     bgClass: 'bg-gradient-to-br from-cyclon-mint/10 to-cyclon-sky/10',
-    mensajePositivo: '¡Leyenda! Tu jardín está en plena floración. Eres un ejemplo de disciplina.',
-    mensajeNegativo: 'Tu jardín es hermoso, pero necesita mantenimiento. ¡Cuídalo!',
+    mensajePositivo: tr("¡Leyenda! Tu jardín está en plena floración. Eres un ejemplo de disciplina."),
+    mensajeNegativo: tr("Tu jardín es hermoso, pero necesita mantenimiento. ¡Cuídalo!"),
   },
 ]

@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useNetworkStatus } from "@/hooks/use-network-status"
 import { getAccessToken } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 /**
  * OfflineSyncProvider
@@ -63,19 +64,14 @@ export function OfflineSyncProvider() {
   // ─── Indicador visual de estado offline ───────────────────────────────────
   if (!isOnline) {
     return (
-      <div className="fixed top-0 left-0 right-0 z-[9999] bg-amber-500 text-white text-center text-xs py-1 font-medium shadow-md">
-        📡 Sin conexión{pendingCount > 0 ? ` — ${pendingCount} operación${pendingCount > 1 ? 'es' : ''} pendiente${pendingCount > 1 ? 's' : ''}` : ''}
-        {isSyncing ? ' (sincronizando...)' : ''}
-      </div>
+      <div className="fixed top-0 left-0 right-0 z-[9999] bg-amber-500 text-white text-center text-xs py-1 font-medium shadow-md">{tr("📡 Sin conexión{0}{1}", [pendingCount > 0 ? (pendingCount === 1 ? tr(" — 1 operación pendiente") : tr(" — {0} operaciones pendientes", [pendingCount])) : '', isSyncing ? tr(" (sincronizando...)") : ''])}</div>
     )
   }
 
   // Mostrar brevemente cuando está sincronizando después de reconexión
   if (isSyncing && pendingCount > 0) {
     return (
-      <div className="fixed top-0 left-0 right-0 z-[9999] bg-emerald-500 text-white text-center text-xs py-1 font-medium shadow-md">
-        🔄 Sincronizando {pendingCount} operación{pendingCount > 1 ? 'es' : ''} pendiente{pendingCount > 1 ? 's' : ''}...
-      </div>
+      <div className="fixed top-0 left-0 right-0 z-[9999] bg-emerald-500 text-white text-center text-xs py-1 font-medium shadow-md">{(pendingCount === 1 ? tr("🔄 Sincronizando 1 operación pendiente...") : tr("🔄 Sincronizando {0} operaciones pendientes...", [pendingCount]))}</div>
     )
   }
 

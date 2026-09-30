@@ -84,9 +84,11 @@ export function OdometerAmount({ value, formatAmount, className, duration = 1500
   const safeValue = Number.isFinite(value) ? value : 0
   const negative = safeValue < 0
 
+  // Se deduce de un número de muestra con miles: antes se usaba el valor del
+  // primer render, que es 0 mientras carga la billetera ("$ 0" no trae
+  // separador) y quedaba la coma por defecto: "$129,900" en pesos.
   const { prefix, suffix, groupSep } = useMemo(
-    () => parseFormat(formatAmount(Math.abs(safeValue))),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => parseFormat(formatAmount(1234567)),
     [formatAmount],
   )
 

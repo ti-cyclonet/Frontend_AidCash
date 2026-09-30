@@ -18,17 +18,18 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuestion"
+import { tr } from "@/lib/i18n"
 
 // ─── Pasos del test ───────────────────────────────────────────────────────────
 
 const STEPS = [
-  "Bienvenida",
-  "Cómo recibes tu plata",
-  "Sueldo base",
-  "Ingreso extra",
-  "Situación de deudas",
-  "Registrar deudas",         // nuevo paso intermedio
-  "Finalización",
+  tr("Bienvenida"),
+  tr("Cómo recibes tu plata"),
+  tr("Sueldo base"),
+  tr("Ingreso extra"),
+  tr("Situación de deudas"),
+  tr("Registrar deudas"),         // nuevo paso intermedio
+  tr("Finalización"),
 ]
 
 // Tipo para deudas/gastos fijos registrados en onboarding
@@ -195,7 +196,7 @@ export default function OnboardingPage() {
           })
 
       if (!saved) {
-        setObligationError("No se pudo guardar. Espera un momento e intenta de nuevo.")
+        setObligationError(tr("No se pudo guardar. Espera un momento e intenta de nuevo."))
         setSavingObligation(false)
         return false
       }
@@ -214,7 +215,7 @@ export default function OnboardingPage() {
       setSavingObligation(false)
       return true
     } catch (e) {
-      setObligationError("No se pudo guardar. Espera un momento e intenta de nuevo.")
+      setObligationError(tr("No se pudo guardar. Espera un momento e intenta de nuevo."))
     }
     setSavingObligation(false)
     return false
@@ -294,9 +295,7 @@ export default function OnboardingPage() {
           ))}
         </div>
         {step > 0 && step < totalSteps - 1 && (
-          <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            Paso {Math.min(visualStep, 4)} de 4
-          </p>
+          <p className="text-[10px] text-muted-foreground mt-2 text-center">{tr("Paso {0} de 4", [Math.min(visualStep, 4)])}</p>
         )}
       </div>
 
@@ -315,27 +314,22 @@ export default function OnboardingPage() {
             {step === 0 && (
               <div className="flex flex-col items-center text-center space-y-6">
                 <div className="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
-                  <span className="text-kiri-emerald">🌱</span> Kiri Finance
-                </div>
+                  <span className="text-kiri-emerald">🌱</span>{" "}{tr("Kiri Finance")}</div>
 
                 <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center">
                   <span className="text-7xl">🌱</span>
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-black">¡Bienvenido a Kiri! 🌱</h1>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Este test inicial nos ayudará a conocerte mejor para ofrecerte una experiencia personalizada y consejos que realmente te servirán.
-                  </p>
+                  <h1 className="text-2xl font-black">{tr("¡Bienvenido a Kiri! 🌱")}</h1>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{tr("Este test inicial nos ayudará a conocerte mejor para ofrecerte una experiencia personalizada y consejos que realmente te servirán.")}</p>
                 </div>
 
                 <div className="flex items-center gap-6 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-kiri-emerald" /> 2-3 min
-                  </span>
+                    <Clock className="h-3.5 w-3.5 text-kiri-emerald" />{" "}{tr("2-3 min")}</span>
                   <span className="flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5 text-kiri-emerald" /> 100% confidencial
-                  </span>
+                    <Shield className="h-3.5 w-3.5 text-kiri-emerald" />{" "}{tr("100% confidencial")}</span>
                 </div>
               </div>
             )}
@@ -348,17 +342,15 @@ export default function OnboardingPage() {
                     <Calendar className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black">¿Cómo recibes tu plata?</h2>
+                    <h2 className="text-lg font-black">{tr("¿Cómo recibes tu plata?")}</h2>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Esto nos ayudará a organizar tu presupuesto correctamente.
-                </p>
+                <p className="text-xs text-muted-foreground">{tr("Esto nos ayudará a organizar tu presupuesto correctamente.")}</p>
 
                 <div className="grid grid-cols-2 gap-3">
                   {([
-                    { v: "fijo", icon: Wallet, t: "Tengo un sueldo fijo", d: "Me pagan en fechas fijas (aunque el monto cambie un poco)" },
-                    { v: "variable", icon: Sparkles, t: "Mis ingresos varían", d: "Independiente, ventas, comisiones, domicilios…" },
+                    { v: "fijo", icon: Wallet, t: tr("Tengo un sueldo fijo"), d: tr("Me pagan en fechas fijas (aunque el monto cambie un poco)") },
+                    { v: "variable", icon: Sparkles, t: tr("Mis ingresos varían"), d: tr("Independiente, ventas, comisiones, domicilios…") },
                   ] as const).map(o => (
                     <button key={o.v} onClick={() => setTipoIngreso(o.v)}
                       className={cn("flex flex-col gap-1.5 p-4 rounded-2xl border-2 transition-colors text-left",
@@ -372,14 +364,14 @@ export default function OnboardingPage() {
 
                 {tipoIngreso === "variable" && (
                   <div className="rounded-2xl bg-kiri-emerald/5 border border-kiri-emerald/20 p-4 text-xs text-muted-foreground space-y-1.5">
-                    <p className="font-bold text-foreground">¡Perfecto! No necesitas un sueldo fijo.</p>
-                    <p>Cada vez que te entre plata la registras (o se la dictas a Kiri) y Kiri organiza tus gastos con lo que de verdad tienes. Con el tiempo aprende tu promedio para planear mejor tus meses.</p>
+                    <p className="font-bold text-foreground">{tr("¡Perfecto! No necesitas un sueldo fijo.")}</p>
+                    <p>{tr("Cada vez que te entre plata la registras (o se la dictas a Kiri) y Kiri organiza tus gastos con lo que de verdad tienes. Con el tiempo aprende tu promedio para planear mejor tus meses.")}</p>
                   </div>
                 )}
 
                 {tipoIngreso === "fijo" && (
                 <div className="space-y-3">
-                <p className="text-xs font-bold">¿Cada cuánto te pagan?</p>
+                <p className="text-xs font-bold">{tr("¿Cada cuánto te pagan?")}</p>
                   <button
                     onClick={() => setFrecuencia("mensual")}
                     className={cn(
@@ -396,8 +388,8 @@ export default function OnboardingPage() {
                     </div>
                     <CalendarDays className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
-                      <p className="text-sm font-bold">Mensual</p>
-                      <p className="text-[10px] text-muted-foreground">Una vez al mes</p>
+                      <p className="text-sm font-bold">{tr("Mensual")}</p>
+                      <p className="text-[10px] text-muted-foreground">{tr("Una vez al mes")}</p>
                     </div>
                   </button>
 
@@ -417,8 +409,8 @@ export default function OnboardingPage() {
                     </div>
                     <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
-                      <p className="text-sm font-bold">Quincenal</p>
-                      <p className="text-[10px] text-muted-foreground">Cada 15 días</p>
+                      <p className="text-sm font-bold">{tr("Quincenal")}</p>
+                      <p className="text-[10px] text-muted-foreground">{tr("Cada 15 días")}</p>
                     </div>
                   </button>
                 </div>
@@ -431,14 +423,14 @@ export default function OnboardingPage() {
                 {tipoIngreso === "fijo" && (
                 <div className="space-y-2 pt-1">
                   <Label className="text-xs font-bold">
-                    {frecuencia === "quincenal" ? "¿Qué días te pagan?" : "¿Qué día te pagan?"}
+                    {frecuencia === "quincenal" ? tr("¿Qué días te pagan?") : tr("¿Qué día te pagan?")}
                   </Label>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
                       min="1"
                       max="31"
-                      placeholder="Ej: 15"
+                      placeholder={tr("Ej: 15")}
                       value={diaPago1}
                       onChange={e => setDiaPago1(e.target.value)}
                       className="h-11 rounded-xl w-24 text-center font-bold"
@@ -450,7 +442,7 @@ export default function OnboardingPage() {
                           type="number"
                           min="1"
                           max="31"
-                          placeholder="Ej: 30"
+                          placeholder={tr("Ej: 30")}
                           value={diaPago2}
                           onChange={e => setDiaPago2(e.target.value)}
                           className="h-11 rounded-xl w-24 text-center font-bold"
@@ -462,9 +454,7 @@ export default function OnboardingPage() {
                 )}
 
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  Podrás cambiar esto cuando quieras desde Gestión → Billetera.
-                </p>
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />{tr("Podrás cambiar esto cuando quieras desde Gestión → Billetera.")}</p>
               </div>
             )}
 
@@ -481,21 +471,21 @@ export default function OnboardingPage() {
                   </div>
                   <div>
                     <h2 className="text-lg font-black">
-                      {variable ? "¿Cuánto te entra en un mes normal?" : frecuencia === "quincenal" ? "¿Cuánto te pagan cada quincena?" : "¿Cuánto te pagan al mes?"}
+                      {variable ? tr("¿Cuánto te entra en un mes normal?") : frecuencia === "quincenal" ? tr("¿Cuánto te pagan cada quincena?") : tr("¿Cuánto te pagan al mes?")}
                     </h2>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {variable
-                    ? "Es solo una idea para planear: si no lo sabes, déjalo vacío y Kiri usará tu promedio real apenas registres tus ingresos."
-                    : "Esta será la base para calcular tu presupuesto inteligente."}
+                    ? tr("Es solo una idea para planear: si no lo sabes, déjalo vacío y Kiri usará tu promedio real apenas registres tus ingresos.")
+                    : tr("Esta será la base para calcular tu presupuesto inteligente.")}
                 </p>
 
                 {!variable && frecuencia === "quincenal" && (
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold">¿Te pagan lo mismo las dos quincenas?</Label>
+                    <Label className="text-xs font-bold">{tr("¿Te pagan lo mismo las dos quincenas?")}</Label>
                     <div className="grid grid-cols-2 gap-2">
-                      {[{ v: true, t: "Sí, lo mismo" }, { v: false, t: "No, cambia" }].map(o => (
+                      {[{ v: true, t: tr("Sí, lo mismo") }, { v: false, t: tr("No, cambia") }].map(o => (
                         <button key={String(o.v)} onClick={() => setQuincenasIguales(o.v)}
                           className={cn("h-11 rounded-xl border-2 text-sm font-bold transition-colors",
                             quincenasIguales === o.v ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
@@ -509,40 +499,38 @@ export default function OnboardingPage() {
                 {distintas ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold">Lo que te pagan el día {diaA}</Label>
+                      <Label className="text-xs font-bold">{tr("Lo que te pagan el día {0}", [diaA])}</Label>
                       <MoneyInput value={incomeValue} onChange={v => setIncomeValue(v)} className="h-14 text-xl font-bold rounded-2xl" placeholder="0" autoFocus />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs font-bold">Lo que te pagan el día {diaB}</Label>
+                      <Label className="text-xs font-bold">{tr("Lo que te pagan el día {0}", [diaB])}</Label>
                       <MoneyInput value={incomeValue2} onChange={v => setIncomeValue2(v)} className="h-14 text-xl font-bold rounded-2xl" placeholder="0" />
                     </div>
                     {Number(incomeValue) > 0 && Number(incomeValue2) > 0 && (
-                      <p className="col-span-2 text-xs text-muted-foreground">Al mes te entran <strong className="text-foreground">{formatAmount(Number(incomeValue) + Number(incomeValue2))}</strong>. Cada quincena Kiri usará lo que corresponde a esa fecha.</p>
+                      <p className="col-span-2 text-xs text-muted-foreground">{tr("Al mes te entran")}{" "}<strong className="text-foreground">{formatAmount(Number(incomeValue) + Number(incomeValue2))}</strong>{tr(". Cada quincena Kiri usará lo que corresponde a esa fecha.")}</p>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-2">
                     <Label className="text-xs font-bold">
-                      {variable ? "Estimación mensual (opcional)" : frecuencia === "quincenal" ? "Lo que te pagan cada quincena" : "Tu sueldo del mes"}
+                      {variable ? tr("Estimación mensual (opcional)") : frecuencia === "quincenal" ? tr("Lo que te pagan cada quincena") : tr("Tu sueldo del mes")}
                     </Label>
                     <MoneyInput
                       value={incomeValue}
                       onChange={v => setIncomeValue(v)}
                       className="h-14 text-2xl font-bold rounded-2xl"
-                      placeholder={variable ? "No lo sé" : "0"}
+                      placeholder={variable ? tr("No lo sé") : "0"}
                       autoFocus
                     />
                     {variable && (
-                      <button onClick={() => { setIncomeValue(""); goNext() }} className="text-xs font-bold text-kiri-emerald hover:underline">
-                        No lo sé todavía, sigamos →
-                      </button>
+                      <button onClick={() => { setIncomeValue(""); goNext() }} className="text-xs font-bold text-kiri-emerald hover:underline">{tr("No lo sé todavía, sigamos →")}</button>
                     )}
                   </div>
                 )}
 
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
                   <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  {variable ? "Registra cada ingreso cuando te llegue: así Kiri siempre sabe con cuánto cuentas." : "Pon lo que de verdad te llega a la cuenta (después de descuentos)."}
+                  {variable ? tr("Registra cada ingreso cuando te llegue: así Kiri siempre sabe con cuánto cuentas.") : tr("Pon lo que de verdad te llega a la cuenta (después de descuentos).")}
                 </p>
               </div>
               )
@@ -556,13 +544,13 @@ export default function OnboardingPage() {
                     <Zap className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black">{tipoIngreso === "variable" ? "¿Tienes algún ingreso fijo aparte?" : "¿Tienes algún ingreso extra?"}</h2>
+                    <h2 className="text-lg font-black">{tipoIngreso === "variable" ? tr("¿Tienes algún ingreso fijo aparte?") : tr("¿Tienes algún ingreso extra?")}</h2>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {tipoIngreso === "variable"
-                    ? "Un arriendo que cobras, una pensión, una mesada… algo que te llegue siempre, además de lo que te entra por tu trabajo."
-                    : "Freelance, comisiones, un negocio aparte — cualquier plata que te entre además de tu sueldo base."}
+                    ? tr("Un arriendo que cobras, una pensión, una mesada… algo que te llegue siempre, además de lo que te entra por tu trabajo.")
+                    : tr("Freelance, comisiones, un negocio aparte — cualquier plata que te entre además de tu sueldo base.")}
                 </p>
 
                 <div className="space-y-3">
@@ -581,7 +569,7 @@ export default function OnboardingPage() {
                       {tieneIngresoExtra === true && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
                     </div>
                     <CheckCircle2 className="h-5 w-5 text-kiri-emerald shrink-0" />
-                    <p className="text-sm font-bold">{tipoIngreso === "variable" ? "Sí, tengo un ingreso fijo" : "Sí, tengo un ingreso extra"}</p>
+                    <p className="text-sm font-bold">{tipoIngreso === "variable" ? tr("Sí, tengo un ingreso fijo") : tr("Sí, tengo un ingreso extra")}</p>
                   </button>
 
                   <button
@@ -599,7 +587,7 @@ export default function OnboardingPage() {
                       {tieneIngresoExtra === false && <div className="h-2.5 w-2.5 rounded-full bg-kiri-emerald" />}
                     </div>
                     <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <p className="text-sm font-bold">{tipoIngreso === "variable" ? "No, solo lo de mi trabajo" : "No, solo mi sueldo base"}</p>
+                    <p className="text-sm font-bold">{tipoIngreso === "variable" ? tr("No, solo lo de mi trabajo") : tr("No, solo mi sueldo base")}</p>
                   </button>
                 </div>
 
@@ -608,16 +596,16 @@ export default function OnboardingPage() {
                 {tieneIngresoExtra === true && (
                   <div className="space-y-3 pt-1">
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Nombre</Label>
+                      <Label className="text-[10px] font-bold">{tr("Nombre")}</Label>
                       <Input
-                        placeholder="Ej: Freelance, comisiones, venta..."
+                        placeholder={tr("Ej: Freelance, comisiones, venta...")}
                         value={extraNombre}
                         onChange={e => setExtraNombre(e.target.value)}
                         className="h-10 rounded-xl"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Monto aproximado</Label>
+                      <Label className="text-[10px] font-bold">{tr("Monto aproximado")}</Label>
                       <MoneyInput
                         value={extraMonto}
                         onChange={v => setExtraMonto(v)}
@@ -626,32 +614,26 @@ export default function OnboardingPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">¿Con qué frecuencia te entra?</Label>
+                      <Label className="text-[10px] font-bold">{tr("¿Con qué frecuencia te entra?")}</Label>
                       <div className="grid grid-cols-3 gap-2">
                         <button type="button" onClick={() => setExtraTemp("una_vez")}
                           className={cn("h-9 rounded-xl text-[10px] font-bold border-2 transition-colors",
-                            extraTemp === "una_vez" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Una vez
-                        </button>
+                            extraTemp === "una_vez" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Una vez")}</button>
                         <button type="button" onClick={() => setExtraTemp("definido")}
                           className={cn("h-9 rounded-xl text-[10px] font-bold border-2 transition-colors",
-                            extraTemp === "definido" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Por un tiempo
-                        </button>
+                            extraTemp === "definido" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Por un tiempo")}</button>
                         <button type="button" onClick={() => setExtraTemp("indefinido")}
                           className={cn("h-9 rounded-xl text-[10px] font-bold border-2 transition-colors",
-                            extraTemp === "indefinido" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>
-                          Siempre
-                        </button>
+                            extraTemp === "indefinido" ? "bg-kiri-emerald/10 border-kiri-emerald text-kiri-emerald" : "border-muted text-muted-foreground")}>{tr("Siempre")}</button>
                       </div>
                     </div>
                     {extraTemp === "definido" && (
                       <div className="space-y-1">
-                        <Label className="text-[10px] font-bold">¿Por cuántos periodos?</Label>
+                        <Label className="text-[10px] font-bold">{tr("¿Por cuántos periodos?")}</Label>
                         <Input
                           type="number"
                           min="1"
-                          placeholder="Ej: 3"
+                          placeholder={tr("Ej: 3")}
                           value={extraMeses}
                           onChange={e => setExtraMeses(e.target.value)}
                           className="h-10 rounded-xl w-24"
@@ -662,9 +644,7 @@ export default function OnboardingPage() {
                 )}
 
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  Podrás registrar más ingresos extra cuando quieras desde Gestión.
-                </p>
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />{tr("Podrás registrar más ingresos extra cuando quieras desde Gestión.")}</p>
               </div>
             )}
 
@@ -676,12 +656,10 @@ export default function OnboardingPage() {
                     <Target className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black">¿Tienes deudas u obligaciones financieras activas?</h2>
+                    <h2 className="text-lg font-black">{tr("¿Tienes deudas u obligaciones financieras activas?")}</h2>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Esto nos permitirá darte recomendaciones más personalizadas desde el inicio.
-                </p>
+                <p className="text-xs text-muted-foreground">{tr("Esto nos permitirá darte recomendaciones más personalizadas desde el inicio.")}</p>
 
                 <div className="space-y-3">
                   <button
@@ -700,7 +678,7 @@ export default function OnboardingPage() {
                     </div>
                     <CheckCircle2 className="h-5 w-5 text-kiri-emerald shrink-0" />
                     <div>
-                      <p className="text-sm font-bold">Sí, tengo deudas o obligaciones</p>
+                      <p className="text-sm font-bold">{tr("Sí, tengo deudas o obligaciones")}</p>
                     </div>
                   </button>
 
@@ -720,15 +698,13 @@ export default function OnboardingPage() {
                     </div>
                     <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
-                      <p className="text-sm font-bold">No, estoy libre de deudas</p>
+                      <p className="text-sm font-bold">{tr("No, estoy libre de deudas")}</p>
                     </div>
                   </button>
                 </div>
 
                 <p className="text-[9px] text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="h-3 w-3 text-kiri-emerald" />
-                  No te preocupes, podrás registrar tus deudas más adelante si cambias de opinión.
-                </p>
+                  <Sparkles className="h-3 w-3 text-kiri-emerald" />{tr("No te preocupes, podrás registrar tus deudas más adelante si cambias de opinión.")}</p>
               </div>
             )}
 
@@ -743,12 +719,10 @@ export default function OnboardingPage() {
                         <ReceiptText className="h-5 w-5" />
                       </div>
                       <div>
-                        <h2 className="text-lg font-black">¿Quieres registrar tus deudas y gastos fijos ahora?</h2>
+                        <h2 className="text-lg font-black">{tr("¿Quieres registrar tus deudas y gastos fijos ahora?")}</h2>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Puedes agregar tus compromisos financieros uno por uno para que Kiri los tenga en cuenta desde el primer día.
-                    </p>
+                    <p className="text-xs text-muted-foreground">{tr("Puedes agregar tus compromisos financieros uno por uno para que Kiri los tenga en cuenta desde el primer día.")}</p>
 
                     <div className="space-y-3">
                       <button
@@ -762,8 +736,8 @@ export default function OnboardingPage() {
                           <Plus className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold">Sí, registrar ahora</p>
-                          <p className="text-[10px] text-muted-foreground">Agrega tus deudas y gastos fijos uno por uno</p>
+                          <p className="text-sm font-bold">{tr("Sí, registrar ahora")}</p>
+                          <p className="text-[10px] text-muted-foreground">{tr("Agrega tus deudas y gastos fijos uno por uno")}</p>
                         </div>
                       </button>
 
@@ -778,8 +752,8 @@ export default function OnboardingPage() {
                           <Clock className="h-4 w-4" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold">Más tarde</p>
-                          <p className="text-[10px] text-muted-foreground">Puedes hacerlo después desde Obligaciones</p>
+                          <p className="text-sm font-bold">{tr("Más tarde")}</p>
+                          <p className="text-[10px] text-muted-foreground">{tr("Puedes hacerlo después desde Obligaciones")}</p>
                         </div>
                       </button>
                     </div>
@@ -794,10 +768,10 @@ export default function OnboardingPage() {
                         <Plus className="h-5 w-5" />
                       </div>
                       <div>
-                        <h2 className="text-lg font-black">Registrar obligación</h2>
+                        <h2 className="text-lg font-black">{tr("Registrar obligación")}</h2>
                         <p className="text-[10px] text-muted-foreground">
                           {obligations.length === 0
-                            ? "Agrega tu primera deuda o gasto fijo"
+                            ? tr("Agrega tu primera deuda o gasto fijo")
                             : `${obligations.length} registrada${obligations.length > 1 ? "s" : ""}`}
                         </p>
                       </div>
@@ -810,7 +784,7 @@ export default function OnboardingPage() {
                           <div key={ob.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-kiri-emerald/5 border border-kiri-emerald/20">
                             <CheckCircle2 className="h-3.5 w-3.5 text-kiri-emerald shrink-0" />
                             <span className="text-xs font-bold flex-1 truncate">{ob.nombre}</span>
-                            <span className="text-[10px] text-muted-foreground capitalize">{ob.tipo === "gasto_fijo" ? "Gasto fijo" : "Deuda"}</span>
+                            <span className="text-[10px] text-muted-foreground capitalize">{ob.tipo === "gasto_fijo" ? tr("Gasto fijo") : tr("Deuda")}</span>
                           </div>
                         ))}
                       </div>
@@ -828,9 +802,7 @@ export default function OnboardingPage() {
                             : "border-muted text-muted-foreground"
                         )}
                       >
-                        <Landmark className="h-3.5 w-3.5 inline mr-1" />
-                        Deuda
-                      </button>
+                        <Landmark className="h-3.5 w-3.5 inline mr-1" />{tr("Deuda")}</button>
                       <button
                         type="button"
                         onClick={() => setCurrentObligation(prev => ({ ...prev, tipo: "gasto_fijo" }))}
@@ -841,16 +813,14 @@ export default function OnboardingPage() {
                             : "border-muted text-muted-foreground"
                         )}
                       >
-                        <ReceiptText className="h-3.5 w-3.5 inline mr-1" />
-                        Gasto fijo
-                      </button>
+                        <ReceiptText className="h-3.5 w-3.5 inline mr-1" />{tr("Gasto fijo")}</button>
                     </div>
 
                     {/* Nombre */}
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Nombre</Label>
+                      <Label className="text-[10px] font-bold">{tr("Nombre")}</Label>
                       <Input
-                        placeholder={currentObligation.tipo === "deuda" ? "Ej: Préstamo banco, Cuota moto..." : "Ej: Netflix, Arriendo, Luz..."}
+                        placeholder={currentObligation.tipo === "deuda" ? tr("Ej: Préstamo banco, Cuota moto...") : tr("Ej: Netflix, Arriendo, Luz...")}
                         value={currentObligation.nombre}
                         onChange={e => setCurrentObligation(prev => ({ ...prev, nombre: e.target.value }))}
                         className="h-10 rounded-xl"
@@ -860,7 +830,7 @@ export default function OnboardingPage() {
                     {/* Monto mensual */}
                     <div className="space-y-1">
                       <Label className="text-[10px] font-bold">
-                        {currentObligation.tipo === "deuda" ? "Cuota mensual" : "Monto mensual"}
+                        {currentObligation.tipo === "deuda" ? tr("Cuota mensual") : tr("Monto mensual")}
                       </Label>
                       <MoneyInput
                         value={currentObligation.monto}
@@ -872,24 +842,24 @@ export default function OnboardingPage() {
 
                     {currentObligation.tipo === "deuda" && (
                       <div className="space-y-1">
-                        <Label className="text-[10px] font-bold">¿Cuánto debes en total? <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+                        <Label className="text-[10px] font-bold">{tr("¿Cuánto debes en total?")}{" "}<span className="font-normal text-muted-foreground">{tr("(opcional)")}</span></Label>
                         <MoneyInput
                           value={currentObligation.saldoTotal}
                           onChange={v => setCurrentObligation(prev => ({ ...prev, saldoTotal: v }))}
                           className="h-11 rounded-xl font-bold"
-                          placeholder="Saldo pendiente con el banco"
+                          placeholder={tr("Saldo pendiente con el banco")}
                         />
                       </div>
                     )}
 
                     {/* Día de pago */}
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold">Día de pago (1-31)</Label>
+                      <Label className="text-[10px] font-bold">{tr("Día de pago (1-31)")}</Label>
                       <Input
                         type="number"
                         min="1"
                         max="31"
-                        placeholder="Ej: 15"
+                        placeholder={tr("Ej: 15")}
                         value={currentObligation.diasPago}
                         onChange={e => setCurrentObligation(prev => ({ ...prev, diasPago: e.target.value }))}
                         className="h-10 rounded-xl w-24"
@@ -909,9 +879,7 @@ export default function OnboardingPage() {
                       >
                         {savingObligation ? "Guardando..." : (
                           <>
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Guardar y agregar otra
-                          </>
+                            <CheckCircle2 className="h-3.5 w-3.5" />{tr("Guardar y agregar otra")}</>
                         )}
                       </Button>
                     </div>
@@ -926,14 +894,13 @@ export default function OnboardingPage() {
                         onClick={() => setQuiereRegistrar(null)}
                         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
                       >
-                        <ChevronLeft className="h-3.5 w-3.5" /> Volver
-                      </button>
+                        <ChevronLeft className="h-3.5 w-3.5" />{" "}{tr("Volver")}</button>
                       <button
                         onClick={continuarDesdeRegistro}
                         disabled={savingObligation}
                         className="text-xs font-bold text-kiri-emerald hover:underline py-2 disabled:opacity-50"
                       >
-                        {obligations.length > 0 || (currentObligation.nombre && currentObligation.monto) ? "Continuar →" : "Continuar después →"}
+                        {obligations.length > 0 || (currentObligation.nombre && currentObligation.monto) ? tr("Continuar →") : tr("Continuar después →")}
                       </button>
                     </div>
                   </>
@@ -950,19 +917,17 @@ export default function OnboardingPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-black">¡Listo, Kiri te conoce mejor!</h1>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Con esta información personalizaremos tu experiencia y te ayudaremos a hacer crecer tu jardín financiero.
-                  </p>
+                  <h1 className="text-2xl font-black">{tr("¡Listo, Kiri te conoce mejor!")}</h1>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{tr("Con esta información personalizaremos tu experiencia y te ayudaremos a hacer crecer tu jardín financiero.")}</p>
                 </div>
 
                 {obligations.length > 0 && (
                   <div className="w-full bg-kiri-emerald/5 rounded-xl p-3 text-left">
-                    <p className="text-[10px] font-bold text-kiri-emerald uppercase mb-1">Registraste:</p>
+                    <p className="text-[10px] font-bold text-kiri-emerald uppercase mb-1">{tr("Registraste:")}</p>
                     <p className="text-xs text-muted-foreground">
-                      {obligations.filter(o => o.tipo === "deuda").length} deuda{obligations.filter(o => o.tipo === "deuda").length !== 1 ? "s" : ""}
+                      {obligations.filter(o => o.tipo === "deuda").length}{" "}{tr("deuda")}{obligations.filter(o => o.tipo === "deuda").length !== 1 ? "s" : ""}
                       {" · "}
-                      {obligations.filter(o => o.tipo === "gasto_fijo").length} gasto{obligations.filter(o => o.tipo === "gasto_fijo").length !== 1 ? "s" : ""} fijo{obligations.filter(o => o.tipo === "gasto_fijo").length !== 1 ? "s" : ""}
+                      {obligations.filter(o => o.tipo === "gasto_fijo").length}{" "}{tr("gasto")}{obligations.filter(o => o.tipo === "gasto_fijo").length !== 1 ? "s" : ""}{" "}{tr("fijo")}{obligations.filter(o => o.tipo === "gasto_fijo").length !== 1 ? "s" : ""}
                     </p>
                   </div>
                 )}
@@ -972,19 +937,19 @@ export default function OnboardingPage() {
                     <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald shrink-0">
                       <Sparkles className="h-4 w-4" />
                     </div>
-                    <span className="text-sm font-bold">Recomendaciones personalizadas</span>
+                    <span className="text-sm font-bold">{tr("Recomendaciones personalizadas")}</span>
                   </div>
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-kiri-emerald/5">
                     <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald shrink-0">
                       <Target className="h-4 w-4" />
                     </div>
-                    <span className="text-sm font-bold">Metas adaptadas a ti</span>
+                    <span className="text-sm font-bold">{tr("Metas adaptadas a ti")}</span>
                   </div>
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-kiri-emerald/5">
                     <div className="h-8 w-8 rounded-lg bg-kiri-emerald/20 flex items-center justify-center text-kiri-emerald shrink-0">
                       <Brain className="h-4 w-4" />
                     </div>
-                    <span className="text-sm font-bold">Consejos inteligentes con IA</span>
+                    <span className="text-sm font-bold">{tr("Consejos inteligentes con IA")}</span>
                   </div>
                 </div>
               </div>
@@ -999,16 +964,14 @@ export default function OnboardingPage() {
           <Button
             onClick={goNext}
             className="w-full h-12 rounded-2xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-sm shadow-lg shadow-kiri-emerald/30"
-          >
-            Comenzar test
-          </Button>
+          >{tr("Comenzar test")}</Button>
         ) : step === 6 ? (
           <Button
             onClick={handleFinish}
             disabled={saving}
             className="w-full h-12 rounded-2xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-sm shadow-lg shadow-kiri-emerald/30 gap-2"
           >
-            {saving ? "Guardando..." : "Comenzar mi viaje en Kiri 🚀"}
+            {saving ? "Guardando..." : tr("Comenzar mi viaje en Kiri 🚀")}
           </Button>
         ) : step === 5 && quiereRegistrar === true ? (
           // No mostrar footer de navegación estándar cuando está en modo registro
@@ -1019,15 +982,13 @@ export default function OnboardingPage() {
               onClick={goPrev}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              <ChevronLeft className="h-3.5 w-3.5" /> Volver
-            </button>
+              <ChevronLeft className="h-3.5 w-3.5" />{" "}{tr("Volver")}</button>
             <Button
               onClick={goNext}
               disabled={!canNext()}
               size="sm"
               className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-xs gap-1 px-5 h-10"
-            >
-              Siguiente <ChevronRight className="h-3.5 w-3.5" />
+            >{tr("Siguiente")}{" "}<ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </div>
         )}

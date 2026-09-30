@@ -9,6 +9,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useToast } from "@/hooks/use-toast"
 import { getPeriodRangeLabel } from "@/lib/period-filter"
+import { tr } from "@/lib/i18n"
 
 /**
  * PaydaySelector — Input libre para días de pago
@@ -51,7 +52,7 @@ export function PaydaySelector({ compact }: Props) {
       await updateUserProfile({ diasPago: parsedDays })
     } catch { /* silencioso — se recupera del localStorage */ }
     setSaving(false)
-    toast({ title: "Días de pago actualizados ✓" })
+    toast({ title: tr("Días de pago actualizados ✓") })
   }
 
   // Calcular periodo actual para mostrar al usuario — misma función canónica
@@ -59,14 +60,14 @@ export function PaydaySelector({ compact }: Props) {
   // escribiendo ahora mismo (aún no guardados).
   const getPeriodLabel = () => {
     if (parsedDays.length === 0 || !isValid) return null
-    return `Periodo actual: ${getPeriodRangeLabel(incomeFrequency, parsedDays.join(","))}`
+    return tr("Periodo actual: {0}", [getPeriodRangeLabel(incomeFrequency, parsedDays.join(","))])
   }
 
   return (
     <div className="space-y-2.5">
       <div className="flex items-center gap-2">
         <Calendar className="h-3.5 w-3.5 text-kiri-emerald" />
-        <p className="text-[10px] font-bold">¿Qué día{maxDays > 1 ? "s" : ""} te pagan?</p>
+        <p className="text-[10px] font-bold">{tr("¿Qué día{0} te pagan?", [maxDays > 1 ? "s" : ""])}</p>
       </div>
 
       {/* Inputs para escribir los días */}
@@ -75,7 +76,7 @@ export function PaydaySelector({ compact }: Props) {
           type="number"
           min="1"
           max="31"
-          placeholder="Día"
+          placeholder={tr("Día")}
           value={day1}
           onChange={e => setDay1(e.target.value)}
           className="h-9 w-20 rounded-lg text-center text-sm font-bold"
@@ -87,7 +88,7 @@ export function PaydaySelector({ compact }: Props) {
               type="number"
               min="1"
               max="31"
-              placeholder="Día"
+              placeholder={tr("Día")}
               value={day2}
               onChange={e => setDay2(e.target.value)}
               className="h-9 w-20 rounded-lg text-center text-sm font-bold"
@@ -101,7 +102,7 @@ export function PaydaySelector({ compact }: Props) {
             disabled={saving}
             className="h-9 rounded-lg bg-kiri-emerald text-white font-bold text-xs gap-1 px-3"
           >
-            {saving ? "..." : <><Check className="h-3 w-3" /> Guardar</>}
+            {saving ? "..." : <><Check className="h-3 w-3" />{" "}{tr("Guardar")}</>}
           </Button>
         )}
       </div>
@@ -110,8 +111,8 @@ export function PaydaySelector({ compact }: Props) {
       {isValid && (
         <p className="text-[9px] text-muted-foreground">
           {incomeFrequency === "quincenal"
-            ? `Tu quincena cae los días ${parsedDays[0]} y ${parsedDays[1]} de cada mes`
-            : `Tu sueldo cae el día ${parsedDays[0]} de cada mes`
+            ? tr("Tu quincena cae los días {0} y {1} de cada mes", [parsedDays[0], parsedDays[1]])
+            : tr("Tu sueldo cae el día {0} de cada mes", [parsedDays[0]])
           }
           {getPeriodLabel() && <span className="block text-kiri-emerald font-bold mt-0.5">{getPeriodLabel()}</span>}
         </p>

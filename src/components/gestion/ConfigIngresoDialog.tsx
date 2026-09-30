@@ -12,6 +12,7 @@ import { useAppContext } from "@/lib/app-context"
 import { useToast } from "@/hooks/use-toast"
 import { diasDeQuincenas, type TipoIngreso } from "@/lib/ingresos"
 import type { IncomeFrequency } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 /**
  * "¿Cómo recibes tu plata?" — reemplaza a "Editar sueldo base".
@@ -73,7 +74,7 @@ export function ConfigIngresoDialog({ open, onOpenChange }: { open: boolean; onO
     })
     setGuardando(false)
     onOpenChange(false)
-    toast({ title: "Listo, Kiri ya sabe cómo recibes tu plata ✓" })
+    toast({ title: tr("Listo, Kiri ya sabe cómo recibes tu plata ✓") })
   }
 
   const Opcion = ({ activo, onClick, children }: { activo: boolean; onClick: () => void; children: React.ReactNode }) => (
@@ -85,15 +86,15 @@ export function ConfigIngresoDialog({ open, onOpenChange }: { open: boolean; onO
     <Dialog open={open} onOpenChange={v => { if (!guardando) onOpenChange(v) }}>
       <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>¿Cómo recibes tu plata?</DialogTitle>
-          <DialogDescription>Con esto Kiri calcula cuánto te entra en cada periodo y te sugiere cuánto ahorrar y gastar.</DialogDescription>
+          <DialogTitle>{tr("¿Cómo recibes tu plata?")}</DialogTitle>
+          <DialogDescription>{tr("Con esto Kiri calcula cuánto te entra en cada periodo y te sugiere cuánto ahorrar y gastar.")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-1">
           {/* Tipo */}
           <div className="grid grid-cols-2 gap-2">
             {([
-              { v: "fijo", icon: Briefcase, t: "Sueldo fijo", d: "Me pagan en fechas fijas" },
-              { v: "variable", icon: Shuffle, t: "Ingresos variables", d: "Independiente, ventas, comisiones" },
+              { v: "fijo", icon: Briefcase, t: tr("Sueldo fijo"), d: tr("Me pagan en fechas fijas") },
+              { v: "variable", icon: Shuffle, t: tr("Ingresos variables"), d: tr("Independiente, ventas, comisiones") },
             ] as const).map(o => (
               <button key={o.v} type="button" onClick={() => setTipo(o.v)}
                 className={cn("rounded-2xl border-2 p-3 text-left transition-colors",
@@ -108,50 +109,50 @@ export function ConfigIngresoDialog({ open, onOpenChange }: { open: boolean; onO
           {tipo === "fijo" ? (
             <>
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">¿Cada cuánto te pagan?</Label>
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿Cada cuánto te pagan?")}</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  <Opcion activo={frecuencia === "quincenal"} onClick={() => setFrecuencia("quincenal")}>Quincenal</Opcion>
-                  <Opcion activo={frecuencia === "mensual"} onClick={() => setFrecuencia("mensual")}>Mensual</Opcion>
+                  <Opcion activo={frecuencia === "quincenal"} onClick={() => setFrecuencia("quincenal")}>{tr("Quincenal")}</Opcion>
+                  <Opcion activo={frecuencia === "mensual"} onClick={() => setFrecuencia("mensual")}>{tr("Mensual")}</Opcion>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{frecuencia === "quincenal" ? "¿Qué días te pagan?" : "¿Qué día te pagan?"}</Label>
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{frecuencia === "quincenal" ? tr("¿Qué días te pagan?") : tr("¿Qué día te pagan?")}</Label>
                 <div className="flex gap-2">
-                  <Input inputMode="numeric" value={dia1} onChange={e => setDia1(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder={frecuencia === "quincenal" ? "15" : "30"} className="h-11 text-center font-bold" aria-label="Primer día de pago" />
+                  <Input inputMode="numeric" value={dia1} onChange={e => setDia1(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder={frecuencia === "quincenal" ? "15" : "30"} className="h-11 text-center font-bold" aria-label={tr("Primer día de pago")} />
                   {frecuencia === "quincenal" && (
-                    <Input inputMode="numeric" value={dia2} onChange={e => setDia2(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="30" className="h-11 text-center font-bold" aria-label="Segundo día de pago" />
+                    <Input inputMode="numeric" value={dia2} onChange={e => setDia2(e.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="30" className="h-11 text-center font-bold" aria-label={tr("Segundo día de pago")} />
                   )}
                 </div>
               </div>
               {frecuencia === "quincenal" && (
                 <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">¿Te pagan lo mismo las dos quincenas?</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿Te pagan lo mismo las dos quincenas?")}</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    <Opcion activo={iguales} onClick={() => setIguales(true)}>Sí, igual</Opcion>
-                    <Opcion activo={!iguales} onClick={() => setIguales(false)}>No, cambia</Opcion>
+                    <Opcion activo={iguales} onClick={() => setIguales(true)}>{tr("Sí, igual")}</Opcion>
+                    <Opcion activo={!iguales} onClick={() => setIguales(false)}>{tr("No, cambia")}</Opcion>
                   </div>
                 </div>
               )}
               {frecuencia === "quincenal" && !iguales ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-[11px] font-bold">Lo que te pagan el día {diaA}</Label>
+                    <Label className="text-[11px] font-bold">{tr("Lo que te pagan el día {0}", [diaA])}</Label>
                     <MoneyInput value={q1} onChange={setQ1} className="h-12 text-lg font-bold bg-muted/30 border-none rounded-xl" placeholder="0" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[11px] font-bold">Lo que te pagan el día {diaB}</Label>
+                    <Label className="text-[11px] font-bold">{tr("Lo que te pagan el día {0}", [diaB])}</Label>
                     <MoneyInput value={q2} onChange={setQ2} className="h-12 text-lg font-bold bg-muted/30 border-none rounded-xl" placeholder="0" />
                   </div>
                   {Number(q1) > 0 && Number(q2) > 0 && (
-                    <p className="col-span-2 text-[11px] text-muted-foreground">Al mes: <strong className="text-foreground">{formatAmount(Number(q1) + Number(q2))}</strong>. Cada quincena Kiri te sugiere lo que corresponde a esa fecha.</p>
+                    <p className="col-span-2 text-[11px] text-muted-foreground">{tr("Al mes:")}{" "}<strong className="text-foreground">{formatAmount(Number(q1) + Number(q2))}</strong>{tr(". Cada quincena Kiri te sugiere lo que corresponde a esa fecha.")}</p>
                   )}
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{frecuencia === "quincenal" ? "Lo que te pagan cada quincena" : "Tu sueldo del mes"}</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{frecuencia === "quincenal" ? tr("Lo que te pagan cada quincena") : tr("Tu sueldo del mes")}</Label>
                   <MoneyInput value={mensual} onChange={setMensual} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
                   {frecuencia === "quincenal" && Number(mensual) > 0 && (
-                    <p className="text-[11px] text-muted-foreground">Al mes: <strong className="text-foreground">{formatAmount(Number(mensual) * 2)}</strong></p>
+                    <p className="text-[11px] text-muted-foreground">{tr("Al mes:")}{" "}<strong className="text-foreground">{formatAmount(Number(mensual) * 2)}</strong></p>
                   )}
                 </div>
               )}
@@ -160,27 +161,26 @@ export function ConfigIngresoDialog({ open, onOpenChange }: { open: boolean; onO
             <>
               <div className="rounded-xl bg-muted/40 p-3 flex gap-2 text-[11px] text-muted-foreground">
                 <Info className="h-4 w-4 shrink-0 text-kiri-emerald" />
-                <p>Registra cada ingreso cuando te llegue (Registrar ingreso o por voz). Kiri aprende tu promedio y organiza tus gastos con lo que de verdad entra: no necesitas un sueldo fijo.</p>
+                <p>{tr("Registra cada ingreso cuando te llegue (Registrar ingreso o por voz). Kiri aprende tu promedio y organiza tus gastos con lo que de verdad entra: no necesitas un sueldo fijo.")}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">¿Cuánto te entra en un mes normal? (opcional)</Label>
-                <MoneyInput value={mensual} onChange={setMensual} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="No lo sé" />
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿Cuánto te entra en un mes normal? (opcional)")}</Label>
+                <MoneyInput value={mensual} onChange={setMensual} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder={tr("No lo sé")} />
                 <p className="text-[11px] text-muted-foreground">
                   {Number(mensual) > 0
-                    ? "Kiri planea con esta estimación. Déjala vacía para usar tu promedio real."
+                    ? tr("Kiri planea con esta estimación. Déjala vacía para usar tu promedio real.")
                     : ingresoPromedio > 0
-                      ? <>Sin estimación Kiri usa tu promedio real: <strong className="text-foreground">{formatAmount(ingresoPromedio)}</strong> al mes.</>
-                      : "Sin estimación, Kiri usará tu promedio real apenas registres tus primeros ingresos."}
+                      ? <>{tr("Sin estimación Kiri usa tu promedio real:")}{" "}<strong className="text-foreground">{formatAmount(ingresoPromedio)}</strong>{" "}{tr("al mes.")}</>
+                      : tr("Sin estimación, Kiri usará tu promedio real apenas registres tus primeros ingresos.")}
                 </p>
               </div>
             </>
           )}
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={guardando}>Cancelar</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={guardando}>{tr("Cancelar")}</Button>
           <Button onClick={guardar} disabled={!puedeGuardar} className="bg-kiri-emerald text-white font-bold rounded-xl px-6 gap-2">
-            {guardando && <Loader2 className="h-4 w-4 animate-spin" />} Guardar
-          </Button>
+            {guardando && <Loader2 className="h-4 w-4 animate-spin" />}{" "}{tr("Guardar")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -21,7 +22,9 @@ import { simulateDebtOptions, DebtSimulationOption, analyzeFinances } from "@/li
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
 import { useAppContext, IncomeFrequency } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
+import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { Debt } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 interface Props {
   debtCapacity: number
@@ -31,8 +34,13 @@ interface Props {
 }
 
 export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClose }: Props) {
-  const { formatAmount, income } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes, addDebt } = useFinanceData()
+  const { formatAmount } = useAppContext()
+  const { debts, addDebt } = useFinanceData()
+  // Misma base que la capacidad (y que el Dashboard): ingreso y obligaciones
+  // pendientes DEL PERIODO. Antes el impacto sumaba todas las obligaciones del
+  // mes contra el ingreso mensual mientras la capacidad era por quincena, y el
+  // "Ahorro / Gasto libre" de hoy no calzaba con lo que muestra el Dashboard.
+  const { effectiveIncome, pendingObligations } = usePeriodBudget()
 
   const [open, setOpen] = useState(false)
   const isOpen = forceOpen ?? open
@@ -44,10 +52,8 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
   const [accepting, setAccepting] = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
 
-  const totalExtraIncome = extraIncomes.reduce((acc, e) => acc + e.monto, 0)
-  const totalIncome = income + totalExtraIncome
-  const totalObligations = debts.reduce((acc, d) => acc + d.cuotaPeriodo, 0) +
-                           fixedExpenses.reduce((acc, f) => acc + f.monto, 0)
+  const totalIncome = effectiveIncome
+  const totalObligations = pendingObligations
 
   const handleSimulate = () => {
     if (!amount || Number(amount) <= 0) return
@@ -88,7 +94,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
         id: '__scenario__',
         userId: '',
         tipoDeuda: 'PRESTAMO',
-        nombre: productName || 'Nueva compra',
+        nombre: productName || tr("Nueva compra"),
         montoTotal: Number(amount),
         saldoRestante: Number(amount),
         cuotaPeriodo: opt.quota,
@@ -144,7 +150,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
     setAccepting(true)
     setAcceptError(null)
     const saved = await addDebt({
-      nombre: productName || 'Nueva compra',
+      nombre: productName || tr("Nueva compra"),
       montoTotal: Number(amount),
       cuotaPeriodo: opt.quota,
       diasPago: String(new Date().getDate()),
@@ -152,13 +158,13 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
     })
     setAccepting(false)
     if (!saved) {
-      setAcceptError('No se pudo guardar la deuda. Intenta de nuevo.')
+      setAcceptError(tr("No se pudo guardar la deuda. Intenta de nuevo."))
       return
     }
     handleClose()
   }
 
-  const periodLabel = incomeFrequency === 'quincenal' ? 'quincena' : 'mes'
+  const periodLabel = incomeFrequency === 'quincenal' ? tr("quincena") : tr("mes")
 
   return (
     <>
@@ -170,13 +176,11 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
               <Calculator className="h-6 w-6" />
             </div>
             <div className="flex-1">
-              <p className="font-bold text-sm text-cyclon-lavender">Simulador de Escenarios</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                ¿Qué pasa si me compro X? Visualiza el impacto antes de decidir.
-              </p>
+              <p className="font-bold text-sm text-cyclon-lavender">{tr("Simulador de Escenarios")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tr("¿Qué pasa si me compro X? Visualiza el impacto antes de decidir.")}</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-[10px] text-muted-foreground font-medium">Capacidad</p>
+              <p className="text-[10px] text-muted-foreground font-medium">{tr("Capacidad")}</p>
               <p className={cn("font-black text-sm", debtCapacity > 0 ? "text-cyclon-lavender" : "text-destructive")}>
                 {formatAmount(debtCapacity)}
               </p>
@@ -190,20 +194,16 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
         <DialogContent >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5 text-cyclon-lavender" />
-              Simulador de Escenarios
-            </DialogTitle>
-            <DialogDescription>
-              Visualiza cómo una nueva compra afecta tu presupuesto antes de comprometerte.
-            </DialogDescription>
+              <Calculator className="h-5 w-5 text-cyclon-lavender" />{tr("Simulador de Escenarios")}</DialogTitle>
+            <DialogDescription>{tr("Visualiza cómo una nueva compra afecta tu presupuesto antes de comprometerte.")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-1">
             {/* ── Inputs ── */}
             <div className="space-y-1.5">
-              <Label>¿Qué quieres comprar?</Label>
+              <Label>{tr("¿Qué quieres comprar?")}</Label>
               <Input
-                placeholder="Ej: Laptop, moto, viaje..."
+                placeholder={tr("Ej: Laptop, moto, viaje...")}
                 value={productName}
                 onChange={e => setProductName(e.target.value)}
                 className="h-11 rounded-xl"
@@ -211,24 +211,20 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
             </div>
 
             <div className="space-y-1.5">
-              <Label>¿Cuánto cuesta?</Label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  className="pl-8 h-14 text-2xl font-bold rounded-xl"
-                  value={amount}
-                  onChange={e => { setAmount(e.target.value); setOptions(null); setSelected(null) }}
-                  autoFocus
-                />
-              </div>
+              <Label>{tr("¿Cuánto cuesta?")}</Label>
+              {/* Con separadores de miles como el resto de montos (antes "12000000") */}
+              <MoneyInput
+                className="h-14 text-2xl font-bold rounded-xl"
+                value={amount}
+                onChange={v => { setAmount(v); setOptions(null); setSelected(null) }}
+                autoFocus
+              />
             </div>
 
             {/* Capacidad */}
             <Card className="border-none bg-muted/40 rounded-2xl">
               <CardContent className="p-3 flex justify-between items-center">
-                <span className="text-xs text-muted-foreground font-medium">Capacidad disponible / {periodLabel}</span>
+                <span className="text-xs text-muted-foreground font-medium">{tr("Capacidad disponible / {0}", [periodLabel])}</span>
                 <span className={cn("font-black text-sm", debtCapacity > 0 ? "text-cyclon-lavender" : "text-destructive")}>
                   {formatAmount(debtCapacity)}
                 </span>
@@ -239,9 +235,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
               onClick={handleSimulate}
               disabled={!amount || Number(amount) <= 0}
               className="w-full h-12 rounded-2xl bg-cyclon-lavender text-white font-bold hover:bg-cyclon-lavender/90"
-            >
-              Simular escenario
-            </Button>
+            >{tr("Simular escenario")}</Button>
 
             {/* ── Sin capacidad ── */}
             {options !== null && !canAffordAny && (
@@ -249,10 +243,8 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
                 <CardContent className="p-4 flex gap-3 items-start">
                   <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <p className="font-bold text-sm text-destructive">Sin capacidad disponible</p>
-                    <p className="text-xs text-muted-foreground">
-                      No tienes margen de endeudamiento. Liquida deudas o aumenta ingresos primero.
-                    </p>
+                    <p className="font-bold text-sm text-destructive">{tr("Sin capacidad disponible")}</p>
+                    <p className="text-xs text-muted-foreground">{tr("No tienes margen de endeudamiento. Liquida deudas o aumenta ingresos primero.")}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -261,9 +253,7 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
             {/* ── Opciones de cuota ── */}
             {options && canAffordAny && (
               <div className="space-y-3">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Elige tu plan de pago
-                </p>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("Elige tu plan de pago")}</p>
                 {options.map((opt, i) => (
                   <OptionCard
                     key={i}
@@ -295,13 +285,13 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
                 <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-2 text-center">{acceptError}</p>
               )}
               <DialogFooter className="gap-2">
-                <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
+                <Button variant="ghost" onClick={handleClose}>{tr("Cancelar")}</Button>
                 <Button
                   onClick={handleAccept}
                   disabled={accepting}
                   className="bg-cyclon-lavender text-white font-bold rounded-xl px-6 gap-2"
                 >
-                  {accepting ? "Guardando..." : "Aceptar escenario"}
+                  {accepting ? "Guardando..." : tr("Aceptar escenario")}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </DialogFooter>
@@ -337,17 +327,17 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
   // Datos para el gráfico de barras comparativo
   const chartData = [
     {
-      name: 'Obligaciones',
+      name: tr("Obligaciones"),
       actual: Math.round(curr.obligationsPct),
       futuro: Math.round(fut.obligationsPct),
     },
     {
-      name: 'Ahorro',
+      name: tr("Ahorro"),
       actual: Math.round(curr.savingsPct),
       futuro: Math.round(fut.savingsPct),
     },
     {
-      name: 'Libre',
+      name: tr("Libre"),
       actual: Math.round(curr.freeInvestmentPct),
       futuro: Math.round(fut.freeInvestmentPct),
     },
@@ -361,9 +351,7 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
     <div className="space-y-4 pt-2">
       <div className="flex items-center gap-2">
         <TrendingDown className="h-4 w-4 text-cyclon-lavender" />
-        <p className="text-sm font-bold text-cyclon-lavender">
-          Impacto en tu presupuesto
-        </p>
+        <p className="text-sm font-bold text-cyclon-lavender">{tr("Impacto en tu presupuesto")}</p>
       </div>
 
       {/* ── Alerta si se sobrecarga ── */}
@@ -371,9 +359,7 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
         <Card className="border border-destructive/30 bg-destructive/10 rounded-2xl shadow-none">
           <CardContent className="p-3 flex gap-2 items-start">
             <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-            <p className="text-xs text-destructive font-bold">
-              ⚠ Esta compra haría que tus obligaciones superen tu ingreso. No es viable.
-            </p>
+            <p className="text-xs text-destructive font-bold">{tr("⚠ Esta compra haría que tus obligaciones superen tu ingreso. No es viable.")}</p>
           </CardContent>
         </Card>
       )}
@@ -382,18 +368,16 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
       <Card className="border-none bg-card shadow-sm rounded-2xl overflow-hidden">
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              Distribución: Hoy vs con {productName || 'nueva compra'}
-            </p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("Distribución: Hoy vs con {0}", [productName || tr("nueva compra")])}</p>
           </div>
           <div className="flex items-center gap-3 text-[10px]">
             <div className="flex items-center gap-1">
               <div className="h-2.5 w-2.5 rounded-sm bg-cyclon-sky" />
-              <span className="text-muted-foreground font-medium">Actual</span>
+              <span className="text-muted-foreground font-medium">{tr("Actual")}</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="h-2.5 w-2.5 rounded-sm bg-cyclon-lavender" />
-              <span className="text-muted-foreground font-medium">Con compra</span>
+              <span className="text-muted-foreground font-medium">{tr("Con compra")}</span>
             </div>
           </div>
           <div className="h-40 w-full">
@@ -429,21 +413,21 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
       {/* ── KPIs de impacto ── */}
       <div className="grid grid-cols-3 gap-2">
         <KpiCard
-          label="Ahorro mensual"
+          label={tr("Ahorro / {0}", [periodLabel])}
           current={formatAmount(curr.savingsAmount)}
           future={formatAmount(fut.savingsAmount)}
           isNegative={savingsDiff < 0}
           icon={<PiggyBank className="h-3.5 w-3.5" />}
         />
         <KpiCard
-          label="Gasto libre"
+          label={tr("Gasto libre")}
           current={formatAmount(curr.dailyFreeAmount)}
           future={formatAmount(fut.dailyFreeAmount)}
           isNegative={fut.dailyFreeAmount < curr.dailyFreeAmount}
           icon={<Banknote className="h-3.5 w-3.5" />}
         />
         <KpiCard
-          label="Libre de deudas"
+          label={tr("Libre de deudas")}
           current={data.currentFreedomMonths > 0 ? `${data.currentFreedomMonths}m` : "—"}
           future={data.futureFreedomMonths > 0 ? `${data.futureFreedomMonths}m` : "—"}
           isNegative={data.delayMonths > 0}
@@ -456,10 +440,7 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
         <Card className="border-none bg-cyclon-pink/5 rounded-2xl">
           <CardContent className="p-3 flex gap-2 items-start">
             <CalendarCheck className="h-4 w-4 text-cyclon-pink shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground">
-              Esta compra retrasa tu libertad financiera <strong className="text-cyclon-pink">{data.delayMonths} {data.delayMonths === 1 ? 'mes' : 'meses'}</strong>.
-              Sin ella: <span className="capitalize font-bold">{data.currentFreedomDate}</span>.
-              Con ella: <span className="capitalize font-bold">{data.futureFreedomDate}</span>.
+            <p className="text-xs text-muted-foreground">{tr("Esta compra retrasa tu libertad financiera")}{" "}<strong className="text-cyclon-pink">{data.delayMonths} {data.delayMonths === 1 ? 'mes' : 'meses'}</strong>{tr(". Sin ella:")}{" "}<span className="capitalize font-bold">{data.currentFreedomDate}</span>{tr(". Con ella:")}{" "}<span className="capitalize font-bold">{data.futureFreedomDate}</span>.
             </p>
           </CardContent>
         </Card>
@@ -470,9 +451,7 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
         <Card className="border-none bg-yellow-50 rounded-2xl">
           <CardContent className="p-3 flex gap-2 items-start">
             <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground">
-              Tu presupuesto pasaría de <strong>normal</strong> a <strong>ajustado</strong> ({Math.round(fut.obligationsPct)}% en obligaciones). Tendrás menos margen para imprevistos.
-            </p>
+            <p className="text-xs text-muted-foreground">{tr("Tu presupuesto pasaría de")}{" "}<strong>{tr("normal")}</strong> a <strong>{tr("ajustado")}</strong>{" "}{tr("({0}% en obligaciones). Tendrás menos margen para imprevistos.", [Math.round(fut.obligationsPct)])}</p>
           </CardContent>
         </Card>
       )}
@@ -481,20 +460,18 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
       <Card className="border-none bg-cyclon-lavender/5 rounded-2xl">
         <CardContent className="p-4 space-y-2">
           <p className="text-xs font-bold text-cyclon-lavender flex items-center gap-1.5">
-            <Banknote className="h-3.5 w-3.5" />
-            Resumen del escenario — opción {data.option.label}
-          </p>
+            <Banknote className="h-3.5 w-3.5" />{tr("Resumen del escenario — opción {0}", [data.option.label])}</p>
           <div className="space-y-1 text-xs text-muted-foreground">
             <div className="flex justify-between">
-              <span>Cuota por {periodLabel}</span>
+              <span>{tr("Cuota por {0}", [periodLabel])}</span>
               <span className="font-bold text-cyclon-lavender">{formatAmount(data.option.quota)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Plazo de pago</span>
-              <span className="font-bold">{data.option.months} meses</span>
+              <span>{tr("Plazo de pago")}</span>
+              <span className="font-bold">{data.option.months}{" "}{tr("meses")}</span>
             </div>
             <div className="flex justify-between">
-              <span>Capacidad restante</span>
+              <span>{tr("Capacidad restante")}</span>
               <span className={cn("font-bold", data.option.remainingCapacity > 0 ? "text-cyclon-mint" : "text-muted-foreground")}>
                 {formatAmount(data.option.remainingCapacity)}/{periodLabel}
               </span>
@@ -503,9 +480,7 @@ function ScenarioImpactPanel({ data, formatAmount, periodLabel, productName }: {
         </CardContent>
       </Card>
 
-      <p className="text-[10px] text-muted-foreground text-center italic">
-        ⚡ Esto es solo una simulación. Nada se guarda hasta que pulses "Aceptar escenario".
-      </p>
+      <p className="text-[10px] text-muted-foreground text-center italic">{tr("⚡ Esto es solo una simulación. Nada se guarda hasta que pulses \"Aceptar escenario\".")}</p>
     </div>
   )
 }
@@ -563,8 +538,7 @@ function OptionCard({ option, isSelected, onSelect, formatAmount, periodLabel }:
               <span className="font-bold text-sm">{option.label}</span>
               {option.recommended && (
                 <span className="flex items-center gap-0.5 text-[9px] font-black bg-cyclon-periwinkle/20 text-cyclon-periwinkle px-1.5 py-0.5 rounded-full">
-                  <Star className="h-2.5 w-2.5" /> SUGERIDA
-                </span>
+                  <Star className="h-2.5 w-2.5" />{" "}{tr("SUGERIDA")}</span>
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">{option.description}</p>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Eye, EyeOff, AlertCircle, Sprout, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -36,11 +37,11 @@ function ResetPasswordForm() {
     setError(null)
 
     if (newPassword.length < 6) {
-      setError("La nueva contraseña debe tener al menos 6 caracteres.")
+      setError(tr("La nueva contraseña debe tener al menos 6 caracteres."))
       return
     }
     if (newPassword !== confirmPassword) {
-      setError("Las contraseñas no coinciden.")
+      setError(tr("Las contraseñas no coinciden."))
       return
     }
 
@@ -53,12 +54,12 @@ function ResetPasswordForm() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || "No se pudo restablecer la contraseña.")
+        setError(data.error || tr("No se pudo restablecer la contraseña."))
         return
       }
       setDone(true)
     } catch {
-      setError("Error de conexión. Intenta de nuevo.")
+      setError(tr("Error de conexión. Intenta de nuevo."))
     } finally {
       setLoading(false)
     }
@@ -71,10 +72,8 @@ function ResetPasswordForm() {
           <Sprout className="h-14 w-14 text-kiri-cream" strokeWidth={1.5} />
         </div>
         <div className="text-center space-y-3">
-          <h1 className="text-4xl font-bold text-white">Kiri Finance</h1>
-          <p className="text-white/50 text-base max-w-sm">
-            Tu jardín financiero crece con tus buenos hábitos. Organiza, ahorra y prospera.
-          </p>
+          <h1 className="text-4xl font-bold text-white">{tr("Kiri Finance")}</h1>
+          <p className="text-white/50 text-base max-w-sm">{tr("Tu jardín financiero crece con tus buenos hábitos. Organiza, ahorra y prospera.")}</p>
         </div>
       </div>
 
@@ -84,7 +83,7 @@ function ResetPasswordForm() {
             <Sprout className="h-10 w-10 text-kiri-cream" strokeWidth={1.5} />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-white">Kiri Finance</h1>
+            <h1 className="text-2xl font-bold text-white">{tr("Kiri Finance")}</h1>
           </div>
         </div>
 
@@ -93,37 +92,31 @@ function ResetPasswordForm() {
             {linkInvalid ? (
               <div className="text-center space-y-3">
                 <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
-                <h2 className="text-xl font-bold text-foreground">Enlace inválido</h2>
-                <p className="text-muted-foreground text-sm">
-                  Este enlace de restablecimiento no es válido. Solicita uno nuevo desde la pantalla de inicio de sesión.
-                </p>
-                <Link href="/login" className="inline-block text-kiri-emerald text-sm font-bold hover:underline pt-2">
-                  Volver a iniciar sesión
-                </Link>
+                <h2 className="text-xl font-bold text-foreground">{tr("Enlace inválido")}</h2>
+                <p className="text-muted-foreground text-sm">{tr("Este enlace de restablecimiento no es válido. Solicita uno nuevo desde la pantalla de inicio de sesión.")}</p>
+                <Link href="/login" className="inline-block text-kiri-emerald text-sm font-bold hover:underline pt-2">{tr("Volver a iniciar sesión")}</Link>
               </div>
             ) : done ? (
               <div className="text-center space-y-3">
                 <CheckCircle2 className="h-10 w-10 text-kiri-emerald mx-auto" />
-                <h2 className="text-xl font-bold text-foreground">¡Contraseña actualizada!</h2>
-                <p className="text-muted-foreground text-sm">Ya puedes iniciar sesión con tu nueva contraseña.</p>
-                <Button onClick={() => router.replace("/login")} className="w-full h-12 rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold mt-2">
-                  Ir a iniciar sesión
-                </Button>
+                <h2 className="text-xl font-bold text-foreground">{tr("¡Contraseña actualizada!")}</h2>
+                <p className="text-muted-foreground text-sm">{tr("Ya puedes iniciar sesión con tu nueva contraseña.")}</p>
+                <Button onClick={() => router.replace("/login")} className="w-full h-12 rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold mt-2">{tr("Ir a iniciar sesión")}</Button>
               </div>
             ) : (
               <>
                 <div>
-                  <h2 className="text-2xl font-bold text-foreground">Elige tu nueva contraseña</h2>
-                  <p className="text-muted-foreground text-sm mt-1">Para la cuenta {email}</p>
+                  <h2 className="text-2xl font-bold text-foreground">{tr("Elige tu nueva contraseña")}</h2>
+                  <p className="text-muted-foreground text-sm mt-1">{tr("Para la cuenta {0}", [email])}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label>Nueva contraseña</Label>
+                    <Label>{tr("Nueva contraseña")}</Label>
                     <div className="relative">
                       <Input
                         type={showPassword ? "text" : "password"}
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder={tr("Mínimo 6 caracteres")}
                         value={newPassword}
                         onChange={e => setNewPassword(e.target.value)}
                         className="h-12 rounded-xl pr-12"
@@ -141,10 +134,10 @@ function ResetPasswordForm() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label>Confirmar nueva contraseña</Label>
+                    <Label>{tr("Confirmar nueva contraseña")}</Label>
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Repite la nueva contraseña"
+                      placeholder={tr("Repite la nueva contraseña")}
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
                       className="h-12 rounded-xl"
@@ -164,7 +157,7 @@ function ResetPasswordForm() {
                     disabled={loading || !newPassword || !confirmPassword}
                     className="w-full h-12 rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold"
                   >
-                    {loading ? "Guardando..." : "Restablecer contraseña"}
+                    {loading ? "Guardando..." : tr("Restablecer contraseña")}
                   </Button>
                 </form>
               </>

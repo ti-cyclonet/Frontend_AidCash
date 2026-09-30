@@ -4,11 +4,12 @@ import { usePlan } from "@/lib/plan-context"
 import { Lock, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
+import { tr } from "@/lib/i18n"
 
 /** Plan desde el que viene cada función (igual que la matriz del backend). */
 const PLAN_DE_FUNCION: Record<string, string> = {
-  advancedReports: "KIRI PLUS", debtStrategies: "KIRI PLUS", p2pLoans: "KIRI PLUS", sharedDebts: "KIRI PLUS", sharedPockets: "KIRI PLUS",
-  householdBudget: "KIRI PRO", openBanking: "KIRI PRO", receiptItems: "KIRI PRO", savedScenarios: "KIRI PRO", exclusiveBadges: "KIRI PRO", prioritySupport: "KIRI PRO",
+  advancedReports: tr("KIRI PLUS"), debtStrategies: tr("KIRI PLUS"), p2pLoans: tr("KIRI PLUS"), sharedDebts: tr("KIRI PLUS"), sharedPockets: tr("KIRI PLUS"),
+  householdBudget: tr("KIRI PRO"), openBanking: tr("KIRI PRO"), receiptItems: tr("KIRI PRO"), savedScenarios: tr("KIRI PRO"), exclusiveBadges: tr("KIRI PRO"), prioritySupport: tr("KIRI PRO"),
 }
 
 interface FeatureGateProps {
@@ -27,7 +28,7 @@ interface FeatureGateProps {
 export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
   const { hasFeature, loading, plan } = usePlan()
   const router = useRouter()
-  const planNecesario = PLAN_DE_FUNCION[feature] ?? "KIRI PLUS"
+  const planNecesario = PLAN_DE_FUNCION[feature] ?? tr("KIRI PLUS")
 
   if (loading) {
     return (
@@ -49,21 +50,13 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
       <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
         <Lock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
       </div>
-      <h3 className="text-lg font-semibold mb-2">
-        Función de {planNecesario}
-      </h3>
-      <p className="text-muted-foreground text-sm max-w-sm mb-6">
-        Esta funcionalidad no está disponible en tu plan actual
-        {plan?.planName && ` (${plan.planName})`}. Actualiza para desbloquear
-        todas las herramientas de Kiri Finance.
-      </p>
+      <h3 className="text-lg font-semibold mb-2">{tr("Función de {0}", [planNecesario])}</h3>
+      <p className="text-muted-foreground text-sm max-w-sm mb-6">{tr("Esta funcionalidad no está disponible en tu plan actual{0}. Actualiza para desbloquear todas las herramientas de Kiri Finance.", [plan?.planName && ` (${plan.planName})`])}</p>
       <Button
-        onClick={() => router.push("/mi-plan")}
+        onClick={() => router.push("/mi-plan#planes")}
         className="gap-2"
       >
-        <Sparkles className="w-4 h-4" />
-        Ver {planNecesario}
-      </Button>
+        <Sparkles className="w-4 h-4" />{tr("Ver {0}", [planNecesario])}</Button>
     </div>
   )
 }

@@ -16,6 +16,8 @@ import { api } from "@/lib/api-client"
 import { looksLikeCreditCardName } from "@/lib/debt-utils"
 import { BudgetCategorySelector } from "@/components/obligaciones/BudgetCategorySelector"
 import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuestion"
+import { tr } from "@/lib/i18n"
+import { useAppContext } from "@/lib/app-context"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -70,6 +72,8 @@ type DebtMode = "normal" | "banco"
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function DebtRegistrationForm({ onSubmit, loading }: Props) {
+  // Montos con la moneda del usuario (antes: toLocaleString con el idioma del teléfono)
+  const { formatAmount } = useAppContext()
   // Inicializar directamente con "normal" — sin estado null
   const [mode, setMode] = useState<DebtMode>("normal")
 
@@ -266,9 +270,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <Landmark className="h-4 w-4" />
-          Deuda Simple
-        </button>
+          <Landmark className="h-4 w-4" />{tr("Deuda Simple")}</button>
         <button
           type="button"
           onClick={() => setMode("banco")}
@@ -279,23 +281,21 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <CreditCard className="h-4 w-4" />
-          Deuda Bancaria
-        </button>
+          <CreditCard className="h-4 w-4" />{tr("Deuda Bancaria")}</button>
       </div>
 
       {/* Subtítulo descriptivo */}
       <p className="text-[10px] text-muted-foreground text-center -mt-2">
         {mode === "normal"
-          ? "Préstamos personales, fiado, cuotas entre amigos."
-          : "Tarjetas de crédito, créditos de libre inversión, hipotecas."}
+          ? tr("Préstamos personales, fiado, cuotas entre amigos.")
+          : tr("Tarjetas de crédito, créditos de libre inversión, hipotecas.")}
       </p>
 
       {/* Nombre */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Nombre de la deuda</Label>
+        <Label className="text-xs font-bold">{tr("Nombre de la deuda")}</Label>
         <Input
-          placeholder={mode === "normal" ? "Ej: Préstamo Juan, Cuota moto..." : "Ej: Visa Bancolombia, Crédito Davivienda..."}
+          placeholder={mode === "normal" ? tr("Ej: Préstamo Juan, Cuota moto...") : tr("Ej: Visa Bancolombia, Crédito Davivienda...")}
           value={nombre}
           onChange={e => setNombre(e.target.value)}
           className="h-11 rounded-xl"
@@ -308,12 +308,12 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
         <>
           {/* Búsqueda de banco */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Banco o entidad financiera</Label>
+            <Label className="text-xs font-bold">{tr("Banco o entidad financiera")}</Label>
             <div className="relative" ref={dropdownRef}>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar banco..."
+                  placeholder={tr("Buscar banco...")}
                   value={searchQuery}
                   onChange={e => { setSearchQuery(e.target.value); setShowDropdown(true); setSelectedBank(null); setIsAddingNew(false) }}
                   onFocus={() => setShowDropdown(true)}
@@ -332,20 +332,20 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
                         <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                         <div>
                           <p className="text-xs font-bold">{bank.nombre}</p>
-                          <p className="text-[8px] text-muted-foreground">{bank.tasaInteresPromedio}% mensual{bank.esVerificado && " · ✓ Verificado"}</p>
+                          <p className="text-[8px] text-muted-foreground">{tr("{0}% mensual{1}", [bank.tasaInteresPromedio, bank.esVerificado && tr(" · ✓ Verificado")])}</p>
                         </div>
                       </div>
                     </button>
                   )) : (
                     <p className="text-[10px] text-muted-foreground text-center py-3">
-                      {banks.length === 0 ? "Cargando bancos..." : "Sin resultados"}
+                      {banks.length === 0 ? tr("Cargando bancos...") : tr("Sin resultados")}
                     </p>
                   )}
                   {!hasExactMatch && searchQuery.length >= 2 && (
                     <button onClick={startAddNew}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-kiri-emerald/5 transition-colors text-left border-t border-border">
                       <Plus className="h-3.5 w-3.5 text-kiri-emerald" />
-                      <span className="text-[10px] font-bold text-kiri-emerald">Agregar &ldquo;{searchQuery}&rdquo;</span>
+                      <span className="text-[10px] font-bold text-kiri-emerald">{tr("Agregar “{0}”", [searchQuery])}</span>
                     </button>
                   )}
                 </div>
@@ -357,11 +357,11 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
           {isAddingNew && (
             <Card className="border-kiri-emerald/20 bg-kiri-emerald/5 rounded-xl">
               <CardContent className="p-3 space-y-2">
-                <p className="text-[10px] font-bold text-kiri-emerald">Nuevo banco</p>
-                <Input value={newBankName} onChange={e => setNewBankName(e.target.value)} className="h-9 rounded-lg text-sm" placeholder="Nombre del banco" />
-                <Input type="number" step="0.01" value={tasaInteres} onChange={e => setTasaInteres(e.target.value)} className="h-9 rounded-lg text-sm" placeholder="Tasa mensual (%)" />
+                <p className="text-[10px] font-bold text-kiri-emerald">{tr("Nuevo banco")}</p>
+                <Input value={newBankName} onChange={e => setNewBankName(e.target.value)} className="h-9 rounded-lg text-sm" placeholder={tr("Nombre del banco")} />
+                <Input type="number" step="0.01" value={tasaInteres} onChange={e => setTasaInteres(e.target.value)} className="h-9 rounded-lg text-sm" placeholder={tr("Tasa mensual (%)")} />
                 <Button size="sm" onClick={handleAddNewBank} disabled={!newBankName || !tasaInteres || savingBank} className="w-full rounded-lg bg-kiri-emerald text-white font-bold text-xs h-8">
-                  {savingBank ? <Loader2 className="h-3 w-3 animate-spin" /> : "Guardar banco"}
+                  {savingBank ? <Loader2 className="h-3 w-3 animate-spin" /> : tr("Guardar banco")}
                 </Button>
               </CardContent>
             </Card>
@@ -370,9 +370,9 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
           {/* Tasa de interés */}
           {!isAddingNew && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold flex items-center gap-1"><Percent className="h-3 w-3" /> Tasa de interés mensual</Label>
-              <Input type="number" step="0.01" value={tasaInteres} onChange={e => setTasaInteres(e.target.value)} className="h-10 rounded-xl" placeholder="Ej: 1.85 (opcional)" />
-              {selectedBank && <p className="text-[8px] text-kiri-emerald">Sugerida por {selectedBank.nombre}</p>}
+              <Label className="text-xs font-bold flex items-center gap-1"><Percent className="h-3 w-3" />{" "}{tr("Tasa de interés mensual")}</Label>
+              <Input type="number" step="0.01" value={tasaInteres} onChange={e => setTasaInteres(e.target.value)} className="h-10 rounded-xl" placeholder={tr("Ej: 1.85 (opcional)")} />
+              {selectedBank && <p className="text-[8px] text-kiri-emerald">{tr("Sugerida por {0}", [selectedBank.nombre])}</p>}
             </div>
           )}
 
@@ -381,20 +381,20 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            {showAdvanced ? "▾ Ocultar opciones avanzadas" : "▸ ¿Ya venías pagando esta deuda?"}
+            {showAdvanced ? tr("▾ Ocultar opciones avanzadas") : tr("▸ ¿Ya venías pagando esta deuda?")}
           </button>
 
           {showAdvanced && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-[10px] font-bold">Monto prestado inicial</Label>
+                <Label className="text-[10px] font-bold">{tr("Monto prestado inicial")}</Label>
                 <MoneyInput value={montoInicial} onChange={v => { setMontoInicial(v); if (!montoTotal) setMontoTotal(v) }} className="h-10 rounded-xl" placeholder="0" />
-                <p className="text-[7px] text-muted-foreground">Lo que te prestaron</p>
+                <p className="text-[7px] text-muted-foreground">{tr("Lo que te prestaron")}</p>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] font-bold">Saldo actual</Label>
+                <Label className="text-[10px] font-bold">{tr("Saldo actual")}</Label>
                 <MoneyInput value={saldoActual} onChange={v => setSaldoActual(v)} className="h-10 rounded-xl" placeholder="0" />
-                <p className="text-[7px] text-muted-foreground">Lo que debes hoy</p>
+                <p className="text-[7px] text-muted-foreground">{tr("Lo que debes hoy")}</p>
               </div>
             </div>
           )}
@@ -406,7 +406,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
       {/* Monto total (solo para deuda normal, o banco sin avanzado) */}
       {(mode === "normal" || (!showAdvanced && mode === "banco")) && (
         <div className="space-y-1.5">
-          <Label className="text-xs font-bold">{mode === "normal" ? "Monto total de la deuda" : "Monto del préstamo"}</Label>
+          <Label className="text-xs font-bold">{mode === "normal" ? tr("Monto total de la deuda") : tr("Monto del préstamo")}</Label>
           <MoneyInput value={montoTotal} onChange={v => setMontoTotal(v)} className="h-11 rounded-xl" placeholder="0" />
         </div>
       )}
@@ -418,32 +418,32 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             onClick={() => setYaPagando(!yaPagando)}
             className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            {yaPagando ? "▾ Ocultar saldo actual" : "▸ ¿Ya venías pagando esta deuda?"}
+            {yaPagando ? tr("▾ Ocultar saldo actual") : tr("▸ ¿Ya venías pagando esta deuda?")}
           </button>
           {yaPagando && (
             <div className="space-y-1.5">
-              <Label className="text-[10px] font-bold">¿Cuánto debes actualmente?</Label>
+              <Label className="text-[10px] font-bold">{tr("¿Cuánto debes actualmente?")}</Label>
               <MoneyInput value={saldoActualNormal} onChange={v => setSaldoActualNormal(v)} className="h-10 rounded-xl" placeholder="0" />
-              <p className="text-[7px] text-muted-foreground">Si ya has pagado algunas cuotas, ingresa lo que debes hoy.</p>
+              <p className="text-[7px] text-muted-foreground">{tr("Si ya has pagado algunas cuotas, ingresa lo que debes hoy.")}</p>
             </div>
           )}
           {/* Resumen visual de progreso */}
           {yaPagando && Number(montoTotal) > 0 && Number(saldoActualNormal) > 0 && Number(saldoActualNormal) < Number(montoTotal) && (
             <Card className="border-none bg-emerald-500/5 rounded-xl">
               <CardContent className="p-3 space-y-1">
-                <p className="text-[8px] font-bold text-emerald-400 uppercase">Resumen</p>
+                <p className="text-[8px] font-bold text-emerald-400 uppercase">{tr("Resumen")}</p>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div>
-                    <p className="text-[7px] text-muted-foreground">Monto total</p>
-                    <p className="text-[11px] font-bold">${Number(montoTotal).toLocaleString()}</p>
+                    <p className="text-[7px] text-muted-foreground">{tr("Monto total")}</p>
+                    <p className="text-[11px] font-bold">{formatAmount(Number(montoTotal))}</p>
                   </div>
                   <div>
-                    <p className="text-[7px] text-muted-foreground">Ya pagaste</p>
-                    <p className="text-[11px] font-bold text-emerald-400">${(Number(montoTotal) - Number(saldoActualNormal)).toLocaleString()}</p>
+                    <p className="text-[7px] text-muted-foreground">{tr("Ya pagaste")}</p>
+                    <p className="text-[11px] font-bold text-emerald-400">{formatAmount(Number(montoTotal) - Number(saldoActualNormal))}</p>
                   </div>
                   <div>
-                    <p className="text-[7px] text-muted-foreground">Te falta</p>
-                    <p className="text-[11px] font-bold text-amber-400">${Number(saldoActualNormal).toLocaleString()}</p>
+                    <p className="text-[7px] text-muted-foreground">{tr("Te falta")}</p>
+                    <p className="text-[11px] font-bold text-amber-400">{formatAmount(Number(saldoActualNormal))}</p>
                   </div>
                 </div>
               </CardContent>
@@ -454,13 +454,13 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
 
       {/* Cuota por periodo */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Cuota por periodo</Label>
+        <Label className="text-xs font-bold">{tr("Cuota por periodo")}</Label>
         <MoneyInput value={cuotaPeriodo} onChange={v => setCuotaPeriodo(v)} className="h-11 rounded-xl" placeholder="0" />
       </div>
 
       {/* Frecuencia de pago */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Frecuencia de pago</Label>
+        <Label className="text-xs font-bold">{tr("Frecuencia de pago")}</Label>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -468,9 +468,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             className={cn("h-10 rounded-xl text-sm font-bold border-2 transition-colors",
               frecuenciaPago === "mensual" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
             )}
-          >
-            Mensual
-          </button>
+          >{tr("Mensual")}</button>
           <button
             type="button"
             onClick={() => {
@@ -485,15 +483,13 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
             className={cn("h-10 rounded-xl text-sm font-bold border-2 transition-colors",
               frecuenciaPago === "quincenal" ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
             )}
-          >
-            Quincenal
-          </button>
+          >{tr("Quincenal")}</button>
         </div>
       </div>
 
       {/* Día(s) de pago */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">{frecuenciaPago === "quincenal" ? "Días de pago (quincenal)" : "Día de pago"}</Label>
+        <Label className="text-xs font-bold">{frecuenciaPago === "quincenal" ? tr("Días de pago (quincenal)") : tr("Día de pago")}</Label>
         {frecuenciaPago === "quincenal" ? (
           <div className="flex items-center gap-2">
             <Input type="number" min="1" max="31" placeholder="15"
@@ -507,10 +503,10 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
               className="h-11 rounded-xl w-20 text-center font-bold" />
           </div>
         ) : (
-          <Input type="number" min="1" max="31" value={diasPago} onChange={e => setDiasPago(e.target.value)} className="h-11 rounded-xl" placeholder="Ej: 15" />
+          <Input type="number" min="1" max="31" value={diasPago} onChange={e => setDiasPago(e.target.value)} className="h-11 rounded-xl" placeholder={tr("Ej: 15")} />
         )}
         <p className="text-[8px] text-muted-foreground">
-          {frecuenciaPago === "quincenal" ? "Los dos días del mes en que te cobran (ej. 15 y 30)" : "Día del mes en que debes pagar (1-31)"}
+          {frecuenciaPago === "quincenal" ? tr("Los dos días del mes en que te cobran (ej. 15 y 30)") : tr("Día del mes en que debes pagar (1-31)")}
         </p>
       </div>
 
@@ -532,7 +528,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
       {mode === "banco" && Number(tasaInteres) > 0 && Number(cuotaPeriodo) > 0 && (Number(saldoActual) > 0 || Number(montoTotal) > 0) && (
         <Card className="border-none bg-muted/20 rounded-xl">
           <CardContent className="p-3 space-y-1">
-            <p className="text-[8px] font-bold text-muted-foreground uppercase">Preview primera cuota</p>
+            <p className="text-[8px] font-bold text-muted-foreground uppercase">{tr("Preview primera cuota")}</p>
             {(() => {
               const saldo = Number(saldoActual) || Number(montoInicial) || Number(montoTotal)
               const tasaMensual = Number(tasaInteres) / 100
@@ -542,9 +538,9 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
               const capital = Math.max(0, cuota - interes)
               return (
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <div><p className="text-[7px] text-muted-foreground">Interés</p><p className="text-[11px] font-bold text-red-500">${interes.toLocaleString()}</p></div>
-                  <div><p className="text-[7px] text-muted-foreground">A capital</p><p className="text-[11px] font-bold text-kiri-emerald">${capital.toLocaleString()}</p></div>
-                  <div><p className="text-[7px] text-muted-foreground">Nuevo saldo</p><p className="text-[11px] font-bold">${Math.max(0, saldo - capital).toLocaleString()}</p></div>
+                  <div><p className="text-[7px] text-muted-foreground">{tr("Interés")}</p><p className="text-[11px] font-bold text-red-500">{formatAmount(interes)}</p></div>
+                  <div><p className="text-[7px] text-muted-foreground">{tr("A capital")}</p><p className="text-[11px] font-bold text-kiri-emerald">{formatAmount(capital)}</p></div>
+                  <div><p className="text-[7px] text-muted-foreground">{tr("Nuevo saldo")}</p><p className="text-[11px] font-bold">{formatAmount(Math.max(0, saldo - capital))}</p></div>
                 </div>
               )
             })()}
@@ -556,24 +552,22 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
       {mode === "banco" && amortizationData.length > 2 && (
         <Card className="border-none bg-muted/10 rounded-xl overflow-hidden">
           <CardContent className="p-3 space-y-2">
-            <p className="text-[8px] font-bold text-muted-foreground uppercase">Proyección de amortización</p>
-            <p className="text-[9px] text-muted-foreground">
-              Así se distribuirá tu cuota {frecuenciaPago === "quincenal" ? "quincena a quincena" : "mes a mes"} (interés ↓ · capital ↑)
-            </p>
+            <p className="text-[8px] font-bold text-muted-foreground uppercase">{tr("Proyección de amortización")}</p>
+            <p className="text-[9px] text-muted-foreground">{tr("Así se distribuirá tu cuota {0} (interés ↓ · capital ↑)", [frecuenciaPago === "quincenal" ? tr("quincena a quincena") : tr("mes a mes")])}</p>
             <div className="h-[140px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={amortizationData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                   <XAxis dataKey="mes" tick={{ fontSize: 8 }} interval={Math.max(0, Math.floor(amortizationData.length / 8))} />
-                  <YAxis tick={{ fontSize: 8 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} width={40} />
+                  <YAxis tick={{ fontSize: 8 }} tickFormatter={v => tr("${0}k", [(v / 1000).toFixed(0)])} width={40} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null
                       return (
                         <div className="bg-card border border-border rounded-lg px-2 py-1.5 shadow-lg text-[9px] space-y-0.5">
                           <p className="font-bold">{payload[0]?.payload?.mes}</p>
-                          <p className="text-red-500">Interés: ${Number(payload[0]?.value ?? 0).toLocaleString()}</p>
-                          <p className="text-emerald-500">Capital: ${Number(payload[1]?.value ?? 0).toLocaleString()}</p>
-                          <p className="text-muted-foreground">Saldo: ${Number(payload[0]?.payload?.saldo ?? 0).toLocaleString()}</p>
+                          <p className="text-red-500">{tr("Interés: {0}", [formatAmount(Number(payload[0]?.value ?? 0))])}</p>
+                          <p className="text-emerald-500">{tr("Capital: {0}", [formatAmount(Number(payload[1]?.value ?? 0))])}</p>
+                          <p className="text-muted-foreground">{tr("Saldo: {0}", [formatAmount(Number(payload[0]?.payload?.saldo ?? 0))])}</p>
                         </div>
                       )
                     }}
@@ -592,13 +586,11 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
               </ResponsiveContainer>
             </div>
             <div className="flex items-center justify-center gap-4 text-[8px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-red-500/70" /> Interés (baja)</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500/80" /> Capital (sube)</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-red-500/70" />{" "}{tr("Interés (baja)")}</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500/80" />{" "}{tr("Capital (sube)")}</span>
             </div>
             {amortizationData.length > 0 && (
-              <p className="text-[9px] text-center text-kiri-emerald font-bold">
-                ≈ {frecuenciaPago === "quincenal" ? Math.ceil(amortizationData.length / 2) : amortizationData.length} meses para liquidar
-              </p>
+              <p className="text-[9px] text-center text-kiri-emerald font-bold">{tr("≈ {0} meses para liquidar", [frecuenciaPago === "quincenal" ? Math.ceil(amortizationData.length / 2) : amortizationData.length])}</p>
             )}
           </CardContent>
         </Card>
@@ -606,7 +598,7 @@ export function DebtRegistrationForm({ onSubmit, loading }: Props) {
 
       {/* Submit */}
       <Button onClick={handleSubmit} disabled={!canSubmit || loading} className="w-full h-12 rounded-xl bg-kiri-emerald text-white font-bold">
-        {loading ? "Guardando..." : "Registrar deuda"}
+        {loading ? "Guardando..." : tr("Registrar deuda")}
       </Button>
     </div>
   )

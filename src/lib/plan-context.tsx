@@ -10,12 +10,13 @@ import {
 } from "react"
 import { api } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { tr } from "@/lib/i18n"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type PlanTier = "FREE" | "PLUS" | "PRO"
-/** De dónde sale el plan: contrato pagado, gratis, prueba de 14 días, pareja PRO, acceso interno o sin conexión con Authoriza. */
-export type PlanFuente = "contrato" | "gratis" | "prueba" | "pareja" | "acceso" | "sin_conexion"
+/** De dónde sale el plan: contrato pagado, gratis, días de PLUS ganados por invitar, acceso interno o sin conexión con Authoriza. */
+export type PlanFuente = "contrato" | "gratis" | "prueba" | "acceso" | "sin_conexion"
 
 export interface PlanData {
   planName: string
@@ -26,10 +27,14 @@ export interface PlanData {
   features: Record<string, boolean>
   limits: Record<string, { displayName: string; maxValue: number }>
   hasPlan: boolean
-  /** Fin de la prueba de KIRI PLUS (registro o por invitar amigos). */
+  /** Hasta cuándo duran los días de KIRI PLUS ganados por invitar amigos. */
   pruebaHasta?: string | null
-  /** Pareja con KIRI PRO que le da PLUS. */
-  parejaNombre?: string | null
+  /** Llegó invitado y aún puede usar su descuento del primer mes: { PLUS: 50, PRO: 30 } */
+  descuentoInvitado?: { PLUS: number; PRO: number } | null
+  /** Pagó su primera factura con descuento de invitado: se recuerda solo ese mes */
+  primerMesInvitado?: { pct: number; hasta: string } | null
+  /** Amigos invitados que ya se suscribieron (cada uno da días de PLUS, hasta `maximo`) */
+  referidos?: { suscritos: number; maximo: number; diasPorReferido: number; descuentoAmigo: { PLUS: number; PRO: number } }
 }
 
 /** Cantidades "sin límite" (Authoriza guarda 999999). */
@@ -81,17 +86,17 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     exclusiveBadges: false, prioritySupport: false,
   }
   const FREE_LIMITS: PlanData["limits"] = {
-    nCategorias: { displayName: "categorías", maxValue: 5 },
+    nCategorias: { displayName: tr("categorías"), maxValue: 5 },
     nDeudas: { displayName: "deudas", maxValue: 5 },
     nGastosFijos: { displayName: "gastos fijos", maxValue: 8 },
     nBolsillos: { displayName: "bolsillos", maxValue: 3 },
-    nMeDeben: { displayName: "personas que te deben", maxValue: 3 },
+    nMeDeben: { displayName: tr("personas que te deben"), maxValue: 3 },
     nIngresosExtra: { displayName: "ingresos extra", maxValue: 2 },
     nConexiones: { displayName: "conexiones", maxValue: 2 },
-    mesesProyeccion: { displayName: "meses de proyección", maxValue: 3 },
-    mesesHistorial: { displayName: "meses de historial", maxValue: 3 },
+    mesesProyeccion: { displayName: tr("meses de proyección"), maxValue: 3 },
+    mesesHistorial: { displayName: tr("meses de historial"), maxValue: 3 },
   }
-  const PLAN_FREE: PlanData = { planName: "KIRI FREE", tier: "FREE", fuente: "gratis", features: FREE_FEATURES, limits: FREE_LIMITS, hasPlan: false }
+  const PLAN_FREE: PlanData = { planName: tr("KIRI FREE"), tier: "FREE", fuente: "gratis", features: FREE_FEATURES, limits: FREE_LIMITS, hasPlan: false }
 
   const [welcomePackage, setWelcomePackage] = useState<string | null>(null)
   const [welcomePlanPrice, setWelcomePlanPrice] = useState<number | null>(null)
