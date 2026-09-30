@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 import { connectionsApi } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
 import type { Connection, ConnectionSharedPocket } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 interface ParejaChallengeProps {
   connection: Connection
@@ -23,7 +24,7 @@ export function ParejaChallenge({ connection, myId }: ParejaChallengeProps) {
   const router = useRouter()
   const { formatAmount } = useAppContext()
   const [pocket, setPocket] = useState<ConnectionSharedPocket | null>(null)
-  const partnerName = (connection.requesterId === myId ? connection.addressee : connection.requester)?.nombre ?? "tu pareja"
+  const partnerName = (connection.requesterId === myId ? connection.addressee : connection.requester)?.nombre ?? tr("tu pareja")
 
   useEffect(() => {
     connectionsApi.getShared(connection.id).then(({ data }) => {
@@ -49,7 +50,7 @@ export function ParejaChallenge({ connection, myId }: ParejaChallengeProps) {
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Heart className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          <span className="text-sm font-bold">Reto en pareja con {partnerName}</span>
+          <span className="text-sm font-bold">{tr("Reto en pareja con {0}", [partnerName])}</span>
         </div>
         <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">{pocket.nombre}</p>
 
@@ -59,21 +60,19 @@ export function ParejaChallenge({ connection, myId }: ParejaChallengeProps) {
         </div>
 
         <div className="flex justify-between text-[11px]">
-          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tú: {formatAmount(you)}</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{tr("Tú: {0}", [formatAmount(you)])}</span>
           <span className="text-purple-600 dark:text-purple-400 font-semibold">{partnerName}: {formatAmount(partner)}</span>
         </div>
 
         <div className="flex justify-between text-[10px] text-muted-foreground pt-2 border-t border-border/50">
-          <span>{pct}% de {formatAmount(pocket.meta)}</span>
+          <span>{tr("{0}% de {1}", [pct, formatAmount(pocket.meta)])}</span>
           {pocket.deadline && <span>{pocket.deadline}</span>}
         </div>
 
         <Button
           onClick={() => router.push("/social?tab=pockets")}
           className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl"
-        >
-          Aportar a la meta
-        </Button>
+        >{tr("Aportar a la meta")}</Button>
       </CardContent>
     </Card>
   )

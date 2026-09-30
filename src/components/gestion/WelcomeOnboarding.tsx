@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,6 +10,11 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
+import { tr, localeFecha } from "@/lib/i18n"
+
+/** Fecha de ejemplo a `dias` de hoy ("3 oct 2026" / "Oct 3, 2026"). */
+const fechaEjemplo = (dias: number) =>
+  new Date(Date.now() + dias * 86400000).toLocaleDateString(localeFecha(), { day: "numeric", month: "short", year: "numeric" })
 
 interface WelcomeOnboardingProps {
   onComplete: () => void
@@ -20,55 +25,55 @@ interface WelcomeOnboardingProps {
 const steps = [
   {
     id: 1,
-    label: "Tu ingreso",
-    title: "¡Bienvenido a",
-    titleHighlight: "Kiri Finance!",
-    description: "Tu aliado para tomar el control de tus finanzas y hacer florecer tu jardín financiero.",
-    cardTitle: "Sueldo Real (Disponible)",
-    cardSubtitle: "Tu dinero, en tus manos.",
-    cardExplanation: "Este es el dinero que tienes actualmente en tu cuenta y en tu bolsillo.",
-    cardTip: "Registrar tu Sueldo Real es vital para saber qué es lo que te va quedando tras cada gasto.",
-    cardCta: "+ Registrar Ingreso",
+    label: tr("Tu ingreso"),
+    title: tr("¡Bienvenido a"),
+    titleHighlight: tr("Kiri Finance!"),
+    description: tr("Tu aliado para tomar el control de tus finanzas y hacer florecer tu jardín financiero."),
+    cardTitle: tr("Sueldo Real (Disponible)"),
+    cardSubtitle: tr("Tu dinero, en tus manos."),
+    cardExplanation: tr("Este es el dinero que tienes actualmente en tu cuenta y en tu bolsillo."),
+    cardTip: tr("Registrar tu Sueldo Real es vital para saber qué es lo que te va quedando tras cada gasto."),
+    cardCta: tr("+ Registrar Ingreso"),
     icon: <Wallet className="h-6 w-6" />,
     accentColor: "from-emerald-500/20 to-emerald-600/5",
   },
   {
     id: 2,
-    label: "Tus metas",
-    title: "Registra tus",
-    titleHighlight: "Obligaciones",
-    description: "Lleva el control de tus pagos pendientes y compromisos.",
-    cardExplanation: "Así podrás visualizar tu balance real antes de gastar y evitar sorpresas.",
+    label: tr("Tus metas"),
+    title: tr("Registra tus"),
+    titleHighlight: tr("Obligaciones"),
+    description: tr("Lleva el control de tus pagos pendientes y compromisos."),
+    cardExplanation: tr("Así podrás visualizar tu balance real antes de gastar y evitar sorpresas."),
     icon: <ReceiptText className="h-6 w-6" />,
     accentColor: "from-amber-500/20 to-amber-600/5",
   },
   {
     id: 3,
-    label: "Tus deudas",
-    title: "Crea tu",
-    titleHighlight: "Presupuesto\ny Categorías",
-    description: "Divide tu dinero en categorías y establece límites de gasto.",
-    cardExplanation: "Así tendrás control total y sabrás exactamente a dónde va cada centavo.",
+    label: tr("Tus deudas"),
+    title: tr("Crea tu"),
+    titleHighlight: tr("Presupuesto\ny Categorías"),
+    description: tr("Divide tu dinero en categorías y establece límites de gasto."),
+    cardExplanation: tr("Así tendrás control total y sabrás exactamente a dónde va cada centavo."),
     icon: <PieChart className="h-6 w-6" />,
     accentColor: "from-blue-500/20 to-blue-600/5",
   },
   {
     id: 4,
-    label: "Registro rápido",
-    title: "Registra sin",
+    label: tr("Registro rápido"),
+    title: tr("Registra sin"),
     titleHighlight: "escribir nada",
-    description: "Dile a Kiri qué gastaste, cuánto ganaste o qué deuda tienes — por voz o con una foto — y él lo ubica solo.",
-    cardExplanation: "Todo esto vive en el botón de Kiri Coach 🌱 (abajo a la derecha, o el + de la barra inferior en el celular).",
+    description: tr("Dile a Kiri qué gastaste, cuánto ganaste o qué deuda tienes — por voz o con una foto — y él lo ubica solo."),
+    cardExplanation: tr("Todo esto vive en el botón de Kiri Coach 🌱 (abajo a la derecha, o el + de la barra inferior en el celular)."),
     icon: <Mic className="h-6 w-6" />,
     accentColor: "from-kiri-emerald/20 to-kiri-forest/5",
   },
   {
     id: 5,
-    label: "Tu jardín",
-    title: "Tu árbol",
-    titleHighlight: "reacciona a tus finanzas",
-    description: "Cada decisión que tomas se ve en tu jardín: crece con tus buenos hábitos y te avisa cuando algo necesita atención.",
-    cardExplanation: "Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel. Y si conectas a tu pareja en Social, llevan juntos el presupuesto del hogar.",
+    label: tr("Tu jardín"),
+    title: tr("Tu árbol"),
+    titleHighlight: tr("reacciona a tus finanzas"),
+    description: tr("Cada decisión que tomas se ve en tu jardín: crece con tus buenos hábitos y te avisa cuando algo necesita atención."),
+    cardExplanation: tr("Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel. Y si conectas a tu pareja en Social, llevan juntos el presupuesto del hogar."),
     icon: <Sprout className="h-6 w-6" />,
     accentColor: "from-emerald-500/20 to-emerald-600/5",
   },
@@ -99,11 +104,24 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
   // Sueldo a mostrar: si el usuario ya registró su ingreso, lo usa; si no, muestra ejemplo
   const displayIncome = income > 0 ? income : 3750000
 
+  // Teclado: Escape = "Saltar"; flechas para pasar de paso
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onComplete()
+      else if (e.key === "ArrowRight") setCurrentStep(s => Math.min(s + 1, steps.length - 1))
+      else if (e.key === "ArrowLeft") setCurrentStep(s => Math.max(s - 1, 0))
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onComplete, steps.length])
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
     >
       <motion.div
@@ -191,8 +209,8 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     <div className="relative z-10 mt-4 flex items-center gap-2 bg-white/5 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/10">
                       <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
                       <div>
-                        <p className="text-[10px] font-bold text-white">Tus datos están seguros</p>
-                        <p className="text-[9px] text-white/50">Solo tú puedes ver tu información.</p>
+                        <p className="text-[10px] font-bold text-white">{tr("Tus datos están seguros")}</p>
+                        <p className="text-[9px] text-white/50">{tr("Solo tú puedes ver tu información.")}</p>
                       </div>
                     </div>
                   </div>
@@ -210,7 +228,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     </div>
 
                     <div>
-                      <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">Disponible ahora</p>
+                      <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">{tr("Disponible ahora")}</p>
                       <p className="text-3xl font-black text-gray-900 dark:text-white">
                         {formatAmount(displayIncome)}
                       </p>
@@ -224,11 +242,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                       </p>
                     </div>
 
-                    <p className="text-[11px] text-gray-700 dark:text-gray-200 leading-relaxed">
-                      Registrar tu Sueldo Real es vital para{" "}
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                        saber qué es lo que te va quedando tras cada gasto.
-                      </span>
+                    <p className="text-[11px] text-gray-700 dark:text-gray-200 leading-relaxed">{tr("Registrar tu Sueldo Real es vital para{0}", [" "])}<span className="text-emerald-600 dark:text-emerald-400 font-medium">{tr("saber qué es lo que te va quedando tras cada gasto.")}</span>
                     </p>
 
                     <div className="pt-1">
@@ -263,12 +277,14 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
 
                   {/* Right: sample obligations */}
                   <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
-                    <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Próximos pagos</p>
+                    <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">{tr("Próximos pagos")}</p>
                     <div className="space-y-2.5">
                       {[
-                        { name: "Renta", date: "15 Jul 2026", amount: "$1,200,000", icon: "✅" },
-                        { name: "Internet", date: "18 Jul 2026", amount: "$80,000", icon: "🌐" },
-                        { name: "Tarjeta de crédito", date: "22 Jul 2026", amount: "$250,000", icon: "💳" },
+                        // Ejemplo con fechas de los próximos días y la moneda del usuario
+                        // (antes: fechas fijas de julio y "$1,200,000" en formato de EE. UU.)
+                        { name: tr("Renta"), date: fechaEjemplo(3), amount: formatAmount(1200000), icon: "✅" },
+                        { name: tr("Internet"), date: fechaEjemplo(6), amount: formatAmount(80000), icon: "🌐" },
+                        { name: tr("Tarjeta de crédito"), date: fechaEjemplo(10), amount: formatAmount(250000), icon: "💳" },
                       ].map((item, i) => (
                         <div key={i} className="flex items-center gap-3 bg-gray-50 dark:bg-slate-700/50 rounded-xl px-3 py-2.5">
                           <span className="text-sm">{item.icon}</span>
@@ -281,7 +297,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                       ))}
                     </div>
                     <div className="pt-1 text-center">
-                      <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">Ver todas las obligaciones →</span>
+                      <span className="text-[9px] text-amber-600 dark:text-amber-400 font-medium">{tr("Ver todas las obligaciones →")}</span>
                     </div>
                   </div>
                 </div>
@@ -309,7 +325,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
 
                   {/* Right: donut chart preview */}
                   <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg">
-                    <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Distribución actual</p>
+                    <p className="text-[10px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">{tr("Distribución actual")}</p>
 
                     {/* Mini donut chart (SVG) */}
                     <div className="flex justify-center">
@@ -333,10 +349,10 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     {/* Legend */}
                     <div className="space-y-2">
                       {[
-                        { name: "Alimentación", pct: "36%", amount: "$1,260,000", color: "bg-emerald-500" },
-                        { name: "Transporte", pct: "24%", amount: "$860,000", color: "bg-blue-500" },
-                        { name: "Ocio / Antojos", pct: "20%", amount: "$590,000", color: "bg-purple-500" },
-                        { name: "Otros", pct: "20%", amount: "$500,000", color: "bg-gray-500" },
+                        { name: tr("Alimentación"), pct: "36%", amount: formatAmount(1260000), color: "bg-emerald-500" },
+                        { name: tr("Transporte"), pct: "24%", amount: formatAmount(860000), color: "bg-blue-500" },
+                        { name: tr("Ocio / Antojos"), pct: "20%", amount: formatAmount(590000), color: "bg-purple-500" },
+                        { name: tr("Otros"), pct: "20%", amount: formatAmount(500000), color: "bg-gray-500" },
                       ].map((cat, i) => (
                         <div key={i} className="flex items-center gap-2">
                           <div className={cn("h-2.5 w-2.5 rounded-full shrink-0", cat.color)} />
@@ -377,10 +393,8 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                         <Mic className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 dark:text-white">Dictar por voz</p>
-                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
-                          Di algo como &quot;gasté 20 mil en el almuerzo&quot; o &quot;me pagaron 2 millones&quot; — Kiri entiende gastos, ingresos, deudas y ahorros, y los guarda solo.
-                        </p>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">{tr("Dictar por voz")}</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">{tr("Di algo como \"gasté 20 mil en el almuerzo\" o \"me pagaron 2 millones\" — Kiri entiende gastos, ingresos, deudas y ahorros, y los guarda solo.")}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-xl px-3 py-2.5">
@@ -388,10 +402,8 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                         <ScanLine className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 dark:text-white">Escanear un recibo</p>
-                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
-                          Tómale foto a un recibo o factura y Kiri extrae el monto y lo registra como gasto por ti.
-                        </p>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">{tr("Escanear un recibo")}</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">{tr("Tómale foto a un recibo o factura y Kiri extrae el monto y lo registra como gasto por ti.")}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-600/40 rounded-xl px-3 py-2.5">
@@ -399,10 +411,8 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                         <Bot className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 dark:text-white">Pregúntale a Kiri Coach</p>
-                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">
-                          El mismo botón te abre un chat para resolver dudas y darte recomendaciones sobre tus finanzas.
-                        </p>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">{tr("Pregúntale a Kiri Coach")}</p>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300 leading-relaxed">{tr("El mismo botón te abre un chat para resolver dudas y darte recomendaciones sobre tus finanzas.")}</p>
                       </div>
                     </div>
                   </div>
@@ -423,10 +433,10 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
                   <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2.5 shadow-lg flex flex-col justify-center">
                     {[
-                      { e: "🌧️", t: "Ahorras", d: "Llueve sobre tu árbol." },
-                      { e: "☀️", t: "Registras tu ingreso", d: "Sale el sol y caen monedas." },
-                      { e: "☁️", t: "Un pago está por vencer", d: "Se nubla. Toca las nubes para ver cuál." },
-                      { e: "⛈️", t: "Tienes pagos vencidos", d: "Llega la tormenta hasta que te pongas al día." },
+                      { e: "🌧️", t: tr("Ahorras"), d: tr("Llueve sobre tu árbol.") },
+                      { e: "☀️", t: tr("Registras tu ingreso"), d: tr("Sale el sol y caen monedas.") },
+                      { e: "☁️", t: tr("Un pago está por vencer"), d: tr("Se nubla. Toca las nubes para ver cuál.") },
+                      { e: "⛈️", t: tr("Tienes pagos vencidos"), d: tr("Llega la tormenta hasta que te pongas al día.") },
                     ].map(x => (
                       <div key={x.t} className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2.5">
                         <span className="text-xl shrink-0">{x.e}</span>
@@ -443,26 +453,24 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
           </AnimatePresence>
 
           {/* Footer: navigation */}
-          <div className="flex items-center justify-between pt-5 mt-auto">
+          <div className="flex items-center justify-between gap-2 pt-5 mt-auto">
             {/* Left: Skip/Back */}
             {isFirst ? (
               <button
                 onClick={onComplete}
                 className="text-xs text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-white transition-colors"
-              >
-                Saltar
-              </button>
+              >{tr("Saltar")}</button>
             ) : (
               <button
                 onClick={prev}
                 className="flex items-center gap-1 text-xs text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-white transition-colors"
               >
-                <ChevronLeft className="h-3.5 w-3.5" /> Atrás
-              </button>
+                <ChevronLeft className="h-3.5 w-3.5" />{" "}{tr("Atrás")}</button>
             )}
 
-            {/* Center: dots */}
-            <div className="flex items-center gap-1.5">
+            {/* Center: dots (en el celular sobran: arriba ya van los pasos 1–5, y
+                empujaban "¡Comenzar ahora!" fuera del modal) */}
+            <div className="hidden sm:flex items-center gap-1.5">
               {steps.map((_, i) => (
                 <div
                   key={i}
@@ -483,8 +491,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                 <Button
                   onClick={onComplete}
                   className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl px-5 gap-1.5 shadow-lg shadow-emerald-500/30"
-                >
-                  ¡Comenzar ahora! <Sparkles className="h-4 w-4" />
+                >{tr("¡Comenzar ahora!")}{" "}<Sparkles className="h-4 w-4" />
                 </Button>
               </motion.div>
             ) : (
@@ -495,8 +502,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                 <Button
                   onClick={next}
                   className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl px-5 gap-1.5"
-                >
-                  Siguiente <ArrowRight className="h-4 w-4" />
+                >{tr("Siguiente")}{" "}<ArrowRight className="h-4 w-4" />
                 </Button>
               </motion.div>
             )}
@@ -510,9 +516,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
               transition={{ delay: 0.3 }}
               className="mt-3 text-center"
             >
-              <p className="text-[10px] text-muted-foreground">
-                👆 Tu primer paso: registra tu Sueldo Real con &quot;<span className="text-emerald-600 dark:text-emerald-400 font-bold">+ Registrar Ingreso</span>&quot;, o simplemente dile a Kiri Coach cuánto ganas.
-              </p>
+              <p className="text-[10px] text-muted-foreground">{tr("👆 Tu primer paso: registra tu Sueldo Real con \"")}<span className="text-emerald-600 dark:text-emerald-400 font-bold">{tr("+ Registrar Ingreso")}</span>{tr("\", o simplemente dile a Kiri Coach cuánto ganas.")}</p>
             </motion.div>
           )}
         </div>

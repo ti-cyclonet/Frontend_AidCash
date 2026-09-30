@@ -5,6 +5,7 @@ import { Bell, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { activarNotificaciones, estadoPush, registrarDispositivo, type EstadoPush } from "@/lib/push-client"
+import { tr } from "@/lib/i18n"
 
 const POSPUESTO_KEY = "kiri_push_pospuesto_hasta"
 
@@ -62,22 +63,22 @@ export function NotificationInitializer() {
           <Bell className="h-4 w-4 text-kiri-emerald" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold">Activa las notificaciones</p>
+          <p className="text-sm font-bold">{tr("Activa las notificaciones")}</p>
           <p className="text-[11px] text-muted-foreground leading-snug">
             {estado === "instalar-ios"
-              ? "En iPhone llegan solo con Kiri instalada: en Safari toca Compartir → \"Agregar a inicio\" y abre Kiri desde ahí."
-              : "Te avisamos de pagos por vencer, tu día de pago, misiones y lo que pase en Social, aunque la app esté cerrada."}
+              ? tr("En iPhone llegan solo con Kiri instalada: en Safari toca Compartir → \"Agregar a inicio\" y abre Kiri desde ahí.")
+              : tr("Te avisamos de pagos por vencer, tu día de pago, misiones y lo que pase en Social, aunque la app esté cerrada.")}
           </p>
         </div>
-        <button onClick={posponer} className="text-muted-foreground hover:text-foreground" aria-label="Cerrar">
+        <button onClick={posponer} className="text-muted-foreground hover:text-foreground" aria-label={tr("Cerrar")}>
           <X className="h-4 w-4" />
         </button>
       </div>
       {estado !== "instalar-ios" && (
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={posponer} className="flex-1 h-9 rounded-xl text-xs">Ahora no</Button>
+          <Button variant="ghost" onClick={posponer} className="flex-1 h-9 rounded-xl text-xs">{tr("Ahora no")}</Button>
           <Button onClick={activar} disabled={activando} className="flex-1 h-9 rounded-xl text-xs font-bold bg-kiri-emerald hover:bg-kiri-emerald/90 text-white">
-            {activando ? "Activando…" : "Activar"}
+            {activando ? "Activando…" : tr("Activar")}
           </Button>
         </div>
       )}

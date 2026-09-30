@@ -14,9 +14,13 @@ function getThousandsSeparator(currency: Currency): string {
   return currency === "COP" || currency === "EUR" ? "." : ","
 }
 
-/** Remueve todo lo que no sea dígito */
+/**
+ * Remueve todo lo que no sea dígito. Máximo 12 dígitos: antes se podían pegar
+ * 30 y el número salía en notación científica (el servidor acepta hasta 5.000
+ * millones y avisa si se pasa).
+ */
 function stripNonDigits(str: string): string {
-  return str.replace(/\D/g, "")
+  return str.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 12)
 }
 
 /** Formatea un número con separador de miles */
@@ -49,6 +53,8 @@ export function MoneyInput({
 }: MoneyInputProps) {
   const { currency } = useAppContext()
   const separator = getThousandsSeparator(currency)
+  // Un ejemplo numérico ("1970700") se muestra como los montos: "1.970.700"
+  const placeholderFmt = /^\d+$/.test(placeholder) ? formatWithSeparator(placeholder, separator) : placeholder
 
   // El display formateado se deriva del valor numérico
   const [display, setDisplay] = useState(() => formatWithSeparator(value, separator))
@@ -78,7 +84,7 @@ export function MoneyInput({
           inputMode="numeric"
           value={display}
           onChange={handleChange}
-          placeholder={placeholder}
+          placeholder={placeholderFmt}
           autoFocus={autoFocus}
           className={cn("pl-10", className)}
         />
@@ -92,7 +98,7 @@ export function MoneyInput({
       inputMode="numeric"
       value={display}
       onChange={handleChange}
-      placeholder={placeholder}
+      placeholder={placeholderFmt}
       autoFocus={autoFocus}
       className={className}
     />

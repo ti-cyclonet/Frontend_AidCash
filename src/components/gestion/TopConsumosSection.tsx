@@ -8,6 +8,7 @@ import { useFinanceData } from "@/hooks/use-finance-data"
 import { Info, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { tr } from "@/lib/i18n"
 
 // Colores para las barras (degradado por posición)
 const BAR_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#3b82f6", "#6366f1"]
@@ -75,8 +76,8 @@ export function TopConsumosSection() {
         {/* Header */}
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold">Top Mayores Consumos</h3>
-            <span title="Suma todos los registros del mismo consumo, aunque tengan distinta categoría o mayúsculas (ej. «InDriver» e «InDriver [Transporte]»).">
+            <h3 className="text-sm font-bold">{tr("Top Mayores Consumos")}</h3>
+            <span title={tr("Suma todos los registros del mismo consumo, aunque tengan distinta categoría o mayúsculas (ej. «InDriver» e «InDriver [Transporte]»).")}>
               <Info className="h-3.5 w-3.5 text-muted-foreground" />
             </span>
           </div>
@@ -85,15 +86,13 @@ export function TopConsumosSection() {
               <button key={a} onClick={() => setAlcance(a)}
                 className={cn("px-2 py-0.5 rounded-md text-[9px] font-bold transition-colors",
                   alcance === a ? "bg-kiri-emerald text-white" : "bg-muted/40 text-muted-foreground hover:bg-muted")}>
-                {a === 'periodo' ? 'Este periodo' : 'Este mes'}
+                {a === 'periodo' ? tr("Este periodo") : tr("Este mes")}
               </button>
             ))}
           </div>
         </div>
-        <p className="text-[9px] text-muted-foreground mb-4">
-          Tus 5 mayores consumos variables {alcance === 'periodo' ? 'en el periodo actual' : 'en el mes calendario'}
-        </p>
-        {items.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">Sin gastos registrados en este rango.</p>}
+        <p className="text-[9px] text-muted-foreground mb-4">{tr("Tus 5 mayores consumos variables {0}", [alcance === 'periodo' ? tr("en el periodo actual") : tr("en el mes calendario")])}</p>
+        {items.length === 0 && <p className="text-xs text-muted-foreground py-4 text-center">{tr("Sin gastos registrados en este rango.")}</p>}
 
         {/* Items */}
         <div className="space-y-3">
@@ -136,18 +135,16 @@ export function TopConsumosSection() {
 
         {/* Footer */}
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/50">
-          <p className="text-[10px] text-muted-foreground">
-            Total gastado en estos ítems: <strong className="text-foreground">{formatAmount(topTotal)}</strong>
+          <p className="text-[10px] text-muted-foreground">{tr("Total gastado en estos ítems:")}{" "}<strong className="text-foreground">{formatAmount(topTotal)}</strong>
             {totalGastado > 0 && (
-              <span className="text-muted-foreground"> ({Math.round((topTotal / totalGastado) * 100)}% del total gastado)</span>
+              <span className="text-muted-foreground">{" "}{tr("({0}% del total gastado)", [Math.round((topTotal / totalGastado) * 100)])}</span>
             )}
           </p>
           <Link
             href="/balance"
             className="text-[10px] font-bold text-kiri-emerald hover:underline flex items-center gap-1"
           >
-            <TrendingDown className="h-3 w-3" /> Ver todos los gastos
-          </Link>
+            <TrendingDown className="h-3 w-3" />{" "}{tr("Ver todos los gastos")}</Link>
         </div>
       </CardContent>
     </Card>

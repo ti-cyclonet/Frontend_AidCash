@@ -32,6 +32,8 @@ import Link from "next/link"
 import { TopConsumosSection } from "./TopConsumosSection"
 import { DesgloseGastosSection } from "./DesgloseGastosSection"
 import { BudgetRadialChart, CategoryDetail } from "@/components/presupuesto/BudgetRadialChart"
+import { tr, localeFecha } from "@/lib/i18n"
+import { toast } from "@/hooks/use-toast"
 
 // --- Types ---
 interface BudgetCategory { id: string; name: string; budget: number; spent: number; color: string; icon: string; linkedFixedIds?: string[] }
@@ -183,12 +185,12 @@ export function PresupuestoTab() {
   const [showHormiga, setShowHormiga] = useState(false)
 
   const IMPULSE_CATEGORIES: { value: ImpulseCategory; label: string; emoji: string }[] = [
-    { value: "cafe",       label: "Café",       emoji: "☕" },
-    { value: "comida",     label: "Comida",     emoji: "🍔" },
-    { value: "transporte", label: "Transporte", emoji: "🚕" },
-    { value: "antojo",     label: "Antojo",     emoji: "🍫" },
-    { value: "salida",     label: "Salida",     emoji: "🎉" },
-    { value: "otro",       label: "Otro",       emoji: "💸" },
+    { value: "cafe",       label: tr("Café"),       emoji: "☕" },
+    { value: "comida",     label: tr("Comida"),     emoji: "🍔" },
+    { value: "transporte", label: tr("Transporte"), emoji: "🚕" },
+    { value: "antojo",     label: tr("Antojo"),     emoji: "🍫" },
+    { value: "salida",     label: tr("Salida"),     emoji: "🎉" },
+    { value: "otro",       label: tr("Otro"),       emoji: "💸" },
   ]
 
   // Estadísticas de gastos hormiga — los marcados esHormiga (el backend los
@@ -219,26 +221,29 @@ export function PresupuestoTab() {
     setEditingId(orig.id); setForm({ name: orig.name, budget: String(orig.budget), icon: orig.icon, color: orig.color }); setLinkedFixed(orig.linkedFixedIds ?? []); setFormOpen(true)
   }
   const handleSave = async () => {
-    if (!form.name || !form.budget) return
+    if (!form.name.trim() || !form.budget) return
     setSavingCategory(true)
-    const payload = { nombre: form.name, montoLimite: Number(form.budget), icono: form.icon, color: form.color, linkedFixedExpenseIds: linkedFixed }
-    if (editingId) await budgetCategoriesApi.update(editingId, payload)
-    else await budgetCategoriesApi.create(payload)
-    await fetchCategories()
+    const payload = { nombre: form.name.trim(), montoLimite: Number(form.budget), icono: form.icon, color: form.color, linkedFixedExpenseIds: linkedFixed }
+    const { error } = editingId ? await budgetCategoriesApi.update(editingId, payload) : await budgetCategoriesApi.create(payload)
     setSavingCategory(false)
+    // Antes el error se ignoraba: el formulario se cerraba y la categoría no existía
+    if (error) { toast({ title: tr("No se pudo guardar la categoría"), description: error, variant: "destructive" }); return }
+    await fetchCategories()
     setFormOpen(false)
   }
   const handleDelete = async () => {
     if (!editingId) return
     setSavingCategory(true)
-    await budgetCategoriesApi.delete(editingId)
-    await fetchCategories()
+    const { error } = await budgetCategoriesApi.delete(editingId)
     setSavingCategory(false)
+    if (error) { toast({ title: tr("No se pudo eliminar"), description: error, variant: "destructive" }); return }
+    await fetchCategories()
     setFormOpen(false)
     setSelectedId(null)
   }
   const handleDeleteCategory = async (id: string) => {
-    await budgetCategoriesApi.delete(id)
+    const { error } = await budgetCategoriesApi.delete(id)
+    if (error) toast({ title: tr("No se pudo eliminar"), description: error, variant: "destructive" })
     await fetchCategories()
   }
 
@@ -381,32 +386,27 @@ export function PresupuestoTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-black">Presupuestos y hábitos de gasto</h1>
-          <p className="text-[10px] text-muted-foreground">Controla tus límites, entiende tus hábitos y encuentra oportunidades para ahorrar.</p>
-          <p className="text-[9px] font-bold text-kiri-emerald mt-0.5">
-            {getPeriodLabel(incomeFrequency, diasCobro)} · el gasto por categoría se reinicia cada periodo
-          </p>
+          <h1 className="text-lg font-black">{tr("Presupuestos y hábitos de gasto")}</h1>
+          <p className="text-[10px] text-muted-foreground">{tr("Controla tus límites, entiende tus hábitos y encuentra oportunidades para ahorrar.")}</p>
+          <p className="text-[9px] font-bold text-kiri-emerald mt-0.5">{tr("{0} · el gasto por categoría se reinicia cada periodo", [getPeriodLabel(incomeFrequency, diasCobro)])}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={openAdd} size="sm" className="bg-kiri-emerald text-white font-bold rounded-xl text-xs gap-1">
-            <Plus className="h-3.5 w-3.5" /> Agregar categoría
-          </Button>
+            <Plus className="h-3.5 w-3.5" />{" "}{tr("Agregar categoría")}</Button>
         </div>
       </div>
 
       {walletError && (
         <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-[11px] font-medium rounded-xl px-3 py-2">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          No pudimos cargar tu billetera — los montos de abajo pueden no ser exactos.
-        </div>
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{tr("No pudimos cargar tu billetera — los montos de abajo pueden no ser exactos.")}</div>
       )}
 
       {/* 4 metricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <AnimatedStatCard label="Disponible para gastar" value={realFreeAmount} sub="Tu bolsillo de gasto libre" formatAmount={formatAmount} />
-        <MC label="Total presupuestado" value={formatAmount(totalBudget)} sub={esLimiteProporcional ? `Proporcional a este periodo (mes: ${formatAmount(catsWithSpent.reduce((a, c) => a + c.budgetMensual, 0))})` : "Límites asignados a categorías"} />
-        <MC label="Total gastado" value={formatAmount(totalSpent)} sub={`${totalPct}% del presupuestado`} color={totalSpent > totalBudget ? "text-red-500" : "text-amber-500"} />
-        <MC label="Disponible restante" value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={`${realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0}% sin gastar`} />
+        <AnimatedStatCard label={tr("Disponible para gastar")} value={realFreeAmount} sub={tr("Tu bolsillo de gasto libre")} formatAmount={formatAmount} />
+        <MC label={tr("Total presupuestado")} value={formatAmount(totalBudget)} sub={esLimiteProporcional ? tr("Proporcional a este periodo (mes: {0})", [formatAmount(catsWithSpent.reduce((a, c) => a + c.budgetMensual, 0))]) : tr("Límites asignados a categorías")} />
+        <MC label={tr("Total gastado")} value={formatAmount(totalSpent)} sub={tr("{0}% del presupuestado", [totalPct])} color={totalSpent > totalBudget ? "text-red-500" : "text-amber-500"} />
+        <MC label={tr("Disponible restante")} value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={tr("{0}% sin gastar", [realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0])} />
       </div>
 
       {/* ═══ DISTRIBUCIÓN ACTUAL (ancho completo) + DETALLE DEBAJO ═══ */}
@@ -435,8 +435,8 @@ export function PresupuestoTab() {
       {selectedId === '__all__' && catsWithSpent.length > 0 && (
         <Card ref={selectedDetailRef} className="border-none bg-card shadow-sm rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
           <CardContent className="p-5 space-y-3">
-            <h3 className="text-sm font-bold">Tus categorías</h3>
-            <p className="text-[9px] text-muted-foreground">Edita los límites máximos de gasto por categoría.</p>
+            <h3 className="text-sm font-bold">{tr("Tus categorías")}</h3>
+            <p className="text-[9px] text-muted-foreground">{tr("Edita los límites máximos de gasto por categoría.")}</p>
             <div className="space-y-3">
               {catsWithSpent.map(cat => {
                 const pct = cat.budget > 0 ? Math.round((cat.spent / cat.budget) * 100) : 0
@@ -449,7 +449,7 @@ export function PresupuestoTab() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold truncate">{cat.name}</p>
-                        <p className="text-[9px] text-muted-foreground">{totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0}% del total</p>
+                        <p className="text-[9px] text-muted-foreground">{tr("{0}% del total", [totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0])}</p>
                       </div>
                       <span className="text-xs font-bold shrink-0">{formatAmount(cat.budget)}</span>
                       <span className={cn("text-xs font-bold shrink-0", over && "text-red-500")}>{formatAmount(cat.spent)}</span>
@@ -472,8 +472,8 @@ export function PresupuestoTab() {
             </div>
             {catsWithSpent.length > 0 && (
               <div className="flex justify-between pt-3 border-t border-border text-[10px]">
-                <span>Total asignado <strong>{formatAmount(totalBudget)}</strong></span>
-                <span>Total gastado <strong>{formatAmount(totalSpent)}</strong></span>
+                <span>{tr("Total asignado")}{" "}<strong>{formatAmount(totalBudget)}</strong></span>
+                <span>{tr("Total gastado")}{" "}<strong>{formatAmount(totalSpent)}</strong></span>
                 <span className="font-bold">{totalPct}%</span>
               </div>
             )}
@@ -514,8 +514,8 @@ export function PresupuestoTab() {
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-bold">Sin categoría · {formatAmount(sinCategoria.gastado)}</p>
-                <p className="text-[10px] text-muted-foreground">{sinCategoria.cantidad === 1 ? "1 gasto de este periodo no cuenta" : `${sinCategoria.cantidad} gastos de este periodo no cuentan`} en ningún presupuesto. Asígnalos:</p>
+                <p className="text-sm font-bold">{tr("Sin categoría · {0}", [formatAmount(sinCategoria.gastado)])}</p>
+                <p className="text-[10px] text-muted-foreground">{tr("{0} en ningún presupuesto. Asígnalos:", [sinCategoria.cantidad === 1 ? tr("1 gasto de este periodo no cuenta") : tr("{0} gastos de este periodo no cuentan", [sinCategoria.cantidad])])}</p>
               </div>
             </div>
             <div className="space-y-2 max-h-[260px] overflow-y-auto">
@@ -523,15 +523,15 @@ export function PresupuestoTab() {
                 <div key={g.id} className="flex items-center gap-2 bg-card rounded-xl px-3 py-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold truncate">{g.nombre}</p>
-                    <p className="text-[9px] text-muted-foreground">{new Date(g.fecha).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} · {formatAmount(g.monto)}</p>
+                    <p className="text-[9px] text-muted-foreground">{new Date(g.fecha).toLocaleDateString(localeFecha(), { day: "numeric", month: "short" })} · {formatAmount(g.monto)}</p>
                   </div>
                   <select
                     defaultValue=""
                     onChange={e => { if (e.target.value) setImpulseCategoria(g.id, e.target.value) }}
                     className="h-8 rounded-lg bg-muted/30 border border-border px-2 text-[10px] font-bold max-w-[130px]"
-                    aria-label={`Categoría para ${g.nombre}`}
+                    aria-label={tr("Categoría para {0}", [g.nombre])}
                   >
-                    <option value="" disabled>Elegir…</option>
+                    <option value="" disabled>{tr("Elegir…")}</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
@@ -564,8 +564,8 @@ export function PresupuestoTab() {
                 <Coffee className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold">🐜 Gastos Hormiga</p>
-                <p className="text-[10px] text-muted-foreground">Pequeños gastos que pueden afectar tus metas sin que lo notes.</p>
+                <p className="text-sm font-bold">{tr("🐜 Gastos Hormiga")}</p>
+                <p className="text-[10px] text-muted-foreground">{tr("Pequeños gastos que pueden afectar tus metas sin que lo notes.")}</p>
               </div>
               <div className="text-right shrink-0">
                 {/* Sin disponible libre (0 o negativo) el % siempre daba 0% aunque
@@ -573,12 +573,12 @@ export function PresupuestoTab() {
                 {realFreeAmount > 0 ? (
                   <>
                     <p className={cn("text-sm font-black", hormigaIsOver ? "text-red-500" : "")}>{hormigaUsagePct}%</p>
-                    <p className="text-[9px] text-muted-foreground">del libre</p>
+                    <p className="text-[9px] text-muted-foreground">{tr("del libre")}</p>
                   </>
                 ) : (
                   <>
                     <p className={cn("text-sm font-black", totalHormiga > 0 ? "text-red-500" : "")}>{formatAmount(totalHormiga)}</p>
-                    <p className="text-[9px] text-muted-foreground">{hormigaExpenses.length} gastos · sin disponible</p>
+                    <p className="text-[9px] text-muted-foreground">{tr("{0} gastos · sin disponible", [hormigaExpenses.length])}</p>
                   </>
                 )}
               </div>
@@ -587,10 +587,8 @@ export function PresupuestoTab() {
             {realFreeAmount > 0 && (
               <div className="px-4 pb-3.5 space-y-1">
                 <div className="flex justify-between text-[9px] font-bold">
-                  <span className={hormigaIsOver ? "text-red-500" : "text-muted-foreground"}>
-                    Hormiga: {formatAmount(totalHormiga)} ({hormigaExpenses.length} gastos)
-                  </span>
-                  <span className="text-muted-foreground">Total gastado: {formatAmount(totalImpulseThisPeriod)}</span>
+                  <span className={hormigaIsOver ? "text-red-500" : "text-muted-foreground"}>{tr("Hormiga: {0} ({1} gastos)", [formatAmount(totalHormiga), hormigaExpenses.length])}</span>
+                  <span className="text-muted-foreground">{tr("Total gastado: {0}", [formatAmount(totalImpulseThisPeriod)])}</span>
                 </div>
                 <Progress
                   value={hormigaUsagePct}
@@ -599,9 +597,7 @@ export function PresupuestoTab() {
                     hormigaUsagePct >= 50 ? "bg-red-500" : hormigaUsagePct >= 30 ? "bg-yellow-500" : "bg-cyclon-pink"
                   )}
                 />
-                <p className="text-[8px] text-muted-foreground text-right">
-                  de {formatAmount(realFreeAmount)} disponible
-                </p>
+                <p className="text-[8px] text-muted-foreground text-right">{tr("de")}{" "}{formatAmount(realFreeAmount)}{" "}{tr("disponible")}</p>
               </div>
             )}
           </button>
@@ -609,16 +605,14 @@ export function PresupuestoTab() {
           {/* Historial Gastos Hormiga (colapsable) — SOLO los marcados como hormiga */}
           {showHormiga && (
             <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Gastos hormiga — {hormigaExpenses.length > 0 ? `${hormigaExpenses.length} registros este periodo` : "Sin registros"}
-              </p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("Gastos hormiga — {0}", [hormigaExpenses.length > 0 ? tr("{0} registros este periodo", [hormigaExpenses.length]) : tr("Sin registros")])}</p>
               {hormigaExpenses.length === 0 ? (
                 <div className="text-center py-6 space-y-2">
                   <div className="h-12 w-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto">
                     <span className="text-2xl">🎉</span>
                   </div>
-                  <p className="text-sm font-bold text-emerald-500">¡No tienes gastos hormiga!</p>
-                  <p className="text-xs text-muted-foreground">Excelente. Kiri no ha encontrado pequeños gastos marcados como hábito.</p>
+                  <p className="text-sm font-bold text-emerald-500">{tr("¡No tienes gastos hormiga!")}</p>
+                  <p className="text-xs text-muted-foreground">{tr("Excelente. Kiri no ha encontrado pequeños gastos marcados como hábito.")}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -631,19 +625,17 @@ export function PresupuestoTab() {
                           <p className="text-sm font-bold truncate">{nombreBaseGasto(item.nombre)}</p>
                           <p className="text-[10px] text-muted-foreground">
                             {item.createdAt
-                              ? new Date(item.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })
+                              ? new Date(item.createdAt).toLocaleDateString(localeFecha(), { day: "numeric", month: "short", year: "numeric" })
                               : item.periodo}
-                            {" · "}{cat?.label ?? "Otro"}
+                            {" · "}{cat?.label ?? tr("Otro")}
                           </p>
                         </div>
                         <span className="font-black text-sm shrink-0">{formatAmount(item.monto)}</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); setImpulseHormiga(item.id, false) }}
-                          title="No es gasto hormiga"
+                          title={tr("No es gasto hormiga")}
                           className="h-7 px-2 rounded-lg text-[9px] font-bold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0"
-                        >
-                          No es 🐜
-                        </button>
+                        >{tr("No es 🐜")}</button>
                         <button
                           onClick={(e) => { e.stopPropagation(); removeImpulseExpense(item.id) }}
                           className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
@@ -660,24 +652,20 @@ export function PresupuestoTab() {
                   para poder corregir la clasificación en el otro sentido. */}
               {otrosGastosVariables.length > 0 && (
                 <div className="space-y-2">
-                  <button onClick={() => setShowOtrosGastos(v => !v)} className="text-[10px] font-bold text-muted-foreground hover:text-foreground">
-                    {showOtrosGastos ? "▾" : "▸"} Otros gastos del periodo ({otrosGastosVariables.length}) — ¿alguno es hormiga?
-                  </button>
+                  <button onClick={() => setShowOtrosGastos(v => !v)} className="text-[10px] font-bold text-muted-foreground hover:text-foreground">{tr("{0} Otros gastos del periodo ({1}) — ¿alguno es hormiga?", [showOtrosGastos ? "▾" : "▸", otrosGastosVariables.length])}</button>
                   {showOtrosGastos && otrosGastosVariables.map(item => (
                     <div key={item.id} className="flex items-center gap-3 bg-muted/10 rounded-2xl px-4 py-2.5">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold truncate">{nombreBaseGasto(item.nombre)}</p>
                         <p className="text-[10px] text-muted-foreground">
-                          {new Date(item.createdAt).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                          {new Date(item.createdAt).toLocaleDateString(localeFecha(), { day: "numeric", month: "short" })}
                         </p>
                       </div>
                       <span className="font-bold text-xs shrink-0">{formatAmount(item.monto)}</span>
                       <button
                         onClick={() => setImpulseHormiga(item.id, true)}
                         className="h-7 px-2 rounded-lg text-[9px] font-bold text-cyclon-pink hover:bg-cyclon-pink/10 transition-colors shrink-0"
-                      >
-                        Marcar 🐜
-                      </button>
+                      >{tr("Marcar 🐜")}</button>
                     </div>
                   ))}
                 </div>
@@ -720,7 +708,7 @@ export function PresupuestoTab() {
             <MapPin className="h-4 w-4" />
           </div>
           <p className="text-[11px] text-muted-foreground flex-1">
-            <span className="font-bold text-foreground">Consejo Kiri: </span>
+            <span className="font-bold text-foreground">{tr("Consejo Kiri:")}{" "}</span>
             {primaryInsight.message}
           </p>
           {insights.length > 1 && (
@@ -739,17 +727,15 @@ export function PresupuestoTab() {
         <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-kiri-emerald" />
-              Análisis de tu presupuesto
-            </DialogTitle>
-            <DialogDescription>Recomendaciones basadas en tus patrones de gasto.</DialogDescription>
+              <Lightbulb className="h-5 w-5 text-kiri-emerald" />{tr("Análisis de tu presupuesto")}</DialogTitle>
+            <DialogDescription>{tr("Recomendaciones basadas en tus patrones de gasto.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             {insights.map((insight) => (
               <InsightRow key={insight.id} insight={insight} formatAmount={formatAmount} />
             ))}
             {insights.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">No hay recomendaciones por ahora. ¡Todo va bien!</p>
+              <p className="text-sm text-muted-foreground text-center py-6">{tr("No hay recomendaciones por ahora. ¡Todo va bien!")}</p>
             )}
           </div>
         </DialogContent>
@@ -759,18 +745,18 @@ export function PresupuestoTab() {
       <Dialog open={formOpen} onOpenChange={v => { setFormOpen(v); if (!v) setShowSugg(false) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Editar categoria" : "Crear nueva categoria"}</DialogTitle>
-            <DialogDescription>Agrega una categoria personalizada.</DialogDescription>
+            <DialogTitle>{editingId ? tr("Editar categoria") : tr("Crear nueva categoria")}</DialogTitle>
+            <DialogDescription>{tr("Agrega una categoria personalizada.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nombre de la categoria</Label>
+              <Label className="text-xs font-bold">{tr("Nombre de la categoria")}</Label>
               <div className="relative">
                 <Input value={form.name}
                   onChange={e => { setForm(f => ({ ...f, name: e.target.value, icon: suggestIcon(e.target.value) })); setShowSugg(true) }}
                   onClick={() => { if (form.name.length === 0) setShowSugg(true) }}
                   onBlur={() => { setTimeout(() => setShowSugg(false), 150) }}
-                  placeholder="Ej: Alimentacion, Mascotas, Transporte..." className="h-10 rounded-xl" autoFocus />
+                  placeholder={tr("Ej: Alimentacion, Mascotas, Transporte...")} maxLength={50} className="h-10 rounded-xl" autoFocus />
                 {showSugg && form.name.length < 20 && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg z-50 max-h-[160px] overflow-y-auto">
                     {filterSuggestions(form.name).slice(0, 6).map(sug => (
@@ -788,7 +774,7 @@ export function PresupuestoTab() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Icono</Label>
+              <Label className="text-xs font-bold">{tr("Icono")}</Label>
               <div className="grid grid-cols-5 gap-2">
                 {ICONS.map(opt => (
                   <button key={opt.key} type="button" onClick={() => setForm(f => ({ ...f, icon: opt.key }))}
@@ -800,19 +786,16 @@ export function PresupuestoTab() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Presupuesto mensual</Label>
+              <Label className="text-xs font-bold">{tr("Presupuesto mensual")}</Label>
               <MoneyInput value={form.budget} onChange={v => setForm(f => ({ ...f, budget: v }))} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
               {/* Sugerencia inteligente de Kiri */}
               {realFreeAmount > 0 && !editingId && (
                 <div className="bg-kiri-emerald/5 border border-kiri-emerald/20 rounded-xl p-3 space-y-1.5">
-                  <p className="text-[9px] font-bold text-kiri-emerald flex items-center gap-1">
-                    🌱 Sugerencia de Kiri
-                  </p>
-                  <p className="text-[9px] text-muted-foreground leading-relaxed">
-                    Tu disponible para gastar es <strong className="text-foreground">{formatAmount(realFreeAmount)}</strong>.
+                  <p className="text-[9px] font-bold text-kiri-emerald flex items-center gap-1">{tr("🌱 Sugerencia de Kiri")}</p>
+                  <p className="text-[9px] text-muted-foreground leading-relaxed">{tr("Tu disponible para gastar es")}{" "}<strong className="text-foreground">{formatAmount(realFreeAmount)}</strong>.
                     {categories.length === 0
-                      ? ` Si creas 4 categorías, podrías asignar ~${formatAmount(Math.round(realFreeAmount / 4))} a cada una.`
-                      : ` Ya tienes ${categories.length} categoría${categories.length > 1 ? 's' : ''} con ${formatAmount(totalBudget)} asignados. Te quedan ~${formatAmount(Math.max(0, realFreeAmount - totalBudget))} disponibles para nuevas categorías.`
+                      ? tr(" Si creas 4 categorías, podrías asignar ~{0} a cada una.", [formatAmount(Math.round(realFreeAmount / 4))])
+                      : tr(" Ya tienes {0} categoría{1} con {2} asignados. Te quedan ~{3} disponibles para nuevas categorías.", [categories.length, categories.length > 1 ? 's' : '', formatAmount(totalBudget), formatAmount(Math.max(0, realFreeAmount - totalBudget))])
                     }
                   </p>
                   {!form.budget && (
@@ -837,7 +820,7 @@ export function PresupuestoTab() {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Color</Label>
+              <Label className="text-xs font-bold">{tr("Color")}</Label>
               <div className="flex gap-2 flex-wrap">
                 {COLORS.map(c => (
                   <button key={c} type="button" onClick={() => setForm(f => ({ ...f, color: c }))}
@@ -850,8 +833,8 @@ export function PresupuestoTab() {
             {/* Vincular gastos fijos relacionados */}
             {fixedExpenses.length > 0 && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Vincular gastos fijos (opcional)</Label>
-                <p className="text-[9px] text-muted-foreground">Al pagar estos gastos fijos, se contarán como gasto de esta categoría.</p>
+                <Label className="text-xs font-bold">{tr("Vincular gastos fijos (opcional)")}</Label>
+                <p className="text-[9px] text-muted-foreground">{tr("Al pagar estos gastos fijos, se contarán como gasto de esta categoría.")}</p>
                 <div className="max-h-[120px] overflow-y-auto space-y-1.5 rounded-xl border border-muted p-2">
                   {fixedExpenses
                     .filter(f => {
@@ -901,16 +884,16 @@ export function PresupuestoTab() {
                     })}
                 </div>
                 {linkedFixed.length > 0 && (
-                  <p className="text-[9px] text-kiri-emerald font-bold">{linkedFixed.length} gasto{linkedFixed.length > 1 ? 's' : ''} fijo{linkedFixed.length > 1 ? 's' : ''} vinculado{linkedFixed.length > 1 ? 's' : ''}</p>
+                  <p className="text-[9px] text-kiri-emerald font-bold">{linkedFixed.length}{" "}{tr("gasto")}{linkedFixed.length > 1 ? 's' : ''}{" "}{tr("fijo")}{linkedFixed.length > 1 ? 's' : ''}{" "}{tr("vinculado")}{linkedFixed.length > 1 ? 's' : ''}</p>
                 )}
               </div>
             )}
           </div>
           <DialogFooter className="gap-2">
-            {editingId && <Button variant="destructive" size="sm" onClick={handleDelete} disabled={savingCategory} className="mr-auto rounded-xl text-xs">Eliminar</Button>}
-            <Button variant="ghost" onClick={() => setFormOpen(false)} disabled={savingCategory}>Cancelar</Button>
+            {editingId && <Button variant="destructive" size="sm" onClick={handleDelete} disabled={savingCategory} className="mr-auto rounded-xl text-xs">{tr("Eliminar")}</Button>}
+            <Button variant="ghost" onClick={() => setFormOpen(false)} disabled={savingCategory}>{tr("Cancelar")}</Button>
             <Button onClick={handleSave} disabled={!form.name || !form.budget || savingCategory} className="bg-kiri-emerald text-white font-bold rounded-xl px-6">
-              {savingCategory ? "Guardando..." : editingId ? "Guardar" : "+ Agregar"}
+              {savingCategory ? "Guardando..." : editingId ? tr("Guardar") : tr("+ Agregar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -921,16 +904,14 @@ export function PresupuestoTab() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-kiri-emerald" />
-              Registrar gasto
-            </DialogTitle>
-            <DialogDescription>El gasto se registrará en la categoría seleccionada y descontará de tu presupuesto.</DialogDescription>
+              <Receipt className="h-5 w-5 text-kiri-emerald" />{tr("Registrar gasto")}</DialogTitle>
+            <DialogDescription>{tr("El gasto se registrará en la categoría seleccionada y descontará de tu presupuesto.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción</Label>
+              <Label className="text-xs font-bold">{tr("Descripción")}</Label>
               <Input
-                placeholder="Ej: Mercado semanal, Uber al trabajo, Netflix..."
+                placeholder={tr("Ej: Mercado semanal, Uber al trabajo, Netflix...")}
                 value={expNombre}
                 onChange={e => handleExpNombreChange(e.target.value)}
                 className="h-10 rounded-xl"
@@ -939,13 +920,12 @@ export function PresupuestoTab() {
               {/* Detección inteligente de categoría */}
               {autoDetected && expCategoria === autoDetected && !expCategoriaManual && (
                 <p className="text-[9px] text-kiri-emerald flex items-center gap-1">
-                  <MapPin className="h-3 w-3" /> Categoría sugerida: {autoDetected}
-                  {categoriaSugerida?.fuente === 'historial' && <span className="text-muted-foreground">· así lo registraste antes</span>}
+                  <MapPin className="h-3 w-3" />{" "}{tr("Categoría sugerida: {0}", [autoDetected])}{categoriaSugerida?.fuente === 'historial' && <span className="text-muted-foreground">{tr("· así lo registraste antes")}</span>}
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto</Label>
+              <Label className="text-xs font-bold">{tr("Monto")}</Label>
               <MoneyInput
                 value={expMonto}
                 onChange={v => setExpMonto(v)}
@@ -954,7 +934,7 @@ export function PresupuestoTab() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Categoría</Label>
+              <Label className="text-xs font-bold">{tr("Categoría")}</Label>
               {/* Categorías del presupuesto */}
               {categories.length > 0 ? (
                 <div className="grid grid-cols-3 gap-2">
@@ -977,9 +957,7 @@ export function PresupuestoTab() {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-xl text-center">
-                  Crea categorías con &ldquo;Agregar&rdquo; para organizar tu presupuesto.
-                </p>
+                <p className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-xl text-center">{tr("Crea categorías con “Agregar” para organizar tu presupuesto.")}</p>
               )}
             </div>
 
@@ -989,8 +967,8 @@ export function PresupuestoTab() {
                 <div className="flex items-center gap-2">
                   <Coffee className="h-4 w-4 text-cyclon-pink" />
                   <div>
-                    <p className="text-xs font-bold">🐜 Marcar como gasto hormiga</p>
-                    <p className="text-[9px] text-muted-foreground">Pequeño gasto cotidiano o impulsivo</p>
+                    <p className="text-xs font-bold">{tr("🐜 Marcar como gasto hormiga")}</p>
+                    <p className="text-[9px] text-muted-foreground">{tr("Pequeño gasto cotidiano o impulsivo")}</p>
                   </div>
                 </div>
                 <button
@@ -1010,7 +988,7 @@ export function PresupuestoTab() {
               {hormigaActivo && (
                 <p className="text-[9px] text-cyclon-pink flex items-center gap-1 px-1">
                   <Coffee className="h-3 w-3" />
-                  {isDetectedHormiga === null ? "Kiri lo marcó como hormiga (monto pequeño o consumo cotidiano). Puedes desmarcarlo." : "Kiri analizará este gasto como hábito de consumo."}
+                  {isDetectedHormiga === null ? tr("Kiri lo marcó como hormiga (monto pequeño o consumo cotidiano). Puedes desmarcarlo.") : tr("Kiri analizará este gasto como hábito de consumo.")}
                 </p>
               )}
             </div>
@@ -1030,8 +1008,8 @@ export function PresupuestoTab() {
                     <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <span>
                       {isOver
-                        ? `Este gasto excederá tu presupuesto de ${expCategoria} (${formatAmount(cat.budget)}).`
-                        : `Estarás al ${Math.round((newTotal / cat.budget) * 100)}% de tu presupuesto de ${expCategoria}.`}
+                        ? tr("Este gasto excederá tu presupuesto de {0} ({1}).", [expCategoria, formatAmount(cat.budget)])
+                        : tr("Estarás al {0}% de tu presupuesto de {1}.", [Math.round((newTotal / cat.budget) * 100), expCategoria])}
                     </span>
                   </div>
                 )
@@ -1040,13 +1018,13 @@ export function PresupuestoTab() {
             })()}
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>{tr("Cancelar")}</Button>
             <Button
               onClick={handleRegisterExpense}
               disabled={expSaving || !expNombre || !expMonto || Number(expMonto) <= 0}
               className="bg-kiri-emerald text-white font-bold rounded-xl px-6"
             >
-              {expSaving ? "Guardando..." : "Registrar"}
+              {expSaving ? "Guardando..." : tr("Registrar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1057,8 +1035,7 @@ export function PresupuestoTab() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-500">
-              <AlertTriangle className="h-5 w-5" /> Presupuesto insuficiente
-            </DialogTitle>
+              <AlertTriangle className="h-5 w-5" />{" "}{tr("Presupuesto insuficiente")}</DialogTitle>
             <DialogDescription>
               {(() => {
                 const generalAvail = Math.max(0, realFreeAmount - totalSpent)
@@ -1066,16 +1043,16 @@ export function PresupuestoTab() {
                   const cat = catsWithSpent.find(c => c.name === expCategoria)
                   const catAvail = Math.max(0, (cat?.budget ?? 0) - (cat?.spent ?? 0))
                   const effectiveAvail = Math.min(catAvail, generalAvail)
-                  return `Tu disponible en ${expCategoria} es ${formatAmount(effectiveAvail)}, pero necesitas ${formatAmount(Number(expMonto))}.`
+                  return tr("Tu disponible en {0} es {1}, pero necesitas {2}.", [expCategoria, formatAmount(effectiveAvail), formatAmount(Number(expMonto))])
                 }
-                return `Tu disponible restante es ${formatAmount(generalAvail)}, pero necesitas ${formatAmount(Number(expMonto))}.`
+                return tr("Tu disponible restante es {0}, pero necesitas {1}.", [formatAmount(generalAvail), formatAmount(Number(expMonto))])
               })()}
             </DialogDescription>
           </DialogHeader>
           <div className="py-3">
             <Card className="border-none bg-red-500/5 rounded-2xl">
               <CardContent className="p-4 text-center space-y-1">
-                <p className="text-xs text-muted-foreground">Disponible en {expCategoria || "gasto libre"}</p>
+                <p className="text-xs text-muted-foreground">{tr("Disponible en {0}", [expCategoria || tr("gasto libre")])}</p>
                 <p className="text-lg font-black">{(() => {
                   const generalAvail = Math.max(0, realFreeAmount - totalSpent)
                   if (expCategoria) {
@@ -1085,9 +1062,7 @@ export function PresupuestoTab() {
                   }
                   return formatAmount(generalAvail)
                 })()}</p>
-                <p className="text-xs text-red-500 font-bold">
-                  Necesitas: {formatAmount(Number(expMonto))}
-                </p>
+                <p className="text-xs text-red-500 font-bold">{tr("Necesitas: {0}", [formatAmount(Number(expMonto))])}</p>
               </CardContent>
             </Card>
           </div>
@@ -1100,11 +1075,9 @@ export function PresupuestoTab() {
               >
                 <div className="flex items-center gap-2">
                   <CircleDollarSign className="h-4 w-4 text-amber-500" />
-                  <p className="font-bold text-sm">Usar más del presupuesto asignado</p>
+                  <p className="font-bold text-sm">{tr("Usar más del presupuesto asignado")}</p>
                 </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Registrar de todas formas. Excederás tu presupuesto.
-                </p>
+                <p className="text-xs text-muted-foreground pl-6">{tr("Registrar de todas formas. Excederás tu presupuesto.")}</p>
               </button>
             )}
 
@@ -1116,11 +1089,9 @@ export function PresupuestoTab() {
               >
                 <div className="flex items-center gap-2">
                   <PiggyBank className="h-4 w-4 text-emerald-500" />
-                  <p className="font-bold text-sm">Usar ahorro</p>
+                  <p className="font-bold text-sm">{tr("Usar ahorro")}</p>
                 </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Cubrir con tu ahorro disponible ({formatAmount(wallet.ahorro)}).
-                </p>
+                <p className="text-xs text-muted-foreground pl-6">{tr("Cubrir con tu ahorro disponible ({0}).", [formatAmount(wallet.ahorro)])}</p>
               </button>
             )}
 
@@ -1129,18 +1100,14 @@ export function PresupuestoTab() {
               <button className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-cyclon-lavender" />
-                  <p className="font-bold text-sm">Registrar como nueva deuda</p>
+                  <p className="font-bold text-sm">{tr("Registrar como nueva deuda")}</p>
                 </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Si pediste prestado para cubrir este gasto, agrégalo como obligación.
-                </p>
+                <p className="text-xs text-muted-foreground pl-6">{tr("Si pediste prestado para cubrir este gasto, agrégalo como obligación.")}</p>
               </button>
             </Link>
 
             {/* Cancelar */}
-            <Button variant="ghost" onClick={handleExpCancel} className="w-full text-muted-foreground mt-1">
-              Cancelar
-            </Button>
+            <Button variant="ghost" onClick={handleExpCancel} className="w-full text-muted-foreground mt-1">{tr("Cancelar")}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1256,10 +1223,10 @@ function AnimatedStatCard({ label, value, sub, formatAmount }: {
 function InsightRow({ insight, formatAmount }: { insight: BudgetInsight; formatAmount: (n: number) => string }) {
   // Colores semáforo: verde = bueno, amarillo = advertencia, rojo = malo
   const severityConfig: Record<string, { dot: string; bg: string; label: string; labelColor: string }> = {
-    critical: { dot: "bg-red-500", bg: "bg-red-500/5", label: "Excedido", labelColor: "text-red-500" },
-    warning: { dot: "bg-amber-500", bg: "bg-amber-500/5", label: "Atención", labelColor: "text-amber-500" },
-    success: { dot: "bg-emerald-500", bg: "bg-emerald-500/5", label: "Bien", labelColor: "text-emerald-500" },
-    info: { dot: "bg-emerald-500", bg: "bg-emerald-500/5", label: "Info", labelColor: "text-emerald-500" },
+    critical: { dot: "bg-red-500", bg: "bg-red-500/5", label: tr("Excedido"), labelColor: "text-red-500" },
+    warning: { dot: "bg-amber-500", bg: "bg-amber-500/5", label: tr("Atención"), labelColor: "text-amber-500" },
+    success: { dot: "bg-emerald-500", bg: "bg-emerald-500/5", label: tr("Bien"), labelColor: "text-emerald-500" },
+    info: { dot: "bg-emerald-500", bg: "bg-emerald-500/5", label: tr("Info"), labelColor: "text-emerald-500" },
   }
 
   const s = severityConfig[insight.severity] ?? severityConfig.info
@@ -1276,16 +1243,14 @@ function InsightRow({ insight, formatAmount }: { insight: BudgetInsight; formatA
         </div>
         <p className="text-[10px] text-muted-foreground mt-1">{insight.message}</p>
         {insight.savingsAmount && insight.savingsAmount > 0 && (
-          <span className="inline-block mt-1.5 text-[9px] font-bold text-kiri-emerald bg-kiri-emerald/10 px-2 py-0.5 rounded-full">
-            Potencial ahorro: {formatAmount(insight.savingsAmount)}
-          </span>
+          <span className="inline-block mt-1.5 text-[9px] font-bold text-kiri-emerald bg-kiri-emerald/10 px-2 py-0.5 rounded-full">{tr("Potencial ahorro: {0}", [formatAmount(insight.savingsAmount)])}</span>
         )}
         {insight.usagePct !== undefined && (
           <div className="mt-2">
             <Progress value={Math.min(insight.usagePct, 100)} className="h-1.5" indicatorClassName={
               insight.usagePct > 100 ? "bg-red-500" : insight.usagePct >= 70 ? "bg-amber-500" : "bg-emerald-500"
             } />
-            <p className="text-[8px] text-muted-foreground mt-0.5">{insight.usagePct}% del presupuesto usado</p>
+            <p className="text-[8px] text-muted-foreground mt-0.5">{tr("{0}% del presupuesto usado", [insight.usagePct])}</p>
           </div>
         )}
       </div>
@@ -1335,23 +1300,23 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-base">📊</span>
-            <h3 className="text-sm font-bold">Impacto de tus gastos hormiga</h3>
+            <h3 className="text-sm font-bold">{tr("Impacto de tus gastos hormiga")}</h3>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-muted/20 rounded-xl p-3 text-center">
-              <p className="text-[9px] text-muted-foreground">Total hormiga</p>
+              <p className="text-[9px] text-muted-foreground">{tr("Total hormiga")}</p>
               <p className="text-sm font-black">{formatAmount(totalHormiga)}</p>
-              <p className="text-[8px] text-muted-foreground">{hormigaCount} gastos</p>
+              <p className="text-[8px] text-muted-foreground">{hormigaCount}{" "}{tr("gastos")}</p>
             </div>
             <div className="bg-muted/20 rounded-xl p-3 text-center">
-              <p className="text-[9px] text-muted-foreground">% del libre</p>
+              <p className="text-[9px] text-muted-foreground">{tr("% del libre")}</p>
               <p className="text-sm font-black text-amber-500">{hormigaPctOfFree}%</p>
-              <p className="text-[8px] text-muted-foreground">de tu presupuesto</p>
+              <p className="text-[8px] text-muted-foreground">{tr("de tu presupuesto")}</p>
             </div>
             <div className="bg-muted/20 rounded-xl p-3 text-center">
-              <p className="text-[9px] text-muted-foreground">Proyección anual</p>
+              <p className="text-[9px] text-muted-foreground">{tr("Proyección anual")}</p>
               <p className="text-sm font-black text-red-500">{formatAmount(totalHormiga * periodsPerYear)}</p>
-              <p className="text-[8px] text-muted-foreground">si continúas así</p>
+              <p className="text-[8px] text-muted-foreground">{tr("si continúas así")}</p>
             </div>
           </div>
         </CardContent>
@@ -1363,8 +1328,8 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
           <div className="flex items-center gap-2">
             <span className="text-base">🌱</span>
             <div>
-              <h3 className="text-sm font-bold">¿Qué pasaría si reduces tus gastos hormiga?</h3>
-              <p className="text-[9px] text-muted-foreground">Selecciona un porcentaje de reducción</p>
+              <h3 className="text-sm font-bold">{tr("¿Qué pasaría si reduces tus gastos hormiga?")}</h3>
+              <p className="text-[9px] text-muted-foreground">{tr("Selecciona un porcentaje de reducción")}</p>
             </div>
           </div>
 
@@ -1390,11 +1355,11 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
           <div className="bg-background/80 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[9px] text-muted-foreground">Podrías liberar por periodo</p>
+                <p className="text-[9px] text-muted-foreground">{tr("Podrías liberar por periodo")}</p>
                 <p className="text-xl font-black text-kiri-emerald">{formatAmount(savingsPerPeriod)}</p>
               </div>
               <div className="text-right">
-                <p className="text-[9px] text-muted-foreground">Potencial anual</p>
+                <p className="text-[9px] text-muted-foreground">{tr("Potencial anual")}</p>
                 <p className="text-lg font-black text-emerald-600">{formatAmount(savingsPerYear)}</p>
               </div>
             </div>
@@ -1402,8 +1367,8 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
             {/* Barra visual de reducción */}
             <div className="space-y-1">
               <div className="flex justify-between text-[9px] text-muted-foreground">
-                <span>Gasto actual: {formatAmount(totalHormiga)}</span>
-                <span>Nuevo: {formatAmount(totalHormiga - savingsPerPeriod)}</span>
+                <span>{tr("Gasto actual: {0}", [formatAmount(totalHormiga)])}</span>
+                <span>{tr("Nuevo: {0}", [formatAmount(totalHormiga - savingsPerPeriod)])}</span>
               </div>
               <div className="h-3 bg-red-500/20 rounded-full overflow-hidden relative">
                 <div
@@ -1423,17 +1388,15 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
             <div className="flex items-start gap-3 p-3 rounded-xl bg-kiri-emerald/5 border border-kiri-emerald/20">
               <PiggyBank className="h-4 w-4 text-kiri-emerald shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold text-kiri-emerald">🎯 Tu oportunidad de ahorro</p>
-                <p className="text-[9px] text-muted-foreground mt-0.5">
-                  Si reduces un {selectedPct}% tus gastos hormiga, podrías destinar {formatAmount(savingsPerPeriod)} por periodo a tu meta &ldquo;{savingsMeta.nombre}&rdquo;.
-                </p>
+                <p className="text-[10px] font-bold text-kiri-emerald">{tr("🎯 Tu oportunidad de ahorro")}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">{tr("Si reduces un {0}% tus gastos hormiga, podrías destinar {1} por periodo a tu meta “{2}”.", [selectedPct, formatAmount(savingsPerPeriod), savingsMeta.nombre])}</p>
                 <div className="mt-2 space-y-1">
                   <div className="flex justify-between text-[8px]">
-                    <span className="text-muted-foreground">Progreso actual: {formatAmount(savingsMeta.acumulado)}</span>
+                    <span className="text-muted-foreground">{tr("Progreso actual: {0}", [formatAmount(savingsMeta.acumulado)])}</span>
                     <span className="font-bold text-kiri-emerald">{Math.round((savingsMeta.acumulado / savingsMeta.meta) * 100)}%</span>
                   </div>
                   <Progress value={(savingsMeta.acumulado / savingsMeta.meta) * 100} className="h-1.5" indicatorClassName="bg-kiri-emerald" />
-                  <p className="text-[8px] text-muted-foreground">Meta: {formatAmount(savingsMeta.meta)}</p>
+                  <p className="text-[8px] text-muted-foreground">{tr("Meta: {0}", [formatAmount(savingsMeta.meta)])}</p>
                 </div>
               </div>
             </div>
@@ -1441,8 +1404,8 @@ function HormigaSimulator({ totalHormiga, hormigaCount, realFreeAmount, incomeFr
             <Link href="/ahorro" className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 hover:bg-muted/30 transition-colors">
               <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1">
-                <p className="text-[10px] font-bold">Convierte este ahorro en una meta</p>
-                <p className="text-[9px] text-muted-foreground">Crea una meta de ahorro y descubre qué impacto tendría este dinero.</p>
+                <p className="text-[10px] font-bold">{tr("Convierte este ahorro en una meta")}</p>
+                <p className="text-[9px] text-muted-foreground">{tr("Crea una meta de ahorro y descubre qué impacto tendría este dinero.")}</p>
               </div>
             </Link>
           )}

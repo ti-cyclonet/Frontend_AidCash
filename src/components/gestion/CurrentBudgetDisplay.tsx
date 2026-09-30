@@ -2,6 +2,7 @@
 
 import { Wallet, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { tr } from "@/lib/i18n"
 
 interface CurrentBudgetDisplayProps {
   cashBalance: number
@@ -21,9 +22,7 @@ export function CurrentBudgetDisplay({
     <div className="flex flex-col items-end gap-1">
       {/* Etiqueta */}
       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-        <Wallet className="h-3 w-3" />
-        Saldo disponible
-      </p>
+        <Wallet className="h-3 w-3" />{tr("Saldo disponible")}</p>
 
       {/* Monto */}
       <div
@@ -50,11 +49,9 @@ export function CurrentBudgetDisplay({
           onClick={onReset}
           disabled={isResetting}
           className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors mt-0.5"
-          aria-label="Reiniciar saldo"
+          aria-label={tr("Reiniciar saldo")}
         >
-          <RefreshCw className={cn("h-2.5 w-2.5", isResetting && "animate-spin")} />
-          Reiniciar saldo
-        </button>
+          <RefreshCw className={cn("h-2.5 w-2.5", isResetting && "animate-spin")} />{tr("Reiniciar saldo")}</button>
       )}
     </div>
   )

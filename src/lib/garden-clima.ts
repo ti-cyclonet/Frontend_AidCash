@@ -1,5 +1,6 @@
 import { getNextPaymentInfo, formatPeriodo } from "@/lib/payment-schedule"
 import type { Debt, FixedExpense } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 /**
  * Clima del jardín según las obligaciones — misma lógica de fechas que
@@ -29,15 +30,15 @@ export function calcularClima(debts: Debt[], fixedExpenses: FixedExpense[]) {
   ) => {
     for (const a of atrasos ?? []) {
       if (a.falta <= 0) continue
-      vencidas.push({ key: `${key}-${a.periodo}`, tipo, nombre, monto: a.falta, etiqueta: `Cuota de ${formatPeriodo(a.periodo)} sin pagar`, orden: -999 })
+      vencidas.push({ key: `${key}-${a.periodo}`, tipo, nombre, monto: a.falta, etiqueta: tr("Cuota de {0} sin pagar", [formatPeriodo(a.periodo)]), orden: -999 })
     }
     const info = getNextPaymentInfo(dias, pagado, quincenal, pendienteProximo)
     if (info.status === "vencido" && restante > 0) {
-      vencidas.push({ key, tipo, nombre, monto: restante, etiqueta: `${info.statusLabel} · era el ${info.nextDate}`, orden: info.daysUntil })
+      vencidas.push({ key, tipo, nombre, monto: restante, etiqueta: tr("{0} · era el {1}", [info.statusLabel, info.nextDate]), orden: info.daysUntil })
     } else if ((info.status === "proximo" || info.status === "pendiente") && info.daysUntil <= PROXIMAS_DIAS && restante > 0) {
       proximas.push({
         key, tipo, nombre, monto: restante,
-        etiqueta: info.daysUntil === 0 ? "Vence hoy" : `Vence en ${info.daysUntil} día${info.daysUntil === 1 ? "" : "s"} · ${info.nextDate}`,
+        etiqueta: info.daysUntil === 0 ? tr("Vence hoy") : tr("Vence en {0} día{1} · {2}", [info.daysUntil, info.daysUntil === 1 ? "" : "s", info.nextDate]),
         orden: info.daysUntil,
       })
     }

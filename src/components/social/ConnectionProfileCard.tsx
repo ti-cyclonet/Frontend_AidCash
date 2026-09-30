@@ -15,8 +15,9 @@ import { useAppContext } from "@/lib/app-context"
 import { useToast } from "@/hooks/use-toast"
 import { UserAvatar } from "@/components/social/UserAvatar"
 import type { ConnectionSharedResponse, ConnectionRole } from "@/lib/types"
+import { tr, localeFecha } from "@/lib/i18n"
 
-const ROLE_LABEL: Record<ConnectionRole, string> = { FRIEND: "Amigo", FAMILY: "Familia", PARTNER: "Pareja" }
+const ROLE_LABEL: Record<ConnectionRole, string> = { FRIEND: tr("Amigo"), FAMILY: tr("Familia"), PARTNER: tr("Pareja") }
 
 // Colores de la tarjeta según el rol, con exactamente el mismo estilo: azul
 // para amigos, ámbar para familia y rosa para la pareja (los mismos colores
@@ -28,7 +29,7 @@ const TEMA = {
     text: "text-kiri-emerald", softBg: "bg-kiri-emerald/10", barra: "bg-kiri-emerald",
     activo: "bg-kiri-emerald text-white border-kiri-emerald shadow-sm shadow-kiri-emerald/20", hoverBorde: "hover:border-kiri-emerald/30",
     creciendo: "from-kiri-emerald/5 to-emerald-900/5 border-kiri-emerald/10", anillo: "#10b981",
-    emoji: "⚙", equipo: "🌱 Equipo Kiri",
+    emoji: "⚙", equipo: tr("🌱 Equipo Kiri"),
   },
   amigo: {
     header: "from-blue-500/20", sparkle: "text-blue-500/30",
@@ -36,7 +37,7 @@ const TEMA = {
     text: "text-blue-600 dark:text-blue-400", softBg: "bg-blue-500/10", barra: "bg-blue-500",
     activo: "bg-blue-500 text-white border-blue-500 shadow-sm shadow-blue-500/20", hoverBorde: "hover:border-blue-500/30",
     creciendo: "from-blue-500/5 to-blue-900/5 border-blue-500/10", anillo: "#3b82f6",
-    emoji: "🤝", equipo: "🤝 Amigos Kiri",
+    emoji: "🤝", equipo: tr("🤝 Amigos Kiri"),
   },
   familia: {
     header: "from-amber-500/20", sparkle: "text-amber-500/30",
@@ -44,7 +45,7 @@ const TEMA = {
     text: "text-amber-600 dark:text-amber-400", softBg: "bg-amber-500/10", barra: "bg-amber-500",
     activo: "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-500/20", hoverBorde: "hover:border-amber-500/30",
     creciendo: "from-amber-500/5 to-amber-900/5 border-amber-500/10", anillo: "#f59e0b",
-    emoji: "🏡", equipo: "🏡 Familia Kiri",
+    emoji: "🏡", equipo: tr("🏡 Familia Kiri"),
   },
   pareja: {
     header: "from-pink-500/20", sparkle: "text-pink-500/30",
@@ -52,7 +53,7 @@ const TEMA = {
     text: "text-pink-600 dark:text-pink-400", softBg: "bg-pink-500/10", barra: "bg-pink-500",
     activo: "bg-pink-500 text-white border-pink-500 shadow-sm shadow-pink-500/20", hoverBorde: "hover:border-pink-500/30",
     creciendo: "from-pink-500/5 to-pink-900/5 border-pink-500/10", anillo: "#ec4899",
-    emoji: "💞", equipo: "💞 Pareja Kiri",
+    emoji: "💞", equipo: tr("💞 Pareja Kiri"),
   },
 } as const
 
@@ -109,7 +110,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: `Solicitud enviada — ${data?.peer.nombre} debe aprobarla` })
+      toast({ title: tr("Solicitud enviada — {0} debe aprobarla", [data?.peer.nombre]) })
       setRoleConfirmTarget(null)
       load()
       onChanged?.()
@@ -123,14 +124,14 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: accept ? "Cambio de rol aceptado ✓" : "Cambio de rol rechazado" })
+      toast({ title: accept ? tr("Cambio de rol aceptado ✓") : tr("Cambio de rol rechazado") })
       load()
       onChanged?.()
     }
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString("es-ES", { month: "long", year: "numeric" })
+    return new Date(dateStr).toLocaleDateString(localeFecha(), { month: "long", year: "numeric" })
   }
 
   if (!open) return null
@@ -197,9 +198,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 {data.peer.nombre}
                 <span className={t.text}>{t.emoji}</span>
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Conectados desde {formatDate(data.connection.createdAt)}
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tr("Conectados desde {0}", [formatDate(data.connection.createdAt)])}</p>
             </div>
           </div>
 
@@ -214,23 +213,21 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                   <Users className={cn("h-4 w-4", t.text)} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-bold">Rol en tu vida</p>
-                  <p className="text-[9px] text-muted-foreground">Define cómo es tu relación</p>
+                  <p className="text-sm font-bold">{tr("Rol en tu vida")}</p>
+                  <p className="text-[9px] text-muted-foreground">{tr("Define cómo es tu relación")}</p>
                 </div>
               </div>
 
               {data.connection.pendingRole && data.connection.roleChangeRequestedBy === myId && (
                 <div className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-2">
                   <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <p className="text-[11px] text-muted-foreground">
-                    Esperando que {data.peer.nombre} apruebe el cambio a <strong>{ROLE_LABEL[data.connection.pendingRole]}</strong>
+                  <p className="text-[11px] text-muted-foreground">{tr("Esperando que {0} apruebe el cambio a", [data.peer.nombre])}{" "}<strong>{ROLE_LABEL[data.connection.pendingRole]}</strong>
                   </p>
                 </div>
               )}
               {data.connection.pendingRole && data.connection.roleChangeRequestedBy && data.connection.roleChangeRequestedBy !== myId && (
                 <div className="flex items-center justify-between gap-2 bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-xl px-3 py-2">
-                  <p className="text-[11px] text-cyclon-lavender font-medium">
-                    {data.peer.nombre} propone cambiar a <strong>{ROLE_LABEL[data.connection.pendingRole]}</strong>
+                  <p className="text-[11px] text-cyclon-lavender font-medium">{tr("{0} propone cambiar a", [data.peer.nombre])}{" "}<strong>{ROLE_LABEL[data.connection.pendingRole]}</strong>
                   </p>
                   <div className="flex gap-1.5 shrink-0">
                     <Button size="icon" disabled={updatingRole} onClick={() => handleRoleRespond(true)} className="h-7 w-7 rounded-lg bg-kiri-emerald text-white">
@@ -245,9 +242,9 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
 
               <div className="grid grid-cols-3 gap-2">
                 {([
-                  { value: 'FRIEND', label: 'Amigo', icon: <Users className="h-3.5 w-3.5" /> },
-                  { value: 'PARTNER', label: 'Pareja', icon: <Heart className="h-3.5 w-3.5" /> },
-                  { value: 'FAMILY', label: 'Familia', icon: <Home className="h-3.5 w-3.5" /> },
+                  { value: 'FRIEND', label: tr("Amigo"), icon: <Users className="h-3.5 w-3.5" /> },
+                  { value: 'PARTNER', label: tr("Pareja"), icon: <Heart className="h-3.5 w-3.5" /> },
+                  { value: 'FAMILY', label: tr("Familia"), icon: <Home className="h-3.5 w-3.5" /> },
                 ] as const).map(r => {
                   const isActive = data.connection.role === r.value
                   return (
@@ -268,9 +265,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 })}
               </div>
 
-              <p className="text-[8px] text-muted-foreground">
-                Cambiar el rol le manda una solicitud a {data.peer.nombre} — solo se aplica si la acepta.
-              </p>
+              <p className="text-[8px] text-muted-foreground">{tr("Cambiar el rol le manda una solicitud a {0} — solo se aplica si la acepta.", [data.peer.nombre])}</p>
             </CardContent>
           </Card>
 
@@ -282,15 +277,15 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <PiggyBank className={cn("h-4 w-4", t.text)} />
-                    <span className="text-sm font-bold">Ahorros compartidos</span>
+                    <span className="text-sm font-bold">{tr("Ahorros compartidos")}</span>
                     <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full", t.softBg, t.text)}>{data.pockets.length}</span>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <p className="text-[9px] text-muted-foreground">Metas que construyen juntos</p>
+                <p className="text-[9px] text-muted-foreground">{tr("Metas que construyen juntos")}</p>
 
                 {data.pockets.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground text-center py-3">Sin ahorros compartidos aún</p>
+                  <p className="text-[10px] text-muted-foreground text-center py-3">{tr("Sin ahorros compartidos aún")}</p>
                 ) : (
                   <div className="space-y-3">
                     {data.pockets.slice(0, 2).map(p => {
@@ -312,9 +307,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 )}
 
                 {data.pockets.length > 0 && (
-                  <button className={cn("w-full text-center text-[10px] font-bold hover:underline pt-1", t.text)}>
-                    Ver todos los ahorros
-                  </button>
+                  <button className={cn("w-full text-center text-[10px] font-bold hover:underline pt-1", t.text)}>{tr("Ver todos los ahorros")}</button>
                 )}
               </CardContent>
             </Card>
@@ -325,15 +318,15 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Coins className="h-4 w-4 text-amber-500" />
-                    <span className="text-sm font-bold">Préstamos entre ustedes</span>
+                    <span className="text-sm font-bold">{tr("Préstamos entre ustedes")}</span>
                     <span className="text-[8px] font-bold bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded-full">{data.loans.length}</span>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <p className="text-[9px] text-muted-foreground">Control de préstamos y pagos</p>
+                <p className="text-[9px] text-muted-foreground">{tr("Control de préstamos y pagos")}</p>
 
                 {data.loans.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground text-center py-3">Sin préstamos activos</p>
+                  <p className="text-[10px] text-muted-foreground text-center py-3">{tr("Sin préstamos activos")}</p>
                 ) : (
                   <div className="space-y-3">
                     {data.loans.slice(0, 2).map(l => {
@@ -343,11 +336,11 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                       return (
                         <div key={l.id} className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold truncate flex-1">{l.descripcion || "Préstamo"}</span>
+                            <span className="text-xs font-bold truncate flex-1">{l.descripcion || tr("Préstamo")}</span>
                             <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full",
                               isPaid ? "bg-kiri-emerald/10 text-kiri-emerald" : "bg-amber-500/10 text-amber-500"
                             )}>
-                              {isPaid ? "Pagado" : "Activo"}
+                              {isPaid ? tr("Pagado") : tr("Activo")}
                             </span>
                           </div>
                           <p className="text-sm font-black">{formatAmount(l.amount)}</p>
@@ -355,8 +348,8 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: isPaid ? "#10b981" : "#f59e0b" }} />
                           </div>
                           <div className="flex justify-between text-[8px] text-muted-foreground">
-                            <span>Pagado: {formatAmount(paid)}</span>
-                            <span>Falta: {formatAmount(l.remainingAmount)}</span>
+                            <span>{tr("Pagado: {0}", [formatAmount(paid)])}</span>
+                            <span>{tr("Falta: {0}", [formatAmount(l.remainingAmount)])}</span>
                           </div>
                         </div>
                       )
@@ -365,9 +358,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                 )}
 
                 {data.loans.length > 0 && (
-                  <button className="w-full text-center text-[10px] font-bold text-amber-500 hover:underline pt-1">
-                    Ver todos los préstamos
-                  </button>
+                  <button className="w-full text-center text-[10px] font-bold text-amber-500 hover:underline pt-1">{tr("Ver todos los préstamos")}</button>
                 )}
               </CardContent>
             </Card>
@@ -378,7 +369,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
             <CardContent className="p-5">
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <h4 className="text-sm font-bold flex items-center gap-1">Creciendo juntos 🌱</h4>
+                  <h4 className="text-sm font-bold flex items-center gap-1">{tr("Creciendo juntos 🌱")}</h4>
                   <p className="text-[10px] text-muted-foreground mt-1">
                     {(() => {
                       const totalSaved = data.pockets.reduce((a, p) => a + p.balance, 0)
@@ -386,23 +377,22 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                       const activeLoans = data.loans.filter(l => l.status === 'ACTIVE').length
                       
                       if (totalSaved === 0 && data.pockets.length === 0 && data.loans.length === 0) {
-                        return "¡Empiecen creando un ahorro compartido! Juntos pueden lograr más."
+                        return tr("¡Empiecen creando un ahorro compartido! Juntos pueden lograr más.")
                       }
                       if (activeLoans > 0 && totalSaved === 0) {
-                        return "Tienen préstamos activos pero sin ahorros juntos. Consideren crear una meta compartida."
+                        return tr("Tienen préstamos activos pero sin ahorros juntos. Consideren crear una meta compartida.")
                       }
                       if (totalMeta > 0 && totalSaved / totalMeta < 0.3) {
-                        return "Van por buen camino. Intenten aportar regularmente para alcanzar sus metas más rápido."
+                        return tr("Van por buen camino. Intenten aportar regularmente para alcanzar sus metas más rápido.")
                       }
                       if (totalMeta > 0 && totalSaved / totalMeta >= 0.7) {
-                        return "¡Excelente progreso! Están muy cerca de cumplir sus metas juntos. 🎉"
+                        return tr("¡Excelente progreso! Están muy cerca de cumplir sus metas juntos. 🎉")
                       }
-                      return "Sigan trabajando en equipo para alcanzar todas sus metas."
+                      return tr("Sigan trabajando en equipo para alcanzar todas sus metas.")
                     })()}
                   </p>
                   {data.pockets.length > 0 && (
-                    <p className={cn("text-[9px] font-bold mt-2", t.text)}>
-                      Total ahorrado juntos: {formatAmount(data.pockets.reduce((a, p) => a + p.balance, 0))}
+                    <p className={cn("text-[9px] font-bold mt-2", t.text)}>{tr("Total ahorrado juntos:")}{" "}{formatAmount(data.pockets.reduce((a, p) => a + p.balance, 0))}
                     </p>
                   )}
                 </div>
@@ -417,7 +407,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
                       <span className={cn("text-sm font-black", t.text)}>{connectionLevel}%</span>
                     </div>
                   </div>
-                  <p className="text-[8px] text-muted-foreground mt-1">Nivel de conexión</p>
+                  <p className="text-[8px] text-muted-foreground mt-1">{tr("Nivel de conexión")}</p>
                   <p className={cn("text-[8px] font-bold", t.text)}>{t.equipo}</p>
                 </div>
               </div>
@@ -426,7 +416,7 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
         </div>
       ) : (
         <div className="flex items-center justify-center py-20">
-          <p className="text-sm text-muted-foreground">No se pudieron cargar los datos</p>
+          <p className="text-sm text-muted-foreground">{tr("No se pudieron cargar los datos")}</p>
         </div>
       )}
       </div>
@@ -443,29 +433,24 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
         <DialogContent className="max-w-sm z-[90]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="h-5 w-5 text-cyclon-lavender" /> Solicitar cambio de rol
-            </DialogTitle>
+              <ArrowRightLeft className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("Solicitar cambio de rol")}</DialogTitle>
           </DialogHeader>
           {roleConfirmTarget && data && (
             <div className="py-1 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Vas a proponerle a <strong className="text-foreground">{data.peer.nombre}</strong> cambiar esta conexión
-                de <strong className="text-foreground">{ROLE_LABEL[data.connection.role]}</strong> a{" "}
+              <p className="text-sm text-muted-foreground">{tr("Vas a proponerle a")}{" "}<strong className="text-foreground">{data.peer.nombre}</strong>{" "}{tr("cambiar esta conexión de")}{" "}<strong className="text-foreground">{ROLE_LABEL[data.connection.role]}</strong> a{" "}
                 <strong className="text-foreground">{ROLE_LABEL[roleConfirmTarget]}</strong>.
               </p>
-              <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
-                Le enviaremos una solicitud — el rol de la conexión solo cambiará si {data.peer.nombre} la acepta.
-              </p>
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">{tr("Le enviaremos una solicitud — el rol de la conexión solo cambiará si {0} la acepta.", [data.peer.nombre])}</p>
             </div>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setRoleConfirmTarget(null)} className="rounded-xl">Cancelar</Button>
+            <Button variant="ghost" onClick={() => setRoleConfirmTarget(null)} className="rounded-xl">{tr("Cancelar")}</Button>
             <Button
               disabled={updatingRole}
               onClick={confirmRoleRequest}
               className="rounded-xl bg-cyclon-lavender text-white font-bold px-6"
             >
-              {updatingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar solicitud"}
+              {updatingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : tr("Enviar solicitud")}
             </Button>
           </DialogFooter>
         </DialogContent>

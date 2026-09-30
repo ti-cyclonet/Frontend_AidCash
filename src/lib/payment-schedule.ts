@@ -1,3 +1,5 @@
+
+import { tr, localeFecha } from "@/lib/i18n"
 /**
  * Próxima fecha de pago inteligente para una obligación (deuda o gasto fijo).
  * Ambos comparten el mismo formato de "días de pago" ("15" o "15,30"), así que
@@ -35,8 +37,8 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean,
   // si el usuario terminó pagando igual este periodo, ese pago real manda.
   if (pendienteProximoPeriodo && !pagadoEstePeriodo) {
     const day = Math.min(...days)
-    const label = dateForDay(currentYear, currentMonth + 1, day).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-    return { nextDate: label, daysUntil: 999, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
+    const label = dateForDay(currentYear, currentMonth + 1, day).toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long' })
+    return { nextDate: label, daysUntil: 999, status: 'pendiente', statusLabel: tr("Pendiente"), statusColor: 'text-muted-foreground', cardRing: '' }
   }
 
   if (pagadoEstePeriodo) {
@@ -53,13 +55,13 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean,
     if (upcomingThisMonth.length > 0) {
       const day = Math.min(...upcomingThisMonth)
       const daysUntil = day - todayDay
-      const label = dateForDay(currentYear, currentMonth, day).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-      if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? 'Vence hoy' : `Vence en ${daysUntil}d`, statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
-      return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
+      const label = dateForDay(currentYear, currentMonth, day).toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long' })
+      if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? tr("Vence hoy") : tr("Vence en {0}d", [daysUntil]), statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
+      return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: tr("Pendiente"), statusColor: 'text-muted-foreground', cardRing: '' }
     }
     const nextDate = dateForDay(currentYear, currentMonth + 1, Math.min(...days))
-    const label = nextDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-    return { nextDate: label, daysUntil: 999, status: 'pagado', statusLabel: 'Pagado ✓', statusColor: 'text-emerald-600', cardRing: '' }
+    const label = nextDate.toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long' })
+    return { nextDate: label, daysUntil: 999, status: 'pagado', statusLabel: tr("Pagado ✓"), statusColor: 'text-emerald-600', cardRing: '' }
   }
 
   // Quincenal sin pagar: el periodo en curso EMPIEZA en su día de cobro (así
@@ -76,9 +78,9 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean,
     else due = dateForDay(currentYear, currentMonth - 1, d2)
     const todayMidnight = new Date(currentYear, currentMonth, todayDay)
     const diffDays = Math.round((todayMidnight.getTime() - due.getTime()) / 86_400_000)
-    const label = due.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-    if (diffDays === 0) return { nextDate: label, daysUntil: 0, status: 'proximo', statusLabel: 'Vence hoy', statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
-    return { nextDate: label, daysUntil: -diffDays, status: 'vencido', statusLabel: `Vencido (${diffDays}d)`, statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
+    const label = due.toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long' })
+    if (diffDays === 0) return { nextDate: label, daysUntil: 0, status: 'proximo', statusLabel: tr("Vence hoy"), statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
+    return { nextDate: label, daysUntil: -diffDays, status: 'vencido', statusLabel: tr("Vencido ({0}d)", [diffDays]), statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
   }
 
   // Comparación por NÚMERO de día, no por Date con hora — comparar `today` (con
@@ -89,16 +91,16 @@ export function getNextPaymentInfo(diasPago: string, pagadoEstePeriodo: boolean,
   if (upcoming.length > 0) {
     const day = Math.min(...upcoming)
     const daysUntil = day - todayDay
-    const label = dateForDay(currentYear, currentMonth, day).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-    if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? 'Vence hoy' : `Vence en ${daysUntil}d`, statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
-    return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: 'Pendiente', statusColor: 'text-muted-foreground', cardRing: '' }
+    const label = dateForDay(currentYear, currentMonth, day).toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long' })
+    if (daysUntil <= 3) return { nextDate: label, daysUntil, status: 'proximo', statusLabel: daysUntil === 0 ? tr("Vence hoy") : tr("Vence en {0}d", [daysUntil]), statusColor: 'text-amber-600', cardRing: 'ring-1 ring-amber-400/40' }
+    return { nextDate: label, daysUntil, status: 'pendiente', statusLabel: tr("Pendiente"), statusColor: 'text-muted-foreground', cardRing: '' }
   }
 
   // Todos los días de este ítem ya pasaron este mes y sigue sin pagar → vencida.
   const mostRecentDay = Math.max(...days)
   const daysUntil = mostRecentDay - todayDay
-  const label = dateForDay(currentYear, currentMonth, mostRecentDay).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-  return { nextDate: label, daysUntil, status: 'vencido', statusLabel: `Vencido (${Math.abs(daysUntil)}d)`, statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
+  const label = dateForDay(currentYear, currentMonth, mostRecentDay).toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long' })
+  return { nextDate: label, daysUntil, status: 'vencido', statusLabel: tr("Vencido ({0}d)", [Math.abs(daysUntil)]), statusColor: 'text-red-500', cardRing: 'ring-1 ring-red-500/40' }
 }
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -108,5 +110,5 @@ export function formatPeriodo(periodo: string): string {
   const m = periodo.match(/^(\d{4})-(\d{2})(?:-Q([12]))?$/)
   if (!m) return periodo
   const mes = MESES[Number(m[2]) - 1] ?? m[2]
-  return m[3] ? `${m[3]}ª quincena de ${mes}` : `${mes} ${m[1]}`
+  return m[3] ? tr("{0}ª quincena de {1}", [m[3], mes]) : `${mes} ${m[1]}`
 }

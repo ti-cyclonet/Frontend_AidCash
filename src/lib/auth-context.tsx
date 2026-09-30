@@ -11,6 +11,7 @@ import {
 import { clearAvatar } from "@/lib/avatar-storage"
 import { hidratarGuias } from "@/lib/guias"
 
+
 interface AuthContextValue {
   user: AuthUser | null
   loading: boolean

@@ -11,6 +11,7 @@ import { ShieldCheck, TrendingUp, CalendarCheck, Plus, Minus } from "lucide-reac
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { analyzeEmergencyFund, EmergencyFundAnalysis } from "@/lib/recommendations"
+import { tr } from "@/lib/i18n"
 
 interface Props {
   totalGastosFijos: number
@@ -59,7 +60,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
             <ShieldCheck className="h-10 w-10 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
-            <p className="text-muted-foreground text-sm font-medium tracking-wide">FONDO DE EMERGENCIA</p>
+            <p className="text-muted-foreground text-sm font-medium tracking-wide">{tr("FONDO DE EMERGENCIA")}</p>
             <h2 className="text-4xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{formatAmount(fondoActual)}</h2>
           </div>
 
@@ -68,7 +69,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
             {/* Meta mínima: 3 meses */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs font-bold">
-                <span className="text-muted-foreground">Mínimo (3 meses): {formatAmount(analysis.metaMinima)}</span>
+                <span className="text-muted-foreground">{tr("Mínimo (3 meses): {0}", [formatAmount(analysis.metaMinima)])}</span>
                 <span className={cn(
                   analysis.pctMinima >= 100 ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground"
                 )}>
@@ -84,7 +85,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
             {/* Meta ideal: 6 meses */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs font-bold">
-                <span className="text-muted-foreground">Ideal (6 meses): {formatAmount(analysis.metaIdeal)}</span>
+                <span className="text-muted-foreground">{tr("Ideal (6 meses): {0}", [formatAmount(analysis.metaIdeal)])}</span>
                 <span className={cn(
                   analysis.pctIdeal >= 100 ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground"
                 )}>
@@ -108,9 +109,9 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
             <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
               <CalendarCheck className="h-4 w-4" />
             </div>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase mt-2">Meta mínima en</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase mt-2">{tr("Meta mínima en")}</p>
             <p className="text-base font-black truncate">
-              {analysis.pctMinima >= 100 ? "✓ Alcanzada" : `${analysis.mesesParaMinima} meses`}
+              {analysis.pctMinima >= 100 ? tr("✓ Alcanzada") : `${analysis.mesesParaMinima} meses`}
             </p>
             {analysis.pctMinima < 100 && (
               <p className="text-[10px] text-muted-foreground capitalize">{analysis.fechaMinima}</p>
@@ -122,9 +123,9 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
             <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-600 dark:text-violet-400">
               <TrendingUp className="h-4 w-4" />
             </div>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase mt-2">Meta ideal en</p>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase mt-2">{tr("Meta ideal en")}</p>
             <p className="text-base font-black truncate">
-              {analysis.pctIdeal >= 100 ? "✓ Alcanzada" : `${analysis.mesesParaIdeal} meses`}
+              {analysis.pctIdeal >= 100 ? tr("✓ Alcanzada") : `${analysis.mesesParaIdeal} meses`}
             </p>
             {analysis.pctIdeal < 100 && (
               <p className="text-[10px] text-muted-foreground capitalize">{analysis.fechaIdeal}</p>
@@ -136,16 +137,10 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
       {/* ── Explicación ── */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-4 space-y-2">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">¿Qué es esto?</p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            El Fondo de Emergencia es un colchón financiero separado de tus metas de ahorro.
-            Cubre entre <strong>3 y 6 meses</strong> de tus gastos fijos para que puedas enfrentar imprevistos
-            sin tocar tus deudas ni tu inversión libre.
-          </p>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("¿Qué es esto?")}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{tr("El Fondo de Emergencia es un colchón financiero separado de tus metas de ahorro. Cubre entre")}{" "}<strong>{tr("3 y 6 meses")}</strong>{" "}{tr("de tus gastos fijos para que puedas enfrentar imprevistos sin tocar tus deudas ni tu inversión libre.")}</p>
           {totalGastosFijos === 0 && (
-            <p className="text-xs text-pink-600 dark:text-pink-400 font-bold">
-              ⚠ Agrega gastos fijos en la sección Deudas para calcular tu meta.
-            </p>
+            <p className="text-xs text-pink-600 dark:text-pink-400 font-bold">{tr("⚠ Agrega gastos fijos en la sección Deudas para calcular tu meta.")}</p>
           )}
         </CardContent>
       </Card>
@@ -156,16 +151,14 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
           onClick={() => openModal('aporte')}
           className="h-14 rounded-2xl bg-indigo-500 text-white font-bold hover:bg-indigo-500/90 shadow-lg shadow-indigo-500/20 gap-2"
         >
-          <Plus className="h-5 w-5" /> Aportar
-        </Button>
+          <Plus className="h-5 w-5" />{" "}{tr("Aportar")}</Button>
         <Button
           variant="outline"
           onClick={() => openModal('retiro')}
           disabled={fondoActual <= 0}
           className="h-14 rounded-2xl border-2 border-dashed font-bold gap-2"
         >
-          <Minus className="h-5 w-5" /> Retirar
-        </Button>
+          <Minus className="h-5 w-5" />{" "}{tr("Retirar")}</Button>
       </div>
 
       {/* ── Modal ── */}
@@ -173,17 +166,17 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
         <DialogContent >
           <DialogHeader>
             <DialogTitle>
-              {modalType === 'aporte' ? '💰 Aportar al Fondo' : '📤 Retirar del Fondo'}
+              {modalType === 'aporte' ? tr("💰 Aportar al Fondo") : tr("📤 Retirar del Fondo")}
             </DialogTitle>
             <DialogDescription>
               {modalType === 'aporte'
-                ? 'Agrega dinero a tu colchón de emergencias.'
-                : 'Retira dinero en caso de necesidad.'}
+                ? tr("Agrega dinero a tu colchón de emergencias.")
+                : tr("Retira dinero en caso de necesidad.")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Monto</Label>
+              <Label>{tr("Monto")}</Label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-muted-foreground">$</span>
                 <Input
@@ -196,12 +189,12 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
                 />
               </div>
               {modalType === 'retiro' && Number(amount) > fondoActual && (
-                <p className="text-xs text-destructive pl-1">No puedes retirar más de lo que tienes.</p>
+                <p className="text-xs text-destructive pl-1">{tr("No puedes retirar más de lo que tienes.")}</p>
               )}
             </div>
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>{tr("Cancelar")}</Button>
             <Button
               onClick={handleConfirm}
               disabled={
@@ -217,7 +210,7 @@ export function EmergencyFundSection({ totalGastosFijos, fondoActual, aporteMens
                   : "bg-destructive text-white"
               )}
             >
-              {saving ? "Guardando..." : modalType === 'aporte' ? "Aportar" : "Retirar"}
+              {saving ? "Guardando..." : modalType === 'aporte' ? tr("Aportar") : tr("Retirar")}
             </Button>
           </DialogFooter>
         </DialogContent>

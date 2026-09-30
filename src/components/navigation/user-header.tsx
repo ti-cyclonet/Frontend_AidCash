@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Settings, Lock, Coins, Moon, Sun, Camera, Globe } from "lucide-react"
 import { userApi } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 export function UserHeader() {
-  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
+  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, idioma, setIdioma } = useAppContext()
   const { user: authUser } = useAuth()
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -48,7 +49,7 @@ export function UserHeader() {
       <button
         onClick={handleOpenSettings}
         className="h-[44px] w-[44px] bg-card border border-border rounded-2xl shadow-sm flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-        title="Configuración"
+        title={tr("Configuración")}
       >
         <Settings className="h-4 w-4" />
       </button>
@@ -58,8 +59,7 @@ export function UserHeader() {
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-cyclon-lavender" /> Configuración
-            </DialogTitle>
+              <Settings className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("Configuración")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-5 py-1">
@@ -80,62 +80,62 @@ export function UserHeader() {
                 </button>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-              <p className="text-[10px] text-muted-foreground">Toca el ícono para cambiar la foto</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Toca el ícono para cambiar la foto")}</p>
             </div>
 
             {/* Nombre y correo */}
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Nombre</Label>
+                <Label className="text-xs font-bold">{tr("Nombre")}</Label>
                 <Input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))}
-                  className="h-10 rounded-xl" placeholder="Tu nombre" />
+                  className="h-10 rounded-xl" placeholder={tr("Tu nombre")} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Correo</Label>
+                <Label className="text-xs font-bold">{tr("Correo")}</Label>
                 <Input type="email" value={editForm.correo} onChange={e => setEditForm(f => ({ ...f, correo: e.target.value }))}
-                  className="h-10 rounded-xl" placeholder="tu@correo.com" />
+                  className="h-10 rounded-xl" placeholder={tr("tu@correo.com")} />
               </div>
             </div>
 
             {/* Apariencia */}
             <div className="space-y-3 pt-1 border-t border-border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Apariencia</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{tr("Apariencia")}</p>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {isDarkMode ? <Moon className="h-4 w-4 text-cyclon-sky" /> : <Sun className="h-4 w-4 text-cyclon-sky" />}
-                  <Label className="font-medium text-sm">Modo Oscuro</Label>
+                  <Label className="font-medium text-sm">{tr("Modo Oscuro")}</Label>
                 </div>
                 <Switch checked={isDarkMode} onCheckedChange={setIsDarkMode} />
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Coins className="h-4 w-4 text-cyclon-mint" />
-                  <Label className="font-medium text-sm">Moneda</Label>
+                  <Label className="font-medium text-sm">{tr("Moneda")}</Label>
                 </div>
                 <Select value={currency} onValueChange={v => setCurrency(v as Currency)}>
                   <SelectTrigger className="w-[100px] h-8 border-none bg-muted/50 font-bold text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="COP">COP ($)</SelectItem>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
-                    <SelectItem value="MXN">MXN ($)</SelectItem>
+                    <SelectItem value="USD">{tr("USD ($)")}</SelectItem>
+                    <SelectItem value="COP">{tr("COP ($)")}</SelectItem>
+                    <SelectItem value="EUR">{tr("EUR (€)")}</SelectItem>
+                    <SelectItem value="MXN">{tr("MXN ($)")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-cyclon-lavender" />
-                  <Label className="font-medium text-sm">Idioma</Label>
+                  <Label className="font-medium text-sm">{tr("Idioma")}</Label>
                 </div>
-                <Select defaultValue="es">
+                <Select value={idioma} onValueChange={v => setIdioma(v as "es" | "en")}>
                   <SelectTrigger className="w-[110px] h-8 border-none bg-muted/50 font-bold text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="es">Español</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">{tr("Español")}</SelectItem>
+                    <SelectItem value="en">{tr("English")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -143,7 +143,7 @@ export function UserHeader() {
 
             {/* Seguridad */}
             <div className="space-y-2 pt-1 border-t border-border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Seguridad</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{tr("Seguridad")}</p>
               <button
                 onClick={() => { setSettingsOpen(false); setChangePwOpen(true) }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/50 transition-colors text-left"
@@ -151,17 +151,15 @@ export function UserHeader() {
                 <div className="h-7 w-7 rounded-lg bg-cyclon-pink/20 flex items-center justify-center text-cyclon-pink shrink-0">
                   <Lock className="h-3.5 w-3.5" />
                 </div>
-                <span className="text-sm font-medium">Cambiar Contraseña</span>
+                <span className="text-sm font-medium">{tr("Cambiar Contraseña")}</span>
               </button>
             </div>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setSettingsOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button variant="ghost" onClick={() => setSettingsOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
             <Button onClick={handleSaveProfile} disabled={!editForm.nombre || !editForm.correo}
-              className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">
-              Guardar
-            </Button>
+              className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">{tr("Guardar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -171,31 +169,30 @@ export function UserHeader() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-cyclon-pink" /> Cambiar Contraseña
-            </DialogTitle>
+              <Lock className="h-5 w-5 text-cyclon-pink" />{" "}{tr("Cambiar Contraseña")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Contraseña actual</Label>
+              <Label className="text-xs font-bold">{tr("Contraseña actual")}</Label>
               <Input type="password" value={pwForm.current}
                 onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nueva contraseña</Label>
+              <Label className="text-xs font-bold">{tr("Nueva contraseña")}</Label>
               <Input type="password" value={pwForm.next}
                 onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Confirmar nueva contraseña</Label>
+              <Label className="text-xs font-bold">{tr("Confirmar nueva contraseña")}</Label>
               <Input type="password" value={pwForm.confirm}
                 onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             {pwForm.next && pwForm.confirm && pwForm.next !== pwForm.confirm && (
-              <p className="text-xs text-destructive font-bold">Las contraseñas no coinciden.</p>
+              <p className="text-xs text-destructive font-bold">{tr("Las contraseñas no coinciden.")}</p>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setChangePwOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button variant="ghost" onClick={() => setChangePwOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
             <Button
               disabled={!pwForm.current || !pwForm.next || pwForm.next !== pwForm.confirm}
               className="bg-cyclon-pink text-white font-bold rounded-xl px-6"
@@ -203,9 +200,7 @@ export function UserHeader() {
                 setChangePwOpen(false)
                 setPwForm({ current: "", next: "", confirm: "" })
               }}
-            >
-              Actualizar
-            </Button>
+            >{tr("Actualizar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

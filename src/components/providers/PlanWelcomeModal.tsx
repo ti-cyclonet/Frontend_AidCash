@@ -7,6 +7,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Sparkles, CheckCircle2 } from "lucide-react"
 import { useAppContext } from "@/lib/app-context"
+import { tr } from "@/lib/i18n"
 
 export function PlanWelcomeModal() {
   const { welcomePackage, welcomePlanPrice, dismissWelcome } = usePlan()
@@ -23,7 +24,7 @@ export function PlanWelcomeModal() {
     const diaPago = String(today.getDate())
 
     addFixedExpense({
-      nombre: `Kiri Finance ${welcomePackage}`,
+      nombre: tr("Kiri Finance {0}", [welcomePackage]),
       monto: welcomePlanPrice,
       fechaCorte: diaPago,
       // La suscripción de Kiri se cobra mensual siempre — no depende de con
@@ -52,49 +53,36 @@ export function PlanWelcomeModal() {
           <div className="h-20 w-20 bg-white/15 backdrop-blur-sm rounded-3xl flex items-center justify-center mx-auto mb-4">
             <Sparkles className="h-10 w-10 text-white" strokeWidth={1.5} />
           </div>
-          <h2 className="text-2xl font-black text-white">¡En hora buena! 🎉</h2>
-          <p className="text-white/70 text-sm mt-1">Tu plan {welcomePackage} está activo</p>
+          <h2 className="text-2xl font-black text-white">{tr("¡En hora buena! 🎉")}</h2>
+          <p className="text-white/70 text-sm mt-1">{tr("Tu plan {0} está activo", [welcomePackage])}</p>
         </div>
 
         {/* Cuerpo */}
         <div className="px-6 py-6 text-center space-y-4">
-          <p className="text-foreground text-sm leading-relaxed">
-            Diste un paso enorme hacia el control total de tus finanzas. Admiramos tu decisión de
-            invertir en ti y en tu futuro.
-          </p>
+          <p className="text-foreground text-sm leading-relaxed">{tr("Diste un paso enorme hacia el control total de tus finanzas. Admiramos tu decisión de invertir en ti y en tu futuro.")}</p>
 
           {/* Confirmación del gasto fijo registrado */}
           {welcomePlanPrice && (
             <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-2xl p-4 text-left space-y-2">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                  Gasto fijo registrado automáticamente
-                </p>
+                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{tr("Gasto fijo registrado automáticamente")}</p>
               </div>
               <div className="pl-6 space-y-0.5">
                 <p className="text-[11px] text-foreground">
-                  <span className="font-medium">Kiri Finance {welcomePackage}</span> — {formatAmount(welcomePlanPrice)}/mes
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Se agregó a tus obligaciones para que no pierdas de vista este compromiso.
-                </p>
+                  <span className="font-medium">{tr("Kiri Finance {0}", [welcomePackage])}</span> — {formatAmount(welcomePlanPrice)}{tr("/mes")}</p>
+                <p className="text-[10px] text-muted-foreground">{tr("Se agregó a tus obligaciones para que no pierdas de vista este compromiso.")}</p>
               </div>
             </div>
           )}
 
           <div className="bg-kiri-emerald/8 rounded-2xl p-4">
-            <p className="text-kiri-forest dark:text-kiri-emerald text-xs leading-relaxed">
-              💚 Ya tienes acceso a todas las herramientas premium de Kiri. Recuerda: las mejores
-              decisiones financieras no son las más grandes, sino las más constantes.
-            </p>
+            <p className="text-kiri-forest dark:text-kiri-emerald text-xs leading-relaxed">{tr("💚 Ya tienes acceso a todas las herramientas premium de Kiri. Recuerda: las mejores decisiones financieras no son las más grandes, sino las más constantes.")}</p>
           </div>
           <Button
             onClick={dismissWelcome}
             className="w-full h-12 rounded-2xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold mt-2"
-          >
-            ¡Empecemos!
-          </Button>
+          >{tr("¡Empecemos!")}</Button>
         </div>
       </DialogContent>
     </Dialog>

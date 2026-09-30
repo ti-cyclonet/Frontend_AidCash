@@ -8,6 +8,7 @@ import { Snowflake, Flame, CalendarCheck, Trophy, ChevronDown, ChevronUp, CheckC
 import { cn } from "@/lib/utils"
 import { DebtStrategy } from "@/lib/recommendations"
 import { useAppContext } from "@/lib/app-context"
+import { tr } from "@/lib/i18n"
 
 interface Props {
   snowball: DebtStrategy
@@ -39,9 +40,7 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
           className="w-full flex items-center justify-between"
         >
           <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-            <Trophy className="h-4 w-4" />
-            Estrategias para salir de deudas
-          </h2>
+            <Trophy className="h-4 w-4" />{tr("Estrategias para salir de deudas")}</h2>
           {expanded
             ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
             : <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -84,18 +83,16 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
               {avalancheWins ? <Flame className="h-4 w-4" /> : <Snowflake className="h-4 w-4" />}
             </div>
             <div className="flex-1">
-              <p className="text-xs font-bold">
-                {faster.nombre} te libera antes
-                {diferenciasMeses > 0 && (
+              <p className="text-xs font-bold">{tr("{0} te libera antes", [tr(faster.nombre)])}{diferenciasMeses > 0 && (
                   <span className="text-muted-foreground font-normal">
-                    {" "}({diferenciasMeses} {diferenciasMeses === 1 ? 'mes' : 'meses'} antes que {slower.nombre})
+                    {" "}{diferenciasMeses === 1 ? tr("(1 mes antes que {0})", [tr(slower.nombre)]) : tr("({0} meses antes que {1})", [diferenciasMeses, tr(slower.nombre)])}
                   </span>
                 )}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {faster.nombre === 'Bola de Nieve'
-                  ? 'Las victorias rápidas con deudas pequeñas mantienen la motivación.'
-                  : 'Atacar la deuda con mayor carga relativa reduce el tiempo total.'
+                  ? tr("Las victorias rápidas con deudas pequeñas mantienen la motivación.")
+                  : tr("Atacar la deuda con mayor carga relativa reduce el tiempo total.")
                 }
               </p>
             </div>
@@ -122,7 +119,7 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
                     ? <Snowflake className="h-5 w-5 text-cyclon-sky" />
                     : <Flame className="h-5 w-5 text-cyclon-pink" />
                   }
-                  {detailStrategy.nombre}
+                  {tr(detailStrategy.nombre)}
                 </DialogTitle>
                 <DialogDescription>{detailStrategy.descripcion}</DialogDescription>
               </DialogHeader>
@@ -131,9 +128,9 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
                 {/* KPIs */}
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { label: 'Meses',   value: String(detailStrategy.mesesTotal) },
-                    { label: 'Libre en', value: detailStrategy.fechaLibre },
-                    { label: 'Total pagado', value: formatAmount(detailStrategy.totalPagado) },
+                    { label: tr("Meses"),   value: String(detailStrategy.mesesTotal) },
+                    { label: tr("Libre en"), value: detailStrategy.fechaLibre },
+                    { label: tr("Total pagado"), value: formatAmount(detailStrategy.totalPagado) },
                   ].map(kpi => (
                     <Card key={kpi.label} className="border-none bg-muted/40 rounded-2xl shadow-none">
                       <CardContent className="p-3 text-center">
@@ -146,9 +143,7 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
 
                 {/* Orden de liquidación */}
                 <div className="space-y-2">
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Orden de liquidación
-                  </p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{tr("Orden de liquidación")}</p>
                   {detailStrategy.pasos.map((paso, i) => (
                     <div key={paso.debtId} className="flex items-start gap-3">
                       <div className={cn(
@@ -161,9 +156,7 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold truncate">{paso.nombre}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          Liquidada en periodo {paso.liquidaEnPeriodo}
-                          {" · "}libera <span className="font-bold text-cyclon-periwinkle">{formatAmount(paso.cuotaLiberada)}/periodo</span>
+                        <p className="text-[10px] text-muted-foreground">{tr("Liquidada en periodo {0}{1}libera", [paso.liquidaEnPeriodo, " · "])}{" "}<span className="font-bold text-cyclon-periwinkle">{formatAmount(paso.cuotaLiberada)}{tr("/periodo")}</span>
                         </p>
                       </div>
                       <CheckCircle2 className={cn(
@@ -179,8 +172,8 @@ export function DebtStrategyPanel({ snowball, avalanche, avalancheWins }: Props)
                   <CardContent className="p-3">
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       💡 {detailStrategy.nombre === 'Bola de Nieve'
-                        ? 'Cada deuda que liquidas libera su cuota para atacar la siguiente más rápido. El efecto se acelera con el tiempo.'
-                        : 'Al atacar la deuda con mayor carga relativa, reduces más rápido el total de lo que debes, aunque tarde un poco más en ver la primera victoria.'
+                        ? tr("Cada deuda que liquidas libera su cuota para atacar la siguiente más rápido. El efecto se acelera con el tiempo.")
+                        : tr("Al atacar la deuda con mayor carga relativa, reduces más rápido el total de lo que debes, aunque tarde un poco más en ver la primera victoria.")
                       }
                     </p>
                   </CardContent>
@@ -220,18 +213,16 @@ function StrategyCard({ strategy, isFaster, icon, color, bgColor, barColor, pct,
               {icon}
             </div>
             {isFaster && (
-              <span className="text-[9px] font-black bg-cyclon-lavender/20 text-cyclon-lavender px-1.5 py-0.5 rounded-full">
-                MÁS RÁPIDO
-              </span>
+              <span className="text-[9px] font-black bg-cyclon-lavender/20 text-cyclon-lavender px-1.5 py-0.5 rounded-full">{tr("MÁS RÁPIDO")}</span>
             )}
           </div>
 
           {/* Nombre */}
           <div>
-            <p className="font-bold text-xs">{strategy.nombre}</p>
+            <p className="font-bold text-xs">{tr(strategy.nombre)}</p>
             <p className={cn("text-xl font-black mt-0.5", color)}>
               {strategy.mesesTotal}
-              <span className="text-xs font-medium text-muted-foreground ml-1">meses</span>
+              <span className="text-xs font-medium text-muted-foreground ml-1">{tr("meses")}</span>
             </p>
           </div>
 
@@ -245,8 +236,7 @@ function StrategyCard({ strategy, isFaster, icon, color, bgColor, barColor, pct,
           <Progress value={pct} className="h-1.5" indicatorClassName={barColor} />
 
           {/* Ver detalle */}
-          <div className={cn("flex items-center gap-1 text-[10px] font-bold", color)}>
-            Ver orden <ArrowRight className="h-3 w-3" />
+          <div className={cn("flex items-center gap-1 text-[10px] font-bold", color)}>{tr("Ver orden")}{" "}<ArrowRight className="h-3 w-3" />
           </div>
         </CardContent>
       </Card>
@@ -266,8 +256,8 @@ function TimelineSection({ strategy, color, dotColor, formatAmount }: {
     <Card className="border-none bg-card shadow-sm rounded-2xl">
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <p className={cn("font-bold text-sm", color)}>{strategy.nombre}</p>
-          <span className="text-xs text-muted-foreground">· libre en {strategy.fechaLibre}</span>
+          <p className={cn("font-bold text-sm", color)}>{tr(strategy.nombre)}</p>
+          <span className="text-xs text-muted-foreground">{tr("· libre en {0}", [strategy.fechaLibre])}</span>
         </div>
         <div className="space-y-2 pl-2 border-l-2 border-dashed border-border ml-1">
           {strategy.pasos.map((paso, i) => (
@@ -278,10 +268,7 @@ function TimelineSection({ strategy, color, dotColor, formatAmount }: {
               )} />
               <div className="pb-2">
                 <p className="text-xs font-bold">{paso.nombre}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  Periodo {paso.liquidaEnPeriodo} · libera {formatAmount(paso.cuotaLiberada)}/periodo
-                  {i < strategy.pasos.length - 1 && " → rueda a la siguiente"}
-                </p>
+                <p className="text-[10px] text-muted-foreground">{tr("Periodo {0} · libera {1}/periodo{2}", [paso.liquidaEnPeriodo, formatAmount(paso.cuotaLiberada), i < strategy.pasos.length - 1 && tr(" → rueda a la siguiente")])}</p>
               </div>
             </div>
           ))}
@@ -290,7 +277,7 @@ function TimelineSection({ strategy, color, dotColor, formatAmount }: {
             <div className={cn("h-4 w-4 rounded-full flex items-center justify-center shrink-0 -ml-[9px]", dotColor)}>
               <CheckCircle2 className="h-3 w-3 text-white" />
             </div>
-            <p className="text-xs font-bold capitalize">{strategy.fechaLibre} — ¡Libre de deudas!</p>
+            <p className="text-xs font-bold capitalize">{tr("{0} — ¡Libre de deudas!", [strategy.fechaLibre])}</p>
           </div>
         </div>
       </CardContent>

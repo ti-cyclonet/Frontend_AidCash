@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Landmark, Lock, RefreshCw, Loader2 } from "lucide-react"
 import { usePlan } from "@/lib/plan-context"
 import { openBankingApi, type BelvoLink } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 /**
  * Conexión con el banco (Belvo) — KIRI PRO.
@@ -28,8 +29,8 @@ export function ConexionBancoCard() {
   }, [loading, esPro])
 
   const pedirPro = () => window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
-    codigo: "FUNCION", mejora: { plan: "KIRI PRO" },
-    mensaje: "Conectar tu banco para traer tus movimientos solos es parte de KIRI PRO.",
+    codigo: "FUNCION", mejora: { plan: tr("KIRI PRO") },
+    mensaje: tr("Conectar tu banco para traer tus movimientos solos es parte de KIRI PRO."),
   } }))
 
   const sincronizar = async (id: string) => {
@@ -45,18 +46,16 @@ export function ConexionBancoCard() {
         {esPro ? <Landmark className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
       </div>
       <div className="flex-1 min-w-0">
-        <span className="font-medium flex items-center gap-1.5">
-          Conexión con tu banco
-          <span className="text-[8px] font-black text-amber-700 dark:text-amber-300 bg-amber-400/25 px-1.5 py-0.5 rounded">PRO</span>
+        <span className="font-medium flex items-center gap-1.5">{tr("Conexión con tu banco")}<span className="text-[8px] font-black text-amber-700 dark:text-amber-300 bg-amber-400/25 px-1.5 py-0.5 rounded">{tr("PRO")}</span>
         </span>
         {!esPro ? (
-          <p className="text-[10px] text-muted-foreground">Trae tus movimientos del banco sin anotarlos a mano. Disponible en KIRI PRO.</p>
+          <p className="text-[10px] text-muted-foreground">{tr("Trae tus movimientos del banco sin anotarlos a mano. Disponible en KIRI PRO.")}</p>
         ) : configurado === null ? (
-          <p className="text-[10px] text-muted-foreground">Revisando…</p>
+          <p className="text-[10px] text-muted-foreground">{tr("Revisando…")}</p>
         ) : !configurado ? (
-          <p className="text-[10px] text-muted-foreground">Pronto disponible: estamos terminando la conexión con los bancos. Te avisaremos cuando puedas activarla.</p>
+          <p className="text-[10px] text-muted-foreground">{tr("Pronto disponible: estamos terminando la conexión con los bancos. Te avisaremos cuando puedas activarla.")}</p>
         ) : links.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground">Aún no conectas ningún banco. Muy pronto podrás hacerlo desde aquí.</p>
+          <p className="text-[10px] text-muted-foreground">{tr("Aún no conectas ningún banco. Muy pronto podrás hacerlo desde aquí.")}</p>
         ) : (
           <ul className="mt-1 space-y-1">
             {links.map(l => (
@@ -64,8 +63,7 @@ export function ConexionBancoCard() {
                 <span className="truncate">{l.institution}</span>
                 <span role="button" tabIndex={0} onClick={() => sincronizar(l.id)} onKeyDown={e => { if (e.key === "Enter") sincronizar(l.id) }}
                   className="text-kiri-emerald font-bold flex items-center gap-1 cursor-pointer">
-                  {sincronizando === l.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Sincronizar
-                </span>
+                  {sincronizando === l.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}{" "}{tr("Sincronizar")}</span>
               </li>
             ))}
           </ul>

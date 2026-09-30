@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { Trophy, Flame, Medal, Crown } from "lucide-react"
 import { UserAvatar } from "@/components/social/UserAvatar"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -46,7 +47,7 @@ export function GamificationLeaderboard({ entries }: Props) {
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-6 text-center">
           <Trophy className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Conecta con amigos para ver el ranking.</p>
+          <p className="text-sm text-muted-foreground">{tr("Conecta con amigos para ver el ranking.")}</p>
         </CardContent>
       </Card>
     )
@@ -58,12 +59,8 @@ export function GamificationLeaderboard({ entries }: Props) {
         {/* Header */}
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-sm font-bold flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-amber-500" />
-            Ranking de hábitos
-          </h3>
-          <p className="text-[9px] text-muted-foreground mt-0.5">
-            Compite con tus amigos por las mejores rachas financieras.
-          </p>
+            <Trophy className="h-4 w-4 text-amber-500" />{tr("Ranking de hábitos")}</h3>
+          <p className="text-[9px] text-muted-foreground mt-0.5">{tr("Compite con tus amigos por las mejores rachas financieras.")}</p>
         </div>
 
         {/* Tabla */}
@@ -71,10 +68,10 @@ export function GamificationLeaderboard({ entries }: Props) {
           {/* Header de columnas */}
           <div className="flex items-center gap-3 text-[9px] text-muted-foreground font-medium pb-2 border-b border-border/50">
             <span className="w-6 text-center">#</span>
-            <span className="flex-1">Usuario</span>
-            <span className="w-16 text-center">Racha</span>
-            <span className="w-16 text-center">Mejor</span>
-            <span className="w-16 text-center">Insignias</span>
+            <span className="flex-1">{tr("Usuario")}</span>
+            <span className="w-16 text-center">{tr("Racha")}</span>
+            <span className="w-16 text-center">{tr("Mejor")}</span>
+            <span className="w-16 text-center">{tr("Insignias")}</span>
           </div>
         </div>
 
@@ -107,10 +104,10 @@ export function GamificationLeaderboard({ entries }: Props) {
                 {/* Nombre */}
                 <div className="flex-1 min-w-0">
                   <p className={cn("text-xs font-bold truncate", entry.isCurrentUser && "text-kiri-emerald")}>
-                    {entry.nombre} {entry.isCurrentUser && "(Tú)"}
+                    {entry.nombre} {entry.isCurrentUser && tr("(Tú)")}
                   </p>
                   {entry.health !== undefined && (
-                    <p className="text-[9px] text-muted-foreground">Salud del jardín: {entry.health}%</p>
+                    <p className="text-[9px] text-muted-foreground">{tr("Salud del jardín: {0}%", [entry.health])}</p>
                   )}
                 </div>
 

@@ -8,6 +8,7 @@ import { usePlan } from "@/lib/plan-context"
 import { exportToPdf } from "@/lib/export-utils"
 import { reportsApi } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { tr, localeFecha } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -45,7 +46,7 @@ function getLastMonths(n = 12): { value: string; label: string; from: string; to
     const month = date.getMonth()
     const from = ymdLocal(new Date(year, month, 1))
     const to = ymdLocal(new Date(year, month + 1, 0))
-    const label = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+    const label = date.toLocaleDateString(localeFecha(), { month: 'long', year: 'numeric' })
 
     months.push({
       value: `${year}-${String(month + 1).padStart(2, '0')}`,
@@ -121,39 +122,29 @@ export function ExportButtons({ className }: ExportButtonsProps) {
         onClick={() => puedePdf
           ? setModalOpen(true)
           : window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
-              codigo: "FUNCION", mensaje: "Descargar tu balance en PDF es parte de KIRI PLUS.", mejora: { plan: "KIRI PLUS" },
+              codigo: "FUNCION", mensaje: tr("Descargar tu balance en PDF es parte de KIRI PLUS."), mejora: { plan: tr("KIRI PLUS") },
             } }))}
         className="h-9 rounded-xl gap-1.5 border-kiri-emerald/40 text-kiri-emerald hover:bg-kiri-emerald/10 hover:border-kiri-emerald font-bold text-xs"
       >
-        {puedePdf ? <FileText className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-        PDF
-      </Button>
+        {puedePdf ? <FileText className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}{tr("PDF")}</Button>
 
       {/* Modal selector de meses */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Download className="h-5 w-5 text-kiri-emerald" />
-              Descargar Balance PDF
-            </DialogTitle>
-            <DialogDescription>
-              Selecciona uno o varios meses para incluir en el reporte.
-            </DialogDescription>
+              <Download className="h-5 w-5 text-kiri-emerald" />{tr("Descargar Balance PDF")}</DialogTitle>
+            <DialogDescription>{tr("Selecciona uno o varios meses para incluir en el reporte.")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2">
             {/* Acciones rápidas */}
             <div className="flex items-center gap-2">
-              <button onClick={selectAll} className="text-[10px] font-bold text-kiri-emerald hover:underline">
-                Seleccionar todos
-              </button>
+              <button onClick={selectAll} className="text-[10px] font-bold text-kiri-emerald hover:underline">{tr("Seleccionar todos")}</button>
               <span className="text-muted-foreground">·</span>
-              <button onClick={selectNone} className="text-[10px] font-bold text-muted-foreground hover:underline">
-                Ninguno
-              </button>
+              <button onClick={selectNone} className="text-[10px] font-bold text-muted-foreground hover:underline">{tr("Ninguno")}</button>
               <span className="ml-auto text-[10px] text-muted-foreground">
-                {selectedMonths.size} {selectedMonths.size === 1 ? 'mes' : 'meses'} seleccionado{selectedMonths.size !== 1 ? 's' : ''}
+                {selectedMonths.size} {selectedMonths.size === 1 ? 'mes' : 'meses'}{" "}{tr("seleccionado")}{selectedMonths.size !== 1 ? 's' : ''}
               </span>
             </div>
 
@@ -181,7 +172,7 @@ export function ExportButtons({ className }: ExportButtonsProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold truncate">{m.label}</p>
-                      {isCurrent && <p className="text-[8px] text-kiri-emerald font-bold">Mes actual</p>}
+                      {isCurrent && <p className="text-[8px] text-kiri-emerald font-bold">{tr("Mes actual")}</p>}
                     </div>
                   </button>
                 )
@@ -190,7 +181,7 @@ export function ExportButtons({ className }: ExportButtonsProps) {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>{tr("Cancelar")}</Button>
             <Button
               onClick={handleDownloadSelected}
               disabled={selectedMonths.size === 0 || downloading}
@@ -200,7 +191,7 @@ export function ExportButtons({ className }: ExportButtonsProps) {
                 ? <Loader2 className="h-4 w-4 animate-spin" />
                 : <Download className="h-4 w-4" />
               }
-              {downloading ? 'Generando...' : `Descargar ${selectedMonths.size > 1 ? `(${selectedMonths.size} meses)` : 'PDF'}`}
+              {downloading ? 'Generando...' : tr("Descargar {0}", [selectedMonths.size > 1 ? tr("({0} meses)", [selectedMonths.size]) : tr("PDF")])}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,7 @@ import { Zap, Clock, Activity, Target } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { projectionsApi, type SpendingProjection } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -51,28 +52,28 @@ export function SpendingStatsGrid() {
     <div className="grid grid-cols-2 gap-3">
       <StatCard
         icon={<Zap className="h-4 w-4 text-amber-500" />}
-        label="Gasto esta semana"
+        label={tr("Gasto esta semana")}
         value={formatAmount(stats.gastoSemanaActual)}
         sub={`${stats.transaccionesSemana} transacciones`}
       />
       <StatCard
         icon={<Clock className="h-4 w-4 text-blue-500" />}
-        label="Semana anterior"
+        label={tr("Semana anterior")}
         value={formatAmount(stats.gastoSemanaAnterior)}
-        sub={stats.gastoSemanaActual > stats.gastoSemanaAnterior ? '↑ Aumentó' : stats.gastoSemanaActual < stats.gastoSemanaAnterior ? '↓ Disminuyó' : '= Igual'}
+        sub={stats.gastoSemanaActual > stats.gastoSemanaAnterior ? tr("↑ Aumentó") : stats.gastoSemanaActual < stats.gastoSemanaAnterior ? tr("↓ Disminuyó") : tr("= Igual")}
         subColor={stats.gastoSemanaActual > stats.gastoSemanaAnterior ? 'text-red-500' : stats.gastoSemanaActual < stats.gastoSemanaAnterior ? 'text-emerald-500' : 'text-muted-foreground'}
       />
       <StatCard
         icon={<Activity className="h-4 w-4 text-purple-500" />}
-        label="Gasto del mes"
+        label={tr("Gasto del mes")}
         value={formatAmount(stats.gastoMes)}
         sub={`${stats.transaccionesMes} transacciones`}
       />
       <StatCard
         icon={<Target className="h-4 w-4 text-kiri-emerald" />}
-        label="Presupuesto diario"
+        label={tr("Presupuesto diario")}
         value={formatAmount(presupuestoDiarioRecomendado)}
-        sub="Para llegar bien"
+        sub={tr("Para llegar bien")}
         subColor="text-kiri-emerald"
       />
     </div>

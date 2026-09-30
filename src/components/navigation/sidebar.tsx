@@ -19,20 +19,21 @@ import { useSocket } from "@/lib/socket-context"
 import { notifIcon, notifTitle, notifRoute } from "@/lib/notification-display"
 import { userApi } from "@/lib/api-client"
 import { prepararFotoPerfil } from "@/lib/avatar-upload"
+import { tr } from "@/lib/i18n"
 
 const navItems = [
-  { label: "Árbol Kiri",    icon: Sprout,     href: "/jardin" },
-  { label: "Gestión",      icon: TrendingUp, href: "/gestion" },
-  { label: "Obligaciones", icon: Landmark,   href: "/obligaciones" },
-  { label: "Balance",      icon: BookOpen,   href: "/balance" },
-  { label: "Social",       icon: Users,      href: "/social" },
-  { label: "Ahorro",       icon: PiggyBank,  href: "/ahorro" },
+  { label: tr("Árbol Kiri"),    icon: Sprout,     href: "/jardin" },
+  { label: tr("Gestión"),      icon: TrendingUp, href: "/gestion" },
+  { label: tr("Obligaciones"), icon: Landmark,   href: "/obligaciones" },
+  { label: tr("Balance"),      icon: BookOpen,   href: "/balance" },
+  { label: tr("Social"),       icon: Users,      href: "/social" },
+  { label: tr("Ahorro"),       icon: PiggyBank,  href: "/ahorro" },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode } = useAppContext()
+  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, idioma, setIdioma } = useAppContext()
   const { signOut, user: authUser } = useAuth()
   const { unreadCount, socialUnreadCount, notifications, markAllRead, clearNotifications } = useSocket()
 
@@ -82,7 +83,7 @@ export function Sidebar() {
     setAvatarError(null)
     const { url, preview, error } = await prepararFotoPerfil(file)
     if (preview) setEditForm(f => ({ ...f, avatarUrl: preview }))
-    if (error || !url) { setAvatarError(error || "No se pudo procesar la foto."); return }
+    if (error || !url) { setAvatarError(error || tr("No se pudo procesar la foto.")); return }
     setEditForm(f => ({ ...f, avatarUrl: url }))
   }
 
@@ -112,7 +113,7 @@ export function Sidebar() {
           <button
             onClick={() => setCollapsed(false)}
             className="relative h-9 w-9 rounded-xl group"
-            title="Abrir barra lateral"
+            title={tr("Abrir barra lateral")}
           >
             {/* Logo — visible por defecto, se oculta en hover */}
             <div className="absolute inset-0 flex items-center justify-center bg-kiri-emerald rounded-xl transition-opacity duration-200 group-hover:opacity-0">
@@ -131,8 +132,8 @@ export function Sidebar() {
                 <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
               </div>
               <div className="min-w-0">
-                <h1 className="text-sm font-bold text-foreground leading-tight">Kiri Finance</h1>
-                <p className="text-[9px] text-muted-foreground">Tu dinero, tu futuro, tu control</p>
+                <h1 className="text-sm font-bold text-foreground leading-tight">{tr("Kiri Finance")}</h1>
+                <p className="text-[9px] text-muted-foreground">{tr("Tu dinero, tu futuro, tu control")}</p>
               </div>
             </Link>
             <div className="ml-auto flex items-center gap-1">
@@ -151,10 +152,10 @@ export function Sidebar() {
                 {notifsOpen && (
                   <div className="fixed top-[80px] left-[290px] w-[320px] bg-card border border-border rounded-2xl shadow-2xl overflow-hidden z-[100]">
                     <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                      <p className="text-xs font-bold flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> Notificaciones</p>
+                      <p className="text-xs font-bold flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" />{" "}{tr("Notificaciones")}</p>
                       <div className="flex items-center gap-2">
                         {notifications.length > 0 && (
-                          <button onClick={clearNotifications} className="text-[9px] text-muted-foreground hover:text-destructive">Limpiar</button>
+                          <button onClick={clearNotifications} className="text-[9px] text-muted-foreground hover:text-destructive">{tr("Limpiar")}</button>
                         )}
                         <button onClick={() => setNotifsOpen(false)} className="text-muted-foreground hover:text-foreground">✕</button>
                       </div>
@@ -163,7 +164,7 @@ export function Sidebar() {
                       {notifications.length === 0 ? (
                         <div className="py-8 flex flex-col items-center gap-2 text-muted-foreground">
                           <Bell className="h-7 w-7 opacity-30" />
-                          <p className="text-xs">Sin notificaciones</p>
+                          <p className="text-xs">{tr("Sin notificaciones")}</p>
                         </div>
                       ) : (
                         notifications.slice(0, 10).map(n => (
@@ -186,7 +187,7 @@ export function Sidebar() {
               <button
                 onClick={() => setCollapsed(true)}
                 className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors shrink-0"
-                title="Cerrar barra lateral"
+                title={tr("Cerrar barra lateral")}
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
@@ -255,14 +256,14 @@ export function Sidebar() {
                   </Avatar>
                   {!collapsed && (
                     <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-semibold truncate leading-tight">{user.nombre || "Usuario"}</p>
+                      <p className="text-sm font-semibold truncate leading-tight">{user.nombre || tr("Usuario")}</p>
                       <p className="text-[10px] text-muted-foreground truncate">{displayEmail}</p>
                     </div>
                   )}
                 </button>
               </TooltipTrigger>
               {collapsed && (
-                <TooltipContent side="right" className="font-semibold">{user.nombre || "Usuario"}</TooltipContent>
+                <TooltipContent side="right" className="font-semibold">{user.nombre || tr("Usuario")}</TooltipContent>
               )}
             </Tooltip>
           </div>
@@ -274,8 +275,7 @@ export function Sidebar() {
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-cyclon-lavender" /> Configuración
-            </DialogTitle>
+              <Settings className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("Configuración")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5 py-1">
             {/* Foto */}
@@ -295,62 +295,62 @@ export function Sidebar() {
                 </button>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-              <p className="text-[10px] text-muted-foreground">Toca el ícono para cambiar la foto</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Toca el ícono para cambiar la foto")}</p>
               {avatarError && <p className="text-[10px] text-destructive">{avatarError}</p>}
             </div>
             {/* Nombre y correo */}
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Nombre</Label>
-                <Input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))} className="h-10 rounded-xl" placeholder="Tu nombre" />
+                <Label className="text-xs font-bold">{tr("Nombre")}</Label>
+                <Input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))} className="h-10 rounded-xl" placeholder={tr("Tu nombre")} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Correo</Label>
-                <Input type="email" value={editForm.correo} onChange={e => setEditForm(f => ({ ...f, correo: e.target.value }))} className="h-10 rounded-xl" placeholder="tu@correo.com" />
+                <Label className="text-xs font-bold">{tr("Correo")}</Label>
+                <Input type="email" value={editForm.correo} onChange={e => setEditForm(f => ({ ...f, correo: e.target.value }))} className="h-10 rounded-xl" placeholder={tr("tu@correo.com")} />
               </div>
             </div>
             {/* Apariencia */}
             <div className="space-y-3 pt-1 border-t border-border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Apariencia</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{tr("Apariencia")}</p>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {isDarkMode ? <Moon className="h-4 w-4 text-cyclon-sky" /> : <Sun className="h-4 w-4 text-cyclon-sky" />}
-                  <Label className="font-medium text-sm">Modo Oscuro</Label>
+                  <Label className="font-medium text-sm">{tr("Modo Oscuro")}</Label>
                 </div>
                 <Switch checked={isDarkMode} onCheckedChange={setIsDarkMode} />
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Coins className="h-4 w-4 text-cyclon-mint" />
-                  <Label className="font-medium text-sm">Moneda</Label>
+                  <Label className="font-medium text-sm">{tr("Moneda")}</Label>
                 </div>
                 <Select value={currency} onValueChange={v => setCurrency(v as Currency)}>
                   <SelectTrigger className="w-[100px] h-8 border-none bg-muted/50 font-bold text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USD">USD ($)</SelectItem>
-                    <SelectItem value="COP">COP ($)</SelectItem>
-                    <SelectItem value="EUR">EUR (€)</SelectItem>
-                    <SelectItem value="MXN">MXN ($)</SelectItem>
+                    <SelectItem value="USD">{tr("USD ($)")}</SelectItem>
+                    <SelectItem value="COP">{tr("COP ($)")}</SelectItem>
+                    <SelectItem value="EUR">{tr("EUR (€)")}</SelectItem>
+                    <SelectItem value="MXN">{tr("MXN ($)")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-cyclon-lavender" />
-                  <Label className="font-medium text-sm">Idioma</Label>
+                  <Label className="font-medium text-sm">{tr("Idioma")}</Label>
                 </div>
-                <Select defaultValue="es">
+                <Select value={idioma} onValueChange={v => setIdioma(v as "es" | "en")}>
                   <SelectTrigger className="w-[110px] h-8 border-none bg-muted/50 font-bold text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="es">Español</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">{tr("Español")}</SelectItem>
+                    <SelectItem value="en">{tr("English")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             {/* Seguridad */}
             <div className="space-y-2 pt-1 border-t border-border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Seguridad</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{tr("Seguridad")}</p>
               <button
                 onClick={() => { setSettingsOpen(false); setChangePwOpen(true) }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/50 transition-colors text-left"
@@ -358,15 +358,13 @@ export function Sidebar() {
                 <div className="h-7 w-7 rounded-lg bg-cyclon-pink/20 flex items-center justify-center text-cyclon-pink shrink-0">
                   <Lock className="h-3.5 w-3.5" />
                 </div>
-                <span className="text-sm font-medium">Cambiar Contraseña</span>
+                <span className="text-sm font-medium">{tr("Cambiar Contraseña")}</span>
               </button>
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setSettingsOpen(false)} className="rounded-xl">Cancelar</Button>
-            <Button onClick={handleSaveProfile} disabled={!editForm.nombre || !editForm.correo} className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">
-              Guardar
-            </Button>
+            <Button variant="ghost" onClick={() => setSettingsOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
+            <Button onClick={handleSaveProfile} disabled={!editForm.nombre || !editForm.correo} className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">{tr("Guardar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -376,35 +374,32 @@ export function Sidebar() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-cyclon-pink" /> Cambiar Contraseña
-            </DialogTitle>
+              <Lock className="h-5 w-5 text-cyclon-pink" />{" "}{tr("Cambiar Contraseña")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Contraseña actual</Label>
+              <Label className="text-xs font-bold">{tr("Contraseña actual")}</Label>
               <Input type="password" value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Nueva contraseña</Label>
+              <Label className="text-xs font-bold">{tr("Nueva contraseña")}</Label>
               <Input type="password" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Confirmar nueva contraseña</Label>
+              <Label className="text-xs font-bold">{tr("Confirmar nueva contraseña")}</Label>
               <Input type="password" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} className="h-10 rounded-xl" />
             </div>
             {pwForm.next && pwForm.confirm && pwForm.next !== pwForm.confirm && (
-              <p className="text-xs text-destructive font-bold">Las contraseñas no coinciden.</p>
+              <p className="text-xs text-destructive font-bold">{tr("Las contraseñas no coinciden.")}</p>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setChangePwOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button variant="ghost" onClick={() => setChangePwOpen(false)} className="rounded-xl">{tr("Cancelar")}</Button>
             <Button
               disabled={!pwForm.current || !pwForm.next || pwForm.next !== pwForm.confirm}
               className="bg-cyclon-pink text-white font-bold rounded-xl px-6"
               onClick={() => { setChangePwOpen(false); setPwForm({ current: "", next: "", confirm: "" }) }}
-            >
-              Actualizar
-            </Button>
+            >{tr("Actualizar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

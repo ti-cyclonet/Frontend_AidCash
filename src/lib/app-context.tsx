@@ -11,6 +11,8 @@ import { useAuth } from "@/lib/auth-context"
 import { saveAvatar, loadAvatar } from "@/lib/avatar-storage"
 import { InactivityTimeout } from "@/hooks/use-inactivity-timeout"
 import { ingresoMensual, ingresoDelPeriodo, type PerfilIngreso, type TipoIngreso } from "@/lib/ingresos"
+import { cambiarIdioma, idioma as idiomaActual, sincronizarIdioma, type Idioma } from "@/lib/i18n"
+
 export type { IncomeFrequency, InactivityTimeout }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -68,6 +70,9 @@ interface AppContextValue {
   ingresoEstimado: number
   perfilIngreso: PerfilIngreso
   configurarIngreso: (cfg: ConfigIngreso) => Promise<void>
+  /** Idioma de la app (se guarda en la cuenta y recarga la app) */
+  idioma: Idioma
+  setIdioma: (v: Idioma) => Promise<void>
   incomeFrequency: IncomeFrequency
   setIncomeFrequency: (v: IncomeFrequency) => void
   diasCobro: string
@@ -107,7 +112,10 @@ const AppContext = createContext<AppContextValue | null>(null)
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user: authUser } = useAuth()
   const [user, setUserState] = useState<UserProfile>(defaultUser)
-  const [currency, setCurrencyState] = useState<Currency>("USD")
+  // Pesos colombianos por defecto: antes era USD y, como cerrar sesión borra la
+  // moneda guardada, en un celular nuevo o tras salir los pesos salían como
+  // dólares ("$3,800,000" en vez de "$ 3.800.000")
+  const [currency, setCurrencyState] = useState<Currency>("COP")
   const [isDarkMode, setDarkModeState] = useState(false)
   const [incomeRaw, setIncomeState] = useState(0)
   const [tipoIngreso, setTipoIngreso] = useState<TipoIngreso>("fijo")
@@ -129,7 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const storedDark     = localStorage.getItem(LS.dark)
     const storedTimeout  = localStorage.getItem(LS.inactivityTimeout)
 
-    if (storedCurrency) setCurrencyState(storedCurrency as Currency)
+    if (storedCurrency && storedCurrency in CURRENCY_CONFIG) setCurrencyState(storedCurrency as Currency)
     if (storedDark)     setDarkModeState(storedDark === "true")
     if (storedTimeout)  setInactivityTimeoutState(storedTimeout as InactivityTimeout)
 
@@ -192,6 +200,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       const u = data.user
+      // El idioma de la cuenta manda: si este navegador tiene otro, se recarga en el de la cuenta
+      if (sincronizarIdioma(u.idioma as string | undefined)) return
       const nombre       = (u.nombre as string) ?? ""
       const correo       = (u.correo as string) ?? ""
       const username     = (u.username as string) ?? ""
@@ -392,6 +402,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(LS.ingresoCfg, JSON.stringify({ tipo: variable ? "variable" : "fijo", q1, q2, promedio: prom }))
   }, [ingresoPromedio])
 
+  /** Cambia el idioma: se guarda en la cuenta (para todos sus dispositivos) y recarga la app. */
+  const setIdioma = useCallback(async (v: Idioma) => {
+    if (isAuthenticated()) await userApi.updateProfile({ idioma: v }).catch(() => {})
+    cambiarIdioma(v)
+  }, [])
+
   // Ingresos variables: al registrar un ingreso cambia su promedio real
   useEffect(() => {
     if (tipoIngreso !== "variable") return
@@ -434,6 +450,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     formatAmount,
     income, setIncome,
     ingresoPeriodo, tipoIngreso, quincenas, ingresoPromedio, ingresoEstimado, perfilIngreso, configurarIngreso,
+    idioma: idiomaActual(), setIdioma,
     incomeFrequency, setIncomeFrequency,
     diasCobro, setDiasCobro,
     savingsAmount,
@@ -448,6 +465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     formatAmount,
     income, setIncome,
     ingresoPeriodo, tipoIngreso, quincenas, ingresoPromedio, ingresoEstimado, perfilIngreso, configurarIngreso,
+    setIdioma,
     incomeFrequency, setIncomeFrequency,
     diasCobro, setDiasCobro,
     savingsAmount,

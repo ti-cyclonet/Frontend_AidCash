@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Sprout } from "lucide-react"
+import { tr } from "@/lib/i18n"
 
 export default function SplashScreen() {
   const router = useRouter()
@@ -45,12 +46,8 @@ export default function SplashScreen() {
           opacity: phase === "enter" ? 0 : 1,
         }}
       >
-        <h1 className="text-4xl font-bold tracking-tight text-white">
-          Kiri Finance
-        </h1>
-        <p className="text-white/50 text-sm font-medium">
-          Your finances, in order.
-        </p>
+        <h1 className="text-4xl font-bold tracking-tight text-white">{tr("Kiri Finance")}</h1>
+        <p className="text-white/50 text-sm font-medium">{tr("Your finances, in order.")}</p>
       </div>
 
       {/* Loading bar */}

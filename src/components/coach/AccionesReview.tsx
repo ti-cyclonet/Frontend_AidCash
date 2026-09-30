@@ -8,6 +8,7 @@ import { MoneyInput } from "@/components/ui/money-input"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { DESTINOS, etiquetaTipo, faltantes, type Accion, type Destinos, type TipoAccion } from "@/lib/kiri-acciones"
+import { tr } from "@/lib/i18n"
 
 /**
  * Tarjetas editables de lo que Kiri propone registrar (chat, voz o recibo).
@@ -30,7 +31,7 @@ export function AccionesReview({ acciones, destinos, onChange, onRemove, errores
   compacto?: boolean
 }) {
   if (acciones.length === 0) {
-    return <p className="text-xs text-muted-foreground text-center py-4">No quedó nada por guardar.</p>
+    return <p className="text-xs text-muted-foreground text-center py-4">{tr("No quedó nada por guardar.")}</p>
   }
   return (
     <div className="space-y-2">
@@ -88,7 +89,7 @@ function AccionCard({ accion: a, destinos, onChange, onRemove, error, compacto }
             a.tipo === "sin_destino" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : "bg-muted/60 hover:bg-muted")}>
           <span>{meta.emoji}</span> {meta.label} <ChevronDown className={cn("h-3 w-3 transition-transform", eligiendo && "rotate-180")} />
         </button>
-        <button onClick={onRemove} className="text-muted-foreground hover:text-destructive" aria-label="Quitar"><X className="h-3.5 w-3.5" /></button>
+        <button onClick={onRemove} className="text-muted-foreground hover:text-destructive" aria-label={tr("Quitar")}><X className="h-3.5 w-3.5" /></button>
       </div>
 
       {eligiendo && (
@@ -105,14 +106,14 @@ function AccionCard({ accion: a, destinos, onChange, onRemove, error, compacto }
       )}
 
       {a.tipo === "sin_destino" && !eligiendo && (
-        <p className="text-[11px] text-amber-700 dark:text-amber-400">Leí {formatAmount(a.monto)} pero no sé a qué corresponde: toca arriba y elige a dónde va.</p>
+        <p className="text-[11px] text-amber-700 dark:text-amber-400">{tr("Leí {0} pero no sé a qué corresponde: toca arriba y elige a dónde va.", [formatAmount(a.monto)])}</p>
       )}
 
       {/* Nombre + monto */}
       {a.tipo !== "sin_destino" && (
         <div className="flex gap-2">
           <Input value={a.nombre} onChange={e => onChange({ nombre: e.target.value })}
-            placeholder={a.tipo === "me_deben" ? "Concepto (opcional)" : "Nombre"} className="flex-1 min-w-0 h-8 text-xs rounded-lg" />
+            placeholder={a.tipo === "me_deben" ? tr("Concepto (opcional)") : tr("Nombre")} className="flex-1 min-w-0 h-8 text-xs rounded-lg" />
           <MoneyInput showCurrency={false} value={a.monto ? String(a.monto) : ""} onChange={v => onChange({ monto: Number(v) || 0 })} className="w-28 shrink-0 h-8 text-xs rounded-lg" placeholder="$0" />
         </div>
       )}
@@ -124,96 +125,110 @@ function AccionCard({ accion: a, destinos, onChange, onRemove, error, compacto }
       {a.tipo === "gasto" && (
         <div className="space-y-1.5">
           <Chips
-            label="Categoría"
+            label={tr("Categoría")}
             opciones={[
               ...destinos.categorias.map(c => ({ id: c.id, label: `${ICONOS_CAT[c.icono] ?? "🏷️"} ${c.nombre}` })),
-              ...(a.categoriaNueva ? [{ id: "__nueva", label: `✨ ${a.categoriaNueva} (nueva)` }] : []),
+              ...(a.categoriaNueva ? [{ id: "__nueva", label: tr("✨ {0} (nueva)", [a.categoriaNueva]) }] : []),
             ]}
             valor={a.categoriaNueva ? "__nueva" : a.categoriaId ?? null}
             onElegir={id => onChange(id === "__nueva" ? {} : { categoriaId: id, categoriaNueva: null })}
-            vacio="Sin categoría"
+            vacio={tr("Sin categoría")}
           />
           {destinos.hogar && destinos.hogar.categorias.length > 0 && (
             <Chips
-              label={`Del hogar (con ${destinos.hogar.pareja})`}
+              label={tr("Del hogar (con {0})", [destinos.hogar.pareja])}
               opciones={destinos.hogar.categorias.map(c => ({ id: c.id, label: `${c.icono} ${c.nombre}` }))}
               valor={a.hogarCategoriaId ?? null}
               onElegir={id => onChange({ hogarCategoriaId: id })}
-              vacio="No"
+              vacio={tr("No")}
               rosa
             />
           )}
           <label className="flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={a.esHormiga === true} onChange={e => onChange({ esHormiga: e.target.checked })} className="accent-kiri-emerald" />
-            Es gasto hormiga 🐜 {a.esHormiga == null && <span className="opacity-70">(si no marcas, Kiri decide)</span>}
+            <input type="checkbox" checked={a.esHormiga === true} onChange={e => onChange({ esHormiga: e.target.checked })} className="accent-kiri-emerald" />{tr("Es gasto hormiga 🐜")}{" "}{a.esHormiga == null && <span className="opacity-70">{tr("(si no marcas, Kiri decide)")}</span>}
           </label>
         </div>
       )}
 
       {a.tipo === "ingreso" && (
-        <Chips label="Tipo" opciones={[{ id: "salario", label: "💼 Mi sueldo" }, { id: "extra", label: "✨ Ingreso extra" }]}
+        <Chips label={tr("Tipo")} opciones={[{ id: "salario", label: tr("💼 Mi sueldo") }, { id: "extra", label: tr("✨ Ingreso extra") }]}
           valor={a.tipoIngreso ?? "extra"} onElegir={id => onChange({ tipoIngreso: (id ?? "extra") as "salario" | "extra" })} />
       )}
 
       {a.tipo === "pago_obligacion" && (
-        <Select label="¿Qué pagaste?" value={a.obligacionId ? `${a.obligacionTipo}:${a.obligacionId}` : ""} onChange={elegirObligacion}
-          opciones={[
-            ...debts.filter(d => d.estado !== "saldada").map(d => ({ v: `deuda:${d.id}`, t: `💳 ${d.nombre} · cuota ${formatAmount(d.cuotaPeriodo)}` })),
-            ...fixedExpenses.map(f => ({ v: `fijo:${f.id}`, t: `📅 ${f.nombre} · ${formatAmount(f.monto)}` })),
-          ]} />
+        <div className="space-y-1.5">
+          <Select label={tr("¿Qué pagaste?")} value={a.obligacionId ? `${a.obligacionTipo}:${a.obligacionId}` : ""} onChange={elegirObligacion}
+            opciones={[
+              ...debts.filter(d => d.estado !== "saldada").map(d => ({ v: `deuda:${d.id}`, t: tr("💳 {0} · cuota {1}", [d.nombre, formatAmount(d.cuotaPeriodo)]) })),
+              ...fixedExpenses.map(f => ({ v: `fijo:${f.id}`, t: `📅 ${f.nombre} · ${formatAmount(f.monto)}` })),
+            ]} />
+          {/* Recibos de servicios, cuotas con seguro, etc. cambian de valor: si
+              el recibo trae menos que la cuota registrada, el usuario decide si
+              con eso quedó pagada (igual que "¿Pagaste otro valor?" en Obligaciones) */}
+          {(() => {
+            if (!a.obligacionId || !(a.monto > 0)) return null
+            const d = a.obligacionTipo === "deuda" ? debts.find(x => x.id === a.obligacionId) : null
+            const f = a.obligacionTipo === "fijo" ? fixedExpenses.find(x => x.id === a.obligacionId) : null
+            const cuota = d ? d.cuotaPeriodo : f ? (f.frecuencia === "quincenal" ? Math.round(f.monto / 2) : f.monto) : 0
+            const falta = Math.max(0, cuota - ((d ?? f)?.montoPagadoEstePeriodo ?? 0))
+            if (!(falta > 0) || a.monto >= falta) return null
+            return (
+              <label className="flex items-start gap-2 text-[10px] text-muted-foreground cursor-pointer rounded-lg bg-muted/40 p-2">
+                <input type="checkbox" checked={!!a.cuotaCompleta} onChange={e => onChange({ cuotaCompleta: e.target.checked })} className="accent-kiri-emerald mt-0.5 h-4 w-4 shrink-0" />
+                <span><span className="font-bold text-foreground">{tr("Con este valor quedó pagada la cuota")}</span>{" "}{tr("(la cuota registrada es {0}; si no la marcas queda pendiente {1})", [formatAmount(falta), formatAmount(falta - a.monto)])}</span>
+              </label>
+            )
+          })()}
+        </div>
       )}
 
       {a.tipo === "ahorro" && (
         destinos.bolsillos.length > 0 ? (
-          <Chips label="Bolsillo" opciones={destinos.bolsillos.map(b => ({ id: b.id, label: `🐷 ${b.nombre}` }))}
+          <Chips label={tr("Bolsillo")} opciones={destinos.bolsillos.map(b => ({ id: b.id, label: `🐷 ${b.nombre}` }))}
             valor={a.bolsilloId ?? null} onElegir={id => onChange({ bolsilloId: id })} />
         ) : (
-          <button type="button" onClick={() => onChange({ tipo: "crear_bolsillo" })} className="text-[11px] text-kiri-emerald font-bold">
-            No tienes bolsillos: crear una meta de ahorro con este monto →
-          </button>
+          <button type="button" onClick={() => onChange({ tipo: "crear_bolsillo" })} className="text-[11px] text-kiri-emerald font-bold">{tr("No tienes bolsillos: crear una meta de ahorro con este monto →")}</button>
         )
       )}
 
       {a.tipo === "crear_deuda" && (
         <div className="grid grid-cols-3 gap-2">
-          <Campo label="Cuota"><MoneyInput showCurrency={false} value={a.cuota ? String(a.cuota) : ""} onChange={v => onChange({ cuota: Number(v) || null })} className="h-8 text-xs rounded-lg" placeholder="$0" /></Campo>
-          <Campo label="Día de pago"><Input inputMode="numeric" value={a.diaPago ?? ""} onChange={e => onChange({ diaPago: Math.min(31, Number(e.target.value.replace(/\D/g, "")) || 0) || null })} className="h-8 text-xs rounded-lg" placeholder="1" /></Campo>
-          <Campo label="Tasa mensual %"><Input inputMode="decimal" value={a.tasaMensual ?? ""} onChange={e => onChange({ tasaMensual: Number(e.target.value.replace(",", ".")) || null })} className="h-8 text-xs rounded-lg" placeholder="Opcional" /></Campo>
+          <Campo label={tr("Cuota")}><MoneyInput showCurrency={false} value={a.cuota ? String(a.cuota) : ""} onChange={v => onChange({ cuota: Number(v) || null })} className="h-8 text-xs rounded-lg" placeholder="$0" /></Campo>
+          <Campo label={tr("Día de pago")}><Input inputMode="numeric" value={a.diaPago ?? ""} onChange={e => onChange({ diaPago: Math.min(31, Number(e.target.value.replace(/\D/g, "")) || 0) || null })} className="h-8 text-xs rounded-lg" placeholder="1" /></Campo>
+          <Campo label={tr("Tasa mensual %")}><Input inputMode="decimal" value={a.tasaMensual ?? ""} onChange={e => onChange({ tasaMensual: Number(e.target.value.replace(",", ".")) || null })} className="h-8 text-xs rounded-lg" placeholder={tr("Opcional")} /></Campo>
           <label className="col-span-3 flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={!!a.esTarjeta} onChange={e => onChange({ esTarjeta: e.target.checked })} className="accent-kiri-emerald" />
-            Es una tarjeta de crédito · la primera cuota cuenta desde el próximo periodo
-          </label>
+            <input type="checkbox" checked={!!a.esTarjeta} onChange={e => onChange({ esTarjeta: e.target.checked })} className="accent-kiri-emerald" />{tr("Es una tarjeta de crédito · la primera cuota cuenta desde el próximo periodo")}</label>
         </div>
       )}
 
       {a.tipo === "crear_gasto_fijo" && (
         <div className="grid grid-cols-2 gap-2">
-          <Campo label="Día de pago"><Input inputMode="numeric" value={a.diaPago ?? ""} onChange={e => onChange({ diaPago: Math.min(31, Number(e.target.value.replace(/\D/g, "")) || 0) || null })} className="h-8 text-xs rounded-lg" placeholder="1" /></Campo>
-          <Campo label="Cada cuánto">
+          <Campo label={tr("Día de pago")}><Input inputMode="numeric" value={a.diaPago ?? ""} onChange={e => onChange({ diaPago: Math.min(31, Number(e.target.value.replace(/\D/g, "")) || 0) || null })} className="h-8 text-xs rounded-lg" placeholder="1" /></Campo>
+          <Campo label={tr("Cada cuánto")}>
             <select value={a.frecuencia ?? "mensual"} onChange={e => onChange({ frecuencia: e.target.value as Accion["frecuencia"] })} className="h-8 w-full text-xs rounded-lg border border-input bg-background px-2">
-              <option value="mensual">Mensual</option><option value="quincenal">Quincenal</option><option value="semanal">Semanal</option><option value="anual">Anual</option>
+              <option value="mensual">{tr("Mensual")}</option><option value="quincenal">{tr("Quincenal")}</option><option value="semanal">{tr("Semanal")}</option><option value="anual">{tr("Anual")}</option>
             </select>
           </Campo>
         </div>
       )}
 
       {a.tipo === "crear_categoria" && (
-        <p className="text-[10px] text-muted-foreground">El monto es el límite mensual de la categoría (0 = sin límite).</p>
+        <p className="text-[10px] text-muted-foreground">{tr("El monto es el límite mensual de la categoría (0 = sin límite).")}</p>
       )}
-      {a.tipo === "crear_bolsillo" && <p className="text-[10px] text-muted-foreground">El monto es la meta del bolsillo.</p>}
+      {a.tipo === "crear_bolsillo" && <p className="text-[10px] text-muted-foreground">{tr("El monto es la meta del bolsillo.")}</p>}
 
       {a.tipo === "me_deben" && (
         <div className="grid grid-cols-2 gap-2">
-          <Campo label="¿A quién?"><Input value={a.persona ?? ""} onChange={e => onChange({ persona: e.target.value })} className="h-8 text-xs rounded-lg" placeholder="Nombre" /></Campo>
-          <Campo label="Te paga el"><Input type="date" value={a.fechaCompromiso ?? ""} onChange={e => onChange({ fechaCompromiso: e.target.value || null })} className="h-8 text-xs rounded-lg" /></Campo>
+          <Campo label={tr("¿A quién?")}><Input value={a.persona ?? ""} onChange={e => onChange({ persona: e.target.value })} className="h-8 text-xs rounded-lg" placeholder={tr("Nombre")} /></Campo>
+          <Campo label={tr("Te paga el")}><Input type="date" value={a.fechaCompromiso ?? ""} onChange={e => onChange({ fechaCompromiso: e.target.value || null })} className="h-8 text-xs rounded-lg" /></Campo>
         </div>
       )}
 
       {a.tipo === "abono_me_deben" && (
         destinos.meDeben.length > 0 ? (
-          <Chips label="¿Quién te pagó?" opciones={destinos.meDeben.map(l => ({ id: l.id, label: `${l.persona} · debe ${formatAmount(l.saldoPendiente)}` }))}
+          <Chips label={tr("¿Quién te pagó?")} opciones={destinos.meDeben.map(l => ({ id: l.id, label: tr("{0} · debe {1}", [l.persona, formatAmount(l.saldoPendiente)]) }))}
             valor={a.meDebenId ?? null} onElegir={id => onChange({ meDebenId: id })} />
-        ) : <p className="text-[11px] text-muted-foreground">No tienes a nadie en "Me deben".</p>
+        ) : <p className="text-[11px] text-muted-foreground">{tr("No tienes a nadie en \"Me deben\".")}</p>
       )}
 
       {(falta.length > 0 || error) && (
@@ -258,7 +273,7 @@ function Select({ label, value, onChange, opciones }: { label: string; value: st
     <div className="space-y-1">
       <p className="text-[10px] font-bold text-muted-foreground">{label}</p>
       <select value={value} onChange={e => onChange(e.target.value)} className="h-8 w-full text-xs rounded-lg border border-input bg-background px-2">
-        <option value="">Elige…</option>
+        <option value="">{tr("Elige…")}</option>
         {opciones.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}
       </select>
     </div>

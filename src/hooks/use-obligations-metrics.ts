@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { Debt, FixedExpense, Loan } from "@/lib/types"
+import { localeFecha } from "@/lib/i18n"
 
 export interface ObligationsMetrics {
   totalDeudasActivas: number
@@ -78,7 +79,7 @@ export function calculateDebtProjection(montoTotal: number, cuotaPeriodo: number
 
   const fecha = new Date()
   fecha.setMonth(fecha.getMonth() + meses)
-  const fechaEstimada = fecha.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const fechaEstimada = fecha.toLocaleDateString(localeFecha(), { month: 'long', year: 'numeric' })
 
   return { cuotasRestantes: meses, fechaEstimada, mesesParaPagar: meses }
 }

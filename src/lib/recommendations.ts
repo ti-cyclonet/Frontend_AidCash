@@ -1,4 +1,5 @@
 import { BudgetAllocation, Debt, IncomeFrequency } from './types'
+import { tr } from "@/lib/i18n"
 
 // ─── Tipos de alertas ─────────────────────────────────────────────────────────
 
@@ -181,10 +182,10 @@ export function analyzeFinances(
     alerts.push({
       id: 'overloaded',
       level: 'critical',
-      title: 'Alerta: Tus obligaciones superan tus ingresos',
+      title: tr("Alerta: Tus obligaciones superan tus ingresos"),
       message: exceso > 0
-        ? `Tus compromisos actuales superan tu ingreso en un ${exceso}%. No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Es urgente replantear prioridades y buscar qué obligaciones reducir primero.`
-        : 'Tus obligaciones actuales consumen el 100% de tu ingreso. No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Revisa qué deudas puedes atacar primero para liberar oxígeno.',
+        ? tr("Tus compromisos actuales superan tu ingreso en un {0}%. No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Es urgente replantear prioridades y buscar qué obligaciones reducir primero.", [exceso])
+        : tr("Tus obligaciones actuales consumen el 100% de tu ingreso. No tienes capacidad para ahorrar o asumir nuevas deudas en este momento. Revisa qué deudas puedes atacar primero para liberar oxígeno."),
     })
   }
 
@@ -193,8 +194,8 @@ export function analyzeFinances(
     alerts.push({
       id: 'no_debt_capacity',
       level: 'warning',
-      title: 'Tu margen está al límite',
-      message: 'Ahora mismo todo lo que te queda libre se va en el día a día y no alcanza para ahorrar. Si liquidas tu deuda más pequeña, su cuota queda libre para metas nuevas.',
+      title: tr("Tu margen está al límite"),
+      message: tr("Ahora mismo todo lo que te queda libre se va en el día a día y no alcanza para ahorrar. Si liquidas tu deuda más pequeña, su cuota queda libre para metas nuevas."),
     })
   }
 
@@ -203,8 +204,8 @@ export function analyzeFinances(
     alerts.push({
       id: 'tight_budget',
       level: 'warning',
-      title: 'Navegando con poco margen',
-      message: `El ${Math.round(allocation.obligationsPct)}% de tu ingreso va a obligaciones. Estás en control, pero con poco colchón para imprevistos. Cada deuda que liquides te devuelve libertad.`,
+      title: tr("Navegando con poco margen"),
+      message: tr("El {0}% de tu ingreso va a obligaciones. Estás en control, pero con poco colchón para imprevistos. Cada deuda que liquides te devuelve libertad.", [Math.round(allocation.obligationsPct)]),
     })
   }
 
@@ -214,8 +215,8 @@ export function analyzeFinances(
     alerts.push({
       id: 'all_good',
       level: 'info',
-      title: 'Vas por buen camino 🌟',
-      message: 'Tu presupuesto está equilibrado. Tienes margen para ahorrar, para el día a día, y para metas nuevas. ¡Sigue así!',
+      title: tr("Vas por buen camino 🌟"),
+      message: tr("Tu presupuesto está equilibrado. Tienes margen para ahorrar, para el día a día, y para metas nuevas. ¡Sigue así!"),
     })
   }
 
@@ -235,8 +236,8 @@ export function analyzeFinances(
         debt,
         periodsToFinish: periods,
         reason: periods <= 3
-          ? `¡Solo ${periods} cuota${periods > 1 ? 's' : ''} para liquidarla!`
-          : `Menor saldo — libera flujo en ${periods} periodos`,
+          ? tr("¡Solo {0} cuota{1} para liquidarla!", [periods, periods > 1 ? 's' : ''])
+          : tr("Menor saldo — libera flujo en {0} periodos", [periods]),
       })
     }
   }
@@ -256,8 +257,8 @@ export function analyzeFinances(
       deudaSímulables, frecuencia,
       // BOLA DE NIEVE: menor saldo total primero → victorias rápidas
       (a, b) => a.montoTotal - b.montoTotal,
-      'Bola de Nieve',
-      'Liquida la deuda de menor saldo primero para ganar victorias rápidas y motivación.'
+      "Bola de Nieve",
+      tr("Liquida la deuda de menor saldo primero para ganar victorias rápidas y motivación.")
     )
 
     const avalanche = simularEstrategia(
@@ -267,7 +268,7 @@ export function analyzeFinances(
       //  primero con los extras reduce el tiempo total)
       (a, b) => b.montoTotal - a.montoTotal,
       'Avalancha',
-      'Ataca la deuda más grande primero para reducir el total adeudado más rápido.'
+      tr("Ataca la deuda más grande primero para reducir el total adeudado más rápido.")
     )
 
     // Añade diferencia entre métodos
@@ -329,9 +330,9 @@ export function simulateDebtOptions(
   return {
     canAffordAny: true,
     options: [
-      buildOption('Conservadora', 'Usas el 25% — guardas margen para otras compras', 0.25, false),
-      buildOption('Moderada',     'Usas el 50% — equilibrio entre plazo y libertad',  0.50, true),
-      buildOption('Total',        'Usas el 100% — pagas más rápido, sin margen extra', 1.0, false),
+      buildOption('Conservadora', tr("Usas el 25% — guardas margen para otras compras"), 0.25, false),
+      buildOption('Moderada',     tr("Usas el 50% — equilibrio entre plazo y libertad"),  0.50, true),
+      buildOption('Total',        tr("Usas el 100% — pagas más rápido, sin margen extra"), 1.0, false),
     ],
   }
 }
@@ -342,7 +343,7 @@ export function simulateDebt(
   incomeFrequency: IncomeFrequency
 ): DebtSimulation {
   if (debtCapacity <= 0) {
-    return { canAfford: false, monthsToPayOff: null, suggestedQuota: 0, remainingCapacity: 0, usagePct: 0, message: 'Actualmente no tienes capacidad de endeudamiento disponible.' }
+    return { canAfford: false, monthsToPayOff: null, suggestedQuota: 0, remainingCapacity: 0, usagePct: 0, message: tr("Actualmente no tienes capacidad de endeudamiento disponible.") }
   }
   const periods = Math.ceil(purchaseAmount / debtCapacity)
   const months = incomeFrequency === 'quincenal' ? Math.ceil(periods / 2) : periods
@@ -351,8 +352,8 @@ export function simulateDebt(
     canAfford, monthsToPayOff: months, suggestedQuota: debtCapacity,
     remainingCapacity: 0, usagePct: 100,
     message: canAfford
-      ? `Podrías pagarlo en ${months} ${months === 1 ? 'mes' : 'meses'}.`
-      : `Con tu capacidad actual tardarías más de 3 años.`,
+      ? tr("Podrías pagarlo en {0} {1}.", [months, months === 1 ? tr("mes") : tr("meses")])
+      : tr("Con tu capacidad actual tardarías más de 3 años."),
   }
 }
 

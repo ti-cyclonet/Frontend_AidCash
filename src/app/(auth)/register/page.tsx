@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import { inviteLinksApi, INVITACION_KEY } from "@/lib/api-client"
 import { ConsentChecks } from "@/components/legal/ConsentChecks"
+import { tr } from "@/lib/i18n"
 
 export default function RegisterPage() {
   return (
@@ -59,17 +60,17 @@ function RegisterContent() {
   const [loading, setLoading] = useState(false)
 
   const passwordStrength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3
-  const strengthLabel = ["", "Débil", "Moderada", "Fuerte"]
+  const strengthLabel = ["", tr("Débil"), "Moderada", "Fuerte"]
   const strengthColor = ["", "bg-destructive", "bg-yellow-400", "bg-cyclon-mint"]
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!nombre.trim()) { setError("El primer nombre es obligatorio."); return }
-    if (!firstSurname.trim()) { setError("El primer apellido es obligatorio."); return }
-    if (password !== confirm) { setError("Las contraseñas no coinciden."); return }
-    if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return }
-    if (!documentNumber.trim()) { setError("El número de documento es obligatorio."); return }
-    if (!aceptaTerminos || !aceptaDatos) { setError("Debes aceptar los Términos y Condiciones y autorizar el tratamiento de tus datos."); return }
+    if (!nombre.trim()) { setError(tr("El primer nombre es obligatorio.")); return }
+    if (!firstSurname.trim()) { setError(tr("El primer apellido es obligatorio.")); return }
+    if (password !== confirm) { setError(tr("Las contraseñas no coinciden.")); return }
+    if (password.length < 6) { setError(tr("La contraseña debe tener al menos 6 caracteres.")); return }
+    if (!documentNumber.trim()) { setError(tr("El número de documento es obligatorio.")); return }
+    if (!aceptaTerminos || !aceptaDatos) { setError(tr("Debes aceptar los Términos y Condiciones y autorizar el tratamiento de tus datos.")); return }
     setLoading(true)
     setError(null)
     // Concatenar nombre completo para la BD de Kiri
@@ -97,8 +98,8 @@ function RegisterContent() {
             <Sprout className="h-10 w-10 text-kiri-cream" strokeWidth={1.5} />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-white">Kiri Finance</h1>
-            <p className="text-white/50 text-xs mt-1">Tu dinero, tu futuro, tu control</p>
+            <h1 className="text-2xl font-bold text-white">{tr("Kiri Finance")}</h1>
+            <p className="text-white/50 text-xs mt-1">{tr("Tu dinero, tu futuro, tu control")}</p>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center px-6 py-10">
@@ -106,14 +107,9 @@ function RegisterContent() {
             <div className="h-20 w-20 bg-kiri-emerald/10 rounded-3xl flex items-center justify-center mx-auto">
               <CheckCircle2 className="h-10 w-10 text-kiri-emerald" strokeWidth={1.5} />
             </div>
-            <h2 className="text-2xl font-black text-foreground">¡Revisa tu correo! 📧</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Te enviamos un enlace de verificación a <strong className="text-foreground">{email}</strong>.
-              Confirma tu correo para activar tu cuenta y empezar a organizar tus finanzas.
-            </p>
-            <Link href="/login" className="inline-block mt-4 font-bold text-kiri-emerald hover:underline">
-              Ir a Iniciar sesión
-            </Link>
+            <h2 className="text-2xl font-black text-foreground">{tr("¡Revisa tu correo! 📧")}</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">{tr("Te enviamos un enlace de verificación a")}{" "}<strong className="text-foreground">{email}</strong>{tr(". Confirma tu correo para activar tu cuenta y empezar a organizar tus finanzas.")}</p>
+            <Link href="/login" className="inline-block mt-4 font-bold text-kiri-emerald hover:underline">{tr("Ir a Iniciar sesión")}</Link>
           </div>
         </div>
       </div>
@@ -128,8 +124,8 @@ function RegisterContent() {
           <Sprout className="h-10 w-10 text-kiri-cream" strokeWidth={1.5} />
         </div>
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-white">Kiri Finance</h1>
-          <p className="text-white/50 text-xs mt-1">Tu dinero, tu futuro, tu control</p>
+          <h1 className="text-2xl font-bold text-white">{tr("Kiri Finance")}</h1>
+          <p className="text-white/50 text-xs mt-1">{tr("Tu dinero, tu futuro, tu control")}</p>
         </div>
       </div>
 
@@ -137,15 +133,15 @@ function RegisterContent() {
       <div className="flex-1 flex justify-center overflow-y-auto">
         <div className="w-full max-w-md px-6 py-8 space-y-6">
         <div>
-          <h2 className="text-2xl font-black text-foreground">Crear cuenta</h2>
-          <p className="text-muted-foreground text-sm mt-1">Empieza a organizar tus finanzas hoy</p>
+          <h2 className="text-2xl font-black text-foreground">{tr("Crear cuenta")}</h2>
+          <p className="text-muted-foreground text-sm mt-1">{tr("Empieza a organizar tus finanzas hoy")}</p>
         </div>
 
         {invitadoPor && (
           <div className="flex items-center gap-3 rounded-2xl border border-kiri-emerald/30 bg-kiri-emerald/5 px-4 py-3">
             <span className="text-xl">💌</span>
             <p className="text-xs">
-              <strong>{invitadoPor.nombre}</strong> te invitó a Kiri. Al crear tu cuenta quedarán conectados como <strong>{invitadoPor.rol}</strong>.
+              <strong>{invitadoPor.nombre}</strong>{" "}{tr("te invitó a Kiri. Al crear tu cuenta quedarán conectados como")}{" "}<strong>{invitadoPor.rol}</strong>.
             </p>
           </div>
         )}
@@ -153,9 +149,9 @@ function RegisterContent() {
         <form onSubmit={handleRegister} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Primer Nombre *</Label>
+              <Label className="text-xs">{tr("Primer Nombre *")}</Label>
               <Input
-                placeholder="Primer nombre"
+                placeholder={tr("Primer nombre")}
                 value={nombre}
                 onChange={e => setNombre(e.target.value)}
                 className="h-12 rounded-2xl"
@@ -163,9 +159,9 @@ function RegisterContent() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Segundo Nombre</Label>
+              <Label className="text-xs">{tr("Segundo Nombre")}</Label>
               <Input
-                placeholder="Segundo nombre"
+                placeholder={tr("Segundo nombre")}
                 value={secondName}
                 onChange={e => setSecondName(e.target.value)}
                 className="h-12 rounded-2xl"
@@ -175,18 +171,18 @@ function RegisterContent() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Primer Apellido *</Label>
+              <Label className="text-xs">{tr("Primer Apellido *")}</Label>
               <Input
-                placeholder="Primer apellido"
+                placeholder={tr("Primer apellido")}
                 value={firstSurname}
                 onChange={e => setFirstSurname(e.target.value)}
                 className="h-12 rounded-2xl"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Segundo Apellido</Label>
+              <Label className="text-xs">{tr("Segundo Apellido")}</Label>
               <Input
-                placeholder="Segundo apellido"
+                placeholder={tr("Segundo apellido")}
                 value={secondSurname}
                 onChange={e => setSecondSurname(e.target.value)}
                 className="h-12 rounded-2xl"
@@ -195,10 +191,10 @@ function RegisterContent() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Correo electrónico</Label>
+            <Label className="text-xs">{tr("Correo electrónico")}</Label>
             <Input
               type="email"
-              placeholder="tu@correo.com"
+              placeholder={tr("tu@correo.com")}
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="h-12 rounded-2xl"
@@ -208,7 +204,7 @@ function RegisterContent() {
 
           <div className="grid grid-cols-[1fr_2fr] gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Tipo Doc. *</Label>
+              <Label className="text-xs">{tr("Tipo Doc. *")}</Label>
               <select
                 value={documentType}
                 onChange={e => setDocumentType(e.target.value)}
@@ -216,13 +212,13 @@ function RegisterContent() {
               >
                 <option value="CC">C.C.</option>
                 <option value="CE">C.E.</option>
-                <option value="PP">Pasaporte</option>
+                <option value="PP">{tr("Pasaporte")}</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Número de Documento *</Label>
+              <Label className="text-xs">{tr("Número de Documento *")}</Label>
               <Input
-                placeholder="Número de documento"
+                placeholder={tr("Número de documento")}
                 value={documentNumber}
                 onChange={e => setDocumentNumber(e.target.value)}
                 className="h-12 rounded-2xl"
@@ -231,11 +227,11 @@ function RegisterContent() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Contraseña</Label>
+            <Label className="text-xs">{tr("Contraseña")}</Label>
             <div className="relative">
               <Input
                 type={showPassword ? "text" : "password"}
-                placeholder="Mínimo 6 caracteres"
+                placeholder={tr("Mínimo 6 caracteres")}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="h-12 rounded-2xl pr-12"
@@ -259,23 +255,23 @@ function RegisterContent() {
                     />
                   ))}
                 </div>
-                <p className="text-[10px] text-muted-foreground">Seguridad: {strengthLabel[passwordStrength]}</p>
+                <p className="text-[10px] text-muted-foreground">{tr("Seguridad: {0}", [strengthLabel[passwordStrength]])}</p>
               </div>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Confirmar contraseña</Label>
+            <Label className="text-xs">{tr("Confirmar contraseña")}</Label>
             <Input
               type={showPassword ? "text" : "password"}
-              placeholder="Repite tu contraseña"
+              placeholder={tr("Repite tu contraseña")}
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               className={cn("h-12 rounded-2xl", confirm && confirm !== password && "border-destructive focus-visible:ring-destructive")}
               autoComplete="new-password"
             />
             {confirm && confirm !== password && (
-              <p className="text-[10px] text-destructive">Las contraseñas no coinciden</p>
+              <p className="text-[10px] text-destructive">{tr("Las contraseñas no coinciden")}</p>
             )}
           </div>
 
@@ -295,15 +291,11 @@ function RegisterContent() {
             disabled={loading || !nombre || !firstSurname || !email || !password || !confirm || !documentNumber || !aceptaTerminos || !aceptaDatos}
             className="w-full h-14 rounded-2xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-base shadow-xl shadow-kiri-emerald/30 mt-2"
           >
-            {loading ? "Creando cuenta..." : "Crear Cuenta"}
+            {loading ? tr("Creando cuenta...") : tr("Crear Cuenta")}
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          ¿Ya tienes cuenta?{" "}
-          <Link href="/login" className="font-bold text-kiri-emerald hover:underline">
-            Inicia sesión
-          </Link>
+        <p className="text-center text-sm text-muted-foreground">{tr("¿Ya tienes cuenta?{0}", [" "])}<Link href="/login" className="font-bold text-kiri-emerald hover:underline">{tr("Inicia sesión")}</Link>
         </p>
         </div>
       </div>

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Eye, EyeOff, AlertCircle, Sprout, Mail, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
+import { tr } from "@/lib/i18n"
 
 export default function LoginPage() {
   const { signIn } = useAuth()
@@ -38,10 +39,10 @@ export default function LoginPage() {
         setForgotSent(true)
       } else {
         const data = await res.json()
-        setForgotError(data.error || 'Error al enviar el correo')
+        setForgotError(data.error || tr("Error al enviar el correo"))
       }
     } catch {
-      setForgotError('Error de conexión')
+      setForgotError(tr("Error de conexión"))
     }
     setForgotLoading(false)
   }
@@ -69,10 +70,8 @@ export default function LoginPage() {
           <Sprout className="h-14 w-14 text-kiri-cream" strokeWidth={1.5} />
         </div>
         <div className="text-center space-y-3">
-          <h1 className="text-4xl font-bold text-white">Kiri Finance</h1>
-          <p className="text-white/50 text-base max-w-sm">
-            Tu jardín financiero crece con tus buenos hábitos. Organiza, ahorra y prospera.
-          </p>
+          <h1 className="text-4xl font-bold text-white">{tr("Kiri Finance")}</h1>
+          <p className="text-white/50 text-base max-w-sm">{tr("Tu jardín financiero crece con tus buenos hábitos. Organiza, ahorra y prospera.")}</p>
         </div>
         <div className="flex gap-2 mt-4">
           {["🌱", "🌿", "🌳"].map((e, i) => (
@@ -89,8 +88,8 @@ export default function LoginPage() {
             <Sprout className="h-10 w-10 text-kiri-cream" strokeWidth={1.5} />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-white">Kiri Finance</h1>
-            <p className="text-white/50 text-xs mt-1">Tu dinero, tu futuro, tu control</p>
+            <h1 className="text-2xl font-bold text-white">{tr("Kiri Finance")}</h1>
+            <p className="text-white/50 text-xs mt-1">{tr("Tu dinero, tu futuro, tu control")}</p>
           </div>
         </div>
 
@@ -98,16 +97,16 @@ export default function LoginPage() {
         <div className="flex-1 flex items-center justify-center px-6 py-8 lg:px-12">
           <div className="w-full max-w-sm space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">Bienvenido de vuelta</h2>
-              <p className="text-muted-foreground text-sm mt-1">Inicia sesión para continuar</p>
+              <h2 className="text-2xl font-bold text-foreground">{tr("Bienvenido de vuelta")}</h2>
+              <p className="text-muted-foreground text-sm mt-1">{tr("Inicia sesión para continuar")}</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Correo electrónico</Label>
+                <Label>{tr("Correo electrónico")}</Label>
                 <Input
                   type="email"
-                  placeholder="tu@correo.com"
+                  placeholder={tr("tu@correo.com")}
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="h-12 rounded-xl"
@@ -118,11 +117,9 @@ export default function LoginPage() {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label>Contraseña</Label>
+                  <Label>{tr("Contraseña")}</Label>
                   <button type="button" onClick={() => { setForgotOpen(true); setForgotEmail(email); setForgotSent(false); setForgotError(null) }}
-                    className="text-[11px] font-medium text-kiri-emerald hover:underline">
-                    ¿Olvidaste tu contraseña?
-                  </button>
+                    className="text-[11px] font-medium text-kiri-emerald hover:underline">{tr("¿Olvidaste tu contraseña?")}</button>
                 </div>
                 <div className="relative">
                   <Input
@@ -157,15 +154,11 @@ export default function LoginPage() {
                 disabled={loading || !email || !password}
                 className="w-full h-13 rounded-xl bg-kiri-emerald hover:bg-kiri-sage text-white font-semibold text-base shadow-lg shadow-kiri-emerald/20 mt-2 transition-all"
               >
-                {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
+                {loading ? tr("Iniciando sesión...") : tr("Iniciar Sesión")}
               </Button>
             </form>
 
-            <p className="text-center text-sm text-muted-foreground">
-              ¿No tienes cuenta?{" "}
-              <Link href="/register" className="font-semibold text-kiri-emerald hover:underline">
-                Regístrate gratis
-              </Link>
+            <p className="text-center text-sm text-muted-foreground">{tr("¿No tienes cuenta?{0}", [" "])}<Link href="/register" className="font-semibold text-kiri-emerald hover:underline">{tr("Regístrate gratis")}</Link>
             </p>
           </div>
         </div>
@@ -176,11 +169,8 @@ export default function LoginPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5 text-kiri-emerald" /> Recuperar contraseña
-            </DialogTitle>
-            <DialogDescription>
-              Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.
-            </DialogDescription>
+              <Mail className="h-5 w-5 text-kiri-emerald" />{" "}{tr("Recuperar contraseña")}</DialogTitle>
+            <DialogDescription>{tr("Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.")}</DialogDescription>
           </DialogHeader>
 
           {forgotSent ? (
@@ -188,22 +178,18 @@ export default function LoginPage() {
               <div className="h-14 w-14 bg-kiri-emerald/10 rounded-full flex items-center justify-center">
                 <CheckCircle2 className="h-7 w-7 text-kiri-emerald" />
               </div>
-              <p className="font-bold text-sm">¡Correo enviado!</p>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                Revisa tu bandeja de entrada en <strong>{forgotEmail}</strong>. Si no lo ves, revisa la carpeta de spam.
-              </p>
-              <Button onClick={() => setForgotOpen(false)} className="mt-2 rounded-xl bg-kiri-emerald text-white font-bold">
-                Entendido
-              </Button>
+              <p className="font-bold text-sm">{tr("¡Correo enviado!")}</p>
+              <p className="text-xs text-muted-foreground max-w-xs">{tr("Revisa tu bandeja de entrada en")}{" "}<strong>{forgotEmail}</strong>{tr(". Si no lo ves, revisa la carpeta de spam.")}</p>
+              <Button onClick={() => setForgotOpen(false)} className="mt-2 rounded-xl bg-kiri-emerald text-white font-bold">{tr("Entendido")}</Button>
             </div>
           ) : (
             <>
               <div className="space-y-4 py-2">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Correo electrónico</Label>
+                  <Label className="text-xs font-bold">{tr("Correo electrónico")}</Label>
                   <Input
                     type="email"
-                    placeholder="tu@correo.com"
+                    placeholder={tr("tu@correo.com")}
                     value={forgotEmail}
                     onChange={e => setForgotEmail(e.target.value)}
                     className="h-11 rounded-xl"
@@ -217,10 +203,10 @@ export default function LoginPage() {
                 )}
               </div>
               <DialogFooter className="gap-2">
-                <Button variant="ghost" onClick={() => setForgotOpen(false)}>Cancelar</Button>
+                <Button variant="ghost" onClick={() => setForgotOpen(false)}>{tr("Cancelar")}</Button>
                 <Button onClick={handleForgotPassword} disabled={forgotLoading || !forgotEmail}
                   className="bg-kiri-emerald text-white font-bold rounded-xl px-6">
-                  {forgotLoading ? "Enviando..." : "Enviar enlace"}
+                  {forgotLoading ? "Enviando..." : tr("Enviar enlace")}
                 </Button>
               </DialogFooter>
             </>

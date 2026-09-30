@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Eye, EyeOff } from "lucide-react"
 import { OdometerAmount } from "@/components/ui/odometer-amount"
+import { tr } from "@/lib/i18n"
 
 interface AnimatedBalanceProps {
   value: number
@@ -20,7 +21,7 @@ interface AnimatedBalanceProps {
  * - Brilla rojo cuando baja
  * - Muestra la diferencia brevemente (+$50,000 / -$100,000)
  */
-export function AnimatedBalance({ value, formatAmount, label = "Saldo total", showToggle = true, className }: AnimatedBalanceProps) {
+export function AnimatedBalance({ value, formatAmount, label = tr("Saldo total"), showToggle = true, className }: AnimatedBalanceProps) {
   const [hidden, setHidden] = useState(false)
   const [flash, setFlash] = useState<"up" | "down" | null>(null)
   const [diff, setDiff] = useState<number | null>(null)

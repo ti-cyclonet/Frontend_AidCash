@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { MODULE_GUIDES, type ModuleGuideData } from "@/lib/module-guide-content"
+import { tr } from "@/lib/i18n"
 
 // ─── Sidebar Navigation Item ──────────────────────────────────────────────────
 
@@ -86,9 +87,7 @@ function ModuleCard({ mod }: { mod: ModuleGuideData }) {
 
             {/* Items */}
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-foreground mb-3">
-                Qué debes hacer aquí:
-              </p>
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground mb-3">{tr("Qué debes hacer aquí:")}</p>
               <div className="space-y-3">
                 {mod.items.map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
@@ -168,12 +167,10 @@ export function GuiaKiriContent() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <Sprout className="h-5 w-5 text-kiri-emerald" />
-              <h1 className="text-xl font-black">Guía de Módulos</h1>
+              <h1 className="text-xl font-black">{tr("Guía de Módulos")}</h1>
               <span className="text-lg">🌱</span>
             </div>
-            <p className="text-xs text-muted-foreground ml-7">
-              Descubre cómo funciona cada módulo de Kiri Finance.
-            </p>
+            <p className="text-xs text-muted-foreground ml-7">{tr("Descubre cómo funciona cada módulo de Kiri Finance.")}</p>
           </div>
         </div>
       </motion.div>
@@ -191,11 +188,8 @@ export function GuiaKiriContent() {
                 <Sprout className="h-6 w-6 text-kiri-emerald" />
               </div>
               <div>
-                <h2 className="font-bold text-sm mb-1">Guía Modular</h2>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Aprende paso a paso cómo usar cada módulo y haz florecer tu jardín financiero.
-                  Explora estas descripciones a tu propio ritmo.
-                </p>
+                <h2 className="font-bold text-sm mb-1">{tr("Guía Modular")}</h2>
+                <p className="text-xs text-muted-foreground leading-relaxed">{tr("Aprende paso a paso cómo usar cada módulo y haz florecer tu jardín financiero. Explora estas descripciones a tu propio ritmo.")}</p>
               </div>
             </div>
           </CardContent>
@@ -207,9 +201,7 @@ export function GuiaKiriContent() {
         {/* Sidebar — solo desktop */}
         <aside className="hidden lg:block w-56 shrink-0">
           <div className="sticky top-24 space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 px-3">
-              Módulos
-            </p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 px-3">{tr("Módulos")}</p>
             {MODULE_GUIDES.map(mod => (
               <SideNavItem
                 key={mod.id}
@@ -224,9 +216,7 @@ export function GuiaKiriContent() {
               <div className="flex items-start gap-2">
                 <Sprout className="h-4 w-4 text-kiri-emerald mt-0.5 shrink-0" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  <span className="font-bold text-foreground">Recuerda</span><br />
-                  Cada acción en la app hace crecer tu jardín. Pequeñas decisiones hoy, grandes logros mañana.
-                </p>
+                  <span className="font-bold text-foreground">{tr("Recuerda")}</span><br />{tr("Cada acción en la app hace crecer tu jardín. Pequeñas decisiones hoy, grandes logros mañana.")}</p>
               </div>
             </div>
           </div>
@@ -271,9 +261,7 @@ export function GuiaKiriContent() {
             <div className="flex items-center justify-center gap-2 text-center">
               <Sparkles className="h-4 w-4 text-kiri-emerald" />
               <p className="text-xs text-muted-foreground">
-                <span className="font-bold text-kiri-emerald">Consejo Kiri:</span>{" "}
-                Explora cada módulo, toma el control de tus finanzas y observa cómo tu jardín florece día a día.
-              </p>
+                <span className="font-bold text-kiri-emerald">{tr("Consejo Kiri:")}</span>{tr("{0}Explora cada módulo, toma el control de tus finanzas y observa cómo tu jardín florece día a día.", [" "])}</p>
               <Sparkles className="h-4 w-4 text-kiri-emerald" />
             </div>
           </motion.div>

@@ -1,4 +1,5 @@
 import { getDaysElapsedAndTotal } from './period-filter'
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -131,8 +132,8 @@ export function analyzeBudgetCategories(
         type: 'alert',
         severity: 'critical',
         category: cat.name,
-        title: `Excediste tu presupuesto de ${cat.name}`,
-        message: `Llevas ${formatMoney(spent)} gastados de los ${formatMoney(cat.budget)} asignados. Te pasaste por ${formatMoney(excess)}.`,
+        title: tr("Excediste tu presupuesto de {0}", [cat.name]),
+        message: tr("Llevas {0} gastados de los {1} asignados. Te pasaste por {2}.", [formatMoney(spent), formatMoney(cat.budget), formatMoney(excess)]),
         usagePct: pct,
       })
     }
@@ -149,8 +150,8 @@ export function analyzeBudgetCategories(
         type: 'recommendation',
         severity: 'warning',
         category: cat.name,
-        title: `Consejo Kiri`,
-        message: `A tu ritmo (${formatMoney(dailyAvg)}/día) cerrarías ${cat.name.toLowerCase()} en ${formatMoney(projectedSpend)}, ${formatMoney(exceso)} por encima del límite. Para no pasarte, gasta máximo ${formatMoney(limiteDiario)} por día los próximos ${daysLeft} días.`,
+        title: tr("Consejo Kiri"),
+        message: tr("A tu ritmo ({0}/día) cerrarías {1} en {2}, {3} por encima del límite. Para no pasarte, gasta máximo {4} por día los próximos {5} días.", [formatMoney(dailyAvg), cat.name.toLowerCase(), formatMoney(projectedSpend), formatMoney(exceso), formatMoney(limiteDiario), daysLeft]),
         savingsAmount: Math.round(exceso),
         usagePct: pct,
       })
@@ -162,8 +163,8 @@ export function analyzeBudgetCategories(
         type: 'celebration',
         severity: 'success',
         category: cat.name,
-        title: `¡Excelente control en ${cat.name}!`,
-        message: `Llevas ${Math.round((daysElapsed / daysInPeriod) * 100)}% del periodo y solo has usado ${pct}% de tu presupuesto. ¡Sigue así!`,
+        title: tr("¡Excelente control en {0}!", [cat.name]),
+        message: tr("Llevas {0}% del periodo y solo has usado {1}% de tu presupuesto. ¡Sigue así!", [Math.round((daysElapsed / daysInPeriod) * 100), pct]),
         usagePct: pct,
       })
     }
@@ -174,8 +175,8 @@ export function analyzeBudgetCategories(
         type: 'pattern',
         severity: 'warning',
         category: cat.name,
-        title: `${cat.name}: ${cat.variacionPct}% más que el periodo pasado`,
-        message: `Llevas ${formatMoney(spent)} en ${cat.name.toLowerCase()}; el periodo anterior cerraste en ${formatMoney(cat.gastadoAnterior ?? 0)}.`,
+        title: tr("{0}: {1}% más que el periodo pasado", [cat.name, cat.variacionPct]),
+        message: tr("Llevas {0} en {1}; el periodo anterior cerraste en {2}.", [formatMoney(spent), cat.name.toLowerCase(), formatMoney(cat.gastadoAnterior ?? 0)]),
         usagePct: pct,
       })
     }
@@ -186,8 +187,8 @@ export function analyzeBudgetCategories(
         type: 'pattern',
         severity: 'warning',
         category: cat.name,
-        title: `Tu gasto en ${cat.name} está creciendo`,
-        message: `Detectamos que tus gastos en ${cat.name.toLowerCase()} están aumentando. A este ritmo gastarás ${formatMoney(projectedSpend)} al final del periodo.`,
+        title: tr("Tu gasto en {0} está creciendo", [cat.name]),
+        message: tr("Detectamos que tus gastos en {0} están aumentando. A este ritmo gastarás {1} al final del periodo.", [cat.name.toLowerCase(), formatMoney(projectedSpend)]),
         usagePct: pct,
       })
     }
@@ -202,8 +203,8 @@ export function analyzeBudgetCategories(
         type: 'celebration',
         severity: 'success',
         category: zc.name,
-        title: `¡${zc.name} sin gastos este periodo!`,
-        message: `No has gastado nada en ${zc.name.toLowerCase()} este periodo: tienes los ${formatMoney(zc.budget)} completos. Si no los vas a necesitar, puedes pasarlos a un bolsillo de ahorro.`,
+        title: tr("¡{0} sin gastos este periodo!", [zc.name]),
+        message: tr("No has gastado nada en {0} este periodo: tienes los {1} completos. Si no los vas a necesitar, puedes pasarlos a un bolsillo de ahorro.", [zc.name.toLowerCase(), formatMoney(zc.budget)]),
         savingsAmount: zc.budget,
         usagePct: 0,
       })
@@ -222,8 +223,8 @@ export function analyzeBudgetCategories(
         type: 'recommendation',
         severity: 'info',
         category: 'General',
-        title: 'Redistribuye tu presupuesto',
-        message: `Tienes ${formatMoney(totalUnused)} sin usar en ${underCats.map(c => c.name).join(', ')} que podrían cubrir el exceso de ${overCats.map(c => c.name).join(', ')}.`,
+        title: tr("Redistribuye tu presupuesto"),
+        message: tr("Tienes {0} sin usar en {1} que podrían cubrir el exceso de {2}.", [formatMoney(totalUnused), underCats.map(c => c.name).join(', '), overCats.map(c => c.name).join(', ')]),
         savingsAmount: Math.min(totalExcess, totalUnused),
       })
     }
@@ -272,8 +273,8 @@ export function getCategoryInsight(
       type: 'alert',
       severity: 'critical',
       category: categoryName,
-      title: 'Presupuesto excedido',
-      message: `Te pasaste por ${formatMoney(excess)} en ${categoryName.toLowerCase()}. Considera ajustar el límite o reducir el gasto el resto del periodo.`,
+      title: tr("Presupuesto excedido"),
+      message: tr("Te pasaste por {0} en {1}. Considera ajustar el límite o reducir el gasto el resto del periodo.", [formatMoney(excess), categoryName.toLowerCase()]),
       usagePct: pct,
     }
   }
@@ -285,8 +286,8 @@ export function getCategoryInsight(
       type: 'alert',
       severity: 'critical',
       category: categoryName,
-      title: 'Casi al límite',
-      message: `Solo te quedan ${formatMoney(remaining)} de tu presupuesto de ${categoryName.toLowerCase()}. Tendrás que ser cuidadoso los próximos ${daysLeft} días.`,
+      title: tr("Casi al límite"),
+      message: tr("Solo te quedan {0} de tu presupuesto de {1}. Tendrás que ser cuidadoso los próximos {2} días.", [formatMoney(remaining), categoryName.toLowerCase(), daysLeft]),
       usagePct: pct,
     }
   }
@@ -300,8 +301,8 @@ export function getCategoryInsight(
       type: 'recommendation',
       severity: 'warning',
       category: categoryName,
-      title: 'Consejo Kiri',
-      message: `A tu ritmo actual te pasarías por ${formatMoney(exceso)}. Para cerrar dentro del presupuesto, gasta máximo ${formatMoney(limiteDiario)} por día los próximos ${daysLeft} días.`,
+      title: tr("Consejo Kiri"),
+      message: tr("A tu ritmo actual te pasarías por {0}. Para cerrar dentro del presupuesto, gasta máximo {1} por día los próximos {2} días.", [formatMoney(exceso), formatMoney(limiteDiario), daysLeft]),
       savingsAmount: Math.round(exceso),
       usagePct: pct,
     }
@@ -314,8 +315,8 @@ export function getCategoryInsight(
       type: 'pattern',
       severity: 'warning',
       category: categoryName,
-      title: 'Gasto moderado',
-      message: `Llevas ${pct}% gastado con solo ${periodPct}% del periodo transcurrido. Mantén el ritmo controlado para no excederte.`,
+      title: tr("Gasto moderado"),
+      message: tr("Llevas {0}% gastado con solo {1}% del periodo transcurrido. Mantén el ritmo controlado para no excederte.", [pct, periodPct]),
       usagePct: pct,
     }
   }
@@ -327,8 +328,8 @@ export function getCategoryInsight(
       type: 'celebration',
       severity: 'success',
       category: categoryName,
-      title: '¡Excelente disciplina!',
-      message: `Llevas ${periodPct}% del periodo sin gastar en ${categoryName.toLowerCase()}: tienes los ${formatMoney(budget)} completos. Si no los vas a necesitar, pásalos a un bolsillo de ahorro.`,
+      title: tr("¡Excelente disciplina!"),
+      message: tr("Llevas {0}% del periodo sin gastar en {1}: tienes los {2} completos. Si no los vas a necesitar, pásalos a un bolsillo de ahorro.", [periodPct, categoryName.toLowerCase(), formatMoney(budget)]),
       savingsAmount: budget,
       usagePct: 0,
     }
@@ -341,8 +342,8 @@ export function getCategoryInsight(
       type: 'celebration',
       severity: 'success',
       category: categoryName,
-      title: '¡Buen control!',
-      message: `Llevas ${periodPct}% del periodo y solo has usado ${pct}% de tu presupuesto en ${categoryName.toLowerCase()}. ¡Sigue así!`,
+      title: tr("¡Buen control!"),
+      message: tr("Llevas {0}% del periodo y solo has usado {1}% de tu presupuesto en {2}. ¡Sigue así!", [periodPct, pct, categoryName.toLowerCase()]),
       usagePct: pct,
     }
   }
@@ -354,8 +355,8 @@ export function getCategoryInsight(
     type: 'recommendation',
     severity: 'info',
     category: categoryName,
-    title: 'Consejo Kiri',
-    message: `Puedes gastar hasta ${formatMoney(dailyBudget)} diarios en ${categoryName.toLowerCase()} para mantenerte dentro del presupuesto.`,
+    title: tr("Consejo Kiri"),
+    message: tr("Puedes gastar hasta {0} diarios en {1} para mantenerte dentro del presupuesto.", [formatMoney(dailyBudget), categoryName.toLowerCase()]),
     usagePct: pct,
   }
 }

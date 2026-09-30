@@ -18,16 +18,17 @@ import { MoneyInput } from "@/components/ui/money-input"
 import { cn } from "@/lib/utils"
 import { Wallet, Zap, Plus } from "lucide-react"
 import { userApi } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 // ─── Schema ────────────────────────────────────────────────────────────────────
 
 const schema = z.object({
   monto: z
     .string()
-    .min(1, "El monto es requerido")
-    .refine((v) => Number(v) > 0, { message: "El monto debe ser mayor a 0" }),
+    .min(1, tr("El monto es requerido"))
+    .refine((v) => Number(v) > 0, { message: tr("El monto debe ser mayor a 0") }),
   tipo: z.enum(["salario", "extra"], {
-    required_error: "Selecciona el tipo de ingreso",
+    required_error: tr("Selecciona el tipo de ingreso"),
   }),
 })
 
@@ -45,14 +46,14 @@ interface RegisterPaymentModalProps {
 const INCOME_TYPES: { value: "salario" | "extra"; label: string; description: string; icon: React.ReactNode }[] = [
   {
     value: "salario",
-    label: "Sueldo / Pago del periodo",
-    description: "Solo suma al saldo disponible — no cambia tu sueldo base",
+    label: tr("Sueldo / Pago del periodo"),
+    description: tr("Solo suma al saldo disponible — no cambia tu sueldo base"),
     icon: <Wallet className="h-4 w-4" />,
   },
   {
     value: "extra",
-    label: "Ingreso Extra",
-    description: "Freelance, bono, comisión, venta, etc.",
+    label: tr("Ingreso Extra"),
+    description: tr("Freelance, bono, comisión, venta, etc."),
     icon: <Zap className="h-4 w-4" />,
   },
 ]
@@ -89,7 +90,7 @@ export function RegisterPaymentModal({ onSuccess }: RegisterPaymentModalProps) {
     try {
       const { data, error } = await userApi.updateBalance(Number(values.monto), "ingreso")
       if (error || !data) {
-        setServerError(error ?? "No se pudo registrar el ingreso. Intenta de nuevo.")
+        setServerError(error ?? tr("No se pudo registrar el ingreso. Intenta de nuevo."))
         return
       }
       onSuccess?.(data.cashBalance)
@@ -106,29 +107,21 @@ export function RegisterPaymentModal({ onSuccess }: RegisterPaymentModalProps) {
         onClick={() => setOpen(true)}
         className="gap-2 bg-cyclon-lavender hover:bg-cyclon-lavender/90 text-white font-bold rounded-2xl shadow-lg shadow-cyclon-lavender/25 px-5"
       >
-        <Plus className="h-4 w-4" />
-        Registrar Ingreso
-      </Button>
+        <Plus className="h-4 w-4" />{tr("Registrar Ingreso")}</Button>
 
       {/* ── Modal ── */}
       <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-cyclon-lavender" />
-              Registrar Ingreso Recibido
-            </DialogTitle>
-            <DialogDescription>
-              El monto se <strong>suma al saldo disponible</strong>. Tu sueldo base configurado no cambia.
-            </DialogDescription>
+              <Wallet className="h-5 w-5 text-cyclon-lavender" />{tr("Registrar Ingreso Recibido")}</DialogTitle>
+            <DialogDescription>{tr("El monto se")}{" "}<strong>{tr("suma al saldo disponible")}</strong>{tr(". Tu sueldo base configurado no cambia.")}</DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 py-2">
             {/* ── Tipo de ingreso ── */}
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Tipo de ingreso
-              </Label>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Tipo de ingreso")}</Label>
               <Controller
                 name="tipo"
                 control={control}
@@ -184,9 +177,7 @@ export function RegisterPaymentModal({ onSuccess }: RegisterPaymentModalProps) {
 
             {/* ── Monto ── */}
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Monto recibido
-              </Label>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Monto recibido")}</Label>
               <Controller
                 name="monto"
                 control={control}
@@ -213,9 +204,7 @@ export function RegisterPaymentModal({ onSuccess }: RegisterPaymentModalProps) {
             )}
 
             <DialogFooter className="gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={handleClose}>
-                Cancelar
-              </Button>
+              <Button type="button" variant="ghost" onClick={handleClose}>{tr("Cancelar")}</Button>
               <Button
                 type="submit"
                 disabled={saving}
@@ -223,11 +212,9 @@ export function RegisterPaymentModal({ onSuccess }: RegisterPaymentModalProps) {
               >
                 {saving ? (
                   <>
-                    <div className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin mr-2" />
-                    Guardando...
-                  </>
+                    <div className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin mr-2" />{tr("Guardando...")}</>
                 ) : (
-                  "Guardar ingreso"
+                  tr("Guardar ingreso")
                 )}
               </Button>
             </DialogFooter>

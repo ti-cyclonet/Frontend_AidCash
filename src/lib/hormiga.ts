@@ -1,3 +1,4 @@
+
 /**
  * Clasificación automática de gasto hormiga — espejo de
  * Backend_AidCash/src/lib/hormiga.ts (si se cambia una, cambiar la otra). Acá
@@ -8,9 +9,9 @@
 export const HORMIGA_MONTO_MAX = 50_000
 
 const HORMIGA_KEYWORDS: string[] = [
-  'café', 'cafe', 'starbucks', 'tinto', 'capuchino', 'latte', 'espresso', 'juan valdez',
+  "café", 'cafe', 'starbucks', 'tinto', 'capuchino', 'latte', 'espresso', 'juan valdez',
   'almuerzo', 'desayuno', 'hamburguesa', 'pizza', 'empanada', 'arepa', 'sandwich', 'perro', 'perrito',
-  'buñuelo', 'domicilio', 'rappi', 'ifood', 'uber eats', 'didi food', 'snack', 'helado', 'postre', 'comida rapida',
+  "buñuelo", 'domicilio', 'rappi', 'ifood', 'uber eats', 'didi food', 'snack', 'helado', 'postre', 'comida rapida',
   'uber', 'indriver', 'in driver', 'didi', 'cabify', 'picap', 'taxi', 'bus', 'transmilenio', 'metro', 'pasaje',
   'parqueadero', 'peaje',
   'dulce', 'chocolate', 'galleta', 'chicle', 'golosina', 'antojo', 'vending', 'papas', 'gaseosa', 'jugo',

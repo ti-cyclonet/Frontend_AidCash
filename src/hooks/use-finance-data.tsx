@@ -13,6 +13,11 @@ import {
 import { Debt, FixedExpense, ExtraIncome, ImpulseExpense, ImpulseCategory, IncomeFrequency, PagosPeriodo, CuotaAtrasada } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/hooks/use-toast"
+import { tr } from "@/lib/i18n"
+
+/** Antes varias acciones fallaban en silencio (o quitaban de la pantalla algo que no se borró). */
+const avisarError = (titulo: string, detalle?: string | null) =>
+  toast({ title: titulo, description: detalle ?? undefined, variant: "destructive" })
 
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -189,7 +194,7 @@ function useFinanceDataInternal() {
         setImpulseExpenses((impulseRes.data?.expenses ?? []).map(mapImpulse))
       }
     } catch (err) {
-      setDbError('Error de conexión con el servidor')
+      setDbError(tr("Error de conexión con el servidor"))
       console.error(err)
     } finally {
       setLoading(false)
@@ -218,7 +223,7 @@ function useFinanceDataInternal() {
   const updateUserProfile = useCallback(async (
     patch: Partial<Pick<UserProfile, 'nombre' | 'ingreso_base' | 'frecuencia_ingreso' | 'onboarding_done' | 'meta_ahorro_global'>> & { diasPago?: number[] }
   ): Promise<{ error: string | null }> => {
-    if (!userId) return { error: 'Sin sesión activa' }
+    if (!userId) return { error: tr("Sin sesión activa") }
     const apiPatch: Record<string, unknown> = {}
     if (patch.nombre             !== undefined) apiPatch.nombre             = patch.nombre
     if (patch.ingreso_base       !== undefined) apiPatch.ingresoBase        = patch.ingreso_base
@@ -284,7 +289,8 @@ function useFinanceDataInternal() {
   }
 
   const deleteDebt = async (debtId: string) => {
-    await debtsApi.delete(debtId)
+    const { error } = await debtsApi.delete(debtId)
+    if (error) { avisarError(tr("No se pudo eliminar"), error); return }
     setDebts(prev => prev.filter(d => d.id !== debtId))
   }
 
@@ -293,15 +299,20 @@ function useFinanceDataInternal() {
     const debt = debts.find(d => d.id === debtId)
     if (!debt) return null
 
-    // montoPagado: si no se especifica, se paga la cuota completa
-    const realPaid = montoPagado ?? debt.cuotaPeriodo
+    // montoPagado: si no se especifica, el backend cobra la cuota — y nunca más
+    // de lo que queda de la deuda (en la última cuota el saldo suele ser menor;
+    // mandar la cuota completa la rechaza por ser mayor que el saldo).
 
     // Llamar al backend — él se encarga de acumular montoPagadoEstePeriodo Y de
     // descontar la billetera, todo en una sola transacción atómica (antes era
     // una segunda llamada aparte que, si fallaba, dejaba la deuda "pagada" sin
     // que el saldo disponible bajara).
-    const { data } = await debtsApi.pay(debtId, realPaid, periodo === 'actual' ? undefined : periodo, opciones)
-    if (!data) return null
+    const { data, error } = await debtsApi.pay(debtId, montoPagado, periodo === 'actual' ? undefined : periodo, opciones)
+    if (!data) {
+      // Antes fallaba en silencio: el modal se cerraba y no pasaba nada
+      avisarError(tr("No se pudo registrar el pago"), error)
+      return null
+    }
     const detalle = {
       liquidada: (data.debt as Record<string, unknown>).estado === 'saldada',
       nombre: debt.nombre,
@@ -433,7 +444,8 @@ function useFinanceDataInternal() {
   }
 
   const deleteFixedExpense = async (id: string) => {
-    await fixedExpensesApi.delete(id)
+    const { error } = await fixedExpensesApi.delete(id)
+    if (error) { avisarError(tr("No se pudo eliminar"), error); return }
     setFixedExpenses(prev => prev.filter(f => f.id !== id))
   }
 
@@ -450,7 +462,8 @@ function useFinanceDataInternal() {
     // con tarjeta, el descuento de cashBalance, todo en una sola transacción
     // atómica (antes el descuento era una segunda llamada aparte que, si
     // fallaba, dejaba el gasto "pagado" sin que el saldo disponible bajara).
-    const { data: payResult } = await fixedExpensesApi.pay(id, realPaid, periodo === 'actual' ? undefined : periodo, cuotaCompleta)
+    const { data: payResult, error: payError } = await fixedExpensesApi.pay(id, realPaid, periodo === 'actual' ? undefined : periodo, cuotaCompleta)
+    if (payError) { avisarError(tr("No se pudo registrar el pago"), payError); return }
 
     // Adelanto o cuota atrasada: el estado del periodo actual no cambia, se
     // recarga para traer adelantos / atrasos recalculados.
@@ -528,13 +541,14 @@ function useFinanceDataInternal() {
 
   const addExtraIncome = async (data: Omit<ExtraIncome, 'id' | 'userId'>) => {
     if (!userId) return
-    await extraIncomesApi.create({
+    const { error } = await extraIncomesApi.create({
       nombre: data.nombre,
       monto: data.monto,
       temporalidad: data.temporalidad,
       mesesRestantes: data.mesesRestantes,
       fechaRecepcion: data.fechaRecepcion || undefined,
     })
+    if (error) avisarError(tr("No se pudo registrar el ingreso"), error)
     await fetchAll()
   }
 
@@ -542,12 +556,14 @@ function useFinanceDataInternal() {
     id: string,
     data: Partial<Pick<ExtraIncome, 'nombre' | 'monto' | 'temporalidad' | 'mesesRestantes'>>
   ) => {
-    await extraIncomesApi.update(id, data as Record<string, unknown>)
+    const { error } = await extraIncomesApi.update(id, data as Record<string, unknown>)
+    if (error) { avisarError(tr("No se pudieron guardar los cambios"), error); return }
     setExtraIncomes(prev => prev.map(e => e.id === id ? { ...e, ...data } : e))
   }
 
   const removeExtraIncome = async (id: string) => {
-    await extraIncomesApi.delete(id)
+    const { error } = await extraIncomesApi.delete(id)
+    if (error) { avisarError(tr("No se pudo eliminar"), error); return }
     setExtraIncomes(prev => prev.filter(e => e.id !== id))
   }
 
@@ -572,7 +588,7 @@ function useFinanceDataInternal() {
    */
   const addImpulseExpense = async (data: { nombre: string; monto: number; categoria: ImpulseCategory; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null; sharedCategoryId?: string | null }) => {
     if (!userId) return null
-    const { data: result } = await impulseApi.create({
+    const { data: result, error: errorGasto } = await impulseApi.create({
       nombre: data.nombre,
       monto: data.monto,
       categoria: data.categoria,
@@ -583,6 +599,7 @@ function useFinanceDataInternal() {
       sharedCategoryId: data.sharedCategoryId,
       descontarBilletera: true,
     })
+    if (errorGasto) avisarError(tr("No se pudo registrar el gasto"), errorGasto)
     if (result?.expense) {
       const mapped = mapImpulse(result.expense)
       setImpulseExpenses(prev => [mapped, ...prev])
@@ -605,8 +622,8 @@ function useFinanceDataInternal() {
       if (result.hogar) {
         const h = result.hogar
         toast({
-          title: h.alerta === 'excedido' ? `Se pasaron en ${h.categoria}` : `${h.icono} Sumado a ${h.categoria} del hogar`,
-          description: `Llevan $${Math.round(h.gastado).toLocaleString('es-CO')} de $${Math.round(h.limite).toLocaleString('es-CO')} ${h.periodo === 'quincenal' ? 'esta quincena' : 'este mes'} (${h.porcentaje}%). Le avisamos a tu pareja.`,
+          title: h.alerta === 'excedido' ? tr("Se pasaron en {0}", [h.categoria]) : tr("{0} Sumado a {1} del hogar", [h.icono, h.categoria]),
+          description: tr("Llevan ${0} de ${1} {2} ({3}%). Le avisamos a tu pareja.", [Math.round(h.gastado).toLocaleString('es-CO'), Math.round(h.limite).toLocaleString('es-CO'), h.periodo === 'quincenal' ? tr("esta quincena") : tr("este mes"), h.porcentaje]),
           variant: h.alerta === 'excedido' ? 'destructive' : undefined,
         })
         window.dispatchEvent(new Event("kiri:hogar-updated"))
@@ -614,8 +631,8 @@ function useFinanceDataInternal() {
       const alerta = result.alertaCategoria
       if (alerta) {
         toast({
-          title: alerta.nivel === 'excedido' ? `Te pasaste en ${alerta.categoria}` : `Vas en el ${alerta.porcentaje}% de ${alerta.categoria}`,
-          description: `Llevas $${Math.round(alerta.gastado).toLocaleString('es-CO')} de $${Math.round(alerta.limite).toLocaleString('es-CO')} este periodo.`,
+          title: alerta.nivel === 'excedido' ? tr("Te pasaste en {0}", [alerta.categoria]) : tr("Vas en el {0}% de {1}", [alerta.porcentaje, alerta.categoria]),
+          description: tr("Llevas ${0} de ${1} este periodo.", [Math.round(alerta.gastado).toLocaleString('es-CO'), Math.round(alerta.limite).toLocaleString('es-CO')]),
           variant: alerta.nivel === 'excedido' ? 'destructive' : undefined,
         })
       }
@@ -643,7 +660,8 @@ function useFinanceDataInternal() {
   }
 
   const removeImpulseExpense = async (id: string) => {
-    await impulseApi.delete(id)
+    const { error } = await impulseApi.delete(id)
+    if (error) { avisarError(tr("No se pudo eliminar"), error); return }
     setImpulseExpenses(prev => prev.filter(e => e.id !== id))
     // El backend ya revirtió el saldo de la tarjeta (o del bolsillo "libre")
     // según cómo se pagó — sin este refetch, la tarjeta se queda mostrando el

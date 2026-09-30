@@ -17,6 +17,7 @@ import { ParejaChallenge } from "@/components/social/ParejaChallenge"
 import { NeighborGardens } from "@/components/social/NeighborGardens"
 import { useFriendsGarden } from "@/hooks/use-friends-garden"
 import type { Connection, SocialUser } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -36,9 +37,9 @@ interface ConnectionsData {
 type ConnectionRoleType = 'FRIEND' | 'FAMILY' | 'PARTNER'
 
 const ROLE_CONFIG: { value: ConnectionRoleType; label: string; icon: React.ReactNode; color: string }[] = [
-  { value: 'FRIEND', label: 'Amigo', icon: <UsersRound className="h-4 w-4" />, color: 'text-blue-500 border-blue-500/40 bg-blue-500/5' },
-  { value: 'FAMILY', label: 'Familia', icon: <Home className="h-4 w-4" />, color: 'text-amber-500 border-amber-500/40 bg-amber-500/5' },
-  { value: 'PARTNER', label: 'Pareja', icon: <Heart className="h-4 w-4" />, color: 'text-pink-500 border-pink-500/40 bg-pink-500/5' },
+  { value: 'FRIEND', label: tr("Amigo"), icon: <UsersRound className="h-4 w-4" />, color: 'text-blue-500 border-blue-500/40 bg-blue-500/5' },
+  { value: 'FAMILY', label: tr("Familia"), icon: <Home className="h-4 w-4" />, color: 'text-amber-500 border-amber-500/40 bg-amber-500/5' },
+  { value: 'PARTNER', label: tr("Pareja"), icon: <Heart className="h-4 w-4" />, color: 'text-pink-500 border-pink-500/40 bg-pink-500/5' },
 ]
 
 function getRoleBadge(role: string) {
@@ -80,7 +81,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     setLoading(true)
     const { data: res, error } = await connectionsApi.list()
     if (error || !res) {
-      toast({ title: "Error al cargar conexiones", variant: "destructive" })
+      toast({ title: tr("Error al cargar conexiones"), variant: "destructive" })
     } else {
       setData({
         accepted:        res.accepted        as unknown as Connection[],
@@ -121,7 +122,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: "Conexión aceptada ✓" })
+      toast({ title: tr("Conexión aceptada ✓") })
       load()
     }
   }
@@ -133,7 +134,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: "Invitación rechazada" })
+      toast({ title: tr("Invitación rechazada") })
       load()
     }
   }
@@ -145,7 +146,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     if (error) {
       toast({ title: error, variant: "destructive" })
     } else {
-      toast({ title: "Conexión eliminada" })
+      toast({ title: tr("Conexión eliminada") })
       load()
     }
   }
@@ -154,7 +155,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-cyclon-lavender" />
-        <p className="text-sm">Cargando conexiones...</p>
+        <p className="text-sm">{tr("Cargando conexiones...")}</p>
       </div>
     )
   }
@@ -173,9 +174,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
       {data.pendingReceived.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5" />
-            Invitaciones recibidas ({data.pendingReceived.length})
-          </h3>
+            <Clock className="h-3.5 w-3.5" />{tr("Invitaciones recibidas ({0})", [data.pendingReceived.length])}</h3>
           {data.pendingReceived.map(conn => {
             const peer = conn.requester!
             const busy = actionLoading === conn.id
@@ -217,9 +216,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
       {data.pendingSent.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5" />
-            Enviadas · esperando respuesta ({data.pendingSent.length})
-          </h3>
+            <Clock className="h-3.5 w-3.5" />{tr("Enviadas · esperando respuesta ({0})", [data.pendingSent.length])}</h3>
           {data.pendingSent.map(conn => {
             const peer = conn.addressee!
             return (
@@ -230,9 +227,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
                     <p className="font-semibold text-sm truncate">{peer.nombre}</p>
                     <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
                   </div>
-                  <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded-lg">
-                    Pendiente
-                  </span>
+                  <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded-lg">{tr("Pendiente")}</span>
                 </CardContent>
               </Card>
             )
@@ -247,9 +242,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
           className="w-full flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider"
         >
           <span className="flex items-center gap-2">
-            <Users className="h-3.5 w-3.5" />
-            Conexiones activas ({data.accepted.length})
-          </span>
+            <Users className="h-3.5 w-3.5" />{tr("Conexiones activas ({0})", [data.accepted.length])}</span>
           {connectionsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
 
@@ -259,8 +252,8 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
           <Card className="border-none bg-muted/30 rounded-3xl">
             <CardContent className="py-10 flex flex-col items-center gap-3 text-muted-foreground">
               <Users className="h-10 w-10 opacity-30" />
-              <p className="text-sm font-medium">Sin conexiones aún</p>
-              <p className="text-xs text-center opacity-70">Invita a alguien para compartir bolsillos y préstamos</p>
+              <p className="text-sm font-medium">{tr("Sin conexiones aún")}</p>
+              <p className="text-xs text-center opacity-70">{tr("Invita a alguien para compartir bolsillos y préstamos")}</p>
             </CardContent>
           </Card>
         ) : (
@@ -286,14 +279,14 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
                       <p className="text-xs text-muted-foreground truncate">{peer.correo}</p>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-kiri-emerald shrink-0" title="Conectado" />
+                      <span className="h-2 w-2 rounded-full bg-kiri-emerald shrink-0" title={tr("Conectado")} />
                       <Button
                         size="icon"
                         variant="ghost"
                         disabled={busy}
                         onClick={() => handleRemove(conn.id)}
                         className="h-8 w-8 rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
-                        title="Eliminar conexión"
+                        title={tr("Eliminar conexión")}
                       >
                         {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                       </Button>
@@ -310,8 +303,8 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
                       <ArrowRightLeft className="h-3.5 w-3.5 text-cyclon-lavender shrink-0" />
                       <p className="text-[11px] text-cyclon-lavender font-medium flex-1">
                         {conn.roleChangeRequestedBy === myId
-                          ? `Esperando que ${peer.nombre} apruebe el cambio de rol`
-                          : `${peer.nombre} propone cambiar el rol — toca para responder`}
+                          ? tr("Esperando que {0} apruebe el cambio de rol", [peer.nombre])
+                          : tr("{0} propone cambiar el rol — toca para responder", [peer.nombre])}
                       </p>
                     </button>
                   )}
@@ -356,7 +349,7 @@ export function ConnectionsTab({ myId, showInviteModal = false, onCloseInviteMod
               })),
               {
                 id: myId,
-                nombre: "Tú",
+                nombre: tr("Tú"),
                 streakActual: myGarden.streak,
                 streakMejor: myGarden.streakMejor,
                 badgesCount: myGarden.badgesCount,

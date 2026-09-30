@@ -15,6 +15,7 @@ import { useFinanceData } from "@/hooks/use-finance-data"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { useToast } from "@/hooks/use-toast"
 import { hogarApi, type HogarCategoria, type HogarResumen } from "@/lib/api-client"
+import { tr } from "@/lib/i18n"
 
 /**
  * Presupuesto del hogar — categorías compartidas en pareja.
@@ -27,12 +28,12 @@ import { hogarApi, type HogarCategoria, type HogarResumen } from "@/lib/api-clie
  */
 
 const SUGERIDAS = [
-  { nombre: "Comida", icono: "🍽️", color: "#10b981" },
-  { nombre: "Mercado", icono: "🛒", color: "#22c55e" },
-  { nombre: "Salidas", icono: "🎉", color: "#8b5cf6" },
-  { nombre: "Viajes", icono: "✈️", color: "#0ea5e9" },
-  { nombre: "Renta", icono: "🏠", color: "#f97316" },
-  { nombre: "Servicios", icono: "💡", color: "#eab308" },
+  { nombre: tr("Comida"), icono: "🍽️", color: "#10b981" },
+  { nombre: tr("Mercado"), icono: "🛒", color: "#22c55e" },
+  { nombre: tr("Salidas"), icono: "🎉", color: "#8b5cf6" },
+  { nombre: tr("Viajes"), icono: "✈️", color: "#0ea5e9" },
+  { nombre: tr("Renta"), icono: "🏠", color: "#f97316" },
+  { nombre: tr("Servicios"), icono: "💡", color: "#eab308" },
 ]
 const ICONOS = ["🍽️", "🛒", "🎉", "✈️", "🏠", "💡", "🚗", "🐶", "👶", "🎁", "💊", "📺"]
 const COLORES = ["#10b981", "#22c55e", "#8b5cf6", "#0ea5e9", "#f97316", "#eab308", "#ec4899", "#ef4444"]
@@ -75,26 +76,24 @@ export function HogarPresupuesto() {
   }
   if (!data.conectado) return null
 
-  const pareja = data.pareja?.nombre.split(" ")[0] ?? "tu pareja"
+  const pareja = data.pareja?.nombre.split(" ")[0] ?? tr("tu pareja")
   const cats = data.categorias ?? []
   // Ninguno de los dos tiene KIRI PRO: se muestra lo que ya tenían, sin crear ni registrar
   const bloqueado = data.habilitado === false
   const pedirPro = () => window.dispatchEvent(new CustomEvent("kiri:limite", { detail: {
-    codigo: "FUNCION", mejora: { plan: "KIRI PRO" },
-    mensaje: `El presupuesto del hogar es parte de KIRI PRO. Basta con que uno de los dos lo tenga, y ${pareja} recibe KIRI PLUS gratis.`,
+    codigo: "FUNCION", mejora: { plan: tr("KIRI PRO") },
+    mensaje: tr("El presupuesto del hogar es parte de KIRI PRO. Basta con que uno de los dos lo tenga para que lo usen ambos."),
   } }))
 
   if (bloqueado && cats.length === 0) {
     return (
       <Card className="border-none bg-card shadow-sm rounded-2xl overflow-hidden">
         <CardContent className="p-4 space-y-3 bg-gradient-to-br from-pink-500/10 via-card to-amber-400/10">
-          <h3 className="text-sm font-bold flex items-center gap-1.5"><Heart className="h-4 w-4 text-pink-500" /> Presupuesto del hogar <span className="text-[9px] font-black text-amber-600 bg-amber-400/20 rounded px-1.5 py-0.5">PRO</span></h3>
-          <p className="text-xs text-muted-foreground">
-            Con {pareja} pueden tener topes compartidos para comida, mercado, renta o salidas: cada uno registra sus gastos y los dos ven cuánto llevan.
-            Con <strong className="text-foreground">KIRI PRO</strong> en uno de los dos, lo usan ambos y {pareja} recibe <strong className="text-foreground">KIRI PLUS gratis</strong>.
+          <h3 className="text-sm font-bold flex items-center gap-1.5"><Heart className="h-4 w-4 text-pink-500" />{" "}{tr("Presupuesto del hogar")}{" "}<span className="text-[9px] font-black text-amber-600 bg-amber-400/20 rounded px-1.5 py-0.5">{tr("PRO")}</span></h3>
+          <p className="text-xs text-muted-foreground">{tr("Con {0} pueden tener topes compartidos para comida, mercado, renta o salidas: cada uno registra sus gastos y los dos ven cuánto llevan. Con", [pareja])}{" "}<strong className="text-foreground">{tr("KIRI PRO")}</strong>{" "}{tr("en uno de los dos, lo usan ambos.")}
           </p>
           <Button asChild size="sm" className="h-8 rounded-xl gap-1 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white">
-            <Link href="/mi-plan"><Crown className="h-3.5 w-3.5" /> Ver KIRI PRO</Link>
+            <Link href="/mi-plan#planes"><Crown className="h-3.5 w-3.5" />{" "}{tr("Ver KIRI PRO")}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -103,8 +102,8 @@ export function HogarPresupuesto() {
   const total = data.total ?? { limite: 0, gastado: 0 }
   const pctTotal = total.limite > 0 ? Math.min(100, Math.round((total.gastado / total.limite) * 100)) : 0
   const quincenal = data.periodo === "quincenal"
-  const porPeriodo = quincenal ? "por quincena" : "al mes"
-  const estePeriodo = quincenal ? "esta quincena" : "este mes"
+  const porPeriodo = quincenal ? tr("por quincena") : tr("al mes")
+  const estePeriodo = quincenal ? tr("esta quincena") : tr("este mes")
 
   const guardar = async () => {
     if (!form || !form.nombre.trim() || !(Number(form.monto) >= 0)) return
@@ -113,7 +112,7 @@ export function HogarPresupuesto() {
     const { error } = form.id ? await hogarApi.actualizar(form.id, body) : await hogarApi.crear(body)
     setGuardando(false)
     if (error) { toast({ title: error, variant: "destructive" }); return }
-    if (!form.id) toast({ title: `${form.icono} ${form.nombre} creada`, description: `Le avisamos a ${pareja}.` })
+    if (!form.id) toast({ title: `${form.icono} ${form.nombre} creada`, description: tr("Le avisamos a {0}.", [pareja]) })
     setForm(null)
     cargar()
   }
@@ -133,7 +132,7 @@ export function HogarPresupuesto() {
     const { error } = await hogarApi.cambiarPeriodo(nuevoPeriodo, convertirTopes)
     setGuardando(false)
     if (error) { toast({ title: error, variant: "destructive" }); return }
-    toast({ title: nuevoPeriodo === "quincenal" ? "🗓️ Ahora el presupuesto es por quincena" : "🗓️ Ahora el presupuesto es mensual", description: `Le avisamos a ${pareja}.` })
+    toast({ title: nuevoPeriodo === "quincenal" ? tr("🗓️ Ahora el presupuesto es por quincena") : tr("🗓️ Ahora el presupuesto es mensual"), description: tr("Le avisamos a {0}.", [pareja]) })
     setNuevoPeriodo(null)
     cargar()
   }
@@ -143,7 +142,7 @@ export function HogarPresupuesto() {
     setGuardando(true)
     const r = await addImpulseExpense({ nombre: gasto.nombre.trim(), monto: Number(gasto.monto), categoria: "otro", sharedCategoryId: gastoCat.id })
     setGuardando(false)
-    if (!r) { toast({ title: "No se pudo registrar el gasto", variant: "destructive" }); return }
+    if (!r) return // el aviso con el motivo ya lo muestra addImpulseExpense
     setGastoCat(null)
     setGasto({ nombre: "", monto: "" })
     cargar()
@@ -154,8 +153,8 @@ export function HogarPresupuesto() {
       <CardContent className="p-4 space-y-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold flex items-center gap-1.5"><Heart className="h-4 w-4 text-pink-500" /> Presupuesto del hogar</h3>
-            <p className="text-[11px] text-muted-foreground">Con {pareja} · {data.etiquetaPeriodo}</p>
+            <h3 className="text-sm font-bold flex items-center gap-1.5"><Heart className="h-4 w-4 text-pink-500" />{" "}{tr("Presupuesto del hogar")}</h3>
+            <p className="text-[11px] text-muted-foreground">{tr("Con {0} · {1}", [pareja, data.etiquetaPeriodo])}</p>
             {/* Mensual ⇄ quincenal: lo puede cambiar cualquiera de los dos */}
             <div className="mt-2 inline-flex rounded-lg bg-muted/50 p-0.5 text-[10px] font-bold">
               {(["mensual", "quincenal"] as const).map(p => (
@@ -168,19 +167,17 @@ export function HogarPresupuesto() {
             </div>
           </div>
           <Button size="sm" onClick={() => bloqueado ? pedirPro() : setForm(vacio())} className="h-8 rounded-xl gap-1 text-xs font-bold bg-pink-500 hover:bg-pink-600 text-white">
-            <Plus className="h-3.5 w-3.5" /> Categoría
-          </Button>
+            <Plus className="h-3.5 w-3.5" />{" "}{tr("Categoría")}</Button>
         </div>
 
         {bloqueado && (
-          <button onClick={pedirPro} className="w-full text-left text-[11px] rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2">
-            Ninguno de los dos tiene KIRI PRO: pueden ver lo que llevan, pero para crear categorías o registrar gastos del hogar uno de los dos necesita PRO. <strong className="text-amber-700 dark:text-amber-400">Ver KIRI PRO →</strong>
+          <button onClick={pedirPro} className="w-full text-left text-[11px] rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2">{tr("Ninguno de los dos tiene KIRI PRO: pueden ver lo que llevan, pero para crear categorías o registrar gastos del hogar uno de los dos necesita PRO.")}{" "}<strong className="text-amber-700 dark:text-amber-400">{tr("Ver KIRI PRO →")}</strong>
           </button>
         )}
 
         {cats.length === 0 ? (
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Definan cuánto van a destinar {porPeriodo} para las cosas del hogar. Empiecen con una:</p>
+            <p className="text-xs text-muted-foreground">{tr("Definan cuánto van a destinar {0} para las cosas del hogar. Empiecen con una:", [porPeriodo])}</p>
             <div className="flex flex-wrap gap-2">
               {SUGERIDAS.map(s => (
                 <button key={s.nombre} onClick={() => setForm({ ...vacio(), ...s })}
@@ -195,8 +192,8 @@ export function HogarPresupuesto() {
             {/* Total del periodo */}
             <div className="space-y-1">
               <div className="flex items-baseline justify-between text-xs">
-                <span className="text-muted-foreground">Llevan</span>
-                <span><strong>{formatAmount(total.gastado)}</strong> <span className="text-muted-foreground">de {formatAmount(total.limite)}</span></span>
+                <span className="text-muted-foreground">{tr("Llevan")}</span>
+                <span><strong>{formatAmount(total.gastado)}</strong> <span className="text-muted-foreground">{tr("de")}{" "}{formatAmount(total.limite)}</span></span>
               </div>
               <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
                 <div className={cn("h-full rounded-full", pctTotal >= 100 ? "bg-red-500" : pctTotal >= 80 ? "bg-amber-500" : "bg-pink-500")} style={{ width: `${pctTotal}%` }} />
@@ -214,17 +211,16 @@ export function HogarPresupuesto() {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold leading-tight break-words">{c.nombre}</p>
                         <p className={cn("text-[10px]", c.porcentaje >= 100 ? "text-red-500 font-bold" : "text-muted-foreground")}>
-                          {formatAmount(c.gastado)} de {formatAmount(c.montoLimite)} · {c.porcentaje >= 100 ? `se pasaron por ${formatAmount(c.gastado - c.montoLimite)}` : `quedan ${formatAmount(c.disponible)}`}
+                          {formatAmount(c.gastado)}{" "}{tr("de")}{" "}{formatAmount(c.montoLimite)} · {c.porcentaje >= 100 ? tr("se pasaron por {0}", [formatAmount(c.gastado - c.montoLimite)]) : tr("quedan {0}", [formatAmount(c.disponible)])}
                         </p>
                       </div>
                       <button onClick={() => setForm({ id: c.id, nombre: c.nombre, icono: c.icono, color: c.color, monto: String(c.montoLimite) })}
-                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted" aria-label={`Editar ${c.nombre}`}>
+                        className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted" aria-label={tr("Editar {0}", [c.nombre])}>
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <Button size="sm" variant="ghost" onClick={() => { setGastoCat(c); setGasto({ nombre: "", monto: "" }) }}
                         className="h-7 px-2 rounded-lg gap-1 text-[10px] font-bold text-pink-600 dark:text-pink-400 hover:bg-pink-500/10">
-                        <ReceiptText className="h-3 w-3" /> Gasto
-                      </Button>
+                        <ReceiptText className="h-3 w-3" />{" "}{tr("Gasto")}</Button>
                     </div>
                     {/* Barra: lo tuyo + lo de tu pareja, sobre el tope */}
                     <div className="h-2 rounded-full bg-muted/40 overflow-hidden flex">
@@ -232,7 +228,7 @@ export function HogarPresupuesto() {
                       <div className="h-full opacity-50" style={{ width: `${Math.max(0, Math.min(100 - ancho(c.gastadoYo), ancho(c.gastadoPareja)))}%`, background: c.color }} />
                     </div>
                     {(c.gastadoYo > 0 || c.gastadoPareja > 0) && (
-                      <p className="text-[9px] text-muted-foreground">Tú {formatAmount(c.gastadoYo)} · {pareja} {formatAmount(c.gastadoPareja)}</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Tú {0} · {1} {2}", [formatAmount(c.gastadoYo), pareja, formatAmount(c.gastadoPareja)])}</p>
                     )}
                   </div>
                 )
@@ -242,10 +238,10 @@ export function HogarPresupuesto() {
             {/* Últimos gastos del hogar */}
             {(data.recientes ?? []).length > 0 && (
               <div className="pt-2 border-t border-border/50 space-y-1">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Últimos gastos</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{tr("Últimos gastos")}</p>
                 {(data.recientes ?? []).slice(0, 5).map(r => (
                   <div key={r.id} className="flex items-center justify-between text-[11px]">
-                    <span className="truncate"><strong>{r.quien === "yo" ? "Tú" : pareja}</strong> · {r.nombre} <span className="text-muted-foreground">· {r.categoria}</span></span>
+                    <span className="truncate"><strong>{r.quien === "yo" ? tr("Tú") : pareja}</strong> · {r.nombre} <span className="text-muted-foreground">· {r.categoria}</span></span>
                     <span className="font-bold shrink-0 pl-2">{formatAmount(r.monto)}</span>
                   </div>
                 ))}
@@ -259,21 +255,21 @@ export function HogarPresupuesto() {
       <Dialog open={!!form} onOpenChange={v => { if (!v) setForm(null) }}>
         <DialogContent className="sm:max-w-sm [&>*]:min-w-0">
           <DialogHeader>
-            <DialogTitle>{form?.id ? "Editar categoría del hogar" : "Nueva categoría del hogar"}</DialogTitle>
-            <DialogDescription>Presupuesto {quincenal ? "quincenal" : "mensual"} compartido con {pareja}.</DialogDescription>
+            <DialogTitle>{form?.id ? tr("Editar categoría del hogar") : tr("Nueva categoría del hogar")}</DialogTitle>
+            <DialogDescription>{tr("Presupuesto {0} compartido con {1}.", [quincenal ? tr("quincenal") : tr("mensual"), pareja])}</DialogDescription>
           </DialogHeader>
           {form && (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Nombre</Label>
-                <Input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Comida, Salidas, Viajes…" className="h-10 rounded-xl" />
+                <Label className="text-xs font-bold">{tr("Nombre")}</Label>
+                <Input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder={tr("Ej: Comida, Salidas, Viajes…")} className="h-10 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">¿Cuánto van a destinar {porPeriodo}?</Label>
+                <Label className="text-xs font-bold">{tr("¿Cuánto van a destinar {0}?", [porPeriodo])}</Label>
                 <MoneyInput value={form.monto} onChange={v => setForm({ ...form, monto: v })} className="h-11 text-lg font-bold rounded-xl" placeholder="0" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Ícono</Label>
+                <Label className="text-xs font-bold">{tr("Ícono")}</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {ICONOS.map(i => (
                     <button key={i} type="button" onClick={() => setForm({ ...form, icono: i })}
@@ -283,18 +279,17 @@ export function HogarPresupuesto() {
               </div>
               <div className="flex gap-2">
                 {COLORES.map(c => (
-                  <button key={c} type="button" onClick={() => setForm({ ...form, color: c })} aria-label={`Color ${c}`}
+                  <button key={c} type="button" onClick={() => setForm({ ...form, color: c })} aria-label={tr("Color {0}", [c])}
                     className={cn("h-7 w-7 rounded-full border-2", form.color === c ? "border-foreground" : "border-transparent")} style={{ background: c }} />
                 ))}
               </div>
               <div className="flex gap-2 pt-1">
                 {form.id && (
                   <Button variant="ghost" onClick={eliminar} disabled={guardando} className="rounded-xl text-destructive hover:text-destructive gap-1 text-xs">
-                    <Trash2 className="h-3.5 w-3.5" /> Eliminar
-                  </Button>
+                    <Trash2 className="h-3.5 w-3.5" />{" "}{tr("Eliminar")}</Button>
                 )}
                 <Button onClick={guardar} disabled={guardando || !form.nombre.trim() || !form.monto} className="flex-1 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold">
-                  {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : form.id ? "Guardar" : "Crear"}
+                  {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : form.id ? tr("Guardar") : tr("Crear")}
                 </Button>
               </div>
             </div>
@@ -306,12 +301,10 @@ export function HogarPresupuesto() {
       <Dialog open={!!nuevoPeriodo} onOpenChange={v => { if (!v) setNuevoPeriodo(null) }}>
         <DialogContent className="sm:max-w-sm [&>*]:min-w-0">
           <DialogHeader>
-            <DialogTitle>🗓️ Presupuesto {nuevoPeriodo === "quincenal" ? "por quincena" : "mensual"}</DialogTitle>
-            <DialogDescription>
-              {nuevoPeriodo === "quincenal"
-                ? "Cada tope se cuenta del 1 al 15 y del 16 a fin de mes. Lo gastado vuelve a cero al empezar cada quincena."
-                : "Cada tope se cuenta de todo el mes."} Le avisamos a {pareja}.
-            </DialogDescription>
+            <DialogTitle>{tr("🗓️ Presupuesto {0}", [nuevoPeriodo === "quincenal" ? tr("por quincena") : tr("mensual")])}</DialogTitle>
+            <DialogDescription>{tr("{0} Le avisamos a {1}.", [nuevoPeriodo === "quincenal"
+                ? tr("Cada tope se cuenta del 1 al 15 y del 16 a fin de mes. Lo gastado vuelve a cero al empezar cada quincena.")
+                : tr("Cada tope se cuenta de todo el mes."), pareja])}</DialogDescription>
           </DialogHeader>
           {cats.length > 0 && (
             <div className="rounded-xl bg-muted/40 p-3 space-y-1 text-[11px]">
@@ -323,17 +316,15 @@ export function HogarPresupuesto() {
                   </span>
                 </div>
               ))}
-              {cats.length > 4 && <p className="text-muted-foreground">y {cats.length - 4} más</p>}
+              {cats.length > 4 && <p className="text-muted-foreground">{tr("y {0} más", [cats.length - 4])}</p>}
             </div>
           )}
           <div className="flex flex-col gap-2">
             <Button onClick={() => cambiarPeriodo(true)} disabled={guardando} className="w-full rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold">
-              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : cats.length > 0 ? (nuevoPeriodo === "quincenal" ? "Cambiar y dividir los topes" : "Cambiar y duplicar los topes") : "Cambiar"}
+              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : cats.length > 0 ? (nuevoPeriodo === "quincenal" ? tr("Cambiar y dividir los topes") : tr("Cambiar y duplicar los topes")) : tr("Cambiar")}
             </Button>
             {cats.length > 0 && (
-              <Button variant="ghost" onClick={() => cambiarPeriodo(false)} disabled={guardando} className="w-full rounded-xl text-xs">
-                Cambiar sin tocar los montos
-              </Button>
+              <Button variant="ghost" onClick={() => cambiarPeriodo(false)} disabled={guardando} className="w-full rounded-xl text-xs">{tr("Cambiar sin tocar los montos")}</Button>
             )}
           </div>
         </DialogContent>
@@ -343,21 +334,21 @@ export function HogarPresupuesto() {
       <Dialog open={!!gastoCat} onOpenChange={v => { if (!v) setGastoCat(null) }}>
         <DialogContent className="sm:max-w-sm [&>*]:min-w-0">
           <DialogHeader>
-            <DialogTitle>{gastoCat?.icono} Gasto en {gastoCat?.nombre}</DialogTitle>
-            <DialogDescription>Sale de tu billetera y suma al presupuesto del hogar. Le avisamos a {pareja}.</DialogDescription>
+            <DialogTitle>{tr("{0} Gasto en {1}", [gastoCat?.icono, gastoCat?.nombre])}</DialogTitle>
+            <DialogDescription>{tr("Sale de tu billetera y suma al presupuesto del hogar. Le avisamos a {0}.", [pareja])}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción</Label>
-              <Input value={gasto.nombre} onChange={e => setGasto(g => ({ ...g, nombre: e.target.value }))} placeholder="Ej: Mercado de la semana" className="h-10 rounded-xl" autoFocus />
+              <Label className="text-xs font-bold">{tr("Descripción")}</Label>
+              <Input value={gasto.nombre} onChange={e => setGasto(g => ({ ...g, nombre: e.target.value }))} placeholder={tr("Ej: Mercado de la semana")} className="h-10 rounded-xl" autoFocus />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto</Label>
+              <Label className="text-xs font-bold">{tr("Monto")}</Label>
               <MoneyInput value={gasto.monto} onChange={v => setGasto(g => ({ ...g, monto: v }))} className="h-11 text-lg font-bold rounded-xl" placeholder="0" />
-              {gastoCat && <p className="text-[10px] text-muted-foreground">Quedan {formatAmount(gastoCat.disponible)} de {formatAmount(gastoCat.montoLimite)} {estePeriodo}.</p>}
+              {gastoCat && <p className="text-[10px] text-muted-foreground">{tr("Quedan {0} de {1} {2}.", [formatAmount(gastoCat.disponible), formatAmount(gastoCat.montoLimite), estePeriodo])}</p>}
             </div>
             <Button onClick={registrarGasto} disabled={guardando || !gasto.nombre.trim() || !(Number(gasto.monto) > 0)} className="w-full rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold">
-              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Registrar gasto"}
+              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : tr("Registrar gasto")}
             </Button>
           </div>
         </DialogContent>

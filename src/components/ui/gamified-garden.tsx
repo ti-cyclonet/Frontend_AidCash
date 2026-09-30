@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { tr } from "@/lib/i18n"
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -41,9 +42,9 @@ function getTimeOfDay(): 'day' | 'sunset' | 'night' {
 }
 
 const SKY = {
-  day:    'linear-gradient(180deg, #87CEEB 0%, #B8E4F0 50%, #E0F7FA 100%)',
-  sunset: 'linear-gradient(180deg, #FF8C42 0%, #FFB347 40%, #87CEEB 100%)',
-  night:  'linear-gradient(180deg, #0F1B2D 0%, #1A2744 50%, #2C3E50 100%)',
+  day:    "linear-gradient(180deg, #87CEEB 0%, #B8E4F0 50%, #E0F7FA 100%)",
+  sunset: "linear-gradient(180deg, #FF8C42 0%, #FFB347 40%, #87CEEB 100%)",
+  night:  "linear-gradient(180deg, #0F1B2D 0%, #1A2744 50%, #2C3E50 100%)",
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ export function GamifiedGarden({
   const isNight = timeOfDay === 'night'
 
   const skyBg = isOverloaded
-    ? 'linear-gradient(180deg, #4B5563 0%, #6B7280 50%, #9CA3AF 100%)'
+    ? "linear-gradient(180deg, #4B5563 0%, #6B7280 50%, #9CA3AF 100%)"
     : SKY[timeOfDay]
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export function GamifiedGarden({
           style={{
             position: 'absolute', top: '10%', right: '10%',
             width: '32px', height: '32px', borderRadius: '50%',
-            background: 'radial-gradient(circle, #FDE68A 0%, #FEF3C7 50%, transparent 100%)',
+            background: "radial-gradient(circle, #FDE68A 0%, #FEF3C7 50%, transparent 100%)",
             zIndex: 2,
           }}
           animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
@@ -103,8 +104,8 @@ export function GamifiedGarden({
           style={{
             position: 'absolute', top: '10%', right: '12%',
             width: '26px', height: '26px', borderRadius: '50%',
-            background: 'radial-gradient(circle, #F9FAFB 0%, #E5E7EB 50%, transparent 80%)',
-            boxShadow: '0 0 12px rgba(255,255,255,0.4)',
+            background: "radial-gradient(circle, #F9FAFB 0%, #E5E7EB 50%, transparent 80%)",
+            boxShadow: "0 0 12px rgba(255,255,255,0.4)",
             zIndex: 2,
           }}
           animate={{ opacity: [0.7, 1, 0.7] }}
@@ -115,7 +116,7 @@ export function GamifiedGarden({
       {/* ── Tierra (pegada al borde inferior) ── */}
       <img
         src="/garden/tierra.png"
-        alt="Isla"
+        alt={tr("Isla")}
         style={{
           position: 'absolute',
           width: '100%',
@@ -134,7 +135,7 @@ export function GamifiedGarden({
       {/* ── Árbol (centrado, arriba del borde inferior) ── */}
       <motion.img
         src={treeAsset.src}
-        alt="Árbol"
+        alt={tr("Árbol")}
         style={{
           position: 'absolute',
           width: treeAsset.width,
@@ -164,7 +165,7 @@ export function GamifiedGarden({
       {/* ── Casa de hormigas ── */}
       <img
         src="/garden/casa_hormigas.png"
-        alt="Hormiguero"
+        alt={tr("Hormiguero")}
         style={{
           position: 'absolute',
           width: '13%',
@@ -210,7 +211,7 @@ export function GamifiedGarden({
         {emergencyFundComplete && (
           <motion.img
             src="/garden/cerca_completa.png"
-            alt="Protección"
+            alt={tr("Protección")}
             style={{
               position: 'absolute',
               width: '80%',
@@ -233,7 +234,7 @@ export function GamifiedGarden({
         {showWatering && (
           <motion.img
             src="/garden/regadera.png"
-            alt="Regadera"
+            alt={tr("Regadera")}
             style={{
               position: 'absolute',
               top: '8%',

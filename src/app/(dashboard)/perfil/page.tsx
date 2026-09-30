@@ -24,27 +24,26 @@ import { ConexionBancoCard } from "@/components/plan/ConexionBancoCard"
 import { api, userApi, supportApi } from "@/lib/api-client"
 import { prepararFotoPerfil, resizeImageToDataUrl } from "@/lib/avatar-upload"
 import { activarNotificaciones, enviarPrueba, estadoPush, registrarDispositivo, type EstadoPush } from "@/lib/push-client"
+import { tr } from "@/lib/i18n"
 
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
 
 export default function PerfilPage() {
   const router = useRouter()
-  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout } = useAppContext()
+  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout, idioma, setIdioma } = useAppContext()
   const { signOut, user: authUser } = useAuth()
   const { plan } = usePlan()
   const displayEmail = authUser?.correo ?? user.correo
   const tier = plan?.tier ?? (/pro|cyclon/i.test(plan?.planName ?? "") ? "PRO" : /plus/i.test(plan?.planName ?? "") ? "PLUS" : "FREE")
   const isPlus = tier !== "FREE"
-  const diasPrueba = plan?.fuente === "prueba" && plan.pruebaHasta
+  const diasPrueba = (plan?.fuente === "prueba" || plan?.fuente === "sin_conexion") && plan.pruebaHasta
     ? Math.max(0, Math.ceil((new Date(plan.pruebaHasta).getTime() - Date.now()) / 86_400_000))
     : null
   const detallePlan = diasPrueba !== null
-    ? `Prueba gratis · ${diasPrueba <= 1 ? "termina hoy" : `te quedan ${diasPrueba} días`}`
-    : plan?.fuente === "pareja"
-      ? "Gratis gracias al KIRI PRO de tu pareja"
-      : tier === "PRO" ? "Todo sin límite, hogar y conexión con tu banco"
-      : tier === "PLUS" ? "Más espacio, PDF, préstamos y más IA"
-      : "Plan gratis · mira lo que desbloqueas"
+    ? tr("Días ganados por invitar · {0}", [diasPrueba <= 1 ? tr("terminan hoy") : tr("te quedan {0} días", [diasPrueba])])
+    : tier === "PRO" ? tr("Todo sin límite, hogar y conexión con tu banco")
+      : tier === "PLUS" ? tr("Más espacio, PDF, préstamos y más IA")
+      : tr("Plan gratis · mira lo que desbloqueas")
 
   const handleLogout = async () => {
     await signOut()
@@ -67,13 +66,13 @@ export default function PerfilPage() {
   const activarPush = async () => {
     const e = await activarNotificaciones()
     setPushEstado(e)
-    setPushMsg(e === "activas" ? "¡Listo! Toca Probar para recibir una notificación de prueba." : e === "bloqueadas" ? "El navegador las bloqueó. Actívalas en los ajustes del sitio." : null)
+    setPushMsg(e === "activas" ? tr("¡Listo! Toca Probar para recibir una notificación de prueba.") : e === "bloqueadas" ? tr("El navegador las bloqueó. Actívalas en los ajustes del sitio.") : null)
   }
   const probarPush = async () => {
     setPushMsg("Enviando…")
     await registrarDispositivo().catch(() => false)
     const n = await enviarPrueba()
-    setPushMsg(n > 0 ? `Enviada a ${n} dispositivo${n === 1 ? "" : "s"}. Debería aparecer en tu barra de notificaciones.` : "Este dispositivo no quedó registrado. Toca Activar de nuevo.")
+    setPushMsg(n > 0 ? tr("Enviada a {0} dispositivo{1}. Debería aparecer en tu barra de notificaciones.", [n, n === 1 ? "" : "s"]) : tr("Este dispositivo no quedó registrado. Toca Activar de nuevo."))
   }
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -82,13 +81,13 @@ export default function PerfilPage() {
     e.target.value = "" // permite volver a elegir el mismo archivo si falla
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      setAvatarError("Selecciona un archivo de imagen.")
+      setAvatarError(tr("Selecciona un archivo de imagen."))
       return
     }
     setAvatarError(null)
     const { url, preview, error } = await prepararFotoPerfil(file)
     if (preview) setEditForm(f => ({ ...f, avatarUrl: preview }))
-    if (error || !url) { setAvatarError(error || "No se pudo subir la foto. Intenta con otra."); return }
+    if (error || !url) { setAvatarError(error || tr("No se pudo subir la foto. Intenta con otra.")); return }
     setEditForm(f => ({ ...f, avatarUrl: url }))
     setAvatarChanged(true)
   }
@@ -108,7 +107,6 @@ export default function PerfilPage() {
     // se reenvía si cambió, para no resubir la foto entera en cada edición.
     const { error } = await userApi.updateProfile({
       nombre: fullName,
-      correo: editForm.correo,
       username: editForm.username,
       ...(avatarChanged ? { avatarUrl: editForm.avatarUrl } : {}),
       firstName: partes.primerNombre,
@@ -158,8 +156,8 @@ export default function PerfilPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-cyclon-lavender">Perfil</h1>
-        <p className="text-muted-foreground text-sm">Configura tu experiencia.</p>
+        <h1 className="text-2xl font-bold text-cyclon-lavender">{tr("Perfil")}</h1>
+        <p className="text-muted-foreground text-sm">{tr("Configura tu experiencia.")}</p>
       </header>
 
       {/* User Info Card */}
@@ -183,7 +181,7 @@ export default function PerfilPage() {
 
       {/* Plan Section */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Mi Plan</h3>
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">{tr("Mi Plan")}</h3>
         <Card className="border-none shadow-sm bg-card rounded-2xl">
           <CardContent className="p-0">
             <button
@@ -195,15 +193,13 @@ export default function PerfilPage() {
                   {isPlus ? <Crown className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                 </div>
                 <div>
-                  <span className="font-medium">{plan?.planName || "KIRI FREE"}</span>
+                  <span className="font-medium">{plan?.planName || tr("KIRI FREE")}</span>
                   <p className="text-[10px] text-muted-foreground">{detallePlan}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {tier !== "PRO" && (
-                  <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                    Mejorar
-                  </span>
+                  <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">{tr("Mejorar")}</span>
                 )}
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>
@@ -217,7 +213,7 @@ export default function PerfilPage() {
 
       {/* App Settings */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Aplicación</h3>
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">{tr("Aplicación")}</h3>
         <Card className="border-none shadow-sm bg-card rounded-2xl">
           <CardContent className="p-0 divide-y divide-border">
             <div className="flex items-center justify-between p-4">
@@ -225,9 +221,27 @@ export default function PerfilPage() {
                 <div className="h-8 w-8 rounded-lg bg-cyclon-sky/10 flex items-center justify-center text-cyclon-sky">
                   {isDarkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </div>
-                <Label htmlFor="dark-mode" className="font-medium">Modo Oscuro</Label>
+                <Label htmlFor="dark-mode" className="font-medium">{tr("Modo Oscuro")}</Label>
               </div>
               <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={setIsDarkMode} />
+            </div>
+
+            <div className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald">
+                  <Globe className="h-4 w-4" />
+                </div>
+                <Label className="font-medium">{tr("Idioma")}</Label>
+              </div>
+              <Select value={idioma} onValueChange={(v) => setIdioma(v as "es" | "en")}>
+                <SelectTrigger className="w-[130px] h-9 border-none bg-muted/50 font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="es">{tr("🇨🇴 Español")}</SelectItem>
+                  <SelectItem value="en">{tr("🇺🇸 English")}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between p-4">
@@ -235,17 +249,17 @@ export default function PerfilPage() {
                 <div className="h-8 w-8 rounded-lg bg-cyclon-pink/10 flex items-center justify-center text-cyclon-pink">
                   <Timer className="h-4 w-4" />
                 </div>
-                <Label className="font-medium">Tiempo de inactividad</Label>
+                <Label className="font-medium">{tr("Tiempo de inactividad")}</Label>
               </div>
               <Select value={inactivityTimeout} onValueChange={(v) => setInactivityTimeout(v as "2" | "5" | "10" | "never")}>
                 <SelectTrigger className="w-[110px] h-9 border-none bg-muted/50 font-bold">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="2">2 min</SelectItem>
-                  <SelectItem value="5">5 min</SelectItem>
-                  <SelectItem value="10">10 min</SelectItem>
-                  <SelectItem value="never">Nunca</SelectItem>
+                  <SelectItem value="2">{tr("2 min")}</SelectItem>
+                  <SelectItem value="5">{tr("5 min")}</SelectItem>
+                  <SelectItem value="10">{tr("10 min")}</SelectItem>
+                  <SelectItem value="never">{tr("Nunca")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -258,20 +272,20 @@ export default function PerfilPage() {
                     <Bell className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium text-sm">Notificaciones del celular</p>
+                    <p className="font-medium text-sm">{tr("Notificaciones del celular")}</p>
                     <p className={cn("text-[11px]", pushEstado === "activas" ? "text-kiri-emerald" : "text-muted-foreground")}>
-                      {pushEstado === "activas" ? "Activadas en este dispositivo"
-                        : pushEstado === "bloqueadas" ? "Bloqueadas: actívalas en los ajustes del navegador"
-                        : pushEstado === "instalar-ios" ? "En iPhone: instala Kiri (Compartir → Agregar a inicio)"
-                        : pushEstado === "no-soportado" ? "Este navegador no las soporta"
-                        : "Sin activar"}
+                      {pushEstado === "activas" ? tr("Activadas en este dispositivo")
+                        : pushEstado === "bloqueadas" ? tr("Bloqueadas: actívalas en los ajustes del navegador")
+                        : pushEstado === "instalar-ios" ? tr("En iPhone: instala Kiri (Compartir → Agregar a inicio)")
+                        : pushEstado === "no-soportado" ? tr("Este navegador no las soporta")
+                        : tr("Sin activar")}
                     </p>
                   </div>
                 </div>
                 {pushEstado === "activas" ? (
-                  <Button size="sm" variant="outline" className="rounded-xl h-8 text-xs shrink-0" onClick={probarPush}>Probar</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl h-8 text-xs shrink-0" onClick={probarPush}>{tr("Probar")}</Button>
                 ) : pushEstado === "sin-activar" ? (
-                  <Button size="sm" className="rounded-xl h-8 text-xs shrink-0 bg-kiri-emerald hover:bg-kiri-emerald/90 text-white" onClick={activarPush}>Activar</Button>
+                  <Button size="sm" className="rounded-xl h-8 text-xs shrink-0 bg-kiri-emerald hover:bg-kiri-emerald/90 text-white" onClick={activarPush}>{tr("Activar")}</Button>
                 ) : null}
               </div>
               {pushMsg && <p className="text-[11px] text-muted-foreground pl-11">{pushMsg}</p>}
@@ -282,7 +296,7 @@ export default function PerfilPage() {
 
       {/* Security */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Seguridad</h3>
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">{tr("Seguridad")}</h3>
         <Card className="border-none shadow-sm bg-card rounded-2xl">
           <CardContent className="p-0">
             <button onClick={() => setIsPasswordOpen(true)} className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
@@ -290,7 +304,7 @@ export default function PerfilPage() {
                 <div className="h-8 w-8 rounded-lg bg-cyclon-pink/20 flex items-center justify-center text-cyclon-pink">
                   <Lock className="h-4 w-4" />
                 </div>
-                <span className="font-medium">Cambiar Contraseña</span>
+                <span className="font-medium">{tr("Cambiar Contraseña")}</span>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -300,7 +314,7 @@ export default function PerfilPage() {
 
       {/* Ayuda */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">Ayuda</h3>
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider ml-1">{tr("Ayuda")}</h3>
         <Card className="border-none shadow-sm bg-card rounded-2xl">
           <CardContent className="p-0 divide-y divide-border">
             <button
@@ -312,8 +326,8 @@ export default function PerfilPage() {
                   <BookOpen className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="font-medium">Guía Kiri</span>
-                  <p className="text-[10px] text-muted-foreground">Descubre cómo funciona cada módulo</p>
+                  <span className="font-medium">{tr("Guía Kiri")}</span>
+                  <p className="text-[10px] text-muted-foreground">{tr("Descubre cómo funciona cada módulo")}</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -327,8 +341,8 @@ export default function PerfilPage() {
                   <MessageCircle className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="font-medium">Soporte</span>
-                  <p className="text-[10px] text-muted-foreground">¿Necesitas ayuda? Escríbenos</p>
+                  <span className="font-medium">{tr("Soporte")}</span>
+                  <p className="text-[10px] text-muted-foreground">{tr("¿Necesitas ayuda? Escríbenos")}</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -339,8 +353,8 @@ export default function PerfilPage() {
                   <HelpCircle className="h-4 w-4" />
                 </div>
                 <div>
-                  <span className="font-medium">Preguntas frecuentes</span>
-                  <p className="text-[10px] text-muted-foreground">Resuelve tus dudas</p>
+                  <span className="font-medium">{tr("Preguntas frecuentes")}</span>
+                  <p className="text-[10px] text-muted-foreground">{tr("Resuelve tus dudas")}</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -366,19 +380,17 @@ export default function PerfilPage() {
         onClick={handleLogout}
         className="w-full h-14 rounded-2xl text-lg font-bold flex items-center gap-2 shadow-lg shadow-destructive/20"
       >
-        <LogOut className="h-5 w-5" />
-        Cerrar Sesión
-      </Button>
+        <LogOut className="h-5 w-5" />{tr("Cerrar Sesión")}</Button>
 
       <div className="text-center pt-4">
-        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Kiri Finance v1.0.0</p>
+        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{tr("Kiri Finance v1.0.0")}</p>
       </div>
 
       {/* Edit Profile Modal */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent >
           <DialogHeader>
-            <DialogTitle>Editar Perfil</DialogTitle>
+            <DialogTitle>{tr("Editar Perfil")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-5 py-2">
@@ -405,79 +417,79 @@ export default function PerfilPage() {
                 className="hidden"
                 onChange={handleAvatarChange}
               />
-              <p className="text-xs text-muted-foreground">Toca el ícono para cambiar la foto</p>
+              <p className="text-xs text-muted-foreground">{tr("Toca el ícono para cambiar la foto")}</p>
               {avatarError && <p className="text-xs text-destructive font-medium">{avatarError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Primer Nombre *</Label>
+                <Label className="text-xs">{tr("Primer Nombre *")}</Label>
                 <Input
                   value={editForm.firstName}
                   onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
-                  placeholder="Primer nombre"
+                  placeholder={tr("Primer nombre")}
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Segundo Nombre</Label>
+                <Label className="text-xs">{tr("Segundo Nombre")}</Label>
                 <Input
                   value={editForm.secondName}
                   onChange={e => setEditForm(f => ({ ...f, secondName: e.target.value }))}
-                  placeholder="Segundo nombre"
+                  placeholder={tr("Segundo nombre")}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Primer Apellido *</Label>
+                <Label className="text-xs">{tr("Primer Apellido *")}</Label>
                 <Input
                   value={editForm.firstSurname}
                   onChange={e => setEditForm(f => ({ ...f, firstSurname: e.target.value }))}
-                  placeholder="Primer apellido"
+                  placeholder={tr("Primer apellido")}
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Segundo Apellido</Label>
+                <Label className="text-xs">{tr("Segundo Apellido")}</Label>
                 <Input
                   value={editForm.secondSurname}
                   onChange={e => setEditForm(f => ({ ...f, secondSurname: e.target.value }))}
-                  placeholder="Segundo apellido"
+                  placeholder={tr("Segundo apellido")}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">Correo</Label>
+              <Label className="text-xs">{tr("Correo")}</Label>
               <Input
                 type="email"
                 value={editForm.correo}
-                onChange={e => setEditForm(f => ({ ...f, correo: e.target.value }))}
-                placeholder="tu@correo.com"
+                readOnly
+                disabled
+                className="bg-muted/50"
               />
+              <p className="text-[10px] text-muted-foreground">{tr("Es tu correo para iniciar sesión; no se cambia desde aquí.")}</p>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">Nombre de usuario</Label>
+              <Label className="text-xs">{tr("Nombre de usuario")}</Label>
               <Input
                 value={editForm.username}
                 onChange={e => setEditForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
                 placeholder="tu_usuario"
               />
-              <p className="text-[10px] text-muted-foreground">Así te encuentran tus amigos en Social — @{editForm.username || 'usuario'}</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Así te encuentran tus amigos en Social — @{0}", [editForm.username || tr("usuario")])}</p>
               {usernameError && <p className="text-[10px] text-destructive">{usernameError}</p>}
             </div>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setIsEditOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setIsEditOpen(false)}>{tr("Cancelar")}</Button>
             <Button
               onClick={handleSaveProfile}
-              disabled={!editForm.firstName || !editForm.firstSurname || !editForm.correo}
+              disabled={!editForm.firstName.trim() || !editForm.firstSurname.trim()}
               className="bg-cyclon-lavender text-white font-bold rounded-xl px-8"
-            >
-              Guardar
-            </Button>
+            >{tr("Guardar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -529,7 +541,7 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
       setImagenes(prev => [...prev, ...resized])
       setError("")
     } catch {
-      setError("No se pudo procesar una de las imágenes.")
+      setError(tr("No se pudo procesar una de las imágenes."))
     }
   }
 
@@ -538,7 +550,7 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
   const handleSubmit = async () => {
     setError("")
     if (!titulo.trim() || !descripcion.trim()) {
-      setError("Completa el título y la descripción.")
+      setError(tr("Completa el título y la descripción."))
       return
     }
 
@@ -562,7 +574,7 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Soporte</DialogTitle>
+          <DialogTitle>{tr("Soporte")}</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -570,38 +582,38 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
             <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
               <MessageCircle className="h-5 w-5 text-green-600" />
             </div>
-            <p className="text-sm font-medium">¡Listo! Ya recibimos tu mensaje.</p>
-            <Button onClick={() => handleClose(false)} className="mt-2">Cerrar</Button>
+            <p className="text-sm font-medium">{tr("¡Listo! Ya recibimos tu mensaje.")}</p>
+            <Button onClick={() => handleClose(false)} className="mt-2">{tr("Cerrar")}</Button>
           </div>
         ) : (
           <>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label>Título</Label>
+                <Label>{tr("Título")}</Label>
                 <Input
                   value={titulo}
                   onChange={e => setTitulo(e.target.value)}
-                  placeholder="Resume tu problema o pregunta"
+                  placeholder={tr("Resume tu problema o pregunta")}
                   maxLength={150}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Descripción</Label>
+                <Label>{tr("Descripción")}</Label>
                 <Textarea
                   value={descripcion}
                   onChange={e => setDescripcion(e.target.value)}
-                  placeholder="Cuéntanos con detalle qué pasó"
+                  placeholder={tr("Cuéntanos con detalle qué pasó")}
                   rows={4}
                   maxLength={5000}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Imágenes (opcional, hasta {SUPPORT_MAX_IMAGES})</Label>
+                <Label>{tr("Imágenes (opcional, hasta {0})", [SUPPORT_MAX_IMAGES])}</Label>
                 <div className="flex flex-wrap gap-2">
                   {imagenes.map((img, i) => (
                     <div key={i} className="relative w-fit">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img} alt={`Adjunto ${i + 1}`} className="h-24 w-24 rounded-lg border border-border object-cover" />
+                      <img src={img} alt={tr("Adjunto {0}", [i + 1])} className="h-24 w-24 rounded-lg border border-border object-cover" />
                       <button
                         onClick={() => removeImage(i)}
                         className="absolute -top-2 -right-2 h-6 w-6 bg-destructive rounded-full flex items-center justify-center shadow-lg"
@@ -618,7 +630,7 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
                       className="gap-2 h-24 w-24 flex-col"
                     >
                       <ImageIcon className="h-5 w-5" />
-                      <span className="text-[10px]">Agregar</span>
+                      <span className="text-[10px]">{tr("Agregar")}</span>
                     </Button>
                   )}
                 </div>
@@ -636,13 +648,13 @@ function SupportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
               )}
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="ghost" onClick={() => handleClose(false)}>Cancelar</Button>
+              <Button variant="ghost" onClick={() => handleClose(false)}>{tr("Cancelar")}</Button>
               <Button
                 onClick={handleSubmit}
                 disabled={loading || !titulo.trim() || !descripcion.trim()}
                 className="bg-cyclon-lavender text-white font-bold rounded-xl px-8"
               >
-                {loading ? "Enviando..." : "Enviar"}
+                {loading ? "Enviando..." : tr("Enviar")}
               </Button>
             </DialogFooter>
           </>
@@ -679,15 +691,15 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     setError("")
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError("Completa todos los campos.")
+      setError(tr("Completa todos los campos."))
       return
     }
     if (newPassword.length < 6) {
-      setError("La nueva contraseña debe tener al menos 6 caracteres.")
+      setError(tr("La nueva contraseña debe tener al menos 6 caracteres."))
       return
     }
     if (newPassword !== confirmPassword) {
-      setError("Las contraseñas no coinciden.")
+      setError(tr("Las contraseñas no coinciden."))
       return
     }
 
@@ -710,7 +722,7 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cambiar Contraseña</DialogTitle>
+          <DialogTitle>{tr("Cambiar Contraseña")}</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -718,14 +730,14 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
               <Lock className="h-5 w-5 text-green-600" />
             </div>
-            <p className="text-sm font-medium">Contraseña actualizada exitosamente</p>
-            <Button onClick={() => handleClose(false)} className="mt-2">Cerrar</Button>
+            <p className="text-sm font-medium">{tr("Contraseña actualizada exitosamente")}</p>
+            <Button onClick={() => handleClose(false)} className="mt-2">{tr("Cerrar")}</Button>
           </div>
         ) : (
           <>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label>Contraseña actual</Label>
+                <Label>{tr("Contraseña actual")}</Label>
                 <Input
                   type="password"
                   value={currentPassword}
@@ -734,21 +746,21 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 />
               </div>
               <div className="space-y-2">
-                <Label>Nueva contraseña</Label>
+                <Label>{tr("Nueva contraseña")}</Label>
                 <Input
                   type="password"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder={tr("Mínimo 6 caracteres")}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Confirmar nueva contraseña</Label>
+                <Label>{tr("Confirmar nueva contraseña")}</Label>
                 <Input
                   type="password"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="Repite la nueva contraseña"
+                  placeholder={tr("Repite la nueva contraseña")}
                 />
               </div>
               {error && (
@@ -756,13 +768,13 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               )}
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="ghost" onClick={() => handleClose(false)}>Cancelar</Button>
+              <Button variant="ghost" onClick={() => handleClose(false)}>{tr("Cancelar")}</Button>
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
                 className="bg-cyclon-lavender text-white font-bold rounded-xl px-8"
               >
-                {loading ? "Guardando..." : "Cambiar contraseña"}
+                {loading ? "Guardando..." : tr("Cambiar contraseña")}
               </Button>
             </DialogFooter>
           </>

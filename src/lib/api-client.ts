@@ -14,6 +14,7 @@
 import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt, ConnectionRole } from './types'
 import { LEGAL_VERSIONS } from "./legal/kiri-legal"
 import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
+import { tr, idioma } from "@/lib/i18n"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
@@ -126,7 +127,33 @@ export interface LimitePlanEvento {
   mejora?: { plan: string; maxValue?: number } | null
 }
 
+/**
+ * GETs idénticos simultáneos comparten una sola petición. Al abrir el
+ * Dashboard varios componentes pedían lo mismo a la vez (24 llamadas, 15
+ * distintas: /auth/me ×2, /budget-categories/resumen ×3…) y, con mucho
+ * tráfico, eso era casi 40 % de carga extra para el servidor. Cada quien que
+ * se suma recibe su propia copia de los datos (por si alguno los modifica).
+ */
+const enVuelo = new Map<string, Promise<ApiResponse<unknown>>>()
+
 export async function api<T = unknown>(
+  endpoint: string,
+  options: ApiOptions = {}
+): Promise<ApiResponse<T>> {
+  const metodo = (options.method ?? 'GET').toUpperCase()
+  if (metodo !== 'GET' || options.body !== undefined) return apiDirecto<T>(endpoint, options)
+  const clave = `${endpoint}|${options.skipAuth ? '' : getAccessToken() ?? ''}|${idioma()}`
+  const existente = enVuelo.get(clave)
+  if (existente) {
+    const r = await existente
+    return { ...r, data: r.data == null ? r.data : structuredClone(r.data) } as ApiResponse<T>
+  }
+  const p = apiDirecto<T>(endpoint, options).finally(() => enVuelo.delete(clave))
+  enVuelo.set(clave, p as Promise<ApiResponse<unknown>>)
+  return p
+}
+
+async function apiDirecto<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
@@ -134,6 +161,8 @@ export async function api<T = unknown>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // Errores y mensajes del backend (y Kiri Coach) en el idioma de la app
+    'x-kiri-idioma': idioma(),
     ...((customHeaders as Record<string, string>) || {}),
   }
 
@@ -172,7 +201,7 @@ export async function api<T = unknown>(
           config.headers = headers
           res = await fetch(`${API_URL}${endpoint}`, config)
         } else {
-          return { data: null, error: 'Sesión expirada', status: 401 }
+          return { data: null, error: tr("Sesión expirada"), status: 401 }
         }
       } else if (errorData.code === 'SESSION_REVOKED') {
         // La sesión se cerró desde el servidor (contraseña restablecida o
@@ -181,7 +210,7 @@ export async function api<T = unknown>(
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
           window.location.href = '/login'
         }
-        return { data: null, error: errorData.error || 'Tu sesión ya no es válida', status: 401 }
+        return { data: null, error: errorData.error || tr("Tu sesión ya no es válida"), status: 401 }
       } else {
         // Sin ningún token guardado la sesión ya no existe (cerró sesión en
         // otra pestaña, se borraron los datos del sitio…): antes cada acción
@@ -190,7 +219,7 @@ export async function api<T = unknown>(
         if (!getAccessToken() && typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
           window.location.href = '/login'
         }
-        return { data: null, error: errorData.error || 'No autorizado', status: 401 }
+        return { data: null, error: errorData.error || tr("No autorizado"), status: 401 }
       }
     }
 
@@ -201,7 +230,7 @@ export async function api<T = unknown>(
       // avisa a <LimitePlanDialog> para ofrecer "Ver planes" en cualquier pantalla.
       const codigo = data?.codigo as string | undefined
       if (codigo === 'LIMITE' || codigo === 'FUNCION' || codigo === 'CUOTA_IA') {
-        const mensaje = (codigo === 'CUOTA_IA' ? data?.error : data?.message) || 'Tu plan no incluye esto.'
+        const mensaje = (codigo === 'CUOTA_IA' ? data?.error : data?.message) || tr("Tu plan no incluye esto.")
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent<LimitePlanEvento>('kiri:limite', {
             detail: { codigo, mensaje, plan: data?.plan, mejora: data?.mejora ?? null },
@@ -211,7 +240,7 @@ export async function api<T = unknown>(
       }
       return {
         data: null,
-        error: data?.error || `Error ${res.status}`,
+        error: data?.error || tr("Error {0}", [res.status]),
         status: res.status,
       }
     }
@@ -220,7 +249,7 @@ export async function api<T = unknown>(
   } catch (err) {
     return {
       data: null,
-      error: 'Error de conexión con el servidor',
+      error: tr("Error de conexión con el servidor"),
       status: 0,
     }
   }
@@ -380,7 +409,7 @@ export const userApi = {
  */
 export async function uploadAvatarToAuthoriza(dataUrl: string): Promise<{ url: string | null; error: string | null }> {
   const { data, error } = await api<{ url: string }>('/users/avatar', { method: 'POST', body: { dataUrl } })
-  if (error || !data?.url) return { url: null, error: error || 'No se pudo subir la foto' }
+  if (error || !data?.url) return { url: null, error: error || tr("No se pudo subir la foto") }
   return { url: data.url, error: null }
 }
 
@@ -962,6 +991,9 @@ export interface Movement {
    * sin esto se mostrarían en rojo como un gasto, cuando en realidad el
    * dinero está volviendo a estar disponible. */
   direccion?: 'entrada' | 'salida'
+  /** Se lista para explicar, pero no movió la billetera (ej. un préstamo que
+   * se registró sin sacar plata): no cuenta en "Entró / Salió". */
+  noMueveBilletera?: boolean
 }
 
 export const reportsApi = {
@@ -1179,7 +1211,7 @@ export interface FactonetInfo {
   url: string
   correo: string
   facturaPendiente: FacturaPendiente | null
-  cambioPlan: { packageId: string; plan: string | null; fecha: string } | null
+  cambioPlan: { packageId: string; plan: string | null; fecha: string; ciclo?: "mensual" | "anual"; descuentoPrimerMes?: number } | null
 }
 
 /** Términos y Condiciones y autorización de tratamiento de datos. */
@@ -1421,7 +1453,7 @@ async function syncLocalDataToDBImpl(): Promise<{ pocketsSynced: number; categor
 
       if (localPockets.length > 0) {
         const pocketsPayload = localPockets.map(p => ({
-          nombre: p.nombre || p.name || 'Sin nombre',
+          nombre: p.nombre || p.name || tr("Sin nombre"),
           meta: p.meta ?? p.goal ?? 0,
           montoActual: p.acumulado ?? p.montoActual ?? p.currentAmount ?? 0,
           color: p.color || '#10B981',
@@ -1450,7 +1482,7 @@ async function syncLocalDataToDBImpl(): Promise<{ pocketsSynced: number; categor
 
       if (localCategories.length > 0) {
         const categoriesPayload = localCategories.map(c => ({
-          nombre: c.nombre || c.name || 'Sin nombre',
+          nombre: c.nombre || c.name || tr("Sin nombre"),
           icono: c.icono || c.icon || 'tag',
           color: c.color || '#6366F1',
           tipo: (c.tipo || c.type || 'gasto') as 'gasto' | 'ingreso' | 'ahorro',

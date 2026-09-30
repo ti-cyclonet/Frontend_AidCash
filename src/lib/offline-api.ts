@@ -23,6 +23,7 @@
 
 import { api, type ApiResponse } from './api-client'
 import { offlineQueue } from './offline-queue'
+import { tr } from "@/lib/i18n"
 
 interface OfflineApiResult<T> {
   /** Datos reales del servidor (null si se encoló offline) */
@@ -55,7 +56,7 @@ export async function offlineApi<T = unknown>(
   // Si claramente no hay red, encolar directamente (evita timeout)
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     if (options?.skipQueue) {
-      return { data: null, error: 'Sin conexión', status: 0, queued: false }
+      return { data: null, error: tr("Sin conexión"), status: 0, queued: false }
     }
 
     const queueId = await offlineQueue.enqueue(endpoint, method, body)
@@ -97,7 +98,7 @@ export async function offlineApi<T = unknown>(
       return { data: null, error: null, status: 0, queued: true, queueId }
     }
 
-    return { data: null, error: 'Error inesperado', status: 0, queued: false }
+    return { data: null, error: tr("Error inesperado"), status: 0, queued: false }
   }
 }
 

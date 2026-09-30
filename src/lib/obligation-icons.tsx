@@ -5,6 +5,7 @@ import {
   Tv, Music, Dumbbell, ShoppingBag, CreditCard, Building2,
   Banknote, Landmark, Receipt, MoreHorizontal, Droplets, Flame,
 } from "lucide-react"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -149,9 +150,9 @@ export function calculateDebtStrategy(debts: DebtInput[]): StrategyResult | null
 
     return {
       strategy: "avalanche",
-      strategyLabel: "⚡ Avalancha",
+      strategyLabel: tr("⚡ Avalancha"),
       priorityDebtId: priority.id,
-      priorityLabel: "⚡ Prioridad Avalancha",
+      priorityLabel: tr("⚡ Prioridad Avalancha"),
       savingsEstimate,
     }
   }
@@ -162,9 +163,9 @@ export function calculateDebtStrategy(debts: DebtInput[]): StrategyResult | null
 
   return {
     strategy: "snowball",
-    strategyLabel: "🔥 Bola de Nieve",
+    strategyLabel: tr("🔥 Bola de Nieve"),
     priorityDebtId: priority.id,
-    priorityLabel: "🔥 Prioridad Bola de Nieve",
+    priorityLabel: tr("🔥 Prioridad Bola de Nieve"),
     savingsEstimate: 0,
   }
 }

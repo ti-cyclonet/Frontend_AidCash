@@ -44,6 +44,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import type { Loan } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Tab = "gastos_fijos" | "deudas" | "me_deben"
@@ -98,17 +99,17 @@ export default function ObligacionesPage() {
     // pagó y ajusta la tasa para estimar mejor la próxima vez.
     if (result && opciones.saldoReal !== undefined && !result.liquidada) {
       toast({
-        title: `Interés real pagado: ${formatAmount(result.pagoInteres)}`,
+        title: tr("Interés real pagado: {0}", [formatAmount(result.pagoInteres)]),
         description: result.tasaObservadaMensual !== null
-          ? `Tu tasa real quedó en ${result.tasaObservadaMensual.toFixed(2)}% mensual. La usaremos para tus próximas estimaciones.`
-          : `Saldo actualizado a ${formatAmount(result.saldoNuevo)}, igual que en tu banco.`,
+          ? tr("Tu tasa real quedó en {0}% mensual. La usaremos para tus próximas estimaciones.", [result.tasaObservadaMensual.toFixed(2)])
+          : tr("Saldo actualizado a {0}, igual que en tu banco.", [formatAmount(result.saldoNuevo)]),
       })
     }
     if (result?.liquidada) {
       setCelebration({
         icon: "🎉",
-        title: `¡Terminaste de pagar "${result.nombre}"!`,
-        subtitle: "Una deuda menos, un paso más cerca de tu libertad financiera.",
+        title: tr("¡Terminaste de pagar \"{0}\"!", [result.nombre]),
+        subtitle: tr("Una deuda menos, un paso más cerca de tu libertad financiera."),
       })
     }
     return result
@@ -498,7 +499,7 @@ export default function ObligacionesPage() {
   // ── Cuotas atrasadas (periodos ya cerrados sin cubrir) ─────────────────────
   const pagarAtraso = async (type: "debt" | "fixed", id: string, atraso: CuotaAtrasada) => {
     if (wallet.cashBalance < atraso.falta) {
-      toast({ title: "Saldo insuficiente", description: `Necesitas ${formatAmount(atraso.falta)} y tienes ${formatAmount(wallet.cashBalance)} disponibles.`, variant: "destructive" })
+      toast({ title: tr("Saldo insuficiente"), description: tr("Necesitas {0} y tienes {1} disponibles.", [formatAmount(atraso.falta), formatAmount(wallet.cashBalance)]), variant: "destructive" })
       return
     }
     if (type === "debt") await payAndCelebrate(id, atraso.falta, atraso.periodo)
@@ -596,7 +597,7 @@ export default function ObligacionesPage() {
     // walletWithdraw aparte.
     const { savingsPocketsApi } = await import("@/lib/api-client")
     const { error } = await savingsPocketsApi.withdraw(pocketId, needed)
-    if (error) return
+    if (error) { toast({ title: tr("No se pudo retirar del bolsillo"), description: error, variant: "destructive" }); return }
     setSavingsPockets(prev => prev.map(p => p.id === pocketId ? { ...p, acumulado: p.acumulado - needed } : p))
 
     // Ahora pagar la obligación
@@ -619,7 +620,7 @@ export default function ObligacionesPage() {
     // billetera en la misma transacción (antes era un walletWithdraw aparte)
     const { emergencyFundApi } = await import("@/lib/api-client")
     const { data: fundData, error: fundError } = await emergencyFundApi.transaction(needed, "retiro")
-    if (fundError || !fundData) return
+    if (fundError || !fundData) { toast({ title: tr("No se pudo retirar del fondo de emergencia"), description: fundError ?? undefined, variant: "destructive" }); return }
     setFondoEmergencia(fundData.fondoActual)
 
     // Pagar la obligación
@@ -636,7 +637,10 @@ export default function ObligacionesPage() {
   const handleQuickIncome = async () => {
     const amt = Number(quickIncomeMonto)
     if (amt <= 0) return
-    await userApi.walletIncome(amt, 'extra')
+    // Antes el error se ignoraba: los modales se cerraban y no pasaba nada
+    const { error } = await userApi.walletIncome(amt, 'extra')
+    if (error) { toast({ title: tr("No se pudo registrar el ingreso"), description: error, variant: "destructive" }); return }
+    toast({ title: tr("Ingreso registrado"), description: tr("Ya puedes registrar el pago de la cuota.") })
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setQuickIncomeOpen(false); setQuickIncomeMonto("")
@@ -649,7 +653,7 @@ export default function ObligacionesPage() {
     if (addType === "deuda") {
       if (!addDebtForm.nombre || !addDebtForm.montoTotal || !addDebtForm.diasPago) {
         setSaving(false)
-        toast({ title: "Faltan datos", description: "Completa nombre, monto total y día(s) de pago.", variant: "destructive" })
+        toast({ title: tr("Faltan datos"), description: tr("Completa nombre, monto total y día(s) de pago."), variant: "destructive" })
         return
       }
       // Si varias cuotas y se usó calculadora, la cuota ya está en addDebtForm.cuotaPeriodo
@@ -664,7 +668,7 @@ export default function ObligacionesPage() {
     } else {
       if (!addFixedForm.nombre || !addFixedForm.monto || !addFixedForm.diasPago) {
         setSaving(false)
-        toast({ title: "Faltan datos", description: "Completa nombre, monto y día(s) de pago.", variant: "destructive" })
+        toast({ title: tr("Faltan datos"), description: tr("Completa nombre, monto y día(s) de pago."), variant: "destructive" })
         return
       }
       await addFixedExpense({
@@ -785,8 +789,8 @@ export default function ObligacionesPage() {
     <div className="space-y-6">
       <header className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-lg sm:text-2xl font-bold text-cyclon-periwinkle truncate">Obligaciones</h1>
-          <p className="text-muted-foreground text-xs sm:text-sm truncate">Gestiona tus compromisos y gastos.</p>
+          <h1 className="text-lg sm:text-2xl font-bold text-cyclon-periwinkle truncate">{tr("Obligaciones")}</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm leading-snug line-clamp-2">{tr("Gestiona tus compromisos y gastos.")}</p>
         </div>
         {/* Cluster de acciones: siempre en la misma fila que el título, pegado
             a la derecha de la pantalla — en mobile los botones se comprimen a
@@ -803,11 +807,11 @@ export default function ObligacionesPage() {
             variant="outline"
             className="flex-col h-auto py-1.5 gap-0.5 rounded-xl border-kiri-emerald/30 text-kiri-emerald hover:bg-kiri-emerald/5 font-bold px-2 sm:flex-row sm:h-9 sm:py-0 sm:gap-1 sm:px-3 sm:text-xs"
             onClick={() => { setAddType("gasto_fijo"); setExpenseModalOpen(true) }}
-            aria-label="Registrar gasto"
+            aria-label={tr("Registrar gasto")}
           >
             <ReceiptText className="h-3.5 w-3.5" />
-            <span className="text-[8px] leading-none sm:hidden">Gasto</span>
-            <span className="hidden sm:inline">Registrar gasto</span>
+            <span className="text-[8px] leading-none sm:hidden">{tr("Gasto")}</span>
+            <span className="hidden sm:inline">{tr("Registrar gasto")}</span>
           </Button>
           {(activeTab === "gastos_fijos" || activeTab === "deudas") && (
             <Button
@@ -817,13 +821,13 @@ export default function ObligacionesPage() {
                 setAddType(activeTab === "deudas" ? "deuda" : "gasto_fijo")
                 setIsAddOpen(true)
               }}
-              aria-label={activeTab === "deudas" ? "Nueva deuda" : "Nuevo gasto fijo"}
+              aria-label={activeTab === "deudas" ? tr("Nueva deuda") : tr("Nuevo gasto fijo")}
             >
-              <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{activeTab === "deudas" ? "Nueva deuda" : "Nuevo gasto fijo"}</span>
+              <Plus className="h-4 w-4" /> <span className="hidden sm:inline">{activeTab === "deudas" ? tr("Nueva deuda") : tr("Nuevo gasto fijo")}</span>
             </Button>
           )}
           {/* Saldo al extremo derecho: primero las acciones (registrar), luego el saldo. */}
-          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label="Saldo total" showToggle={false} className="scale-90 sm:scale-100 origin-right" />
+          <AnimatedBalance value={wallet.cashBalance} formatAmount={formatAmount} label={tr("Saldo total")} showToggle={false} className="scale-90 sm:scale-100 origin-right" />
         </div>
       </header>
 
@@ -833,14 +837,12 @@ export default function ObligacionesPage() {
           <CardContent className="p-4 flex items-start gap-3">
             <span className="text-lg shrink-0">🌱</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-kiri-emerald">Kiri sugiere vincular este gasto</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                &ldquo;{categorySuggestion.fixedName}&rdquo; parece pertenecer a la categoría <strong>{categorySuggestion.suggestedCategory}</strong>. ¿Deseas registrarlo ahí para que se contabilice en tu presupuesto?
-              </p>
+              <p className="text-sm font-bold text-kiri-emerald">{tr("Kiri sugiere vincular este gasto")}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{tr("“{0}” parece pertenecer a la categoría", [categorySuggestion.fixedName])}{" "}<strong>{categorySuggestion.suggestedCategory}</strong>{tr(". ¿Deseas registrarlo ahí para que se contabilice en tu presupuesto?")}</p>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button onClick={() => setCategorySuggestion(null)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:bg-muted">No</button>
-              <button onClick={handleAcceptCategorySuggestion} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-kiri-emerald text-white hover:bg-kiri-emerald/90">Sí, vincular</button>
+              <button onClick={() => setCategorySuggestion(null)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:bg-muted">{tr("No")}</button>
+              <button onClick={handleAcceptCategorySuggestion} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-kiri-emerald text-white hover:bg-kiri-emerald/90">{tr("Sí, vincular")}</button>
             </div>
           </CardContent>
         </Card>
@@ -849,16 +851,11 @@ export default function ObligacionesPage() {
       {/* ── Simulador de Escenarios ── */}
       {allocation && (
         <DebtSimulator
-          debtCapacity={wallet.cashBalance > 0 ? Math.max(0, (() => {
-            const obligTotal = periodData.periodDebts.reduce((a, d) => a + d.cuotaPeriodo, 0) + periodData.periodFixed.reduce((a, f) => a + f.monto, 0)
-            const rem = Math.max(0, wallet.cashBalance - obligTotal)
-            const remPct = wallet.cashBalance > 0 ? (rem / wallet.cashBalance) * 100 : 0
-            const savPct = remPct >= 40 ? 20 : remPct >= 25 ? 15 : remPct >= 15 ? 10 : 5
-            const savAmt = Math.min((savPct / 100) * wallet.cashBalance, rem)
-            const afterSav = rem - savAmt
-            const maxFree = (15 / 100) * wallet.cashBalance
-            return afterSav - Math.min(afterSav, maxFree)
-          })()) : 0}
+          // La misma capacidad que muestran el Dashboard ("Endeudamiento") y el
+          // simulador del botón de Kiri: sale de la distribución del periodo.
+          // Antes acá se recalculaba con el saldo de la billetera y, a fin de
+          // quincena, decía "Capacidad $0" mientras el Dashboard mostraba $778.600.
+          debtCapacity={Math.max(0, allocation.debtCapacityAmount)}
           incomeFrequency={incomeFrequency}
         />
       )}
@@ -866,10 +863,10 @@ export default function ObligacionesPage() {
       {/* ── Pestañas ── */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { key: "gastos_fijos" as Tab, label: "Gastos Fijos" },
-          { key: "deudas" as Tab,       label: "Deudas" },
+          { key: "gastos_fijos" as Tab, label: tr("Gastos Fijos") },
+          { key: "deudas" as Tab,       label: tr("Deudas") },
           // Plata que TE deben personas que no usan Kiri (ver MeDebenTab).
-          { key: "me_deben" as Tab,     label: "Me deben" },
+          { key: "me_deben" as Tab,     label: tr("Me deben") },
         ].map(tab => (
           <button
             key={tab.key}
@@ -896,20 +893,19 @@ export default function ObligacionesPage() {
             {(["todas", "pendientes", "pagadas"] as const).map(f => (
               <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
                 statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
-                {f === "todas" ? "Todas" : f === "pendientes" ? "Pendientes" : "Pagadas"}
+                {f === "todas" ? tr("Todas") : f === "pendientes" ? tr("Pendientes") : tr("Pagadas")}
               </button>
             ))}
           </div>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Cargando...</p>
+            <p className="text-sm text-muted-foreground text-center py-8">{tr("Cargando...")}</p>
           ) : fixedExpenses.length === 0 ? (
             <button
               onClick={() => { setAddType("gasto_fijo"); setIsAddOpen(true) }}
               className="w-full border-2 border-dashed border-muted rounded-2xl p-6 text-sm text-muted-foreground hover:border-cyclon-periwinkle/40 hover:text-cyclon-periwinkle transition-colors flex items-center justify-center gap-2"
             >
-              <Plus className="h-4 w-4" /> Agregar gasto fijo (Netflix, arriendo, etc.)
-            </button>
+              <Plus className="h-4 w-4" />{" "}{tr("Agregar gasto fijo (Netflix, arriendo, etc.)")}</button>
           ) : (
             <>
               {[...fixedExpenses]
@@ -946,9 +942,7 @@ export default function ObligacionesPage() {
               ))}
             </>
           )}
-          <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">
-            Ver historial completo en Balance →
-          </Link>
+          <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">{tr("Ver historial completo en Balance →")}</Link>
         </div>
       )}
 
@@ -964,20 +958,19 @@ export default function ObligacionesPage() {
             {(["todas", "pendientes", "pagadas"] as const).map(f => (
               <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
                 statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
-                {f === "todas" ? "Todas" : f === "pendientes" ? "Pendientes" : "Pagadas"}
+                {f === "todas" ? tr("Todas") : f === "pendientes" ? tr("Pendientes") : tr("Pagadas")}
               </button>
             ))}
           </div>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Cargando...</p>
+            <p className="text-sm text-muted-foreground text-center py-8">{tr("Cargando...")}</p>
           ) : debts.length === 0 ? (
             <button
               onClick={() => { setAddType("deuda"); setIsAddOpen(true) }}
               className="w-full border-2 border-dashed border-muted rounded-2xl p-6 text-sm text-muted-foreground hover:border-cyclon-periwinkle/40 hover:text-cyclon-periwinkle transition-colors flex items-center justify-center gap-2"
             >
-              <Plus className="h-4 w-4" /> Agregar deuda (tarjeta, crédito, etc.)
-            </button>
+              <Plus className="h-4 w-4" />{" "}{tr("Agregar deuda (tarjeta, crédito, etc.)")}</button>
           ) : (
             <>
               {(() => {
@@ -1014,9 +1007,7 @@ export default function ObligacionesPage() {
               })()}
             </>
           )}
-          <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">
-            Ver historial completo en Balance →
-          </Link>
+          <Link href="/balance" className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-cyclon-lavender/70 hover:text-cyclon-lavender transition-colors pt-1">{tr("Ver historial completo en Balance →")}</Link>
 
           {/* ── Deudas saldadas — pagadas por completo, ya no aparecen arriba ── */}
           {settledDebts.length > 0 && (
@@ -1026,8 +1017,7 @@ export default function ObligacionesPage() {
                 className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider"
               >
                 <span className="flex items-center gap-1.5">
-                  <PartyPopper className="h-3.5 w-3.5 text-emerald-500" /> Deudas saldadas ({settledDebts.length})
-                </span>
+                  <PartyPopper className="h-3.5 w-3.5 text-emerald-500" />{" "}{tr("Deudas saldadas ({0})", [settledDebts.length])}</span>
                 {showSettled ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
               {showSettled && (
@@ -1040,7 +1030,7 @@ export default function ObligacionesPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold truncate">{d.nombre as string}</p>
-                          <p className="text-[10px] text-muted-foreground">Pagada por completo · {formatAmount(Number(d.montoTotal))}</p>
+                          <p className="text-[10px] text-muted-foreground">{tr("Pagada por completo · {0}", [formatAmount(Number(d.montoTotal))])}</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -1054,8 +1044,7 @@ export default function ObligacionesPage() {
           {socialLoans.length > 0 && (
             <div className="space-y-2 pt-3 border-t border-border/50">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="h-3 w-3" /> Préstamos P2P
-              </p>
+                <Users className="h-3 w-3" />{" "}{tr("Préstamos P2P")}</p>
               {socialLoans.map(loan => {
                 const lenderName = loan.lender?.nombre ?? "Prestamista"
                 const pct = loan.amount > 0 ? Math.round(((loan.amount - loan.remainingAmount) / loan.amount) * 100) : 0
@@ -1071,18 +1060,16 @@ export default function ObligacionesPage() {
                           <Users className="h-5 w-5 text-cyclon-lavender" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm truncate">Le debo a {lenderName}</p>
-                          <p className="text-[10px] text-muted-foreground">{loan.descripcion || "Préstamo P2P"}</p>
+                          <p className="font-bold text-sm truncate">{tr("Le debo a {0}", [lenderName])}</p>
+                          <p className="text-[10px] text-muted-foreground">{loan.descripcion || tr("Préstamo P2P")}</p>
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-sm font-black text-amber-600">{formatAmount(loan.remainingAmount)}</p>
-                          <p className="text-[9px] text-muted-foreground">de {formatAmount(loan.amount)}</p>
+                          <p className="text-[9px] text-muted-foreground">{tr("de")}{" "}{formatAmount(loan.amount)}</p>
                         </div>
                       </div>
                       <Progress value={pct} className="h-1.5" indicatorClassName="bg-cyclon-lavender" />
-                      <p className="text-[8px] text-cyclon-lavender font-bold text-center">
-                        Toca para pagar en Social →
-                      </p>
+                      <p className="text-[8px] text-cyclon-lavender font-bold text-center">{tr("Toca para pagar en Social →")}</p>
                     </CardContent>
                   </Card>
                 )
@@ -1099,8 +1086,8 @@ export default function ObligacionesPage() {
       <Dialog open={!!payDebt} onOpenChange={v => { if (!v) { setPayDebt(null); setShowDebtTCOptions(false); setSelectedDebtTC(null); setDebtTcCuotas("1") } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>¿Ya pagaste?</DialogTitle>
-            <DialogDescription>Obligación: <strong>{payDebt?.nombre}</strong></DialogDescription>
+            <DialogTitle>{tr("¿Ya pagaste?")}</DialogTitle>
+            <DialogDescription>{tr("Obligación:")}{" "}<strong>{payDebt?.nombre}</strong></DialogDescription>
           </DialogHeader>
           <div className="py-3 flex flex-col gap-3">
             {payDebt && (
@@ -1113,9 +1100,7 @@ export default function ObligacionesPage() {
               />
             )}
             <Button onClick={confirmFullPay} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
-              <CheckCircle2 className="h-5 w-5" />
-              Pagar ({formatAmount(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)))})
-            </Button>
+              <CheckCircle2 className="h-5 w-5" />{tr("Pagar ({0})", [formatAmount(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)))])}</Button>
 
             {/* Opción: Pagar con tarjeta de crédito */}
             {(() => {
@@ -1128,9 +1113,7 @@ export default function ObligacionesPage() {
                     onClick={() => { setShowDebtTCOptions(v => !v); setSelectedDebtTC(null); setDebtTcCuotas("1") }}
                     className="h-12 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
                   >
-                    <CircleDollarSign className="h-4 w-4" />
-                    Pagar con Tarjeta de Crédito
-                  </Button>
+                    <CircleDollarSign className="h-4 w-4" />{tr("Pagar con Tarjeta de Crédito")}</Button>
                   {showDebtTCOptions && (
                     <div className="space-y-3 pl-2">
                       {tarjetas.map(tc => (
@@ -1146,15 +1129,15 @@ export default function ObligacionesPage() {
                         >
                           <div>
                             <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)} · Cuota: {formatAmount(tc.cuotaPeriodo)}</p>
+                            <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0} · Cuota: {1}", [formatAmount(tc.saldoRestante), formatAmount(tc.cuotaPeriodo)])}</p>
                           </div>
-                          <span className="text-[10px] font-bold text-amber-500">{selectedDebtTC === tc.id ? "✓" : "Seleccionar"}</span>
+                          <span className="text-[10px] font-bold text-amber-500">{selectedDebtTC === tc.id ? "✓" : tr("Seleccionar")}</span>
                         </button>
                       ))}
                       {selectedDebtTC && (
                         <div className="space-y-3 pt-2 border-t border-border/50">
                           <div className="space-y-1.5">
-                            <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                            <Label className="text-xs font-bold">{tr("¿A cuántas cuotas?")}</Label>
                             <Input
                               type="number"
                               min="1"
@@ -1163,9 +1146,7 @@ export default function ObligacionesPage() {
                               onChange={e => setDebtTcCuotas(e.target.value)}
                               className="h-10 rounded-xl text-center font-bold"
                             />
-                            <p className="text-[10px] text-muted-foreground">
-                              Se sumará <strong>{formatAmount(Math.round(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)) / (Number(debtTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {debtTcCuotas} {Number(debtTcCuotas) === 1 ? "mes" : "meses"}.
-                            </p>
+                            <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)) / (Number(debtTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [debtTcCuotas, Number(debtTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
                           </div>
                           <Button
                             onClick={async () => {
@@ -1183,9 +1164,7 @@ export default function ObligacionesPage() {
                               window.location.reload()
                             }}
                             className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
-                          >
-                            Confirmar pago con TC
-                          </Button>
+                          >{tr("Confirmar pago con TC")}</Button>
                         </div>
                       )}
                     </div>
@@ -1194,13 +1173,11 @@ export default function ObligacionesPage() {
               )
             })()}
 
-            <Button variant="outline" onClick={() => setIsPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
-              ¿Pagaste otro valor?
-            </Button>
+            <Button variant="outline" onClick={() => setIsPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">{tr("¿Pagaste otro valor?")}</Button>
             <div className={cn("overflow-hidden transition-all duration-300", isPartialMode ? "max-h-80 opacity-100" : "max-h-0 opacity-0")}>
               <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Monto abonado</Label>
+                  <Label className="text-xs font-bold">{tr("Monto abonado")}</Label>
                   <MoneyInput value={partialAmount} onChange={v => setPartialAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus={isPartialMode} />
                 </div>
                 {payDebt && Number(partialAmount) > 0 && Number(partialAmount) < Math.max(0, payDebt.cuotaPeriodo - (payDebt.montoPagadoEstePeriodo ?? 0)) && (
@@ -1211,9 +1188,7 @@ export default function ObligacionesPage() {
                     formatAmount={formatAmount}
                   />
                 )}
-                <Button onClick={confirmPartialPay} disabled={!partialAmount || Number(partialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">
-                  Confirmar abono
-                </Button>
+                <Button onClick={confirmPartialPay} disabled={!partialAmount || Number(partialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">{tr("Confirmar abono")}</Button>
               </div>
             </div>
           </div>
@@ -1224,26 +1199,25 @@ export default function ObligacionesPage() {
       <Dialog open={!!abonoTarget} onOpenChange={v => { if (!v) { setAbonoTarget(null); setAbonoAmount("") } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Abonar a esta deuda</DialogTitle>
+            <DialogTitle>{tr("Abonar a esta deuda")}</DialogTitle>
             <DialogDescription>
-              <strong>{abonoTarget?.nombre}</strong> · Saldo restante: {formatAmount(abonoTarget?.saldoRestante ?? 0)}
-            </DialogDescription>
+              <strong>{abonoTarget?.nombre}</strong>{" "}{tr("· Saldo restante: {0}", [formatAmount(abonoTarget?.saldoRestante ?? 0)])}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto a abonar</Label>
+              <Label className="text-xs font-bold">{tr("Monto a abonar")}</Label>
               <MoneyInput value={abonoAmount} onChange={v => setAbonoAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus />
-              <p className="text-[10px] text-muted-foreground">Se descuenta de tu saldo disponible ({formatAmount(wallet.cashBalance)}) y se abona directo al capital de la deuda.</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Se descuenta de tu saldo disponible ({0}) y se abona directo al capital de la deuda.", [formatAmount(wallet.cashBalance)])}</p>
             </div>
             {Number(abonoAmount) > wallet.cashBalance && (
-              <p className="text-[10px] text-red-500 font-bold">No tienes saldo suficiente para este abono.</p>
+              <p className="text-[10px] text-red-500 font-bold">{tr("No tienes saldo suficiente para este abono.")}</p>
             )}
             <Button
               onClick={confirmAbono}
               disabled={abonoSaving || !abonoAmount || Number(abonoAmount) <= 0 || Number(abonoAmount) > wallet.cashBalance}
               className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl"
             >
-              {abonoSaving ? "Abonando..." : "Confirmar abono"}
+              {abonoSaving ? "Abonando..." : tr("Confirmar abono")}
             </Button>
           </div>
         </DialogContent>
@@ -1253,15 +1227,13 @@ export default function ObligacionesPage() {
       <Dialog open={!!payFixed} onOpenChange={v => !v && setPayFixed(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>¿Ya pagaste?</DialogTitle>
-            <DialogDescription>Gasto fijo: <strong>{payFixed?.nombre}</strong></DialogDescription>
+            <DialogTitle>{tr("¿Ya pagaste?")}</DialogTitle>
+            <DialogDescription>{tr("Gasto fijo:")}{" "}<strong>{payFixed?.nombre}</strong></DialogDescription>
           </DialogHeader>
           <div className="py-3 flex flex-col gap-3">
             {/* Opción 1: Pagar del sueldo real */}
             <Button onClick={confirmFullPayFixed} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
-              <CheckCircle2 className="h-5 w-5" />
-              Pagar ({formatAmount(Math.max(0, (payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)) - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0)))})
-            </Button>
+              <CheckCircle2 className="h-5 w-5" />{tr("Pagar ({0})", [formatAmount(Math.max(0, (payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)) - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0)))])}</Button>
 
             {/* Opción 2: Pagar con tarjeta de crédito */}
             {(() => {
@@ -1274,9 +1246,7 @@ export default function ObligacionesPage() {
                     onClick={() => { setShowTCOptions(v => !v); setSelectedTC(null); setTcCuotas("1") }}
                     className="h-12 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
                   >
-                    <CircleDollarSign className="h-4 w-4" />
-                    Pagar con Tarjeta de Crédito
-                  </Button>
+                    <CircleDollarSign className="h-4 w-4" />{tr("Pagar con Tarjeta de Crédito")}</Button>
                   {showTCOptions && (
                     <div className="space-y-3 pl-2">
                       {tarjetas.map(tc => (
@@ -1292,15 +1262,15 @@ export default function ObligacionesPage() {
                         >
                           <div>
                             <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)} · Cuota: {formatAmount(tc.cuotaPeriodo)}</p>
+                            <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0} · Cuota: {1}", [formatAmount(tc.saldoRestante), formatAmount(tc.cuotaPeriodo)])}</p>
                           </div>
-                          <span className="text-[10px] font-bold text-amber-500">{selectedTC === tc.id ? "✓" : "Seleccionar"}</span>
+                          <span className="text-[10px] font-bold text-amber-500">{selectedTC === tc.id ? "✓" : tr("Seleccionar")}</span>
                         </button>
                       ))}
                       {selectedTC && (
                         <div className="space-y-3 pt-2 border-t border-border/50">
                           <div className="space-y-1.5">
-                            <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                            <Label className="text-xs font-bold">{tr("¿A cuántas cuotas?")}</Label>
                             <Input
                               type="number"
                               min="1"
@@ -1314,9 +1284,7 @@ export default function ObligacionesPage() {
                               const montoFijo = Math.max(0, montoPorPeriodo - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0))
                               const cuotasNum = Number(tcCuotas) || 1
                               return (
-                                <p className="text-[10px] text-muted-foreground">
-                                  Se sumará <strong>{formatAmount(Math.round(montoFijo / cuotasNum))}/mes</strong> a la cuota de la tarjeta durante {tcCuotas} {cuotasNum === 1 ? "mes" : "meses"}.
-                                </p>
+                                <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(montoFijo / cuotasNum))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [tcCuotas, cuotasNum === 1 ? tr("mes") : tr("meses")])}</p>
                               )
                             })()}
                           </div>
@@ -1337,9 +1305,7 @@ export default function ObligacionesPage() {
                               window.location.reload()
                             }}
                             className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
-                          >
-                            Confirmar pago con TC
-                          </Button>
+                          >{tr("Confirmar pago con TC")}</Button>
                         </div>
                       )}
                     </div>
@@ -1349,15 +1315,13 @@ export default function ObligacionesPage() {
             })()}
 
             {/* Opción 3: Pagaste otro valor */}
-            <Button variant="outline" onClick={() => setIsFixedPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">
-              ¿Pagaste otro valor?
-            </Button>
+            <Button variant="outline" onClick={() => setIsFixedPartialMode(v => !v)} className="h-12 font-medium rounded-2xl border-dashed border-2 text-sm">{tr("¿Pagaste otro valor?")}</Button>
             <div className={cn("overflow-hidden transition-all duration-300", isFixedPartialMode ? "max-h-96 opacity-100" : "max-h-0 opacity-0")}>
               <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Monto real pagado</Label>
+                  <Label className="text-xs font-bold">{tr("Monto real pagado")}</Label>
                   <MoneyInput value={fixedPartialAmount} onChange={v => setFixedPartialAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus={isFixedPartialMode} />
-                  <p className="text-[10px] text-muted-foreground">Si pagaste más o menos del valor esperado ({formatAmount(payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0))}), registra el monto real aquí.</p>
+                  <p className="text-[10px] text-muted-foreground">{tr("Si pagaste más o menos del valor esperado ({0}), registra el monto real aquí.", [formatAmount(payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0))])}</p>
                 </div>
                 {payFixed && (() => {
                   const esperado = (payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto) - (payFixed.montoPagadoEstePeriodo ?? 0)
@@ -1365,9 +1329,7 @@ export default function ObligacionesPage() {
                   if (!(monto > 0 && monto < esperado)) return null
                   return <CuotaCompletaCheck checked={cuotaCompletaFixed} onChange={setCuotaCompletaFixed} falta={esperado - monto} formatAmount={formatAmount} />
                 })()}
-                <Button onClick={confirmPartialPayFixed} disabled={!fixedPartialAmount || Number(fixedPartialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">
-                  Confirmar pago
-                </Button>
+                <Button onClick={confirmPartialPayFixed} disabled={!fixedPartialAmount || Number(fixedPartialAmount) <= 0} className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl">{tr("Confirmar pago")}</Button>
               </div>
             </div>
           </div>
@@ -1378,26 +1340,25 @@ export default function ObligacionesPage() {
       <Dialog open={!!abonoFixedTarget} onOpenChange={v => { if (!v) { setAbonoFixedTarget(null); setAbonoFixedAmount("") } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Abonar a este gasto fijo</DialogTitle>
+            <DialogTitle>{tr("Abonar a este gasto fijo")}</DialogTitle>
             <DialogDescription>
-              <strong>{abonoFixedTarget?.nombre}</strong> · Ya pagado este periodo: {formatAmount((abonoFixedTarget as any)?.montoPagadoEstePeriodo ?? 0)}
-            </DialogDescription>
+              <strong>{abonoFixedTarget?.nombre}</strong>{" "}{tr("· Ya pagado este periodo: {0}", [formatAmount((abonoFixedTarget as any)?.montoPagadoEstePeriodo ?? 0)])}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto a abonar</Label>
+              <Label className="text-xs font-bold">{tr("Monto a abonar")}</Label>
               <MoneyInput value={abonoFixedAmount} onChange={v => setAbonoFixedAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus />
-              <p className="text-[10px] text-muted-foreground">Se descuenta de tu saldo disponible ({formatAmount(wallet.cashBalance)}) y se suma a lo ya pagado este periodo.</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Se descuenta de tu saldo disponible ({0}) y se suma a lo ya pagado este periodo.", [formatAmount(wallet.cashBalance)])}</p>
             </div>
             {Number(abonoFixedAmount) > wallet.cashBalance && (
-              <p className="text-[10px] text-red-500 font-bold">No tienes saldo suficiente para este abono.</p>
+              <p className="text-[10px] text-red-500 font-bold">{tr("No tienes saldo suficiente para este abono.")}</p>
             )}
             <Button
               onClick={confirmAbonoFixed}
               disabled={abonoFixedSaving || !abonoFixedAmount || Number(abonoFixedAmount) <= 0 || Number(abonoFixedAmount) > wallet.cashBalance}
               className="w-full bg-cyclon-periwinkle text-white font-bold h-11 rounded-xl"
             >
-              {abonoFixedSaving ? "Abonando..." : "Confirmar abono"}
+              {abonoFixedSaving ? "Abonando..." : tr("Confirmar abono")}
             </Button>
           </div>
         </DialogContent>
@@ -1410,17 +1371,15 @@ export default function ObligacionesPage() {
       <Dialog open={!!autoPayTarget} onOpenChange={v => { if (!v) { setAutoPayTarget(null); setAutoPaySelectedTC(null) } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pago automático</DialogTitle>
-            <DialogDescription>Gasto fijo: <strong>{autoPayTarget?.nombre}</strong></DialogDescription>
+            <DialogTitle>{tr("Pago automático")}</DialogTitle>
+            <DialogDescription>{tr("Gasto fijo:")}{" "}<strong>{autoPayTarget?.nombre}</strong></DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-3">
             {autoPayTarget?.pagoAutomatico && (
-              <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">
-                Activo, pagando con{" "}
-                <strong>
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-xl p-3">{tr("Activo, pagando con{0}", [" "])}<strong>
                   {autoPayTarget.tarjetaVinculadaId
-                    ? debts.find(d => d.id === autoPayTarget.tarjetaVinculadaId)?.nombre ?? "una tarjeta"
-                    : "tu disponible"}
+                    ? debts.find(d => d.id === autoPayTarget.tarjetaVinculadaId)?.nombre ?? tr("una tarjeta")
+                    : tr("tu disponible")}
                 </strong>.
               </p>
             )}
@@ -1439,15 +1398,14 @@ export default function ObligacionesPage() {
                   : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
               )}
             >
-              <WalletIcon className="h-4 w-4" /> Con tu disponible
-            </Button>
+              <WalletIcon className="h-4 w-4" />{" "}{tr("Con tu disponible")}</Button>
 
             {(() => {
               const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
               if (tarjetas.length === 0) return null
               return (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-muted-foreground px-1 uppercase tracking-wide">O con una tarjeta de crédito</p>
+                  <p className="text-[10px] font-bold text-muted-foreground px-1 uppercase tracking-wide">{tr("O con una tarjeta de crédito")}</p>
                   {tarjetas.map(tc => (
                     <button
                       key={tc.id}
@@ -1462,9 +1420,9 @@ export default function ObligacionesPage() {
                     >
                       <div>
                         <p className="text-xs font-bold">{tc.nombre}</p>
-                        <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)}</p>
+                        <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0}", [formatAmount(tc.saldoRestante)])}</p>
                       </div>
-                      <span className="text-[10px] font-bold text-amber-500">{autoPaySelectedTC === tc.id ? "✓" : "Seleccionar"}</span>
+                      <span className="text-[10px] font-bold text-amber-500">{autoPaySelectedTC === tc.id ? "✓" : tr("Seleccionar")}</span>
                     </button>
                   ))}
                   {autoPaySelectedTC && (
@@ -1475,9 +1433,7 @@ export default function ObligacionesPage() {
                         setAutoPayTarget(null); setAutoPaySelectedTC(null)
                       }}
                       className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
-                    >
-                      Confirmar con esta tarjeta
-                    </Button>
+                    >{tr("Confirmar con esta tarjeta")}</Button>
                   )}
                 </div>
               )
@@ -1493,9 +1449,7 @@ export default function ObligacionesPage() {
                   setAutoPayTarget(null); setAutoPaySelectedTC(null)
                 }}
                 className="w-full text-red-500 hover:text-red-600 hover:bg-red-500/5 font-bold h-10 rounded-xl"
-              >
-                Desactivar pago automático
-              </Button>
+              >{tr("Desactivar pago automático")}</Button>
             )}
           </div>
         </DialogContent>
@@ -1506,11 +1460,8 @@ export default function ObligacionesPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <AlertTriangle className="h-5 w-5" /> Saldo insuficiente
-            </DialogTitle>
-            <DialogDescription>
-              Tu sueldo disponible actual ({formatAmount(wallet.cashBalance)}) no es suficiente para cubrir esta cuota de <strong>{formatAmount(insufficientTarget?.monto ?? 0)}</strong> de <strong>{insufficientTarget?.nombre}</strong>. ¿Cómo te gustaría proceder?
-            </DialogDescription>
+              <AlertTriangle className="h-5 w-5" />{" "}{tr("Saldo insuficiente")}</DialogTitle>
+            <DialogDescription>{tr("Tu sueldo disponible actual ({0}) no es suficiente para cubrir esta cuota de", [formatAmount(wallet.cashBalance)])}{" "}<strong>{formatAmount(insufficientTarget?.monto ?? 0)}</strong>{" "}{tr("de")}{" "}<strong>{insufficientTarget?.nombre}</strong>{tr(". ¿Cómo te gustaría proceder?")}</DialogDescription>
           </DialogHeader>
           <div className="py-3 flex flex-col gap-2.5">
             {/* Opción 1: Abono parcial */}
@@ -1519,10 +1470,10 @@ export default function ObligacionesPage() {
               className={cn("w-full text-left p-4 rounded-2xl border-2 border-cyclon-sky/40 bg-cyclon-sky/5 hover:border-cyclon-sky transition-colors space-y-0.5", wallet.cashBalance <= 0 && "opacity-40 cursor-not-allowed hover:border-cyclon-sky/40")}>
               <div className="flex items-center gap-2">
                 <CircleDollarSign className="h-4 w-4 text-cyclon-sky" />
-                <p className="font-bold text-sm">Abono parcial</p>
+                <p className="font-bold text-sm">{tr("Abono parcial")}</p>
               </div>
               <p className="text-xs text-muted-foreground pl-6">
-                {wallet.cashBalance > 0 ? `Abonar mis ${formatAmount(wallet.cashBalance)} disponibles` : "No tienes saldo disponible"}
+                {wallet.cashBalance > 0 ? tr("Abonar mis {0} disponibles", [formatAmount(wallet.cashBalance)]) : tr("No tienes saldo disponible")}
               </p>
             </button>
 
@@ -1532,11 +1483,9 @@ export default function ObligacionesPage() {
                 className="w-full text-left p-4 rounded-2xl border-2 border-emerald-400/40 bg-emerald-50/50 dark:bg-emerald-950/10 hover:border-emerald-400 transition-colors space-y-0.5">
                 <div className="flex items-center gap-2">
                   <PiggyBank className="h-4 w-4 text-emerald-600" />
-                  <p className="font-bold text-sm">Usar Ahorros</p>
+                  <p className="font-bold text-sm">{tr("Usar Ahorros")}</p>
                 </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Completar usando mis ahorros ({formatAmount(savingsPockets.reduce((a, p) => a + p.acumulado, 0) + fondoEmergencia)} disponibles)
-                </p>
+                <p className="text-xs text-muted-foreground pl-6">{tr("Completar usando mis ahorros (")}{formatAmount(savingsPockets.reduce((a, p) => a + p.acumulado, 0) + fondoEmergencia)}{" "}{tr("disponibles)")}</p>
               </button>
             )}
 
@@ -1556,7 +1505,7 @@ export default function ObligacionesPage() {
               const montoTarget = insufficientTarget?.monto ?? 0
               return (
                 <div className="space-y-2">
-                  <p className="text-[9px] font-bold text-muted-foreground uppercase pl-1">Pagar con tarjeta de crédito</p>
+                  <p className="text-[9px] font-bold text-muted-foreground uppercase pl-1">{tr("Pagar con tarjeta de crédito")}</p>
                   {tarjetas.map(tc => {
                     const tasaMensual = tc.tasaInteres ? Number(tc.tasaInteres) : 1.85
                     const interesMes = Math.round(montoTarget * (tasaMensual / 100))
@@ -1569,20 +1518,18 @@ export default function ObligacionesPage() {
                         >
                           <div className="flex items-center gap-2">
                             <CircleDollarSign className="h-4 w-4 text-amber-500" />
-                            <p className="font-bold text-sm">Pagar con {tc.nombre}</p>
+                            <p className="font-bold text-sm">{tr("Pagar con {0}", [tc.nombre])}</p>
                           </div>
-                          <p className="text-xs text-muted-foreground pl-6">
-                            Se sumará {formatAmount(montoTarget)} al saldo de tu tarjeta.
-                          </p>
+                          <p className="text-xs text-muted-foreground pl-6">{tr("Se sumará {0} al saldo de tu tarjeta.", [formatAmount(montoTarget)])}</p>
                           <div className="pl-6 text-[9px] text-amber-500 space-y-0.5">
-                            <p>Interés mensual estimado: +{formatAmount(interesMes)} ({tasaMensual}%)</p>
-                            <p>Nuevo saldo tarjeta: {formatAmount(tc.saldoRestante + montoTarget)}</p>
+                            <p>{tr("Interés mensual estimado: +{0} ({1}%)", [formatAmount(interesMes), tasaMensual])}</p>
+                            <p>{tr("Nuevo saldo tarjeta: {0}", [formatAmount(tc.saldoRestante + montoTarget)])}</p>
                           </div>
                         </button>
                         {selected && (
                           <div className="px-4 pb-4 space-y-3 pt-1 border-t border-amber-500/20">
                             <div className="space-y-1.5">
-                              <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                              <Label className="text-xs font-bold">{tr("¿A cuántas cuotas?")}</Label>
                               <Input
                                 type="number"
                                 min="1"
@@ -1591,9 +1538,7 @@ export default function ObligacionesPage() {
                                 onChange={e => setInsufficientTcCuotas(e.target.value)}
                                 className="h-10 rounded-xl text-center font-bold"
                               />
-                              <p className="text-[10px] text-muted-foreground">
-                                Se sumará <strong>{formatAmount(Math.round(montoTarget / (Number(insufficientTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {insufficientTcCuotas} {Number(insufficientTcCuotas) === 1 ? "mes" : "meses"}.
-                              </p>
+                              <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(montoTarget / (Number(insufficientTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [insufficientTcCuotas, Number(insufficientTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
                             </div>
                             <Button
                               disabled={payingInsufficientTC}
@@ -1609,7 +1554,7 @@ export default function ObligacionesPage() {
                                 })
                                 if (error) {
                                   setPayingInsufficientTC(false)
-                                  toast({ title: "No se pudo registrar el pago con tarjeta", description: "Intenta de nuevo.", variant: "destructive" })
+                                  toast({ title: tr("No se pudo registrar el pago con tarjeta"), description: tr("Intenta de nuevo."), variant: "destructive" })
                                   return
                                 }
                                 setInsufficientOpen(false); setInsufficientTarget(null)
@@ -1618,7 +1563,7 @@ export default function ObligacionesPage() {
                               }}
                               className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
                             >
-                              {payingInsufficientTC ? "Procesando..." : "Confirmar pago con TC"}
+                              {payingInsufficientTC ? "Procesando..." : tr("Confirmar pago con TC")}
                             </Button>
                           </div>
                         )}
@@ -1633,13 +1578,13 @@ export default function ObligacionesPage() {
             <button onClick={() => { setQuickIncomeOpen(true) }} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
               <div className="flex items-center gap-2">
                 <WalletIcon className="h-4 w-4 text-cyclon-lavender" />
-                <p className="font-bold text-sm">Registrar nuevo ingreso</p>
+                <p className="font-bold text-sm">{tr("Registrar nuevo ingreso")}</p>
               </div>
-              <p className="text-xs text-muted-foreground pl-6">Agregar dinero extra para cubrir la cuota</p>
+              <p className="text-xs text-muted-foreground pl-6">{tr("Agregar dinero extra para cubrir la cuota")}</p>
             </button>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setInsufficientOpen(false); setInsufficientTarget(null) }}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => { setInsufficientOpen(false); setInsufficientTarget(null) }}>{tr("Cancelar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1648,24 +1593,22 @@ export default function ObligacionesPage() {
       <Dialog open={quickIncomeOpen} onOpenChange={v => { if (!v) setQuickIncomeOpen(false) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><WalletIcon className="h-5 w-5 text-cyclon-lavender" /> Agregar dinero extra</DialogTitle>
-            <DialogDescription>Inyecta liquidez a tu sueldo real para cubrir la cuota.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><WalletIcon className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("Agregar dinero extra")}</DialogTitle>
+            <DialogDescription>{tr("Inyecta liquidez a tu sueldo real para cubrir la cuota.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto</Label>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Monto")}</Label>
               <MoneyInput value={quickIncomeMonto} onChange={setQuickIncomeMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
               {insufficientTarget && (
-                <p className="text-[10px] text-muted-foreground">
-                  Te faltan al menos {formatAmount(Math.max(0, (insufficientTarget.monto) - wallet.cashBalance))} para cubrir la cuota
-                </p>
+                <p className="text-[10px] text-muted-foreground">{tr("Te faltan al menos {0} para cubrir la cuota", [formatAmount(Math.max(0, (insufficientTarget.monto) - wallet.cashBalance))])}</p>
               )}
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setQuickIncomeOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setQuickIncomeOpen(false)}>{tr("Cancelar")}</Button>
             <Button onClick={handleQuickIncome} disabled={!quickIncomeMonto || Number(quickIncomeMonto) <= 0}
-              className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">Registrar</Button>
+              className="bg-cyclon-lavender text-white font-bold rounded-xl px-6">{tr("Registrar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1674,10 +1617,8 @@ export default function ObligacionesPage() {
       <Dialog open={savingsSourceOpen} onOpenChange={v => { if (!v) setSavingsSourceOpen(false) }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><PiggyBank className="h-5 w-5 text-emerald-600" /> ¿De dónde sacar?</DialogTitle>
-            <DialogDescription>
-              Necesitas {formatAmount(Math.max(0, (insufficientTarget?.monto ?? 0) - wallet.cashBalance))} adicionales. Elige de dónde tomar los fondos.
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><PiggyBank className="h-5 w-5 text-emerald-600" />{" "}{tr("¿De dónde sacar?")}</DialogTitle>
+            <DialogDescription>{tr("Necesitas {0} adicionales. Elige de dónde tomar los fondos.", [formatAmount(Math.max(0, (insufficientTarget?.monto ?? 0) - wallet.cashBalance))])}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-2.5 max-h-[300px] overflow-y-auto">
             {/* Fondo de emergencia */}
@@ -1689,8 +1630,8 @@ export default function ObligacionesPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🛡️</span>
                     <div>
-                      <p className="font-bold text-sm">Fondo de Emergencia</p>
-                      <p className="text-[10px] text-muted-foreground">Disponible: {formatAmount(fondoEmergencia)}</p>
+                      <p className="font-bold text-sm">{tr("Fondo de Emergencia")}</p>
+                      <p className="text-[10px] text-muted-foreground">{tr("Disponible: {0}", [formatAmount(fondoEmergencia)])}</p>
                     </div>
                   </div>
                 </div>
@@ -1707,7 +1648,7 @@ export default function ObligacionesPage() {
                     <span className="text-lg">🐷</span>
                     <div>
                       <p className="font-bold text-sm">{pocket.nombre}</p>
-                      <p className="text-[10px] text-muted-foreground">Disponible: {formatAmount(pocket.acumulado)}</p>
+                      <p className="text-[10px] text-muted-foreground">{tr("Disponible: {0}", [formatAmount(pocket.acumulado)])}</p>
                     </div>
                   </div>
                 </div>
@@ -1715,11 +1656,11 @@ export default function ObligacionesPage() {
             ))}
 
             {savingsPockets.filter(p => p.acumulado > 0).length === 0 && fondoEmergencia === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-4">No tienes fondos de ahorro disponibles.</p>
+              <p className="text-xs text-muted-foreground text-center py-4">{tr("No tienes fondos de ahorro disponibles.")}</p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSavingsSourceOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setSavingsSourceOpen(false)}>{tr("Cancelar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1728,8 +1669,8 @@ export default function ObligacionesPage() {
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Agregar {addType === "deuda" ? "Deuda" : "Gasto Fijo"}</DialogTitle>
-            <DialogDescription>Completa los datos del compromiso.</DialogDescription>
+            <DialogTitle>{tr("Agregar {0}", [addType === "deuda" ? tr("Deuda") : tr("Gasto Fijo")])}</DialogTitle>
+            <DialogDescription>{tr("Completa los datos del compromiso.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {addType === "deuda" ? (
@@ -1760,9 +1701,9 @@ export default function ObligacionesPage() {
               <>
                 <FixedFormFields form={addFixedForm} onChange={setAddFixedForm} dueQuestion={addFixedDueQ} />
                 <DialogFooter className="gap-2 pt-2">
-                  <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
+                  <Button variant="ghost" onClick={() => setIsAddOpen(false)}>{tr("Cancelar")}</Button>
                   <Button onClick={handleAdd} disabled={saving} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
-                    {saving ? "Guardando..." : "Guardar"}
+                    {saving ? "Guardando..." : tr("Guardar")}
                   </Button>
                 </DialogFooter>
               </>
@@ -1775,16 +1716,16 @@ export default function ObligacionesPage() {
       <Dialog open={!!editDebt && !isScopeOpen} onOpenChange={v => !v && setEditDebt(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Deuda</DialogTitle>
-            <DialogDescription>Modifica los datos de <strong>{editDebt?.nombre}</strong>.</DialogDescription>
+            <DialogTitle>{tr("Editar Deuda")}</DialogTitle>
+            <DialogDescription>{tr("Modifica los datos de")}{" "}<strong>{editDebt?.nombre}</strong>.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <DebtFormFields form={editDebtForm} onChange={setEditDebtForm} isEdit dueQuestion={editDebtDueQ} />
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setEditDebt(null)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setEditDebt(null)}>{tr("Cancelar")}</Button>
             <Button onClick={handleEditDebtSubmit} disabled={savingEdit} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
-              {savingEdit ? "Guardando..." : "Guardar"}
+              {savingEdit ? "Guardando..." : tr("Guardar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1794,20 +1735,20 @@ export default function ObligacionesPage() {
       <Dialog open={isScopeOpen} onOpenChange={v => !v && setIsScopeOpen(false)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>¿Cómo aplicar el cambio?</DialogTitle>
-            <DialogDescription>Cambiaste la cuota de <strong>{formatAmount(editDebt?.cuotaPeriodo ?? 0)}</strong> a <strong>{formatAmount(Number(editDebtForm.cuotaPeriodo))}</strong>.</DialogDescription>
+            <DialogTitle>{tr("¿Cómo aplicar el cambio?")}</DialogTitle>
+            <DialogDescription>{tr("Cambiaste la cuota de")}{" "}<strong>{formatAmount(editDebt?.cuotaPeriodo ?? 0)}</strong> a <strong>{formatAmount(Number(editDebtForm.cuotaPeriodo))}</strong>.</DialogDescription>
           </DialogHeader>
           <div className="py-4 flex flex-col gap-3">
             <button onClick={() => applyDebtEdit("este_mes")} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-sky/40 bg-cyclon-sky/5 hover:border-cyclon-sky transition-colors space-y-0.5">
-              <p className="font-bold text-sm">Solo este periodo</p>
-              <p className="text-xs text-muted-foreground">Solo la cuota de este periodo cambia; la de {formatAmount(editDebt?.cuotaBase ?? editDebt?.cuotaPeriodo ?? 0)} vuelve sola el próximo periodo.</p>
+              <p className="font-bold text-sm">{tr("Solo este periodo")}</p>
+              <p className="text-xs text-muted-foreground">{tr("Solo la cuota de este periodo cambia; la de {0} vuelve sola el próximo periodo.", [formatAmount(editDebt?.cuotaBase ?? editDebt?.cuotaPeriodo ?? 0)])}</p>
             </button>
             <button onClick={() => applyDebtEdit("permanente")} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
-              <p className="font-bold text-sm">Cambio permanente</p>
-              <p className="text-xs text-muted-foreground">La nueva cuota se usará en todos los periodos futuros.</p>
+              <p className="font-bold text-sm">{tr("Cambio permanente")}</p>
+              <p className="text-xs text-muted-foreground">{tr("La nueva cuota se usará en todos los periodos futuros.")}</p>
             </button>
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setIsScopeOpen(false)}>Cancelar</Button></DialogFooter>
+          <DialogFooter><Button variant="ghost" onClick={() => setIsScopeOpen(false)}>{tr("Cancelar")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1815,16 +1756,16 @@ export default function ObligacionesPage() {
       <Dialog open={!!editFixed} onOpenChange={v => !v && setEditFixed(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Gasto Fijo</DialogTitle>
-            <DialogDescription>Modifica <strong>{editFixed?.nombre}</strong>.</DialogDescription>
+            <DialogTitle>{tr("Editar Gasto Fijo")}</DialogTitle>
+            <DialogDescription>{tr("Modifica")}{" "}<strong>{editFixed?.nombre}</strong>.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <FixedFormFields form={editFixedForm} onChange={setEditFixedForm} dueQuestion={editFixedDueQ} isEdit />
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setEditFixed(null)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setEditFixed(null)}>{tr("Cancelar")}</Button>
             <Button onClick={handleEditFixed} disabled={savingFixed} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-8">
-              {savingFixed ? "Guardando..." : "Guardar"}
+              {savingFixed ? "Guardando..." : tr("Guardar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1834,22 +1775,20 @@ export default function ObligacionesPage() {
       <Dialog open={!!adelantoTarget} onOpenChange={v => { if (!v && !adelantoSaving) setAdelantoTarget(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adelantar próxima cuota</DialogTitle>
-            <DialogDescription>
-              Este pago queda asignado a <strong>{adelantoTarget?.periodo ? formatPeriodo(adelantoTarget.periodo) : "el próximo periodo"}</strong> de <strong>{adelantoTarget?.nombre}</strong>, así la próxima cuota ya aparece pagada cuando llegue.
-            </DialogDescription>
+            <DialogTitle>{tr("Adelantar próxima cuota")}</DialogTitle>
+            <DialogDescription>{tr("Este pago queda asignado a")}{" "}<strong>{adelantoTarget?.periodo ? formatPeriodo(adelantoTarget.periodo) : tr("el próximo periodo")}</strong>{" "}{tr("de")}{" "}<strong>{adelantoTarget?.nombre}</strong>{tr(", así la próxima cuota ya aparece pagada cuando llegue.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 py-2">
-            <Label className="text-xs font-bold">Monto</Label>
+            <Label className="text-xs font-bold">{tr("Monto")}</Label>
             <MoneyInput value={adelantoAmount} onChange={setAdelantoAmount} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
             {Number(adelantoAmount) > wallet.cashBalance && (
-              <p className="text-[10px] text-red-500 font-bold">Tu saldo disponible es {formatAmount(wallet.cashBalance)}.</p>
+              <p className="text-[10px] text-red-500 font-bold">{tr("Tu saldo disponible es {0}.", [formatAmount(wallet.cashBalance)])}</p>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" disabled={adelantoSaving} onClick={() => setAdelantoTarget(null)}>Cancelar</Button>
+            <Button variant="ghost" disabled={adelantoSaving} onClick={() => setAdelantoTarget(null)}>{tr("Cancelar")}</Button>
             <Button onClick={confirmAdelanto} disabled={adelantoSaving || Number(adelantoAmount) <= 0 || Number(adelantoAmount) > wallet.cashBalance} className="bg-cyclon-periwinkle text-white font-bold rounded-xl px-6">
-              {adelantoSaving ? "Guardando..." : "Adelantar"}
+              {adelantoSaving ? "Guardando..." : tr("Adelantar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1859,26 +1798,24 @@ export default function ObligacionesPage() {
       <Dialog open={!!undoTarget} onOpenChange={v => { if (!v && !undoing) setUndoTarget(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>¿Qué quieres deshacer?</DialogTitle>
-            <DialogDescription>
-              En este periodo registraste {undoTarget?.pagos.cantidad} pagos a <strong>{undoTarget?.nombre}</strong> por un total de {formatAmount(undoTarget?.totalPeriodo ?? 0)}.
-            </DialogDescription>
+            <DialogTitle>{tr("¿Qué quieres deshacer?")}</DialogTitle>
+            <DialogDescription>{tr("En este periodo registraste {0} pagos a", [undoTarget?.pagos.cantidad])}{" "}<strong>{undoTarget?.nombre}</strong>{" "}{tr("por un total de {0}.", [formatAmount(undoTarget?.totalPeriodo ?? 0)])}</DialogDescription>
           </DialogHeader>
           <div className="py-2 flex flex-col gap-3">
             <button disabled={undoing} onClick={() => confirmUndo("ultimo")} className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-periwinkle/40 bg-cyclon-periwinkle/5 hover:border-cyclon-periwinkle transition-colors space-y-0.5 disabled:opacity-50">
-              <p className="font-bold text-sm">Solo el último abono ({formatAmount(undoTarget?.pagos.ultimoMonto ?? 0)})</p>
+              <p className="font-bold text-sm">{tr("Solo el último abono ({0})", [formatAmount(undoTarget?.pagos.ultimoMonto ?? 0)])}</p>
               <p className="text-xs text-muted-foreground">
                 {undoTarget?.pagos.ultimoEsMarcador
-                  ? "Quita la marca de \"ya la había pagado\". No devuelve dinero porque no salió de tu billetera."
-                  : "Se devuelve ese monto y el resto de lo pagado este periodo queda igual."}
+                  ? tr("Quita la marca de \"ya la había pagado\". No devuelve dinero porque no salió de tu billetera.")
+                  : tr("Se devuelve ese monto y el resto de lo pagado este periodo queda igual.")}
               </p>
             </button>
             <button disabled={undoing} onClick={() => confirmUndo("todo")} className="w-full text-left p-4 rounded-2xl border-2 border-red-400/40 bg-red-500/5 hover:border-red-500 transition-colors space-y-0.5 disabled:opacity-50">
-              <p className="font-bold text-sm">Todo lo pagado este periodo ({formatAmount(undoTarget?.totalPeriodo ?? 0)})</p>
-              <p className="text-xs text-muted-foreground">La cuota y todos los abonos del periodo se revierten.</p>
+              <p className="font-bold text-sm">{tr("Todo lo pagado este periodo ({0})", [formatAmount(undoTarget?.totalPeriodo ?? 0)])}</p>
+              <p className="text-xs text-muted-foreground">{tr("La cuota y todos los abonos del periodo se revierten.")}</p>
             </button>
           </div>
-          <DialogFooter><Button variant="ghost" disabled={undoing} onClick={() => setUndoTarget(null)}>Cancelar</Button></DialogFooter>
+          <DialogFooter><Button variant="ghost" disabled={undoing} onClick={() => setUndoTarget(null)}>{tr("Cancelar")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1886,12 +1823,12 @@ export default function ObligacionesPage() {
       <Dialog open={!!deleteTarget} onOpenChange={v => !v && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" /> Eliminar</DialogTitle>
-            <DialogDescription>¿Eliminar <strong>{deleteTarget?.nombre}</strong>? Esta acción no se puede deshacer.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><AlertTriangle className="h-5 w-5" />{" "}{tr("Eliminar")}</DialogTitle>
+            <DialogDescription>{tr("¿Eliminar")}{" "}<strong>{deleteTarget?.nombre}</strong>{tr("? Esta acción no se puede deshacer.")}</DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 pt-4">
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={confirmDelete} className="rounded-xl font-bold px-8">Eliminar</Button>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>{tr("Cancelar")}</Button>
+            <Button variant="destructive" onClick={confirmDelete} className="rounded-xl font-bold px-8">{tr("Eliminar")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1901,16 +1838,14 @@ export default function ObligacionesPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ReceiptText className="h-5 w-5 text-kiri-emerald" />
-              Registrar gasto
-            </DialogTitle>
-            <DialogDescription>El gasto se registrará y descontará de tu presupuesto libre.</DialogDescription>
+              <ReceiptText className="h-5 w-5 text-kiri-emerald" />{tr("Registrar gasto")}</DialogTitle>
+            <DialogDescription>{tr("El gasto se registrará y descontará de tu presupuesto libre.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Descripción</Label>
+              <Label className="text-xs font-bold">{tr("Descripción")}</Label>
               <Input
-                placeholder="Ej: Mercado semanal, Uber, Netflix..."
+                placeholder={tr("Ej: Mercado semanal, Uber, Netflix...")}
                 value={expNombre}
                 onChange={e => setExpNombre(e.target.value)}
                 className="h-10 rounded-xl"
@@ -1918,14 +1853,12 @@ export default function ObligacionesPage() {
               />
               {/* Categoría sugerida por Kiri */}
               {expNombre && expCategoriaSugerida && !expCategoriaManual && (
-                <p className="text-[9px] text-kiri-emerald flex items-center gap-1">
-                  📁 Categoría sugerida: {expCategoriaSugerida.nombre}
-                  {expCategoriaSugerida.fuente === 'historial' && <span className="text-muted-foreground">· así lo registraste antes</span>}
+                <p className="text-[9px] text-kiri-emerald flex items-center gap-1">{tr("📁 Categoría sugerida: {0}", [expCategoriaSugerida.nombre])}{expCategoriaSugerida.fuente === 'historial' && <span className="text-muted-foreground">{tr("· así lo registraste antes")}</span>}
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Monto</Label>
+              <Label className="text-xs font-bold">{tr("Monto")}</Label>
               <MoneyInput value={expMonto} onChange={v => setExpMonto(v)} className="h-12 text-lg font-bold rounded-xl" placeholder="0" />
             </div>
             {/* Gasto hormiga: Kiri lo sugiere (monto chico o palabra clave) y el usuario decide */}
@@ -1936,8 +1869,7 @@ export default function ObligacionesPage() {
                 <button type="button" onClick={() => setExpHormiga(!activo)}
                   className={cn("w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-colors",
                     activo ? "border-cyclon-pink/40 bg-cyclon-pink/5" : "border-muted")}>
-                  <span className="text-[10px] font-bold">
-                    🐜 Gasto hormiga {expHormiga === null && auto && <span className="font-normal text-muted-foreground">· sugerido por Kiri</span>}
+                  <span className="text-[10px] font-bold">{tr("🐜 Gasto hormiga")}{" "}{expHormiga === null && auto && <span className="font-normal text-muted-foreground">{tr("· sugerido por Kiri")}</span>}
                   </span>
                   <span className={cn("relative h-5 w-9 rounded-full transition-colors", activo ? "bg-cyclon-pink" : "bg-muted")}>
                     <span className={cn("absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform", activo && "translate-x-4")} />
@@ -1948,7 +1880,7 @@ export default function ObligacionesPage() {
             {/* Selector de categoría */}
             {budgetCategories.length > 0 && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Categoría (opcional)</Label>
+                <Label className="text-xs font-bold">{tr("Categoría (opcional)")}</Label>
                 <div className="flex gap-2 flex-wrap">
                   {budgetCategories.map(c => (
                     <button key={c.id} type="button"
@@ -1970,7 +1902,7 @@ export default function ObligacionesPage() {
             {/* Del hogar: suma al presupuesto compartido con la pareja y le avisa */}
             {hogarCats.length > 0 && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Del hogar {hogarPareja && <span className="font-normal text-muted-foreground">(con {hogarPareja.split(" ")[0]})</span>}</Label>
+                <Label className="text-xs font-bold">{tr("Del hogar")}{" "}{hogarPareja && <span className="font-normal text-muted-foreground">{tr("(con")}{" "}{hogarPareja.split(" ")[0]})</span>}</Label>
                 <div className="flex gap-2 flex-wrap">
                   {hogarCats.map(c => (
                     <button key={c.id} type="button"
@@ -1980,7 +1912,7 @@ export default function ObligacionesPage() {
                         expHogarId === c.id ? "border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-400" : "border-muted text-muted-foreground hover:border-pink-500/40"
                       )}
                     >
-                      {c.icono} {c.nombre} <span className="font-normal opacity-70">· quedan {formatAmount(c.disponible)}</span>
+                      {c.icono} {c.nombre} <span className="font-normal opacity-70">{tr("· quedan {0}", [formatAmount(c.disponible)])}</span>
                     </button>
                   ))}
                 </div>
@@ -1999,9 +1931,7 @@ export default function ObligacionesPage() {
                     onClick={() => { setExpShowTCOptions(v => !v); setExpSelectedTC(null); setExpTcCuotas("1") }}
                     className="w-full h-11 rounded-2xl border-2 border-amber-500/40 text-amber-600 hover:bg-amber-500/5 font-bold text-sm gap-2"
                   >
-                    <CircleDollarSign className="h-4 w-4" />
-                    Pagar con Tarjeta de Crédito
-                  </Button>
+                    <CircleDollarSign className="h-4 w-4" />{tr("Pagar con Tarjeta de Crédito")}</Button>
                   {expShowTCOptions && (
                     <div className="space-y-3 pl-2 pt-1">
                       {tarjetas.map(tc => (
@@ -2018,14 +1948,14 @@ export default function ObligacionesPage() {
                         >
                           <div>
                             <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">Saldo: {formatAmount(tc.saldoRestante)} · Cuota: {formatAmount(tc.cuotaPeriodo)}</p>
+                            <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0} · Cuota: {1}", [formatAmount(tc.saldoRestante), formatAmount(tc.cuotaPeriodo)])}</p>
                           </div>
-                          <span className="text-[10px] font-bold text-amber-500">{expSelectedTC === tc.id ? "✓" : "Seleccionar"}</span>
+                          <span className="text-[10px] font-bold text-amber-500">{expSelectedTC === tc.id ? "✓" : tr("Seleccionar")}</span>
                         </button>
                       ))}
                       {expSelectedTC && (
                         <div className="space-y-1.5 pt-2 border-t border-border/50">
-                          <Label className="text-xs font-bold">¿A cuántas cuotas?</Label>
+                          <Label className="text-xs font-bold">{tr("¿A cuántas cuotas?")}</Label>
                           <Input
                             type="number"
                             min="1"
@@ -2035,9 +1965,7 @@ export default function ObligacionesPage() {
                             className="h-10 rounded-xl text-center font-bold"
                           />
                           {Number(expMonto) > 0 && (
-                            <p className="text-[10px] text-muted-foreground">
-                              Se sumará <strong>{formatAmount(Math.round(Number(expMonto) / (Number(expTcCuotas) || 1)))}/mes</strong> a la cuota de la tarjeta durante {expTcCuotas} {Number(expTcCuotas) === 1 ? "mes" : "meses"}.
-                            </p>
+                            <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(Number(expMonto) / (Number(expTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [expTcCuotas, Number(expTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
                           )}
                         </div>
                       )}
@@ -2048,7 +1976,7 @@ export default function ObligacionesPage() {
             })()}
           </div>
           <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>{tr("Cancelar")}</Button>
             <Button
               onClick={async () => {
                 if (!expNombre || !expMonto || Number(expMonto) <= 0) return
@@ -2072,7 +2000,7 @@ export default function ObligacionesPage() {
                 })
                 setExpSaving(false)
                 if (!result) {
-                  toast({ title: "No se pudo registrar el gasto", description: "Intenta de nuevo.", variant: "destructive" })
+                  toast({ title: tr("No se pudo registrar el gasto"), description: tr("Intenta de nuevo."), variant: "destructive" })
                   return
                 }
                 setExpenseModalOpen(false)
@@ -2084,7 +2012,7 @@ export default function ObligacionesPage() {
               disabled={expSaving || !expNombre || !expMonto || Number(expMonto) <= 0 || (expShowTCOptions && !expSelectedTC)}
               className="bg-kiri-emerald text-white font-bold rounded-xl px-6"
             >
-              {expSaving ? "Guardando..." : "Registrar"}
+              {expSaving ? "Guardando..." : tr("Registrar")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2146,20 +2074,20 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
           <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 rounded-xl p-3 space-y-2 -mb-1 animate-in fade-in slide-in-from-top-1 duration-200">
             <div className="flex items-start justify-between">
               <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
-                {strategyBadge?.includes('Nieve') ? '❄️ Estrategia Bola de Nieve' : '⚡ Estrategia Avalancha'}
+                {strategyBadge?.includes('Nieve') ? tr("❄️ Estrategia Bola de Nieve") : tr("⚡ Estrategia Avalancha")}
               </p>
               <button onClick={(e) => { e.stopPropagation(); setShowStrategyInfo(false) }} className="text-[10px] text-muted-foreground hover:text-foreground">✕</button>
             </div>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               {strategyBadge?.includes('Nieve')
-                ? 'La Bola de Nieve prioriza la deuda con MENOR saldo restante. Al liquidarla rápido, liberas esa cuota para atacar la siguiente. Genera motivación psicológica al ver resultados rápidos.'
-                : 'La Avalancha prioriza la deuda con MAYOR tasa de interés. Así minimizas el dinero que regalas al banco en intereses. Es la estrategia que más te ahorra a largo plazo.'
+                ? tr("La Bola de Nieve prioriza la deuda con MENOR saldo restante. Al liquidarla rápido, liberas esa cuota para atacar la siguiente. Genera motivación psicológica al ver resultados rápidos.")
+                : tr("La Avalancha prioriza la deuda con MAYOR tasa de interés. Así minimizas el dinero que regalas al banco en intereses. Es la estrategia que más te ahorra a largo plazo.")
               }
             </p>
             <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
               {strategyBadge?.includes('Nieve')
-                ? '💡 Paga primero esta deuda porque es la más pequeña. Cuando la liquides, usa esa cuota para la siguiente.'
-                : '💡 Paga primero esta deuda porque es la que más interés te cobra. Cada peso extra que abonas aquí te ahorra más.'
+                ? tr("💡 Paga primero esta deuda porque es la más pequeña. Cuando la liquides, usa esa cuota para la siguiente.")
+                : tr("💡 Paga primero esta deuda porque es la que más interés te cobra. Cada peso extra que abonas aquí te ahorra más.")
               }
             </p>
           </div>
@@ -2173,13 +2101,13 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
               {obligIcon.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : debt.nombre}</h3>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h3 className="font-bold text-sm leading-tight line-clamp-2 break-words min-w-0">{hidden ? "••••••" : debt.nombre}</h3>
                 {(() => {
                   const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
                   const isPartial = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
                   if (isPartial) {
-                    return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Pago parcial</span>
+                    return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{tr("Pago parcial")}</span>
                   }
                   return (
                     <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
@@ -2194,28 +2122,28 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
               {!hidden && debt.acreedor && <p className="text-[10px] text-muted-foreground truncate">{debt.acreedor}</p>}
               {!hidden && (
                 <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
-                  {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
-                  {" · "}{debt.frecuenciaPago === 'quincenal' ? 'Quincenal' : 'Mensual'}
-                  {debt.pagoAutomatico && <span className="ml-1.5 text-amber-500">⚡ Auto</span>}
+                  {payInfo.status === 'pagado' ? tr("Próximo: {0}", [payInfo.nextDate]) : payInfo.nextDate}
+                  {" · "}{debt.frecuenciaPago === 'quincenal' ? tr("Quincenal") : tr("Mensual")}
+                  {debt.pagoAutomatico && <span className="ml-1.5 text-amber-500">{tr("⚡ Auto")}</span>}
                 </p>
               )}
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
             {debt.frecuenciaPago !== 'quincenal' && (
-            <button onClick={onToggleAutoPay} title={debt.pagoAutomatico ? "Pago automático activado: se paga sola al registrar tu sueldo en Billetera" : "Pagar sola al registrar tu sueldo en Billetera"}
+            <button onClick={onToggleAutoPay} title={debt.pagoAutomatico ? tr("Pago automático activado: se paga sola al registrar tu sueldo en Billetera") : tr("Pagar sola al registrar tu sueldo en Billetera")}
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 debt.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
             </button>
             )}
-            <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
+            <button onClick={onToggleHidden} aria-label={hidden ? tr("Mostrar") : tr("Ocultar")} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
-            <button onClick={onEdit} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
+            <button onClick={onEdit} aria-label={tr("Editar")} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
-            <button onClick={onDelete} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
+            <button onClick={onDelete} aria-label={tr("Eliminar")} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -2228,10 +2156,8 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
         {/* Deuda compartida — solo informativo, no cambia cómo se paga */}
         {!hidden && debt.esCompartida && debt.nombreParticipanteB && (
           <div className="flex items-center justify-between bg-cyclon-lavender/5 border border-cyclon-lavender/20 rounded-xl px-3 py-2 text-[10px]">
-            <span className="font-bold text-cyclon-lavender">Compartida con {debt.nombreParticipanteB}</span>
-            <span className="text-muted-foreground">
-              Tú: {formatAmount(debt.montoParticipanteA ?? 0)} · {debt.nombreParticipanteB}: {formatAmount(debt.montoParticipanteB ?? 0)}
-            </span>
+            <span className="font-bold text-cyclon-lavender">{tr("Compartida con {0}", [debt.nombreParticipanteB])}</span>
+            <span className="text-muted-foreground">{tr("Tú: {0} · {1}: {2}", [formatAmount(debt.montoParticipanteA ?? 0), debt.nombreParticipanteB, formatAmount(debt.montoParticipanteB ?? 0)])}</span>
           </div>
         )}
 
@@ -2239,15 +2165,15 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
         {!hidden ? (
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-[10px] text-muted-foreground">Saldo restante</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Saldo restante")}</p>
               <p className="text-xl font-black">{formatAmount(debt.saldoRestante)}</p>
               {debt.montoTotal !== debt.saldoRestante && (
-                <p className="text-[9px] text-muted-foreground">de {formatAmount(debt.montoTotal)} original</p>
+                <p className="text-[9px] text-muted-foreground">{tr("de")}{" "}{formatAmount(debt.montoTotal)}{" "}{tr("original")}</p>
               )}
             </div>
             <div className="text-right">
               <p className="text-[10px] text-muted-foreground">
-                {debt.pagadoEstePeriodo && debt.montoPagadoEstePeriodo ? "Pagado" : "Cuota"}
+                {debt.pagadoEstePeriodo && debt.montoPagadoEstePeriodo ? tr("Pagado") : tr("Cuota")}
               </p>
               <p className="text-sm font-bold">
                 {debt.pagadoEstePeriodo && debt.montoPagadoEstePeriodo
@@ -2255,7 +2181,7 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
                   : formatAmount(debt.cuotaPeriodo)}
               </p>
               {debt.cuotaAjustadaEstePeriodo && (
-                <p className="text-[9px] text-amber-600">Ajustada este periodo · normal {formatAmount(debt.cuotaBase ?? 0)}</p>
+                <p className="text-[9px] text-amber-600">{tr("Ajustada este periodo · normal {0}", [formatAmount(debt.cuotaBase ?? 0)])}</p>
               )}
             </div>
           </div>
@@ -2268,10 +2194,9 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
           <div className="space-y-1.5">
             <Progress value={progreso} className="h-1.5" indicatorClassName="bg-cyclon-periwinkle" />
             <div className="flex justify-between items-center">
-              <span className="text-[10px] text-muted-foreground">{progreso}% pagado</span>
+              <span className="text-[10px] text-muted-foreground">{tr("{0}% pagado", [progreso])}</span>
               <span className="text-[10px] font-bold bg-cyclon-periwinkle/10 text-cyclon-periwinkle px-2 py-0.5 rounded-full">
-                {cuotasRestantes} cuotas restantes
-              </span>
+                {cuotasRestantes}{" "}{tr("cuotas restantes")}</span>
             </div>
           </div>
         )}
@@ -2285,16 +2210,10 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
             return (
               <div className="space-y-2">
                 <div className="flex gap-2">
-                  <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
-                    Deshacer pago
-                  </Button>
-                  <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-                    Abonar
-                  </Button>
+                  <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">{tr("Deshacer pago")}</Button>
+                  <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Abonar")}</Button>
                   {!debt.proximaCuotaCubierta && debt.estado === 'activa' && (
-                    <Button onClick={onAdelantar} size="sm" className="flex-1 bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none rounded-xl h-9 font-bold text-xs">
-                      Adelantar
-                    </Button>
+                    <Button onClick={onAdelantar} size="sm" className="flex-1 bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Adelantar")}</Button>
                   )}
                 </div>
                 <AdelantoInfo monto={debt.montoAdelantado} cubierta={debt.proximaCuotaCubierta} periodo={debt.periodoSiguiente} formatAmount={formatAmount} onUndo={onUndoAdelanto} />
@@ -2304,25 +2223,17 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
           if (isPartiallyPaid) {
             return (
               <div className="space-y-2">
-                <p className="text-[10px] text-amber-500 font-bold">
-                  Abonado: {formatAmount(montoPagadoPeriodo)} de {formatAmount(debt.cuotaPeriodo)} · Falta: {formatAmount(debt.cuotaPeriodo - montoPagadoPeriodo)}
-                </p>
+                <p className="text-[10px] text-amber-500 font-bold">{tr("Abonado: {0} de {1} · Falta: {2}", [formatAmount(montoPagadoPeriodo), formatAmount(debt.cuotaPeriodo), formatAmount(debt.cuotaPeriodo - montoPagadoPeriodo)])}</p>
                 <div className="flex gap-2">
-                  <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
-                    Deshacer pago
-                  </Button>
-                  <Button onClick={onPay} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-                    Pagar restante
-                  </Button>
+                  <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">{tr("Deshacer pago")}</Button>
+                  <Button onClick={onPay} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Pagar restante")}</Button>
                 </div>
               </div>
             )
           }
           if (debt.estado === 'activa') {
             return (
-              <Button onClick={onPay} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-                Registrar pago de cuota
-              </Button>
+              <Button onClick={onPay} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Registrar pago de cuota")}</Button>
             )
           }
           return null
@@ -2348,17 +2259,15 @@ function SaldoRealBanco({ debt, monto, value, onChange, formatAmount }: {
   const interesReal = real !== null ? Math.max(0, monto - (debt.saldoRestante - real)) : null
   return (
     <div className="rounded-2xl border border-border bg-muted/10 p-3 space-y-1.5">
-      <Label className="text-xs font-bold">¿En cuánto quedó tu saldo según el banco? <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+      <Label className="text-xs font-bold">{tr("¿En cuánto quedó tu saldo según el banco?")}{" "}<span className="font-normal text-muted-foreground">{tr("(opcional)")}</span></Label>
       <MoneyInput value={value} onChange={onChange} className="h-11 text-lg font-bold rounded-xl" placeholder={String(Math.round(estimado))} />
       <p className="text-[10px] text-muted-foreground">
         {tasaMensual > 0
-          ? <>Con la tasa registrada ({tasaMensual}% mensual) Kiri estima que queda en <strong>{formatAmount(estimado)}</strong>. Si tu banco muestra otro saldo, escríbelo y calculamos el interés real.</>
-          : <>Kiri estima que queda en <strong>{formatAmount(estimado)}</strong>. Si tu banco muestra otro saldo (por intereses o seguros), escríbelo.</>}
+          ? <>{tr("Con la tasa registrada ({0}% mensual) Kiri estima que queda en", [tasaMensual])}{" "}<strong>{formatAmount(estimado)}</strong>{tr(". Si tu banco muestra otro saldo, escríbelo y calculamos el interés real.")}</>
+          : <>{tr("Kiri estima que queda en")}{" "}<strong>{formatAmount(estimado)}</strong>{tr(". Si tu banco muestra otro saldo (por intereses o seguros), escríbelo.")}</>}
       </p>
       {interesReal !== null && (
-        <p className="text-[10px] font-bold text-amber-600">
-          Interés real de este pago: {formatAmount(interesReal)} · a capital: {formatAmount(Math.max(0, debt.saldoRestante - real!))}
-        </p>
+        <p className="text-[10px] font-bold text-amber-600">{tr("Interés real de este pago: {0} · a capital: {1}", [formatAmount(interesReal), formatAmount(Math.max(0, debt.saldoRestante - real!))])}</p>
       )}
     </div>
   )
@@ -2377,8 +2286,8 @@ function CuotaCompletaCheck({ checked, onChange, falta, formatAmount }: {
         {checked && <span className="text-white text-[9px] font-bold">✓</span>}
       </span>
       <span className="text-[11px]">
-        <strong>Con este valor quedó pagada la cuota</strong>
-        <span className="block text-muted-foreground">La cuota llegó más baja: no quedarán {formatAmount(falta)} pendientes este periodo.</span>
+        <strong>{tr("Con este valor quedó pagada la cuota")}</strong>
+        <span className="block text-muted-foreground">{tr("La cuota llegó más baja: no quedarán {0} pendientes este periodo.", [formatAmount(falta)])}</span>
       </span>
     </button>
   )
@@ -2401,14 +2310,10 @@ function AtrasosBanner({ atrasos, montoAtrasado, formatAmount, onPagar, onMarcar
       {atrasos.map(a => (
         <div key={a.periodo} className="flex items-center gap-2">
           <span className="text-[10px] flex-1 min-w-0 truncate first-letter:uppercase">
-            {formatPeriodo(a.periodo)} · <strong>{formatAmount(a.falta)}</strong>{a.pagado > 0 && <span className="text-muted-foreground"> (abonaste {formatAmount(a.pagado)})</span>}
+            {formatPeriodo(a.periodo)} · <strong>{formatAmount(a.falta)}</strong>{a.pagado > 0 && <span className="text-muted-foreground">{" "}{tr("(abonaste")}{" "}{formatAmount(a.pagado)})</span>}
           </span>
-          <button onClick={() => onMarcar(a)} className="text-[9px] font-bold text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-muted/40 shrink-0">
-            Ya la pagué
-          </button>
-          <button onClick={() => onPagar(a)} className="text-[9px] font-bold text-white bg-red-500 hover:bg-red-600 px-2.5 py-1 rounded-lg shrink-0">
-            Pagar
-          </button>
+          <button onClick={() => onMarcar(a)} className="text-[9px] font-bold text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-muted/40 shrink-0">{tr("Ya la pagué")}</button>
+          <button onClick={() => onPagar(a)} className="text-[9px] font-bold text-white bg-red-500 hover:bg-red-600 px-2.5 py-1 rounded-lg shrink-0">{tr("Pagar")}</button>
         </div>
       ))}
     </div>
@@ -2424,10 +2329,10 @@ function AdelantoInfo({ monto, cubierta, periodo, formatAmount, onUndo }: {
   return (
     <div className="flex items-center justify-between text-[10px] bg-kiri-emerald/5 rounded-lg px-2.5 py-1.5">
       <span className="text-kiri-emerald font-bold">
-        {cubierta ? "✓ Próxima cuota adelantada" : "Adelantado a la próxima cuota"}: {formatAmount(monto)}
+        {cubierta ? tr("✓ Próxima cuota adelantada") : tr("Adelantado a la próxima cuota")}: {formatAmount(monto)}
         {periodo && <span className="font-normal text-muted-foreground"> · {formatPeriodo(periodo)}</span>}
       </span>
-      <button onClick={onUndo} className="text-muted-foreground hover:text-foreground font-bold">Deshacer</button>
+      <button onClick={onUndo} className="text-muted-foreground hover:text-foreground font-bold">{tr("Deshacer")}</button>
     </div>
   )
 }
@@ -2462,12 +2367,13 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
               {obligIcon.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm truncate">{hidden ? "••••••" : item.nombre}</h3>
+              {/* En el celular el nombre quedaba en "Netf…" (competía con la
+                  etiqueta y 4 botones): ahora usa hasta 2 líneas y la etiqueta
+                  baja si no cabe */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h3 className="font-bold text-sm leading-tight line-clamp-2 break-words min-w-0">{hidden ? "••••••" : item.nombre}</h3>
                 {isPartiallyPaid ? (
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                    Pago parcial
-                  </span>
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{tr("Pago parcial")}</span>
                 ) : (
                   <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0",
                     payInfo.status === 'pagado' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :
@@ -2479,10 +2385,10 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
               </div>
               {!hidden && (
                 <p className={cn("text-[10px] font-medium mt-0.5", payInfo.statusColor)}>
-                  {payInfo.status === 'pagado' ? `Próximo: ${payInfo.nextDate}` : payInfo.nextDate}
-                  {" · "}{item.frecuencia === 'quincenal' ? 'Quincenal' : 'Mensual'}
+                  {payInfo.status === 'pagado' ? tr("Próximo: {0}", [payInfo.nextDate]) : payInfo.nextDate}
+                  {" · "}{item.frecuencia === 'quincenal' ? tr("Quincenal") : tr("Mensual")}
                   {item.pagoAutomatico && (
-                    <span className="ml-1.5 text-amber-500">⚡ Auto{tarjetaNombre ? " con TC" : ""}</span>
+                    <span className="ml-1.5 text-amber-500">{tr("⚡ Auto{0}", [tarjetaNombre ? tr(" con TC") : ""])}</span>
                   )}
                 </p>
               )}
@@ -2493,22 +2399,22 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
             <button onClick={onToggleAutoPay} title={
               item.pagoAutomatico
                 ? tarjetaNombre
-                  ? `Pago automático con ${tarjetaNombre}. Toca para cambiarlo.`
-                  : "Pago automático con tu disponible. Toca para cambiarlo."
-                : "Configurar pago automático"
+                  ? tr("Pago automático con {0}. Toca para cambiarlo.", [tarjetaNombre])
+                  : tr("Pago automático con tu disponible. Toca para cambiarlo.")
+                : tr("Configurar pago automático")
             }
               className={cn("h-7 w-7 rounded-lg flex items-center justify-center transition-colors",
                 item.pagoAutomatico ? "text-amber-500 bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}>
               <span className="text-[10px]">⚡</span>
             </button>
             )}
-            <button onClick={onToggleHidden} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
+            <button onClick={onToggleHidden} aria-label={hidden ? tr("Mostrar") : tr("Ocultar")} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-muted transition-colors">
               {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
-            <button onClick={onEdit} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
+            <button onClick={onEdit} aria-label={tr("Editar")} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-cyclon-lavender hover:bg-cyclon-lavender/10 transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
-            <button onClick={onDelete} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
+            <button onClick={onDelete} aria-label={tr("Eliminar")} className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -2522,12 +2428,10 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
             {/* Si pagó más (o menos) que la cuota configurada, que quede claro cuál
                 era la cuota — antes esto se ocultaba en cuanto quedaba "pagado". */}
             {item.pagadoEstePeriodo && montoPagado > 0 && montoPagado !== item.monto && (
-              <p className="text-[9px] text-muted-foreground mt-0.5">Cuota: {formatAmount(item.monto)}</p>
+              <p className="text-[9px] text-muted-foreground mt-0.5">{tr("Cuota: {0}", [formatAmount(item.monto)])}</p>
             )}
             {isPartiallyPaid && (
-              <p className="text-[10px] text-amber-500 font-bold mt-0.5">
-                Pagado: {formatAmount(montoPagado)} · Falta: {formatAmount(remaining)}
-              </p>
+              <p className="text-[10px] text-amber-500 font-bold mt-0.5">{tr("Pagado: {0} · Falta: {1}", [formatAmount(montoPagado), formatAmount(remaining)])}</p>
             )}
           </div>
         ) : (
@@ -2540,33 +2444,21 @@ function FixedCard({ item, tarjetaNombre, formatAmount, onEdit, onDelete, onTogg
         {item.pagadoEstePeriodo ? (
           <div className="space-y-2">
             <div className="flex gap-2">
-              <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
-                Deshacer pago
-              </Button>
-              <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-                Abonar
-              </Button>
+              <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">{tr("Deshacer pago")}</Button>
+              <Button onClick={onAbonar} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Abonar")}</Button>
               {!item.proximaCuotaCubierta && (
-                <Button onClick={onAdelantar} size="sm" className="flex-1 bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none rounded-xl h-9 font-bold text-xs">
-                  Adelantar
-                </Button>
+                <Button onClick={onAdelantar} size="sm" className="flex-1 bg-kiri-emerald/10 text-kiri-emerald hover:bg-kiri-emerald/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Adelantar")}</Button>
               )}
             </div>
             <AdelantoInfo monto={item.montoAdelantado} cubierta={item.proximaCuotaCubierta} periodo={item.periodoSiguiente} formatAmount={formatAmount} onUndo={onUndoAdelanto} />
           </div>
         ) : isPartiallyPaid ? (
           <div className="flex gap-2">
-            <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">
-              Deshacer pago
-            </Button>
-            <Button onClick={onTogglePaid} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-              Pagar restante
-            </Button>
+            <Button onClick={onUndoPay} size="sm" variant="ghost" className="flex-1 rounded-xl h-9 text-xs text-muted-foreground">{tr("Deshacer pago")}</Button>
+            <Button onClick={onTogglePaid} size="sm" className="flex-1 bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Pagar restante")}</Button>
           </div>
         ) : (
-          <Button onClick={onTogglePaid} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">
-            Registrar pago de cuota
-          </Button>
+          <Button onClick={onTogglePaid} size="sm" className="w-full bg-cyclon-periwinkle/10 text-cyclon-periwinkle hover:bg-cyclon-periwinkle/20 border-none rounded-xl h-9 font-bold text-xs">{tr("Registrar pago de cuota")}</Button>
         )}
       </CardContent>
     </Card>
@@ -2587,6 +2479,7 @@ function DebtFormFields({
   dueQuestion?: DueQuestionKind | null
 }) {
   const set = (patch: Partial<DebtForm>) => onChange({ ...form, ...patch })
+  const { formatAmount } = useAppContext()
 
   // Cálculo reactivo: cuotas restantes
   const cuotasEstimadas = (() => {
@@ -2603,34 +2496,34 @@ function DebtFormFields({
           como "Acreedor", lo que hacía parecer que el nombre real de la
           deuda no se podía editar desde acá. */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Nombre de la deuda</Label>
-        <Input placeholder="Ej: Banco Falabella" value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
+        <Label className="text-xs font-bold">{tr("Nombre de la deuda")}</Label>
+        <Input placeholder={tr("Ej: Banco Falabella")} value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
       </div>
 
       {/* Monto total de la deuda */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Monto total de la deuda</Label>
+        <Label className="text-xs font-bold">{tr("Monto total de la deuda")}</Label>
         <MoneyInput value={form.montoTotal} onChange={v => set({ montoTotal: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
       </div>
 
       {/* Saldo restante (lo que debes hoy) */}
       {isEdit && (
         <div className="space-y-1.5">
-          <Label className="text-xs font-bold">Saldo restante <span className="font-normal text-muted-foreground">(lo que debes hoy)</span></Label>
+          <Label className="text-xs font-bold">{tr("Saldo restante")}{" "}<span className="font-normal text-muted-foreground">{tr("(lo que debes hoy)")}</span></Label>
           <MoneyInput value={form.saldoRestante} onChange={v => set({ saldoRestante: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
-          <p className="text-[8px] text-muted-foreground">Este valor baja con cada pago que registres.</p>
+          <p className="text-[8px] text-muted-foreground">{tr("Este valor baja con cada pago que registres.")}</p>
         </div>
       )}
 
       {/* Cuota por periodo */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Cuota por periodo</Label>
+        <Label className="text-xs font-bold">{tr("Cuota por periodo")}</Label>
         <MoneyInput value={form.cuotaPeriodo} onChange={v => set({ cuotaPeriodo: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
       </div>
 
       {/* Frecuencia de pago */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Frecuencia de pago</Label>
+        <Label className="text-xs font-bold">{tr("Frecuencia de pago")}</Label>
         <div className="grid grid-cols-2 gap-2">
           {(["mensual", "quincenal"] as const).map(f => (
             <button key={f} type="button" onClick={() => {
@@ -2651,7 +2544,7 @@ function DebtFormFields({
       {/* Días de pago */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">
-          {form.frecuencia === "quincenal" ? "Días de pago (quincenal)" : "Día de pago"}
+          {form.frecuencia === "quincenal" ? tr("Días de pago (quincenal)") : tr("Día de pago")}
         </Label>
         {form.frecuencia === "quincenal" ? (
           <div className="flex items-center gap-2">
@@ -2672,13 +2565,13 @@ function DebtFormFields({
               className="h-11 rounded-xl w-20 text-center font-bold" />
           </div>
         ) : (
-          <Input type="number" min={1} max={31} placeholder="Ej: 15"
+          <Input type="number" min={1} max={31} placeholder={tr("Ej: 15")}
             value={form.diasPago}
             onChange={e => set({ diasPago: e.target.value })}
             className="h-11 rounded-xl w-24 text-center font-bold text-lg" />
         )}
         <p className="text-[9px] text-muted-foreground">
-          {form.frecuencia === "quincenal" ? "Ej: 1 y 15 ó 15 y 30" : "Día del mes en que se paga"}
+          {form.frecuencia === "quincenal" ? tr("Ej: 1 y 15 ó 15 y 30") : tr("Día del mes en que se paga")}
         </p>
       </div>
 
@@ -2699,12 +2592,8 @@ function DebtFormFields({
         <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-2xl p-3 flex items-center gap-3">
           <span className="text-lg">✅</span>
           <div>
-            <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-              Pagarás esta deuda en aproximadamente {cuotasEstimadas} cuotas
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              Cálculo: {form.montoTotal ? `$${Number(form.montoTotal).toLocaleString()}` : '?'} / {form.cuotaPeriodo ? `$${Number(form.cuotaPeriodo).toLocaleString()}` : '?'} = {cuotasEstimadas}
-            </p>
+            <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{tr("Pagarás esta deuda en aproximadamente {0} cuotas", [cuotasEstimadas])}</p>
+            <p className="text-[10px] text-muted-foreground">{tr("Cálculo: {0} / {1} = {2}", [form.montoTotal ? formatAmount(Number(form.montoTotal)) : '?', form.cuotaPeriodo ? formatAmount(Number(form.cuotaPeriodo)) : '?', cuotasEstimadas])}</p>
           </div>
         </div>
       )}
@@ -2732,19 +2621,19 @@ function FixedFormFields({
     <div className="space-y-4">
       {/* Nombre */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Nombre</Label>
-        <Input placeholder="Ej: Netflix, Arriendo, Luz" value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
+        <Label className="text-xs font-bold">{tr("Nombre")}</Label>
+        <Input placeholder={tr("Ej: Netflix, Arriendo, Luz")} value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
       </div>
 
       {/* Monto */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Monto</Label>
+        <Label className="text-xs font-bold">{tr("Monto")}</Label>
         <MoneyInput value={form.monto} onChange={v => set({ monto: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
       </div>
 
       {/* Frecuencia de pago */}
       <div className="space-y-1.5">
-        <Label className="text-xs font-bold">Frecuencia de pago</Label>
+        <Label className="text-xs font-bold">{tr("Frecuencia de pago")}</Label>
         <div className="grid grid-cols-2 gap-2">
           {(["mensual", "quincenal"] as const).map(f => (
             <button key={f} type="button" onClick={() => {
@@ -2765,7 +2654,7 @@ function FixedFormFields({
       {/* Días de pago */}
       <div className="space-y-1.5">
         <Label className="text-xs font-bold">
-          {form.frecuencia === "quincenal" ? "Días de pago (quincenal)" : "Día de pago"}
+          {form.frecuencia === "quincenal" ? tr("Días de pago (quincenal)") : tr("Día de pago")}
         </Label>
         {form.frecuencia === "quincenal" ? (
           <div className="flex items-center gap-2">
@@ -2786,13 +2675,13 @@ function FixedFormFields({
               className="h-11 rounded-xl w-20 text-center font-bold" />
           </div>
         ) : (
-          <Input type="number" min={1} max={31} placeholder="Ej: 15"
+          <Input type="number" min={1} max={31} placeholder={tr("Ej: 15")}
             value={form.diasPago}
             onChange={e => set({ diasPago: e.target.value })}
             className="h-11 rounded-xl w-24 text-center font-bold text-lg" />
         )}
         <p className="text-[9px] text-muted-foreground">
-          {form.frecuencia === "quincenal" ? "Ej: 1 y 15 ó 15 y 30" : "Día del mes en que se cobra"}
+          {form.frecuencia === "quincenal" ? tr("Ej: 1 y 15 ó 15 y 30") : tr("Día del mes en que se cobra")}
         </p>
       </div>
 

@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { getNextPaymentInfo } from "@/lib/payment-schedule"
+import { tr } from "@/lib/i18n"
 
 export type DueQuestionKind = "vencido" | "hoy"
 
@@ -42,10 +43,10 @@ export function DueQuestion({ kind, yaPago, nueva, onChange, isEdit }: {
     <div className="rounded-2xl border-2 border-amber-400/30 bg-amber-500/5 p-3 space-y-2">
       <p className="text-xs font-bold">
         {kind === "hoy"
-          ? "Esta cuota vence hoy. ¿Ya pagaste?"
+          ? tr("Esta cuota vence hoy. ¿Ya pagaste?")
           : isEdit
-            ? "Con este día de pago, la cuota de este periodo ya venció. ¿Ya la pagaste?"
-            : "El día de pago de este periodo ya pasó. ¿Ya pagaste esta cuota?"}
+            ? tr("Con este día de pago, la cuota de este periodo ya venció. ¿Ya la pagaste?")
+            : tr("El día de pago de este periodo ya pasó. ¿Ya pagaste esta cuota?")}
       </p>
       <div className="grid grid-cols-2 gap-2">
         <button
@@ -55,7 +56,7 @@ export function DueQuestion({ kind, yaPago, nueva, onChange, isEdit }: {
             yaPago ? "bg-kiri-emerald text-white border-kiri-emerald" : "border-muted text-muted-foreground hover:border-kiri-emerald/40"
           )}
         >
-          {kind === "hoy" ? "Sí, ya pagué" : "Sí, ya la pagué"}
+          {kind === "hoy" ? tr("Sí, ya pagué") : tr("Sí, ya la pagué")}
         </button>
         <button
           type="button"
@@ -64,7 +65,7 @@ export function DueQuestion({ kind, yaPago, nueva, onChange, isEdit }: {
             (!yaPago && !nueva) ? "bg-red-500 text-white border-red-500" : "border-muted text-muted-foreground hover:border-red-400/40"
           )}
         >
-          {kind === "hoy" ? "No, vence hoy" : "No, está vencida"}
+          {kind === "hoy" ? tr("No, vence hoy") : tr("No, está vencida")}
         </button>
       </div>
       <button
@@ -74,12 +75,10 @@ export function DueQuestion({ kind, yaPago, nueva, onChange, isEdit }: {
           nueva ? "bg-cyclon-periwinkle text-white border-cyclon-periwinkle" : "border-muted text-muted-foreground hover:border-cyclon-periwinkle/40"
         )}
       >
-        {isEdit ? "Todavía no me la cobran (inicia el próximo periodo)" : "Es una obligación nueva (inicia el próximo periodo)"}
+        {isEdit ? tr("Todavía no me la cobran (inicia el próximo periodo)") : tr("Es una obligación nueva (inicia el próximo periodo)")}
       </button>
       {yaPago && (
-        <p className="text-[9px] text-muted-foreground">
-          Queda como pagada este periodo sin descontar de tu billetera (la pagaste por fuera de Kiri).
-        </p>
+        <p className="text-[9px] text-muted-foreground">{tr("Queda como pagada este periodo sin descontar de tu billetera (la pagaste por fuera de Kiri).")}</p>
       )}
     </div>
   )

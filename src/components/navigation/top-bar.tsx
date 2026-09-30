@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
+import { tr } from "@/lib/i18n"
 
 export function TopBar() {
   const [notifsOpen, setNotifsOpen] = useState(false)
@@ -49,7 +50,7 @@ export function TopBar() {
             <div className="h-8 w-8 bg-kiri-emerald rounded-xl flex items-center justify-center">
               <Sprout className="h-4 w-4 text-white" strokeWidth={2} />
             </div>
-            <span className="text-sm font-bold text-foreground">Kiri</span>
+            <span className="text-sm font-bold text-foreground">{tr("Kiri")}</span>
           </Link>
 
           {/* Derecha: Notificaciones + Avatar */}
@@ -83,7 +84,7 @@ export function TopBar() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-cyclon-lavender" />
-                <span className="font-bold text-sm">Notificaciones</span>
+                <span className="font-bold text-sm">{tr("Notificaciones")}</span>
                 <span className={cn("h-2 w-2 rounded-full", connected ? "bg-kiri-emerald" : "bg-muted-foreground")} />
               </div>
               <div className="flex items-center gap-1">
@@ -101,8 +102,8 @@ export function TopBar() {
               {notifications.length === 0 ? (
                 <div className="py-10 flex flex-col items-center gap-2 text-muted-foreground">
                   <Bell className="h-8 w-8 opacity-30" />
-                  <p className="text-sm font-medium">Sin notificaciones</p>
-                  <p className="text-xs opacity-60">Las actividades de tu red aparecerán aquí</p>
+                  <p className="text-sm font-medium">{tr("Sin notificaciones")}</p>
+                  <p className="text-xs opacity-60">{tr("Las actividades de tu red aparecerán aquí")}</p>
                 </div>
               ) : (
                 <ul className="divide-y divide-border/50">

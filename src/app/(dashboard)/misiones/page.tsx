@@ -15,13 +15,16 @@ import { useStreaks } from "@/hooks/use-streaks"
 import { useMissions } from "@/hooks/use-missions"
 import { calculateGardenXP } from "@/lib/garden-xp"
 import type { RewardResult } from "@/lib/types"
+import { tr } from "@/lib/i18n"
 
-// ─── Hitos de racha — solo informativos, se comparan contra streakActual real ──
-
+// ─── Hitos de racha — se comparan contra streakActual real ──
+// Antes prometían "Farolito", "Bonsái" e "Insignia dorada", premios que no
+// existían en ninguna parte. Estas son las insignias que el backend SÍ entrega
+// al llegar a esos días (STREAK_BADGES en Backend src/lib/missions.ts).
 const MILESTONES = [
-  { days: 7, label: "7 días", reward: "Farolito" },
-  { days: 30, label: "30 días", reward: "Bonsái" },
-  { days: 100, label: "100 días", reward: "Insignia dorada" },
+  { days: 7, label: tr("7 días"), reward: tr("🌻 Insignia Racha de una Semana") },
+  { days: 30, label: tr("30 días"), reward: tr("🏆 Insignia Disciplina de Acero") },
+  { days: 100, label: tr("100 días"), reward: tr("👑 Insignia Leyenda Financiera") },
 ]
 
 export default function MisionesPage() {
@@ -55,21 +58,16 @@ export default function MisionesPage() {
       <header className="flex items-start justify-between gap-2">
         <div>
           <Link href="/jardin" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1">
-            <ChevronLeft className="h-3.5 w-3.5" /> Volver al jardín
-          </Link>
-          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-            🎯 Misiones
-          </p>
-          <h1 className="text-xl font-black mt-0.5">Tus misiones de hoy</h1>
-          <p className="text-muted-foreground text-xs">
-            Completa misiones y reclama el cofre — la recompensa siempre es sorpresa.
-          </p>
+            <ChevronLeft className="h-3.5 w-3.5" />{" "}{tr("Volver al jardín")}</Link>
+          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">{tr("🎯 Misiones")}</p>
+          <h1 className="text-xl font-black mt-0.5">{tr("Tus misiones de hoy")}</h1>
+          <p className="text-muted-foreground text-xs">{tr("Completa misiones y reclama el cofre — la recompensa siempre es sorpresa.")}</p>
         </div>
         {/* XP en vivo — sube apenas se reclama una recompensa */}
         <div className="flex items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2 shrink-0">
           <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <div className="text-right">
-            <p className="text-[8px] text-muted-foreground">XP total</p>
+            <p className="text-[8px] text-muted-foreground">{tr("XP total")}</p>
             <motion.p
               key={currentXP}
               initial={{ scale: 1.3 }}
@@ -85,9 +83,7 @@ export default function MisionesPage() {
 
       {loading ? (
         <Card className="border-none bg-card shadow-sm rounded-2xl">
-          <CardContent className="p-6 text-center text-sm text-muted-foreground">
-            Cargando misiones…
-          </CardContent>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">{tr("Cargando misiones…")}</CardContent>
         </Card>
       ) : (
         <>
@@ -97,9 +93,9 @@ export default function MisionesPage() {
               <CardContent className="p-5 space-y-1">
                 <div className="flex items-center gap-2 mb-1">
                   <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <p className="text-sm font-bold">Primeros pasos</p>
+                  <p className="text-sm font-bold">{tr("Primeros pasos")}</p>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-3">Completa esto una sola vez para arrancar con todo</p>
+                <p className="text-[11px] text-muted-foreground mb-3">{tr("Completa esto una sola vez para arrancar con todo")}</p>
 
                 <div className="space-y-4">
                   {pendingOnboarding.map((m) => {
@@ -124,7 +120,7 @@ export default function MisionesPage() {
                               disabled={claiming === m.key}
                               className="h-8 gap-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-bold px-3"
                             >
-                              <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : "Reclamar"}
+                              <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : tr("Reclamar")}
                             </Button>
                           ) : (
                             <Lock className="h-4 w-4 text-muted-foreground/40" />
@@ -157,9 +153,9 @@ export default function MisionesPage() {
                   indicatorClassName="bg-amber-500"
                 />
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">{weekly.progress}/{weekly.target} días</span>
+                  <span className="text-[10px] text-muted-foreground">{tr("{0}/{1} días", [weekly.progress, weekly.target])}</span>
                   {weekly.claimed ? (
-                    <span className="text-[10px] font-bold text-muted-foreground">Reclamada</span>
+                    <span className="text-[10px] font-bold text-muted-foreground">{tr("Reclamada")}</span>
                   ) : weekly.progress >= weekly.target ? (
                     <Button
                       size="sm"
@@ -167,10 +163,10 @@ export default function MisionesPage() {
                       disabled={claiming === weekly.key}
                       className="h-7 gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold px-3"
                     >
-                      <Gift className="h-3 w-3" /> {claiming === weekly.key ? "Abriendo…" : "Reclamar"}
+                      <Gift className="h-3 w-3" /> {claiming === weekly.key ? "Abriendo…" : tr("Reclamar")}
                     </Button>
                   ) : (
-                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">Recompensa mayor 🏆</span>
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">{tr("Recompensa mayor 🏆")}</span>
                   )}
                 </div>
               </CardContent>
@@ -180,8 +176,8 @@ export default function MisionesPage() {
           {/* ═══ MISIONES DIARIAS ═══ */}
           <Card className="border-none bg-card shadow-sm rounded-2xl">
             <CardContent className="p-5 space-y-1">
-              <p className="text-sm font-bold">Misiones de hoy</p>
-              <p className="text-[11px] text-muted-foreground mb-3">Se renuevan mañana a medianoche</p>
+              <p className="text-sm font-bold">{tr("Misiones de hoy")}</p>
+              <p className="text-[11px] text-muted-foreground mb-3">{tr("Se renuevan mañana a medianoche")}</p>
 
               <div className="space-y-4">
                 {daily.map((m) => {
@@ -205,7 +201,7 @@ export default function MisionesPage() {
                       </div>
                       <div className="shrink-0">
                         {m.claimed ? (
-                          <span className="text-[10px] text-muted-foreground">Reclamada</span>
+                          <span className="text-[10px] text-muted-foreground">{tr("Reclamada")}</span>
                         ) : done ? (
                           <Button
                             size="sm"
@@ -213,7 +209,7 @@ export default function MisionesPage() {
                             disabled={claiming === m.key}
                             className="h-8 gap-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] font-bold px-3"
                           >
-                            <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : "Reclamar"}
+                            <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : tr("Reclamar")}
                           </Button>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">{m.progress}/{m.target}</span>
@@ -233,14 +229,12 @@ export default function MisionesPage() {
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <div className="flex items-center gap-2">
                     <UserPlus className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                    <p className="text-sm font-bold">Invita amigos a Kiri</p>
+                    <p className="text-sm font-bold">{tr("Invita amigos a Kiri")}</p>
                   </div>
                   <Button size="sm" onClick={() => setInvitarOpen(true)} className="h-8 gap-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3">
-                    <UserPlus className="h-3.5 w-3.5" /> Invitar
-                  </Button>
+                    <UserPlus className="h-3.5 w-3.5" />{" "}{tr("Invitar")}</Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-3">
-                  Cuenta cuando se registran con tu enlace — quedan conectados en Social. {referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">Llevas {referidos}.</strong>}
+                <p className="text-[11px] text-muted-foreground mb-3">{tr("Cuentan tus amigos que se suscriben a KIRI PLUS o PRO con tu enlace (ellos tienen 50% o 30% en su primer mes). Por cada uno ganas 10 días de KIRI PLUS, hasta 3.")}{" "}{referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">{tr("Llevas {0}.", [referidos])}</strong>}
                 </p>
                 <div className="space-y-4">
                   {invitaciones.map((m) => {
@@ -257,10 +251,10 @@ export default function MisionesPage() {
                         </div>
                         <div className="shrink-0">
                           {m.claimed ? (
-                            <span className="text-[10px] text-muted-foreground">Reclamada</span>
+                            <span className="text-[10px] text-muted-foreground">{tr("Reclamada")}</span>
                           ) : done ? (
                             <Button size="sm" onClick={() => handleClaim(m.key)} disabled={claiming === m.key} className="h-8 gap-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3">
-                              <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : "Reclamar"}
+                              <Gift className="h-3.5 w-3.5" /> {claiming === m.key ? "Abriendo…" : tr("Reclamar")}
                             </Button>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">{m.progress}/{m.target}</span>
@@ -279,8 +273,8 @@ export default function MisionesPage() {
             <CardContent className="p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                <span className="text-sm font-bold">Hitos de racha</span>
-                <span className="text-xs font-bold text-orange-600 dark:text-orange-400 ml-auto">{streakActual} días</span>
+                <span className="text-sm font-bold">{tr("Hitos de racha")}</span>
+                <span className="text-xs font-bold text-orange-600 dark:text-orange-400 ml-auto">{streakActual === 1 ? tr("1 día") : tr("{0} días", [streakActual])}</span>
               </div>
               <div className="grid grid-cols-3 gap-2.5">
                 {MILESTONES.map((mi) => {
@@ -316,7 +310,7 @@ export default function MisionesPage() {
       {/* ═══ COFRE SORPRESA ═══ */}
       <Dialog open={!!reward} onOpenChange={(open) => { if (!open) setReward(null) }}>
         <DialogContent className="text-center">
-          <DialogTitle className="sr-only">Recompensa reclamada</DialogTitle>
+          <DialogTitle className="sr-only">{tr("Recompensa reclamada")}</DialogTitle>
           {reward && (
             <>
               <motion.div
@@ -335,13 +329,11 @@ export default function MisionesPage() {
                 transition={{ delay: 0.15 }}
               >
                 <p className="text-lg font-black">{reward.result.label}</p>
-                <p className="text-xs text-muted-foreground mb-5">¡Misión completada!</p>
+                <p className="text-xs text-muted-foreground mb-5">{tr("¡Misión completada!")}</p>
                 <Button
                   onClick={() => setReward(null)}
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl"
-                >
-                  Genial
-                </Button>
+                >{tr("Genial")}</Button>
               </motion.div>
             </>
           )}

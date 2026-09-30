@@ -2,6 +2,7 @@
 
 import { Tag } from "lucide-react"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
+import { tr } from "@/lib/i18n"
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -28,14 +29,13 @@ export function BudgetCategorySelector({ value, onChange }: Props) {
   return (
     <div className="space-y-1.5">
       <label className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5">
-        <Tag className="h-3 w-3" /> Categoría de presupuesto (opcional)
-      </label>
+        <Tag className="h-3 w-3" />{" "}{tr("Categoría de presupuesto (opcional)")}</label>
       <select
         value={value ?? ""}
         onChange={e => onChange(e.target.value || null)}
         className="w-full h-10 rounded-xl bg-muted/30 border border-border px-3 text-sm font-medium appearance-none cursor-pointer"
       >
-        <option value="">Sin categoría</option>
+        <option value="">{tr("Sin categoría")}</option>
         {budgetCategories.map(c => (
           <option key={c.id} value={c.id}>{c.name}</option>
         ))}

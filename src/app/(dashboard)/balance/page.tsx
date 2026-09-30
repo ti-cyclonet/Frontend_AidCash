@@ -22,12 +22,13 @@ import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletSta
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { FeatureGate } from "@/components/plan/feature-gate"
 import Link from "next/link"
+import { tr, localeFecha } from "@/lib/i18n"
 
 const TIMEFRAMES: { value: Timeframe; label: string }[] = [
-  { value: "week",  label: "Semana" },
-  { value: "month", label: "Mes"    },
-  { value: "year",  label: "Año"    },
-  { value: "all",   label: "Todo"   },
+  { value: "week",  label: tr("Semana") },
+  { value: "month", label: tr("Mes")    },
+  { value: "year",  label: tr("Año")    },
+  { value: "all",   label: tr("Todo")   },
 ]
 
 export default function BalancePage() {
@@ -141,15 +142,13 @@ export default function BalancePage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <BookOpen className="h-6 w-6" /> Balance
-            </h1>
-            <p className="text-muted-foreground text-sm">Todo lo que pasa con tu plata, en un solo lugar.</p>
+              <BookOpen className="h-6 w-6" />{" "}{tr("Balance")}</h1>
+            <p className="text-muted-foreground text-sm">{tr("Todo lo que pasa con tu plata, en un solo lugar.")}</p>
           </div>
           {/* Historial es su propio módulo (/balance/historial), no una ventana. */}
           <Link href="/balance/historial" className="shrink-0">
             <Button className="rounded-xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold gap-2">
-              <History className="h-4 w-4" /> Historial
-            </Button>
+              <History className="h-4 w-4" />{" "}{tr("Historial")}</Button>
           </Link>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -164,9 +163,7 @@ export default function BalancePage() {
           </div>
           {/* El plan recortó el rango (KIRI FREE ve 3 meses; PLUS 24) */}
           {report?.historialLimitado && (
-            <Link href="/mi-plan" className="text-[11px] text-center text-muted-foreground bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1.5 hover:bg-amber-500/15">
-              Tu plan muestra los últimos {report.historialLimitado.meses} meses.
-              {report.historialLimitado.mejora && <strong className="text-amber-700 dark:text-amber-400"> Con {report.historialLimitado.mejora.plan} ves más →</strong>}
+            <Link href="/mi-plan#planes" className="text-[11px] text-center text-muted-foreground bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1.5 hover:bg-amber-500/15">{tr("Tu plan muestra los últimos {0} meses.", [report.historialLimitado.meses])}{report.historialLimitado.mejora && <strong className="text-amber-700 dark:text-amber-400">{" "}{tr("Con {0} ves más →", [report.historialLimitado.mejora.plan])}</strong>}
             </Link>
           )}
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -179,8 +176,7 @@ export default function BalancePage() {
             {/* Reiniciar balance */}
             <button onClick={() => setResetConfirmOpen(true)}
               className="h-8 px-3 rounded-lg text-[10px] font-bold text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1">
-              <Trash2 className="h-3 w-3" /> Reiniciar
-            </button>
+              <Trash2 className="h-3 w-3" />{" "}{tr("Reiniciar")}</button>
           </div>
         </div>
       </header>
@@ -191,12 +187,12 @@ export default function BalancePage() {
           <CardContent className="p-4 flex items-center gap-3">
             <Trash2 className="h-5 w-5 text-destructive shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-bold text-destructive">¿Reiniciar historial del balance?</p>
-              <p className="text-[10px] text-muted-foreground">Se borrarán los registros de ingresos, ahorro y gastos hormiga del historial. Tu saldo real y obligaciones no se tocan.</p>
+              <p className="text-sm font-bold text-destructive">{tr("¿Reiniciar historial del balance?")}</p>
+              <p className="text-[10px] text-muted-foreground">{tr("Se borrarán los registros de ingresos, ahorro y gastos hormiga del historial. Tu saldo real y obligaciones no se tocan.")}</p>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button onClick={() => setResetConfirmOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:bg-muted">Cancelar</button>
-              <button onClick={handleResetBalance} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-destructive text-white hover:bg-destructive/90">Confirmar</button>
+              <button onClick={() => setResetConfirmOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:bg-muted">{tr("Cancelar")}</button>
+              <button onClick={handleResetBalance} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-destructive text-white hover:bg-destructive/90">{tr("Confirmar")}</button>
             </div>
           </CardContent>
         </Card>
@@ -211,12 +207,12 @@ export default function BalancePage() {
 
           {/* ═══ 6 TARJETAS KPI (animadas) ═══ */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            <KpiCard label="Balance neto actual" value={balanceNeto} color="text-emerald-500" formatAmount={formatAmount} icon={<BarChart3 className="h-3.5 w-3.5" />} />
-            <KpiCard label="Total recibido" value={ingresosTotales} color="text-emerald-500" formatAmount={formatAmount} icon={<TrendingUp className="h-3.5 w-3.5" />} />
-            <KpiCard label="Total gastado" value={egresosTotales} color="text-red-500" formatAmount={formatAmount} icon={<TrendingDown className="h-3.5 w-3.5" />} />
-            <KpiCard label="Ahorro del período" value={ahorroDelPeriodo} color="text-cyclon-lavender" formatAmount={formatAmount} icon={<PiggyBank className="h-3.5 w-3.5" />} />
-            <KpiCard label="Interés pagado" value={interesPagado} color="text-amber-500" formatAmount={formatAmount} icon={<Percent className="h-3.5 w-3.5" />} />
-            <KpiCard label="Interés evitado" value={interesEvitado} color="text-violet-500" formatAmount={formatAmount} icon={<ShieldCheck className="h-3.5 w-3.5" />} sub="Por tus abonos extra" />
+            <KpiCard label={tr("Balance neto actual")} value={balanceNeto} color="text-emerald-500" formatAmount={formatAmount} icon={<BarChart3 className="h-3.5 w-3.5" />} />
+            <KpiCard label={tr("Total recibido")} value={ingresosTotales} color="text-emerald-500" formatAmount={formatAmount} icon={<TrendingUp className="h-3.5 w-3.5" />} sub={tr("Desde que usas Kiri")} />
+            <KpiCard label={tr("Total gastado")} value={egresosTotales} color="text-red-500" formatAmount={formatAmount} icon={<TrendingDown className="h-3.5 w-3.5" />} sub={tr("Desde que usas Kiri")} />
+            <KpiCard label={tr("Ahorro del período")} value={ahorroDelPeriodo} color="text-cyclon-lavender" formatAmount={formatAmount} icon={<PiggyBank className="h-3.5 w-3.5" />} />
+            <KpiCard label={tr("Interés pagado")} value={interesPagado} color="text-amber-500" formatAmount={formatAmount} icon={<Percent className="h-3.5 w-3.5" />} />
+            <KpiCard label={tr("Interés evitado")} value={interesEvitado} color="text-violet-500" formatAmount={formatAmount} icon={<ShieldCheck className="h-3.5 w-3.5" />} sub={tr("Por tus abonos extra")} />
           </div>
 
           {/* ═══ GRÁFICA DE EVOLUCIÓN ═══ */}
@@ -224,25 +220,18 @@ export default function BalancePage() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="font-bold text-sm flex items-center gap-2">
-                    Evolución de tu balance
-                  </h2>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Así ha cambiado tu balance neto en el período seleccionado.</p>
+                  <h2 className="font-bold text-sm flex items-center gap-2">{tr("Evolución de tu balance")}</h2>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{tr("Así ha cambiado tu balance neto en el período seleccionado.")}</p>
                 </div>
                 {/* Filtros de gráfica: seleccionar qué líneas ver */}
                 <div className="flex items-center gap-1">
                   <button onClick={() => toggleChartFilter("balance")} className={cn("px-2.5 py-1 rounded-md text-[9px] font-bold transition-colors flex items-center gap-1",
                     chartFilter.has("balance") ? "bg-emerald-500/20 text-emerald-500" : "bg-muted/30 text-muted-foreground")}>
-                    <BarChart3 className="h-3 w-3" /> Balance
-                  </button>
+                    <BarChart3 className="h-3 w-3" />{" "}{tr("Balance")}</button>
                   <button onClick={() => toggleChartFilter("ingresos")} className={cn("px-2.5 py-1 rounded-md text-[9px] font-bold transition-colors",
-                    chartFilter.has("ingresos") ? "bg-emerald-500/20 text-emerald-500" : "bg-muted/30 text-muted-foreground")}>
-                    Ingresos
-                  </button>
+                    chartFilter.has("ingresos") ? "bg-emerald-500/20 text-emerald-500" : "bg-muted/30 text-muted-foreground")}>{tr("Ingresos")}</button>
                   <button onClick={() => toggleChartFilter("egresos")} className={cn("px-2.5 py-1 rounded-md text-[9px] font-bold transition-colors",
-                    chartFilter.has("egresos") ? "bg-red-500/20 text-red-500" : "bg-muted/30 text-muted-foreground")}>
-                    Egresos
-                  </button>
+                    chartFilter.has("egresos") ? "bg-red-500/20 text-red-500" : "bg-muted/30 text-muted-foreground")}>{tr("Egresos")}</button>
                 </div>
               </div>
 
@@ -266,7 +255,7 @@ export default function BalancePage() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} className="text-muted-foreground" />
-                      <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                      <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" tickFormatter={v => tr("${0}k", [(v / 1000).toFixed(0)])} />
                       <Tooltip content={<CustomTooltip formatAmount={formatAmount} />} />
                       {chartFilter.has("balance") && (
                         <Area type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={2} fill="url(#balanceGradient)" name="Balance neto" />
@@ -281,9 +270,7 @@ export default function BalancePage() {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
-                  Registra ingresos y pagos para ver tu evolución
-                </div>
+                <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">{tr("Registra ingresos y pagos para ver tu evolución")}</div>
               )}
             </CardContent>
           </Card>
@@ -291,11 +278,11 @@ export default function BalancePage() {
           {/* ═══ DISTRIBUCIÓN POR CATEGORÍA + INGRESOS VS EGRESOS ═══ */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Mismo componente que el Dashboard (ver CategoryDistributionCard). */}
-            <CategoryDistributionCard verMas={{ href: "/gestion", label: "Ver presupuesto" }} />
+            <CategoryDistributionCard verMas={{ href: "/gestion", label: tr("Ver presupuesto") }} />
 
             <Card className="border-none bg-card shadow-sm rounded-2xl">
               <CardContent className="p-5">
-                <h2 className="font-bold text-sm mb-3">Ingresos vs Egresos</h2>
+                <h2 className="font-bold text-sm mb-3">{tr("Ingresos vs Egresos")}</h2>
                 {chartData.length > 0 ? (
                   <div className="h-[150px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -314,9 +301,7 @@ export default function BalancePage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-[150px] flex items-center justify-center text-muted-foreground text-xs">
-                    Sin movimientos en este periodo
-                  </div>
+                  <div className="h-[150px] flex items-center justify-center text-muted-foreground text-xs">{tr("Sin movimientos en este periodo")}</div>
                 )}
               </CardContent>
             </Card>
@@ -324,11 +309,13 @@ export default function BalancePage() {
 
           {/* ═══ MINI STATS ═══ */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            <MiniStat icon={<Trophy className="h-4 w-4 text-emerald-500" />} label="Promedio diario" value={formatAmount(stats.promedio)} />
-            <MiniStat icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />} label="Mayor ingreso" value={`+${formatAmount(stats.mayorAumento)}`} color="text-emerald-500" />
-            <MiniStat icon={<ArrowDownRight className="h-4 w-4 text-red-500" />} label="Mayor egreso" value={formatAmount(stats.mayorDisminucion)} color="text-red-500" />
+            <MiniStat icon={<Trophy className="h-4 w-4 text-emerald-500" />} label={tr("Promedio diario")} value={formatAmount(stats.promedio)} />
+            {/* Son los totales del periodo elegido (antes decían "Mayor ingreso /
+                egreso" y salía un "mayor ingreso" más alto que el total recibido) */}
+            <MiniStat icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />} label={tr("Ingresos del periodo")} value={`+${formatAmount(stats.mayorAumento)}`} color="text-emerald-500" />
+            <MiniStat icon={<ArrowDownRight className="h-4 w-4 text-red-500" />} label={tr("Egresos del periodo")} value={formatAmount(stats.mayorDisminucion)} color="text-red-500" />
             {stats.meta > 0 && (
-              <MiniStat icon={<Target className="h-4 w-4 text-cyclon-lavender" />} label="Meta de ahorro" value={formatAmount(stats.meta)} extra={
+              <MiniStat icon={<Target className="h-4 w-4 text-cyclon-lavender" />} label={tr("Meta de ahorro")} value={formatAmount(stats.meta)} extra={
                 <div className="flex items-center gap-1.5 mt-1">
                   <Progress value={stats.metaPct} className="h-1.5 flex-1" indicatorClassName="bg-cyclon-lavender" />
                   <span className="text-[9px] font-bold text-cyclon-lavender">{stats.metaPct}%</span>
@@ -343,22 +330,22 @@ export default function BalancePage() {
               {/* Resumen de deudas */}
               <Card className="border-none bg-card shadow-sm rounded-2xl">
                 <CardContent className="p-4 space-y-3">
-                  <h3 className="text-sm font-bold">Resumen de deudas</h3>
+                  <h3 className="text-sm font-bold">{tr("Resumen de deudas")}</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-0.5">
-                      <p className="text-[9px] text-muted-foreground">Total de deudas</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Total de deudas")}</p>
                       <p className="text-sm font-black">{formatAmount(debts.reduce((a, d) => a + d.montoTotal, 0))}</p>
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[9px] text-muted-foreground">Saldo restante</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Saldo restante")}</p>
                       <p className="text-sm font-black text-red-500">{formatAmount(debts.reduce((a, d) => a + d.saldoRestante, 0))}</p>
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[9px] text-muted-foreground">Interés pagado (periodo)</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Interés pagado (periodo)")}</p>
                       <p className="text-sm font-black text-amber-500">{formatAmount(s.totalInteresPagado)}</p>
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-[9px] text-muted-foreground">Capital abonado</p>
+                      <p className="text-[9px] text-muted-foreground">{tr("Capital abonado")}</p>
                       <p className="text-sm font-black text-emerald-500">{formatAmount(s.totalCapitalAbonado)}</p>
                     </div>
                   </div>
@@ -381,10 +368,10 @@ export default function BalancePage() {
                 return (
                   <Card className="border-none bg-card shadow-sm rounded-2xl">
                     <CardContent className="p-4 space-y-3">
-                      <h3 className="text-sm font-bold">Comparación vs mes anterior</h3>
+                      <h3 className="text-sm font-bold">{tr("Comparación vs mes anterior")}</h3>
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">Ingresos</span>
+                          <span className="text-xs text-muted-foreground">{tr("Ingresos")}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold">{formatAmount(current.ingresos)}</span>
                             <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full",
@@ -395,7 +382,7 @@ export default function BalancePage() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">Egresos</span>
+                          <span className="text-xs text-muted-foreground">{tr("Egresos")}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold">{formatAmount(current.egresos)}</span>
                             <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full",
@@ -406,16 +393,14 @@ export default function BalancePage() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                          <span className="text-xs font-bold">Balance neto</span>
+                          <span className="text-xs font-bold">{tr("Balance neto")}</span>
                           <span className={cn("text-sm font-black",
                             (current.ingresos - current.egresos) >= 0 ? "text-emerald-500" : "text-red-500"
                           )}>
                             {formatAmount(current.ingresos - current.egresos)}
                           </span>
                         </div>
-                        <p className="text-[9px] text-muted-foreground">
-                          Mes anterior: {formatAmount(previous.ingresos - previous.egresos)}
-                        </p>
+                        <p className="text-[9px] text-muted-foreground">{tr("Mes anterior: {0}", [formatAmount(previous.ingresos - previous.egresos)])}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -430,28 +415,26 @@ export default function BalancePage() {
               <CardContent className="p-4 flex items-center gap-4">
                 <span className="text-3xl shrink-0">🌱</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm text-emerald-700 dark:text-emerald-300">
-                    Resumen del mes
-                  </p>
+                  <p className="font-bold text-sm text-emerald-700 dark:text-emerald-300">{tr("Resumen del mes")}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {balanceNeto > 0
-                      ? `Tu saldo neto aumentó. Has ahorrado ${formatAmount(ahorroDelPeriodo)} este periodo. ¡Vas por buen camino! 💚`
-                      : "Registra un ingreso para comenzar a construir tu balance positivo."}
+                      ? tr("Tu saldo neto aumentó. Has ahorrado {0} este periodo. ¡Vas por buen camino! 💚", [formatAmount(ahorroDelPeriodo)])
+                      : tr("Registra un ingreso para comenzar a construir tu balance positivo.")}
                   </p>
                 </div>
                 {/* Mini stats del resumen */}
                 <div className="hidden lg:flex items-center gap-4 shrink-0">
                   <div className="text-center">
                     <p className="text-xs font-black text-emerald-500">+{formatAmount(ingresosTotales)}</p>
-                    <p className="text-[8px] text-muted-foreground">Ingresos</p>
+                    <p className="text-[8px] text-muted-foreground">{tr("Ingresos")}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs font-black text-red-500">-{formatAmount(egresosTotales)}</p>
-                    <p className="text-[8px] text-muted-foreground">Egresos</p>
+                    <p className="text-[8px] text-muted-foreground">{tr("Egresos")}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs font-black text-cyclon-lavender">{formatAmount(ahorroDelPeriodo)}</p>
-                    <p className="text-[8px] text-muted-foreground">Ahorrado</p>
+                    <p className="text-[8px] text-muted-foreground">{tr("Ahorrado")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -520,6 +503,6 @@ function CustomTooltip({ active, payload, formatAmount }: { active?: boolean; pa
 
 function fmtDateShort(iso: string | undefined | null): string {
   if (!iso) return '—'
-  try { return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) }
+  try { return new Date(iso).toLocaleDateString(localeFecha(), { day: 'numeric', month: 'long', year: 'numeric' }) }
   catch { return String(iso) }
 }
