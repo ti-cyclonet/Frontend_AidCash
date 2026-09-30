@@ -5,8 +5,9 @@ import { useRouter, usePathname } from "next/navigation"
 import { useEffect } from "react"
 
 const PUBLIC_ROUTES = ['/', '/login', '/register']
-// Enlaces de invitación: se abren con o sin sesión (ver app/invitacion/[code])
-const PUBLIC_PREFIXES = ['/invitacion/']
+// Enlaces de invitación (app/invitacion/[code]) y documentos legales
+// (app/legal/[doc]): se abren con o sin sesión
+const PUBLIC_PREFIXES = ['/invitacion/', '/legal/']
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()

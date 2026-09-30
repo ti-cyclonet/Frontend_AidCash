@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X, Bell } from "lucide-react"
+import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X, Bell, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useAppContext, Currency } from "@/lib/app-context"
@@ -341,6 +341,18 @@ export default function PerfilPage() {
                 <div>
                   <span className="font-medium">Preguntas frecuentes</span>
                   <p className="text-[10px] text-muted-foreground">Resuelve tus dudas</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </a>
+            <a href="/legal/terminos" target="_blank" rel="noopener" className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-kiri-forest/15 flex items-center justify-center text-kiri-forest dark:text-kiri-cream">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-medium">Términos y privacidad</span>
+                  <p className="text-[10px] text-muted-foreground">Términos y Condiciones y tratamiento de tus datos</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />

@@ -11,6 +11,7 @@ import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import { inviteLinksApi, INVITACION_KEY } from "@/lib/api-client"
+import { ConsentChecks } from "@/components/legal/ConsentChecks"
 
 export default function RegisterPage() {
   return (
@@ -51,6 +52,8 @@ function RegisterContent() {
   const [documentType, setDocumentType] = useState("CC")
   const [documentNumber, setDocumentNumber] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [aceptaTerminos, setAceptaTerminos] = useState(false)
+  const [aceptaDatos, setAceptaDatos] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -66,11 +69,12 @@ function RegisterContent() {
     if (password !== confirm) { setError("Las contraseñas no coinciden."); return }
     if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres."); return }
     if (!documentNumber.trim()) { setError("El número de documento es obligatorio."); return }
+    if (!aceptaTerminos || !aceptaDatos) { setError("Debes aceptar los Términos y Condiciones y autorizar el tratamiento de tus datos."); return }
     setLoading(true)
     setError(null)
     // Concatenar nombre completo para la BD de Kiri
     const fullName = [nombre, secondName, firstSurname, secondSurname].filter(Boolean).join(' ')
-    const { error, verificationRequired } = await signUp(email, password, fullName, documentType, documentNumber, nombre, secondName, firstSurname, secondSurname) as any
+    const { error, verificationRequired } = await signUp(email, password, fullName, documentType, documentNumber, nombre, secondName, firstSurname, secondSurname, true) as any
     if (error) {
       setError(error)
       setLoading(false)
@@ -213,7 +217,6 @@ function RegisterContent() {
                 <option value="CC">C.C.</option>
                 <option value="CE">C.E.</option>
                 <option value="PP">Pasaporte</option>
-                <option value="TI">T.I.</option>
               </select>
             </div>
             <div className="space-y-1.5">
@@ -276,6 +279,8 @@ function RegisterContent() {
             )}
           </div>
 
+          <ConsentChecks terms={aceptaTerminos} datos={aceptaDatos} onTerms={setAceptaTerminos} onDatos={setAceptaDatos} />
+
           {error && (
             <Card className="border-destructive/20 bg-destructive/10 shadow-none rounded-2xl">
               <CardContent className="p-3 flex items-center gap-2">
@@ -287,7 +292,7 @@ function RegisterContent() {
 
           <Button
             type="submit"
-            disabled={loading || !nombre || !firstSurname || !email || !password || !confirm || !documentNumber}
+            disabled={loading || !nombre || !firstSurname || !email || !password || !confirm || !documentNumber || !aceptaTerminos || !aceptaDatos}
             className="w-full h-14 rounded-2xl bg-kiri-emerald hover:bg-kiri-sage text-white font-bold text-base shadow-xl shadow-kiri-emerald/30 mt-2"
           >
             {loading ? "Creando cuenta..." : "Crear Cuenta"}

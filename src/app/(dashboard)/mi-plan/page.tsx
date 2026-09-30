@@ -414,7 +414,12 @@ export default function MiPlanPage() {
           </div>
           <label className="flex items-start gap-2 text-xs cursor-pointer">
             <input type="checkbox" checked={acepta} onChange={e => setAcepta(e.target.checked)} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
-            <span>Acepto los términos del servicio de Cyclonet y el tratamiento de mis datos personales para la contratación y facturación.</span>
+            <span>
+              Acepto los <a href="/legal/terminos" target="_blank" rel="noopener" className="font-bold text-kiri-emerald underline">Términos y Condiciones</a> de
+              Kiri Finance, incluidas las condiciones del plan pago, y autorizo el{" "}
+              <a href="/legal/datos" target="_blank" rel="noopener" className="font-bold text-kiri-emerald underline">tratamiento de mis datos personales</a> para
+              la contratación y facturación.
+            </span>
           </label>
           {errorCambio && <p className="text-xs font-bold text-destructive bg-destructive/10 rounded-lg p-2">{errorCambio}</p>}
           <DialogFooter className="gap-2">
