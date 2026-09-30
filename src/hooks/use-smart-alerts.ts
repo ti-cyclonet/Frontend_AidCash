@@ -56,7 +56,7 @@ export function getIncomeQuincenaLabel(
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export function useSmartAlerts() {
-  const { income, incomeFrequency, diasCobro, onboardingDone } = useAppContext()
+  const { income, incomeFrequency, diasCobro, onboardingDone, tipoIngreso } = useAppContext()
   const { addNotification } = useSocket()
   const { sendNotification, permission, requestPermission } = usePushNotifications()
   const alertFiredRef = useRef(false)
@@ -71,7 +71,8 @@ export function useSmartAlerts() {
 
   useEffect(() => {
     // No disparar alertas si no completó onboarding o no tiene ingreso configurado
-    if (!onboardingDone || income <= 0) return
+    // (con ingresos variables no hace falta un sueldo configurado)
+    if (!onboardingDone || (income <= 0 && tipoIngreso !== 'variable')) return
     // No disparar más de una vez por sesión/render
     if (alertFiredRef.current) return
 
@@ -82,9 +83,13 @@ export function useSmartAlerts() {
 
     // Generar un ID de periodo para no repetir alertas
     const quincena = getCurrentQuincena(diasCobro)
-    const periodKey = incomeFrequency === 'quincenal'
-      ? `${year}-${month}-Q${quincena}`
-      : `${year}-${month}`
+    // Ingresos variables: no hay fecha de pago → un recordatorio por semana
+    const semana = Math.floor((Date.UTC(year, month, day) - Date.UTC(year, 0, 1)) / (7 * 86400000))
+    const periodKey = tipoIngreso === 'variable'
+      ? `${year}-W${semana}`
+      : incomeFrequency === 'quincenal'
+        ? `${year}-${month}-Q${quincena}`
+        : `${year}-${month}`
 
     // Verificar si ya se mostró la alerta para este periodo
     const shownPeriod = localStorage.getItem(ALERT_SHOWN_KEY)
@@ -96,7 +101,13 @@ export function useSmartAlerts() {
     let shouldAlert = false
     let alertMessage = ""
 
-    if (incomeFrequency === 'quincenal' && payDays.length >= 2) {
+    if (tipoIngreso === 'variable') {
+      // Una vez por semana, a partir del viernes (cuando más suele entrar plata)
+      if (today.getDay() === 0 || today.getDay() >= 5) {
+        shouldAlert = true
+        alertMessage = '¿Te entró plata esta semana? Regístrala para que Kiri sepa con cuánto cuentas.'
+      }
+    } else if (incomeFrequency === 'quincenal' && payDays.length >= 2) {
       const [d1, d2] = payDays
       // Proximidad al fin del periodo 1 (3 días antes de d2)
       if (day >= d1 && day < d2 && (d2 - day) <= 3) {
@@ -140,5 +151,5 @@ export function useSmartAlerts() {
       localStorage.setItem(ALERT_SHOWN_KEY, periodKey)
       alertFiredRef.current = true
     }
-  }, [income, incomeFrequency, diasCobro, onboardingDone, addNotification, sendNotification])
+  }, [income, incomeFrequency, diasCobro, onboardingDone, tipoIngreso, addNotification, sendNotification])
 }

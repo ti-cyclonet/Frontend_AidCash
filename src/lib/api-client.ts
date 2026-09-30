@@ -12,6 +12,7 @@
  */
 
 import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt, ConnectionRole } from './types'
+import { LEGAL_VERSIONS } from "./legal/kiri-legal"
 import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
@@ -242,14 +243,18 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  async register(nombre: string, correo: string, password: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string) {
+  async register(nombre: string, correo: string, password: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string, aceptaDocumentos = false) {
     // Llegó con un enlace de invitación (/invitacion/[code]): se conecta en
     // Social con quien lo invitó apenas se crea la cuenta.
     let invitacion: string | undefined
     try { invitacion = localStorage.getItem(INVITACION_KEY) ?? undefined } catch { /* sin storage */ }
     const res = await api<LoginResponse>('/auth/register', {
       method: 'POST',
-      body: { nombre, correo, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname, invitacion },
+      body: {
+        nombre, correo, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname, invitacion,
+        // Términos y autorización de datos (versión vigente): el backend los exige
+        ...(aceptaDocumentos ? { acceptTerms: true, acceptHabeasData: true, termsVersion: LEGAL_VERSIONS.terms, habeasDataVersion: LEGAL_VERSIONS.habeasData } : {}),
+      },
       skipAuth: true,
     })
     if (!res.error) { try { localStorage.removeItem(INVITACION_KEY) } catch { /* sin storage */ } }
@@ -1175,6 +1180,15 @@ export interface FactonetInfo {
   correo: string
   facturaPendiente: FacturaPendiente | null
   cambioPlan: { packageId: string; plan: string | null; fecha: string } | null
+}
+
+/** Términos y Condiciones y autorización de tratamiento de datos. */
+export const legalApi = {
+  estado: () => api<{ pendiente: boolean; vigentes: { terms: string; habeasData: string }; aceptadas: { terms: string | null; habeasData: string | null; fecha: string | null } }>('/auth/consentimiento'),
+  aceptar: () => api<{ ok: boolean }>('/auth/consentimiento', {
+    method: 'POST',
+    body: { acceptTerms: true, acceptHabeasData: true, termsVersion: LEGAL_VERSIONS.terms, habeasDataVersion: LEGAL_VERSIONS.habeasData },
+  }),
 }
 
 export const planApi = {

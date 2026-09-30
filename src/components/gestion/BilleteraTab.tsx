@@ -22,7 +22,8 @@ import { getCurrentQuincena, getPeriodRangeLabel, getNextPeriodLabel, isGenuinel
 import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
-import { PaydaySelector } from "./PaydaySelector"
+import { ConfigIngresoDialog } from "./ConfigIngresoDialog"
+import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/ingresos"
 import { Debt, FixedExpense } from "@/lib/types"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
 
@@ -147,12 +148,15 @@ const POCKETS = [
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function BilleteraTab() {
-  const { formatAmount, income, setIncome, incomeFrequency, setIncomeFrequency, diasCobro } = useAppContext()
+  const { formatAmount, income, incomeFrequency, diasCobro, ingresoPeriodo, tipoIngreso, perfilIngreso, ingresoEstimado, ingresoPromedio } = useAppContext()
+  const variable = tipoIngreso === "variable"
+  const distintas = quincenasDistintas(perfilIngreso)
+  // Monto sugerido al registrar el sueldo: lo de ESTA quincena (o el mes). Con ingresos variables no hay sugerido.
+  const sugeridoSueldo = variable ? 0 : ingresoPeriodo
   const { debts, fixedExpenses, extraIncomes, addExtraIncome, removeExtraIncome, markPaid, markFixedPaid, refetch } = useFinanceData()
   const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
   const [incomeOpen, setIncomeOpen] = useState(false)
   const [editIncomeOpen, setEditIncomeOpen] = useState(false)
-  const [editIncomeValue, setEditIncomeValue] = useState("")
   const [obligationsExpanded, setObligationsExpanded] = useState(false)
   const [frequencyExpanded, setFrequencyExpanded] = useState(false)
 
@@ -232,6 +236,12 @@ export function BilleteraTab() {
   const { addNotification } = useSocket()
 
   const periodNum = incomeFrequency === "mensual" ? 1 : getCurrentQuincena(diasCobro)
+  const [diaA, diaB] = diasDeQuincenas(diasCobro)
+  const descripcionIngreso = variable
+    ? (ingresoEstimado > 0 ? `Estimado al mes${ingresoPromedio > 0 ? ` · promedio real ${formatAmount(ingresoPromedio)}` : ""}` : ingresoPromedio > 0 ? "Tu promedio real al mes" : "Registra lo que te entre y Kiri calcula tu promedio")
+    : distintas
+      ? `Te pagan ${formatAmount(ingresoDeQuincena(perfilIngreso, 1))} el ${diaA} y ${formatAmount(ingresoDeQuincena(perfilIngreso, 2))} el ${diaB}`
+      : incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"
   const periodRange = getPeriodRangeLabel(incomeFrequency, diasCobro)
   const nextPeriodLabel = getNextPeriodLabel(incomeFrequency, diasCobro)
 
@@ -328,14 +338,6 @@ export function BilleteraTab() {
     window.dispatchEvent(new Event("kiri:wallet-updated"))
   }
 
-  const handleEditIncome = async () => {
-    const val = Number(editIncomeValue)
-    if (val <= 0) return
-    setIncome(val)
-    setEditIncomeOpen(false)
-    setEditIncomeValue("")
-  }
-
   const handleReset = async () => {
     setResetConfirmOpen(false)
     setResetting(true)
@@ -383,7 +385,7 @@ export function BilleteraTab() {
           </BalanceAura>
           <p className="text-white/50 text-[9px]">Se actualiza conforme pagues tus obligaciones</p>
           <div className="flex items-center justify-center gap-3 pt-3">
-            <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(String(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)); setSelectedExtras([]) }} size="sm"
+            <Button onClick={() => { setIncomeOpen(true); setTipo("salario"); setMonto(sugeridoSueldo > 0 ? String(sugeridoSueldo) : ""); setSelectedExtras([]) }} size="sm"
               className="bg-white text-kiri-emerald hover:bg-white/90 font-bold rounded-xl gap-1.5 h-10 px-5 text-sm shadow-lg shadow-black/10">
               <Plus className="h-4 w-4" /> Registrar Ingreso
             </Button>
@@ -417,9 +419,9 @@ export function BilleteraTab() {
         <Card className="border-none bg-gray-900 dark:bg-gray-800 rounded-2xl">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <p className="text-white/50 text-[9px] font-bold uppercase tracking-wider">Sueldo Base del periodo</p>
+              <p className="text-white/50 text-[9px] font-bold uppercase tracking-wider">{variable ? "Ingreso variable" : "Sueldo Base del periodo"}</p>
               <div className="flex items-center gap-2">
-                <button onClick={() => { setEditIncomeOpen(true); setEditIncomeValue(String(income)) }}
+                <button onClick={() => setEditIncomeOpen(true)} aria-label="Cómo recibo mi plata"
                   className="h-8 w-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors">
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -429,10 +431,8 @@ export function BilleteraTab() {
                 </button>
               </div>
             </div>
-            <AnimatedAmount value={incomeFrequency === "quincenal" ? Math.round(income / 2) : income} formatAmount={formatAmount} className="text-xl font-black text-white block mt-1" />
-            <p className="text-white/40 text-[8px] mt-0.5">
-              {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
-            </p>
+            <AnimatedAmount value={variable ? income : ingresoPeriodo} formatAmount={formatAmount} className="text-xl font-black text-white block mt-1" />
+            <p className="text-white/40 text-[8px] mt-0.5">{descripcionIngreso}</p>
           </CardContent>
         </Card>
 
@@ -454,9 +454,7 @@ export function BilleteraTab() {
       {frequencyExpanded && (
         <Card data-panel="frequency" className="border-none rounded-2xl animate-in slide-in-from-top-2 duration-200">
           <CardContent className="p-4 space-y-3">
-            <p className="text-xs text-muted-foreground">
-              {incomeFrequency === "quincenal" ? `Quincenal (De ${formatAmount(income)} al mes)` : "Mensual"}
-            </p>
+            <p className="text-xs text-muted-foreground">{descripcionIngreso}</p>
 
             {/* ── Ingresos Extra ── */}
             <div className="border-t border-border/50 pt-3 space-y-3">
@@ -727,9 +725,9 @@ export function BilleteraTab() {
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo</Label>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => { setTipo("salario"); setMonto(String(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
+                <button onClick={() => { setTipo("salario"); setMonto(sugeridoSueldo > 0 ? String(sugeridoSueldo) : ""); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
                   tipo === "salario" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
-                  <Wallet className="h-4 w-4" /> Sueldo
+                  <Wallet className="h-4 w-4" /> {variable ? "De mi trabajo" : "Sueldo"}
                 </button>
                 <button onClick={() => { setTipo("extra"); setMonto(""); setSelectedExtras([]) }} className={cn("flex items-center justify-center gap-2 h-11 rounded-xl border-2 font-bold text-sm transition-colors",
                   tipo === "extra" ? "border-kiri-emerald bg-kiri-emerald/5 text-kiri-emerald" : "border-muted text-muted-foreground")}>
@@ -745,10 +743,12 @@ export function BilleteraTab() {
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Monto recibido</Label>
                   <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
                   <p className="text-[10px] text-muted-foreground">
-                    Sugerido: {formatAmount(incomeFrequency === "quincenal" ? Math.round(income / 2) : income)} (sueldo base del periodo)
+                    {variable
+                      ? "Escribe lo que te entró (una venta, un trabajo, tus comisiones). Kiri aprende tu promedio con cada registro."
+                      : <>Sugerido: {formatAmount(sugeridoSueldo)} ({distintas ? `lo que te pagan en esta quincena; la otra es de ${formatAmount(ingresoDeQuincena(perfilIngreso, periodNum === 1 ? 2 : 1))}` : "sueldo base del periodo"})</>}
                   </p>
                 </div>
-                {incomeFrequency === "quincenal" && (
+                {incomeFrequency === "quincenal" && !variable && (
                   <div className="flex items-center gap-2 bg-kiri-mint/30 rounded-xl px-3 py-2">
                     <CheckCircle2 className="h-4 w-4 text-kiri-emerald shrink-0" />
                     <p className="text-xs text-kiri-forest font-medium">
@@ -836,65 +836,14 @@ export function BilleteraTab() {
             <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc(""); setSelectedExtras([]) }}>Cancelar</Button>
             <Button onClick={handleRegisterIncome} disabled={saving || !monto || Number(monto) <= 0}
               className={cn("font-bold rounded-xl px-6", tipo === "salario" ? "bg-kiri-emerald text-white" : "bg-cyclon-lavender text-white")}>
-              {saving ? "Distribuyendo..." : tipo === "salario" ? "Sí, registrar mi Sueldo Base" : "Registrar"}
+              {saving ? "Distribuyendo..." : tipo === "salario" ? (variable ? "Registrar ingreso" : "Sí, registrar mi Sueldo Base") : "Registrar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ═══ MODAL EDITAR SUELDO BASE ═══ */}
-      <Dialog open={editIncomeOpen} onOpenChange={setEditIncomeOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Pencil className="h-5 w-5 text-kiri-emerald" /> Editar Sueldo Base</DialogTitle>
-            <DialogDescription>Este es tu ingreso mensual fijo. Si eres quincenal, se dividirá automáticamente entre las 2 quincenas para calcular el sueldo del periodo.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ingreso mensual total</Label>
-              <MoneyInput value={editIncomeValue} onChange={setEditIncomeValue} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" autoFocus />
-            </div>
-            {incomeFrequency === "quincenal" && Number(editIncomeValue) > 0 && (
-              <div className="bg-muted/30 rounded-xl px-4 py-3 space-y-1">
-                <p className="text-xs text-muted-foreground">Así se distribuirá:</p>
-                <div className="flex justify-between text-sm">
-                  <span>Quincena 1:</span>
-                  <span className="font-bold">{formatAmount(Math.round(Number(editIncomeValue) / 2))}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Quincena 2:</span>
-                  <span className="font-bold">{formatAmount(Math.round(Number(editIncomeValue) / 2))}</span>
-                </div>
-              </div>
-            )}
-            {/* Frecuencia */}
-            <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Frecuencia</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setIncomeFrequency("quincenal")}
-                  className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
-                    incomeFrequency === "quincenal" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
-                  Quincenal
-                </button>
-                <button onClick={() => setIncomeFrequency("mensual")}
-                  className={cn("h-10 rounded-xl font-bold text-sm transition-colors",
-                    incomeFrequency === "mensual" ? "bg-kiri-emerald text-white" : "border-2 border-muted text-muted-foreground")}>
-                  Mensual
-                </button>
-              </div>
-            </div>
-            {/* Días de pago */}
-            <div className="border-t border-border/50 pt-3">
-              <PaydaySelector compact />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setEditIncomeOpen(false)}>Cancelar</Button>
-            <Button onClick={handleEditIncome} disabled={!editIncomeValue || Number(editIncomeValue) <= 0}
-              className="bg-kiri-emerald text-white font-bold rounded-xl px-6">Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ═══ CÓMO RECIBO MI PLATA (sueldo fijo, quincenas distintas o ingresos variables) ═══ */}
+      <ConfigIngresoDialog open={editIncomeOpen} onOpenChange={setEditIncomeOpen} />
 
       <RecommendationModal type={recommendationType} open={recommendationOpen} onClose={() => { setRecommendationOpen(false); setRecommendationType(null) }} formatAmount={formatAmount} />
     </div>

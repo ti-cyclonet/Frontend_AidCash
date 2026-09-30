@@ -129,7 +129,7 @@ function crearReconocimiento(): SR | null {
 export function CoachFab() {
   const router = useRouter()
   const pathname = usePathname()
-  const { income, incomeFrequency, formatAmount, user } = useAppContext()
+  const { income, ingresoPeriodo, incomeFrequency, diasCobro, formatAmount, user } = useAppContext()
   const { debts, fixedExpenses, extraIncomes } = useFinanceData()
   const { ejecutar } = useEjecutarAcciones()
 
@@ -207,7 +207,7 @@ export function CoachFab() {
   }, [])
 
   // ── Simulador (satélite) ──────────────────────────────────────────────────
-  const periodData = getPeriodData(income, extraIncomes.reduce((a, e) => a + e.monto, 0), debts, fixedExpenses, incomeFrequency)
+  const periodData = getPeriodData(income, extraIncomes.reduce((a, e) => a + e.monto, 0), debts, fixedExpenses, incomeFrequency, diasCobro, ingresoPeriodo)
   const debtCapacityAmount = periodData.effectiveIncome > 0
     ? calculateBudgetAllocation(periodData.effectiveIncome, periodData.totalObligations).debtCapacityAmount
     : 0

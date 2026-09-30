@@ -9,6 +9,7 @@ import { DataSyncInitializer } from "@/components/providers/DataSyncInitializer"
 import { OfflineSyncProvider } from "@/components/providers/OfflineSyncProvider"
 import { PlanWelcomeModal } from "@/components/providers/PlanWelcomeModal"
 import { ForcePasswordChange } from "@/components/auth/ForcePasswordChange"
+import { ConsentGate } from "@/components/legal/ConsentGate"
 import { LimitePlanDialog } from "@/components/plan/LimitePlanDialog"
 
 export default function DashboardLayout({
@@ -45,6 +46,7 @@ export default function DashboardLayout({
       <OfflineSyncProvider />
       <PlanWelcomeModal />
       <ForcePasswordChange />
+      <ConsentGate />
       <LimitePlanDialog />
     </div>
   )

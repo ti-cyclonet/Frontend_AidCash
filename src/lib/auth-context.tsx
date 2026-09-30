@@ -15,7 +15,7 @@ interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
-  signUp: (email: string, password: string, nombre: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string) => Promise<{ error: string | null }>
+  signUp: (email: string, password: string, nombre: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string, aceptaDocumentos?: boolean) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -61,8 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null }
   }
 
-  const signUp = async (email: string, password: string, nombre: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string) => {
-    const { data, error } = await authApi.register(nombre, email, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname)
+  const signUp = async (email: string, password: string, nombre: string, documentType?: string, documentNumber?: string, firstName?: string, secondName?: string, firstSurname?: string, secondSurname?: string, aceptaDocumentos = false) => {
+    const { data, error } = await authApi.register(nombre, email, password, documentType, documentNumber, firstName, secondName, firstSurname, secondSurname, aceptaDocumentos)
     if (error) return { error }
     // If verification is required, do NOT log the user in
     const verificationRequired = (data as any)?.verificationRequired
