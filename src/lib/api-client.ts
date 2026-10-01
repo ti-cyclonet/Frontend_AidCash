@@ -1211,7 +1211,7 @@ export interface FactonetInfo {
   url: string
   correo: string
   facturaPendiente: FacturaPendiente | null
-  cambioPlan: { packageId: string; plan: string | null; fecha: string; ciclo?: "mensual" | "anual"; descuentoPrimerMes?: number } | null
+  cambioPlan: { packageId: string; plan: string | null; fecha: string; ciclo?: "mensual" | "anual"; descuentoPrimerMes?: number; firmado?: boolean } | null
 }
 
 /** Términos y Condiciones y autorización de tratamiento de datos. */
