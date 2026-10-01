@@ -164,7 +164,7 @@ export default function MiPlanPage() {
     if (error || !data?.success) { setErrorCambio(error ?? tr("No se pudo cambiar de plan. Intenta de nuevo.")); return }
     setElegido(null)
     setListo(nombre)
-    toast({ title: tr("Solicitaste {0}", [nombre]), description: tr("Tu contrato quedó listo en FactoNet.") })
+    toast({ title: tr("Solicitaste {0}", [nombre]), description: tr("Firmaste tu contrato; falta la firma del administrador.") })
     cargar()
   }
 
@@ -254,12 +254,15 @@ export default function MiPlanPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-sm">{tr("Solicitaste {0}: tu contrato está listo", [listo ?? cambioPendiente?.plan ?? tr("un nuevo plan")])}</p>
-            <p className="text-xs text-muted-foreground">{tr("Entra a FactoNet con tu mismo correo y contraseña de Kiri para firmarlo. Mientras tanto sigues usando tu plan actual; el nuevo se activa al firmar y pagar la primera factura.")}</p>
+            {/* Planes pedidos desde Kiri: aceptar Términos + datos fue la firma del cliente */}
+            <p className="text-xs text-muted-foreground">{listo || cambioPendiente?.firmado
+              ? tr("Ya lo firmaste al aceptar los Términos y la autorización de datos. Falta la firma del administrador de CycloNet; mientras tanto sigues usando tu plan actual y el nuevo se activa cuando él firme y pagues la primera factura.")
+              : tr("Entra a FactoNet con tu mismo correo y contraseña de Kiri para firmarlo. Mientras tanto sigues usando tu plan actual; el nuevo se activa al firmar y pagar la primera factura.")}</p>
             {(cambioPendiente?.descuentoPrimerMes ?? 0) > 0 && (
               <p className="text-xs font-bold text-amber-700 dark:text-amber-300 mt-1">{tr("Tu primera factura trae {0}% de descuento por venir invitado.", [cambioPendiente!.descuentoPrimerMes])}</p>
             )}
           </div>
-          <Button onClick={abrirFactonet} variant="outline" className="gap-2 shrink-0 border-kiri-emerald/40 text-kiri-emerald">{tr("Firmar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
+          <Button onClick={abrirFactonet} variant="outline" className="gap-2 shrink-0 border-kiri-emerald/40 text-kiri-emerald">{listo || cambioPendiente?.firmado ? tr("Ver en FactoNet") : tr("Firmar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}
@@ -483,7 +486,7 @@ export default function MiPlanPage() {
           </DialogHeader>
           <ol className="space-y-1.5 text-sm">
             <li className="flex gap-2"><span className="font-black text-kiri-emerald">1.</span>{" "}{tr("Creamos tu contrato con el nuevo plan.")}</li>
-            <li className="flex gap-2"><span className="font-black text-kiri-emerald">2.</span>{" "}{tr("Lo firmas en FactoNet, con tu mismo usuario de Kiri.")}</li>
+            <li className="flex gap-2"><span className="font-black text-kiri-emerald">2.</span>{" "}{tr("Al aceptar los Términos y la autorización de datos, firmas el contrato. Solo falta la firma del administrador de CycloNet.")}</li>
             <li className="flex gap-2"><span className="font-black text-kiri-emerald">3.</span>{" "}{tr("Te llega la factura (aquí en Kiri también te avisamos) y, al pagarla, se activa tu plan.")}</li>
           </ol>
           <p className="text-xs text-muted-foreground">{tr("Mientras tanto sigues usando tu plan actual sin perder nada.")}</p>
