@@ -224,7 +224,18 @@ export function useEjecutarAcciones() {
 
 // ─── Llamadas a la IA (backend, con login) ────────────────────────────────────
 
-export interface RespuestaCoach { respuesta: string; acciones: Accion[]; sugerencias: string[]; ir: { ruta: string; etiqueta: string } | null; uso?: UsoIA }
+/** Escenario que Kiri Coach quiere simular (las cifras las calcula el frontend). */
+export interface SimulacionIA {
+  tipo: "ahorro_futuro" | "ahorro_meta" | "compra_cuotas"
+  nombre: string | null
+  monto: number | null
+  aporte: number | null
+  meses: number | null
+  fecha: string | null
+  inicial: number | null
+  tasaAnual: number | null
+}
+export interface RespuestaCoach { respuesta: string; acciones: Accion[]; sugerencias: string[]; ir: { ruta: string; etiqueta: string } | null; simulacion?: SimulacionIA | null; uso?: UsoIA }
 export interface RespuestaDictado { resumen: string; acciones: Accion[]; confianza: "alta" | "media" | "baja"; uso?: UsoIA }
 export interface RespuestaRecibo {
   esRecibo: boolean; establecimiento: string; fecha: string | null; total: number

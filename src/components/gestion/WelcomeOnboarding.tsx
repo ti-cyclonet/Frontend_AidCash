@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { tr, localeFecha } from "@/lib/i18n"
+import { userApi } from "@/lib/api-client"
 
 /** Fecha de ejemplo a `dias` de hoy ("3 oct 2026" / "Oct 3, 2026"). */
 const fechaEjemplo = (dias: number) =>
@@ -101,8 +102,12 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
     if (!isFirst) setCurrentStep(s => s - 1)
   }
 
-  // Sueldo a mostrar: si el usuario ya registró su ingreso, lo usa; si no, muestra ejemplo
-  const displayIncome = income > 0 ? income : 3750000
+  // Su Sueldo Real de verdad: lo que dijo en el test que tiene hoy (o lo que
+  // ya lleva registrado). Sin saldo, un ejemplo marcado como tal.
+  const [saldoReal, setSaldoReal] = useState<number | null>(null)
+  useEffect(() => { userApi.getWallet().then(({ data }) => setSaldoReal(data?.wallet.cashBalance ?? 0)) }, [])
+  const tieneSaldo = (saldoReal ?? 0) > 0
+  const displayIncome = tieneSaldo ? saldoReal! : income > 0 ? income : 3750000
 
   // Teclado: Escape = "Saltar"; flechas para pasar de paso
   useEffect(() => {
@@ -228,9 +233,9 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     </div>
 
                     <div>
-                      <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">{tr("Disponible ahora")}</p>
+                      <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-0.5">{tieneSaldo ? tr("Tu plata hoy") : saldoReal === null ? tr("Disponible ahora") : tr("Ejemplo")}</p>
                       <p className="text-3xl font-black text-gray-900 dark:text-white">
-                        {formatAmount(displayIncome)}
+                        {saldoReal === null ? "…" : formatAmount(displayIncome)}
                       </p>
                     </div>
 
@@ -238,7 +243,9 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                     <div className="flex items-start gap-2 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2.5">
                       <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                       <p className="text-[10px] text-gray-700 dark:text-gray-300 leading-relaxed">
-                        {step.cardExplanation}
+                        {tieneSaldo
+                          ? tr("Es lo que nos dijiste que tienes hoy entre bancos y efectivo. Lo verás en Gestión → Billetera como tu Sueldo Real, y cada gasto, pago e ingreso que registres lo irá moviendo.")
+                          : step.cardExplanation}
                       </p>
                     </div>
 

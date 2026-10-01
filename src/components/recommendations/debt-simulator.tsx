@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,9 +31,11 @@ interface Props {
   incomeFrequency: IncomeFrequency
   forceOpen?: boolean
   onClose?: () => void
+  /** Abrirlo ya lleno y simulado (p. ej. desde Kiri Coach) */
+  inicial?: { nombre?: string | null; monto?: number | null } | null
 }
 
-export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClose }: Props) {
+export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClose, inicial }: Props) {
   const { formatAmount } = useAppContext()
   const { debts, addDebt } = useFinanceData()
   // Misma base que la capacidad (y que el Dashboard): ingreso y obligaciones
@@ -62,6 +64,21 @@ export function DebtSimulator({ debtCapacity, incomeFrequency, forceOpen, onClos
     setCanAffordAny(result.canAffordAny)
     setSelected(null)
   }
+
+  useEffect(() => {
+    if (!inicial || !isOpen) return
+    setProductName(inicial.nombre ?? "")
+    const m = Math.round(inicial.monto ?? 0)
+    setAmount(m > 0 ? String(m) : "")
+    if (m > 0) {
+      const result = simulateDebtOptions(m, debtCapacity, incomeFrequency)
+      setOptions(result.options)
+      setCanAffordAny(result.canAffordAny)
+      // La sugerida ya elegida, para ver el impacto de una vez
+      const sugerida = result.options.findIndex(o => o.recommended && o.canAfford)
+      setSelected(sugerida >= 0 ? sugerida : null)
+    }
+  }, [inicial, isOpen, debtCapacity, incomeFrequency])
 
   const handleClose = () => {
     setOpen(false)

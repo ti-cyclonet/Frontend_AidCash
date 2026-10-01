@@ -14,13 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
+import { SavingsSimulator, type EscenarioAhorro } from "@/components/recommendations/savings-simulator"
+import { SimulacionCard } from "@/components/coach/SimulacionCard"
 import { getPeriodData } from "@/lib/period-filter"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
 import { resizeImageToDataUrl } from "@/lib/avatar-upload"
 import { AccionesReview } from "@/components/coach/AccionesReview"
 import {
   iaApi, useDestinos, useEjecutarAcciones, faltantes, pantallaActual,
-  type Accion, type RespuestaRecibo, type UsoIA, type UsoIAMes,
+  type Accion, type RespuestaRecibo, type UsoIA, type UsoIAMes, type SimulacionIA,
 } from "@/lib/kiri-acciones"
 import { usePlan } from "@/lib/plan-context"
 import { tr } from "@/lib/i18n"
@@ -61,6 +63,7 @@ interface Msg {
   resultado?: string
   sugerencias?: string[]
   ir?: { ruta: string; etiqueta: string } | null
+  simulacion?: SimulacionIA | null
 }
 
 const nuevoId = () => Math.random().toString(36).slice(2, 10)
@@ -147,7 +150,10 @@ export function CoachFab() {
   }
   const [showSatellites, setShowSatellites] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [simOpen, setSimOpen] = useState(false)
+  // Simuladores: elegir cuál (atajo), o abrir uno ya lleno desde el chat
+  const [simElegir, setSimElegir] = useState(false)
+  const [simDeuda, setSimDeuda] = useState<{ nombre?: string | null; monto?: number | null } | null>(null)
+  const [simAhorro, setSimAhorro] = useState<EscenarioAhorro | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -210,9 +216,26 @@ export function CoachFab() {
 
   // ── Simulador (satélite) ──────────────────────────────────────────────────
   const periodData = getPeriodData(income, extraIncomes.reduce((a, e) => a + e.monto, 0), debts, fixedExpenses, incomeFrequency, diasCobro, ingresoPeriodo)
-  const debtCapacityAmount = periodData.effectiveIncome > 0
-    ? calculateBudgetAllocation(periodData.effectiveIncome, periodData.totalObligations).debtCapacityAmount
-    : 0
+  const allocation = periodData.effectiveIncome > 0
+    ? calculateBudgetAllocation(periodData.effectiveIncome, periodData.totalObligations)
+    : null
+  const debtCapacityAmount = Math.max(0, allocation?.debtCapacityAmount ?? 0)
+  const ahorroSugerido = Math.max(0, allocation?.savingsAmount ?? 0)
+
+  /** Abre el simulador de la tarjeta del chat, ya lleno con el escenario. */
+  // El chat va encima de los modales: se oculta mientras está el simulador y
+  // vuelve al cerrarlo (la conversación sigue ahí)
+  const [volverAlChat, setVolverAlChat] = useState(false)
+  const cerrarSimulador = () => {
+    setSimDeuda(null); setSimAhorro(null)
+    if (volverAlChat) { setVolverAlChat(false); setIsOpen(true) }
+  }
+  const abrirSimulacion = (s: SimulacionIA) => {
+    setIsOpen(false)
+    setVolverAlChat(true)
+    if (s.tipo === "compra_cuotas") { setSimDeuda({ nombre: s.nombre, monto: s.monto }); return }
+    setSimAhorro({ modo: s.tipo === "ahorro_futuro" ? "futuro" : "meta", nombre: s.nombre, monto: s.monto, aporte: s.aporte, meses: s.meses, fecha: s.fecha, inicial: s.inicial, tasaAnual: s.tasaAnual })
+  }
 
   // ══════════════════════════════════════════════════════════════════════════
   // CHAT
@@ -222,7 +245,9 @@ export function CoachFab() {
     if (!t || loading) return
     const historial = messages.filter(m => !m.error).slice(-10).map(m => ({
       rol: (m.role === "assistant" ? "coach" : "usuario") as "coach" | "usuario",
-      texto: m.texto + (m.acciones?.length ? tr("\n[Propuse {0} registro(s); el usuario {1}]", [m.acciones.length, m.estado === "guardado" ? tr("los guardó") : m.estado === "descartado" ? tr("los descartó") : tr("aún no confirma")]) : ""),
+      texto: m.texto + (m.acciones?.length ? tr("\n[Propuse {0} registro(s); el usuario {1}]", [m.acciones.length, m.estado === "guardado" ? tr("los guardó") : m.estado === "descartado" ? tr("los descartó") : tr("aún no confirma")]) : "")
+        // Para que en la siguiente pregunta ("¿y si fueran 300 mil?") sepa qué simuló
+        + (m.simulacion ? `\n[Simulación ${JSON.stringify(Object.fromEntries(Object.entries(m.simulacion).filter(([, v]) => v != null)))}]` : ""),
     }))
     setMessages(p => [...p, { id: nuevoId(), role: "user", texto: t }])
     setInput("")
@@ -238,7 +263,7 @@ export function CoachFab() {
       id: nuevoId(), role: "assistant", texto: data.respuesta,
       acciones: data.acciones.length ? data.acciones : undefined,
       estado: data.acciones.length ? "pendiente" : undefined,
-      sugerencias: data.sugerencias, ir: data.ir,
+      sugerencias: data.sugerencias, ir: data.ir, simulacion: data.simulacion ?? null,
     }])
   }, [loading, messages, pathname])
 
@@ -473,7 +498,7 @@ export function CoachFab() {
 
   // Botones del "+" de la barra inferior (celular)
   useEffect(() => {
-    const onSim = () => { setShowSatellites(false); setSimOpen(true) }
+    const onSim = () => { setShowSatellites(false); setSimElegir(true) }
     const onVoice = () => abrirVoz()
     const onScan = () => abrirScanner()
     window.addEventListener("kiri:open-simulator", onSim)
@@ -590,7 +615,7 @@ export function CoachFab() {
             showSatellites ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none")}>
             {[
               { onClick: abrirScanner, icon: <ScanLine className="h-5 w-5" />, label: tr("Escanear recibo"), color: "bg-cyclon-periwinkle shadow-cyclon-periwinkle/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.1s_both]" },
-              { onClick: () => { setShowSatellites(false); setSimOpen(true) }, icon: <Calculator className="h-5 w-5" />, label: tr("Simulador"), color: "bg-cyclon-lavender shadow-cyclon-lavender/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.05s_both]" },
+              { onClick: () => { setShowSatellites(false); setSimElegir(true) }, icon: <Calculator className="h-5 w-5" />, label: tr("Simulador"), color: "bg-cyclon-lavender shadow-cyclon-lavender/30", anim: "animate-[satellite-enter_0.3s_ease-out_0.05s_both]" },
               { onClick: abrirVoz, icon: <Mic className="h-5 w-5" />, label: tr("Dictar datos"), color: "bg-kiri-emerald shadow-kiri-emerald/30", anim: "animate-[satellite-enter_0.3s_ease-out_0s_both]" },
             ].map(s => (
               <div key={s.label} className="relative group/sat">
@@ -617,7 +642,30 @@ export function CoachFab() {
         </div>
       )}
 
-      {simOpen && <DebtSimulator debtCapacity={debtCapacityAmount} incomeFrequency={incomeFrequency} forceOpen onClose={() => setSimOpen(false)} />}
+      {/* ══════════ Simuladores: elegir cuál ══════════ */}
+      <Dialog open={simElegir} onOpenChange={setSimElegir}>
+        <DialogContent className="[&>*]:min-w-0">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Calculator className="h-5 w-5 text-cyclon-lavender" />{" "}{tr("¿Qué quieres simular?")}</DialogTitle>
+            <DialogDescription>{tr("Prueba escenarios antes de decidir: nada se guarda hasta que lo aceptes.")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <button onClick={() => { setSimElegir(false); setSimDeuda({}) }}
+              className="rounded-2xl border-2 border-cyclon-lavender/30 bg-cyclon-lavender/5 hover:border-cyclon-lavender/60 p-4 text-left">
+              <p className="font-bold text-sm text-cyclon-lavender">{tr("Comprar algo a cuotas")}</p>
+              <p className="text-xs text-muted-foreground">{tr("¿Qué pasa si me compro X? Cuota, plazo e impacto en tu presupuesto.")}</p>
+            </button>
+            <button onClick={() => { setSimElegir(false); setSimAhorro({ modo: "futuro" }) }}
+              className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/60 p-4 text-left">
+              <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{tr("Ahorro")}</p>
+              <p className="text-xs text-muted-foreground">{tr("¿Cuánto tendré si ahorro X? ¿Cuánto debo guardar para comprar algo?")}</p>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {simDeuda && <DebtSimulator debtCapacity={debtCapacityAmount} incomeFrequency={incomeFrequency} forceOpen inicial={simDeuda.monto ? simDeuda : null} onClose={cerrarSimulador} />}
+      {simAhorro && <SavingsSimulator ahorroSugerido={ahorroSugerido} margenLibre={debtCapacityAmount} incomeFrequency={incomeFrequency} forceOpen
+        inicial={simAhorro.aporte || simAhorro.monto ? simAhorro : null} onClose={cerrarSimulador} />}
 
       {/* ══════════ MODAL: Dictado por voz ══════════ */}
       <Dialog open={voiceOpen} onOpenChange={v => { if (!v) cerrarVoz() }}>
@@ -874,6 +922,10 @@ export function CoachFab() {
                         </div>
                       )}
                     </div>
+                  )}
+                  {msg.simulacion && (
+                    <SimulacionCard sim={msg.simulacion} ahorroSugerido={ahorroSugerido} margenLibre={debtCapacityAmount} debtCapacity={debtCapacityAmount}
+                      incomeFrequency={incomeFrequency} formatAmount={formatAmount} onAbrir={() => abrirSimulacion(msg.simulacion!)} />
                   )}
                   {msg.estado === "guardado" && <p className="text-[11px] font-bold text-kiri-emerald">{msg.resultado}</p>}
                   {msg.estado === "descartado" && <p className="text-[11px] text-muted-foreground">{tr("Descartado — no se guardó nada.")}</p>}
