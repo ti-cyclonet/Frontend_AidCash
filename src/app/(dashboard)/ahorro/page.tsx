@@ -32,6 +32,7 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import { CelebrationModal } from "@/components/ui/celebration-modal"
 import { FeatureGate } from "@/components/plan/feature-gate"
+import { SavingsSimulator } from "@/components/recommendations/savings-simulator"
 import type { SharedPocket } from "@/lib/types"
 import { tr } from "@/lib/i18n"
 
@@ -161,7 +162,7 @@ export default function AhorroPage() {
 
 function AhorroContent() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("ahorro")
-  const { formatAmount, savingsAmount, metaAhorro, setMetaAhorro } = useAppContext()
+  const { formatAmount, savingsAmount, metaAhorro, setMetaAhorro, incomeFrequency } = useAppContext()
   const { savingsHistory, totalAhorrado, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
   const { user: authUser } = useAuth()
   const { allocation } = usePeriodBudget()
@@ -239,10 +240,14 @@ function AhorroContent() {
   const [pocketsLoading, setPocketsLoading] = useState(true)
   useEffect(() => {
     if (!authUser?.id) return
-    savingsPocketsApi.list().then(({ data }) => {
+    const cargar = () => savingsPocketsApi.list().then(({ data }) => {
       if (data?.pockets) setPockets(data.pockets.map(mapApiPocket))
       setPocketsLoading(false)
     }).catch(() => setPocketsLoading(false))
+    cargar()
+    // El simulador (aquí o desde Kiri Coach) puede crear un bolsillo
+    window.addEventListener("kiri:bolsillos-actualizados", cargar)
+    return () => window.removeEventListener("kiri:bolsillos-actualizados", cargar)
   }, [authUser?.id])
 
   // ── Modal: nuevo bolsillo ─────────────────────────────────────────────────
@@ -554,6 +559,13 @@ function AhorroContent() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── Simulador de Ahorro (igual al de Obligaciones) ── */}
+          <SavingsSimulator
+            ahorroSugerido={Math.max(0, realSavingsForPeriod)}
+            margenLibre={Math.max(0, allocation?.debtCapacityAmount ?? 0)}
+            incomeFrequency={incomeFrequency}
+          />
 
           {/* ── Sub-tabs: Bolsillos / Historial ── */}
           <div className="grid grid-cols-2 gap-2">

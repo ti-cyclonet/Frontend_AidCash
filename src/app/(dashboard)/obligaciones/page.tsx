@@ -1146,7 +1146,7 @@ export default function ObligacionesPage() {
                               onChange={e => setDebtTcCuotas(e.target.value)}
                               className="h-10 rounded-xl text-center font-bold"
                             />
-                            <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)) / (Number(debtTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [debtTcCuotas, Number(debtTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
+                            <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)) / (Number(debtTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta desde el próximo mes, durante {0} {1}.", [debtTcCuotas, Number(debtTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
                           </div>
                           <Button
                             onClick={async () => {
@@ -1284,7 +1284,7 @@ export default function ObligacionesPage() {
                               const montoFijo = Math.max(0, montoPorPeriodo - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0))
                               const cuotasNum = Number(tcCuotas) || 1
                               return (
-                                <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(montoFijo / cuotasNum))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [tcCuotas, cuotasNum === 1 ? tr("mes") : tr("meses")])}</p>
+                                <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(montoFijo / cuotasNum))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta desde el próximo mes, durante {0} {1}.", [tcCuotas, cuotasNum === 1 ? tr("mes") : tr("meses")])}</p>
                               )
                             })()}
                           </div>
@@ -1538,7 +1538,7 @@ export default function ObligacionesPage() {
                                 onChange={e => setInsufficientTcCuotas(e.target.value)}
                                 className="h-10 rounded-xl text-center font-bold"
                               />
-                              <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(montoTarget / (Number(insufficientTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [insufficientTcCuotas, Number(insufficientTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
+                              <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(montoTarget / (Number(insufficientTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta desde el próximo mes, durante {0} {1}.", [insufficientTcCuotas, Number(insufficientTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
                             </div>
                             <Button
                               disabled={payingInsufficientTC}
@@ -1965,7 +1965,7 @@ export default function ObligacionesPage() {
                             className="h-10 rounded-xl text-center font-bold"
                           />
                           {Number(expMonto) > 0 && (
-                            <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(Number(expMonto) / (Number(expTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta durante {0} {1}.", [expTcCuotas, Number(expTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
+                            <p className="text-[10px] text-muted-foreground">{tr("Se sumará")}{" "}<strong>{formatAmount(Math.round(Number(expMonto) / (Number(expTcCuotas) || 1)))}{tr("/mes")}</strong>{" "}{tr("a la cuota de la tarjeta desde el próximo mes, durante {0} {1}.", [expTcCuotas, Number(expTcCuotas) === 1 ? tr("mes") : tr("meses")])}</p>
                           )}
                         </div>
                       )}

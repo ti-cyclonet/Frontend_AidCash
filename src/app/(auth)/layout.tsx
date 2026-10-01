@@ -1,5 +1,4 @@
-import { SelectorIdioma } from "@/components/i18n/SelectorIdioma"
-
+// El idioma solo se cambia desde Perfil (queda guardado en la cuenta)
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}<SelectorIdioma /></>
+  return <>{children}</>
 }

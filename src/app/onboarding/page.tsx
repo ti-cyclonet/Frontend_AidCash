@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils"
 import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuestion"
 import { tr } from "@/lib/i18n"
+import { userApi } from "@/lib/api-client"
 
 // ─── Pasos del test ───────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ const STEPS = [
   tr("Cómo recibes tu plata"),
   tr("Sueldo base"),
   tr("Ingreso extra"),
+  tr("Tu plata hoy"),
   tr("Situación de deudas"),
   tr("Registrar deudas"),         // nuevo paso intermedio
   tr("Finalización"),
@@ -68,6 +70,8 @@ export default function OnboardingPage() {
   const [extraMonto, setExtraMonto] = useState("")
   const [extraTemp, setExtraTemp] = useState<"una_vez" | "definido" | "indefinido">("una_vez")
   const [extraMeses, setExtraMeses] = useState("")
+  // Lo que tiene HOY en total (bancos, billeteras, efectivo): arranque del Sueldo Real
+  const [saldoHoy, setSaldoHoy] = useState("")
   const [tieneDeudas, setTieneDeudas] = useState<boolean | null>(null)
   const [quiereRegistrar, setQuiereRegistrar] = useState<boolean | null>(null)
 
@@ -100,18 +104,18 @@ export default function OnboardingPage() {
     } else {
       // Si no quiere contar un ingreso extra, no hay nada más que pedirle en
       // este paso — pero SÍ sigue al de deudas normalmente (no se salta nada).
-      if (step === 4) {
+      if (step === 5) {
         // Si no tiene deudas o no quiere registrar, saltar el paso de registro
         if (tieneDeudas === false) {
-          setStep(6) // saltar a finalización
+          setStep(7) // saltar a finalización
           return
         }
-        // Si tiene deudas, va al paso 5 (pregunta de registrar)
-        setStep(5)
+        // Si tiene deudas, va al paso 6 (pregunta de registrar)
+        setStep(6)
         return
       }
-      if (step === 5 && quiereRegistrar === false) {
-        setStep(6) // saltar a finalización
+      if (step === 6 && quiereRegistrar === false) {
+        setStep(7) // saltar a finalización
         return
       }
       setStep(s => s + 1)
@@ -121,16 +125,16 @@ export default function OnboardingPage() {
   const goPrev = () => {
     if (!isFirst) {
       // Ajustar navegación hacia atrás
-      if (step === 6) {
+      if (step === 7) {
         if (tieneDeudas === false) {
-          setStep(4)
-          return
-        }
-        if (quiereRegistrar === false) {
           setStep(5)
           return
         }
-        setStep(5)
+        if (quiereRegistrar === false) {
+          setStep(6)
+          return
+        }
+        setStep(6)
         return
       }
       setStep(s => s - 1)
@@ -157,8 +161,9 @@ export default function OnboardingPage() {
       return !!incomeValue && Number(incomeValue) > 0
     }
     if (step === 3) return tieneIngresoExtra !== null && (tieneIngresoExtra === false || (!!extraNombre && !!extraMonto))
-    if (step === 4) return tieneDeudas !== null
-    if (step === 5) return quiereRegistrar !== null
+    if (step === 4) return saldoHoy !== ""
+    if (step === 5) return tieneDeudas !== null
+    if (step === 6) return quiereRegistrar !== null
     return true
   }
 
@@ -228,7 +233,7 @@ export default function OnboardingPage() {
       const ok = await handleSaveObligation()
       if (!ok) return
     }
-    setStep(6)
+    setStep(7)
   }
 
   // ── Finalizar y guardar ───────────────────────────────────────────────────
@@ -256,6 +261,13 @@ export default function OnboardingPage() {
       })
       await updateUserProfile({ onboarding_done: true })
 
+      // Lo que tiene hoy arranca su Sueldo Real (después de las obligaciones
+      // del paso 6, que ya quedaron guardadas: así se reparte con ellas)
+      if (Number(saldoHoy) > 0) {
+        await userApi.walletSaldoInicial(Number(saldoHoy))
+        window.dispatchEvent(new Event("kiri:wallet-updated"))
+      }
+
       // El ingreso extra se guarda hasta el final, junto con todo lo demás —
       // no apenas se llena el formulario en el paso 3 (mismo patrón que ya
       // usa el resto del test: nada se persiste hasta "Comenzar mi viaje").
@@ -276,8 +288,8 @@ export default function OnboardingPage() {
   }
 
   // Calcula el paso visual (para la progress bar)
-  const visualStep = step >= 6 ? 5 : step >= 5 ? 4 : step
-  const visualTotalSteps = 6
+  const visualStep = step >= 7 ? 6 : step >= 6 ? 5 : step
+  const visualTotalSteps = 7
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -295,7 +307,7 @@ export default function OnboardingPage() {
           ))}
         </div>
         {step > 0 && step < totalSteps - 1 && (
-          <p className="text-[10px] text-muted-foreground mt-2 text-center">{tr("Paso {0} de 4", [Math.min(visualStep, 4)])}</p>
+          <p className="text-[10px] text-muted-foreground mt-2 text-center">{tr("Paso {0} de 5", [Math.min(visualStep, 5)])}</p>
         )}
       </div>
 
@@ -648,8 +660,44 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 4: Situación de deudas ═══ */}
+            {/* ═══ PASO 4: Cuánta plata tiene hoy (arranque del Sueldo Real) ═══ */}
             {step === 4 && (
+              <div className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-kiri-emerald/10 flex items-center justify-center text-kiri-emerald">
+                    <Landmark className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black">{tr("¿Cuánta plata tienes hoy?")}</h2>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">{tr("Suma TODO lo que tienes en este momento: tus cuentas de banco, Nequi, Daviplata, el efectivo… hasta las monedas de la cartera.")}</p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold">{tr("Total que tienes hoy")}</Label>
+                  <MoneyInput value={saldoHoy} onChange={v => setSaldoHoy(v)} className="h-14 text-2xl font-bold rounded-2xl" placeholder="0" autoFocus />
+                  <button onClick={() => setSaldoHoy("0")}
+                    className={cn("text-xs font-bold hover:underline", saldoHoy === "0" ? "text-kiri-emerald" : "text-muted-foreground")}>
+                    {saldoHoy === "0" ? tr("✓ Empiezo en $0") : tr("Hoy no tengo nada, empiezo en $0")}
+                  </button>
+                </div>
+
+                <div className="rounded-2xl bg-kiri-emerald/5 border border-kiri-emerald/20 p-4 space-y-2 text-xs">
+                  <p className="font-bold text-foreground">{tr("¿Para qué lo usa Kiri?")}</p>
+                  <ul className="space-y-1.5 text-muted-foreground">
+                    <li className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-kiri-emerald shrink-0 mt-px" /><span>{tr("Será tu Sueldo Real en Gestión: el punto de partida de todo.")}</span></li>
+                    <li className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-kiri-emerald shrink-0 mt-px" /><span>{tr("Cada gasto, pago e ingreso que registres lo irá moviendo: siempre sabrás cuánto te queda de verdad.")}</span></li>
+                    <li className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-kiri-emerald shrink-0 mt-px" /><span>{tr("Si un día tu plata real no cuadra con la de Kiri, es que se te escapó un gasto. Así no se te escapa ni uno.")}</span></li>
+                  </ul>
+                </div>
+
+                <p className="text-[9px] text-muted-foreground flex items-start gap-1">
+                  <Sparkles className="h-3 w-3 text-kiri-emerald shrink-0 mt-px" />{tr("No cuentes el cupo de tus tarjetas de crédito: eso es deuda, no plata tuya. Si tienes plata ahorrada aparte, inclúyela y luego la pasas a un bolsillo en Ahorro.")}</p>
+              </div>
+            )}
+
+            {/* ═══ PASO 5: Situación de deudas ═══ */}
+            {step === 5 && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
@@ -708,8 +756,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 5: Registrar deudas/gastos fijos ═══ */}
-            {step === 5 && (
+            {/* ═══ PASO 6: Registrar deudas/gastos fijos ═══ */}
+            {step === 6 && (
               <div className="space-y-5">
                 {/* Si aún no eligió si quiere registrar */}
                 {quiereRegistrar === null && (
@@ -742,7 +790,7 @@ export default function OnboardingPage() {
                       </button>
 
                       <button
-                        onClick={() => { setQuiereRegistrar(false); setStep(6) }}
+                        onClick={() => { setQuiereRegistrar(false); setStep(7) }}
                         className={cn(
                           "w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-colors text-left",
                           "border-muted hover:border-kiri-emerald/30"
@@ -908,8 +956,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* ═══ PASO 6: Finalización ═══ */}
-            {step === 6 && (
+            {/* ═══ PASO 7: Finalización ═══ */}
+            {step === 7 && (
               <div className="flex flex-col items-center text-center space-y-6">
                 <div className="h-40 w-40 rounded-full bg-kiri-emerald/5 border-2 border-kiri-emerald/20 flex items-center justify-center relative">
                   <span className="text-7xl">🌱</span>
@@ -920,6 +968,13 @@ export default function OnboardingPage() {
                   <h1 className="text-2xl font-black">{tr("¡Listo, Kiri te conoce mejor!")}</h1>
                   <p className="text-sm text-muted-foreground leading-relaxed">{tr("Con esta información personalizaremos tu experiencia y te ayudaremos a hacer crecer tu jardín financiero.")}</p>
                 </div>
+
+                {Number(saldoHoy) > 0 && (
+                  <div className="w-full bg-kiri-emerald/5 rounded-xl p-3 text-left">
+                    <p className="text-[10px] font-bold text-kiri-emerald uppercase mb-1">{tr("Tu Sueldo Real arranca en")}</p>
+                    <p className="text-lg font-black">{formatAmount(Number(saldoHoy))}</p>
+                  </div>
+                )}
 
                 {obligations.length > 0 && (
                   <div className="w-full bg-kiri-emerald/5 rounded-xl p-3 text-left">
@@ -965,7 +1020,7 @@ export default function OnboardingPage() {
             onClick={goNext}
             className="w-full h-12 rounded-2xl bg-kiri-emerald hover:bg-kiri-emerald/90 text-white font-bold text-sm shadow-lg shadow-kiri-emerald/30"
           >{tr("Comenzar test")}</Button>
-        ) : step === 6 ? (
+        ) : step === 7 ? (
           <Button
             onClick={handleFinish}
             disabled={saving}
@@ -973,7 +1028,7 @@ export default function OnboardingPage() {
           >
             {saving ? "Guardando..." : tr("Comenzar mi viaje en Kiri 🚀")}
           </Button>
-        ) : step === 5 && quiereRegistrar === true ? (
+        ) : step === 6 && quiereRegistrar === true ? (
           // No mostrar footer de navegación estándar cuando está en modo registro
           null
         ) : (

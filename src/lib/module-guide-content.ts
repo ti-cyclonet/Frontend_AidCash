@@ -100,7 +100,7 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     items: [
       { icon: "🏠", title: tr("Registrar gastos fijos"), description: tr("Añade tus pagos recurrentes (renta, internet, servicios) y dales 'check' al pagarlos. Activa el pago automático ⚡.") },
       { icon: "💳", title: tr("Deudas y tarjetas"), description: tr("Registra deudas bancarias y tarjetas de crédito. Vincula cada tarjeta para controlar cuotas, intereses y fechas de corte automáticamente.") },
-      { icon: "🧮", title: tr("Pagos con tarjeta de crédito"), description: tr("Al pagar una deuda o gasto fijo con tu tarjeta, el interés se calcula igual que un pago en efectivo y la cuota de la tarjeta sube — y baja sola cuando esa cuota termina de pagarse.") },
+      { icon: "🧮", title: tr("Pagos con tarjeta de crédito"), description: tr("Al pagar una deuda, un gasto fijo o una compra con tu tarjeta, el interés se calcula igual que un pago en efectivo y la cuota de la tarjeta sube desde el próximo mes (como en el extracto) — y baja sola cuando esa cuota termina de pagarse.") },
       { icon: "🏦", title: tr("Saldo real del banco"), description: tr("Al pagar una cuota puedes escribir en cuánto quedó tu saldo según el banco: Kiri calcula el interés real que pagaste y ajusta la tasa para sus próximas estimaciones.") },
       { icon: "✅", title: tr("Cuota más baja"), description: tr("Si pagaste otro valor (ej. llegó $180.000 y no $182.000), marca \"Con este valor quedó pagada la cuota\" y no queda saldo pendiente ese periodo.") },
       { icon: "⏪", title: tr("Atrasos, adelantos y deshacer"), description: tr("Kiri marca las cuotas atrasadas de periodos anteriores, te deja adelantar la próxima y deshacer solo el último abono o todo el pago del periodo.") },

@@ -369,6 +369,11 @@ export const userApi = {
     return res
   },
 
+  /** Lo que tiene hoy en total (test inicial): punto de partida del Sueldo Real, no un ingreso. */
+  async walletSaldoInicial(monto: number) {
+    return api<{ wallet: WalletState }>('/users/wallet/saldo-inicial', { method: 'POST', body: { monto } })
+  },
+
   /** Elimina un ingreso como si nunca hubiera existido (la billetera pierde lo que sumó). */
   async deleteIncome(id: string) {
     return api<{ message: string; monto: number; tipo: string; wallet: WalletState }>(`/users/wallet/income/${id}`, { method: 'DELETE' })
