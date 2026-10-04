@@ -45,6 +45,10 @@ export interface Accion {
   diaPago?: number | null
   tasaMensual?: number | null
   esTarjeta?: boolean | null
+  /** Addi, Sistecrédito, Brilla… (cupo como una tarjeta) */
+  esCreditoCompras?: boolean | null
+  /** Cupo total de la tarjeta o crédito de compras */
+  cupo?: number | null
   frecuencia?: "mensual" | "quincenal" | "semanal" | "anual" | null
   icono?: string | null
   persona?: string | null
@@ -73,11 +77,14 @@ export const etiquetaTipo = (t: TipoAccion) => DESTINOS.find(d => d.tipo === t) 
 export function faltantes(a: Accion): string[] {
   const f: string[] = []
   if (a.tipo === "sin_destino") f.push(tr("Elige a dónde va este monto"))
-  if (!(a.monto > 0) && a.tipo !== "crear_categoria") f.push(tr("Escribe el monto"))
+  const lineaSinUsar = a.tipo === "crear_deuda" && !!(a.esTarjeta || a.esCreditoCompras) && Number(a.cupo) > 0
+  if (!(a.monto > 0) && a.tipo !== "crear_categoria" && !lineaSinUsar) f.push(tr("Escribe el monto"))
   if (!a.nombre.trim() && a.tipo !== "sin_destino") f.push(tr("Escribe un nombre"))
   if (a.tipo === "pago_obligacion" && !a.obligacionId) f.push(tr("Elige qué obligación pagaste"))
   if (a.tipo === "ahorro" && !a.bolsilloId) f.push(tr("Elige el bolsillo"))
-  if (a.tipo === "crear_deuda" && !(Number(a.cuota) > 0)) f.push(tr("Escribe la cuota"))
+  // En una tarjeta o crédito de compras sin usar ($0 ocupado) no hay cuota
+  if (a.tipo === "crear_deuda" && !(Number(a.cuota) > 0) && a.monto > 0) f.push(tr("Escribe la cuota"))
+  if (a.tipo === "crear_deuda" && (a.esTarjeta || a.esCreditoCompras) && !(a.monto > 0) && !(Number(a.cupo) > 0)) f.push(tr("Escribe el cupo"))
   if (a.tipo === "me_deben" && !a.persona?.trim()) f.push(tr("¿A quién le prestaste?"))
   if (a.tipo === "abono_me_deben" && !a.meDebenId) f.push(tr("Elige quién te pagó"))
   return f
@@ -165,15 +172,18 @@ export function useEjecutarAcciones() {
       }
       case "crear_categoria": {
         // Las categorías admiten 50 letras; la IA a veces propone nombres más largos
-        const { error } = await budgetCategoriesApi.create({ nombre: nombre.slice(0, 50), tipo: "gasto", icono: a.icono ?? "more", montoLimite: a.monto || 0 })
+        const { error } = await budgetCategoriesApi.create({ nombre: nombre.slice(0, 50), tipo: "gasto", icono: a.icono ?? "more", montoLimite: a.monto || 0, frecuenciaLimite: a.frecuencia === "quincenal" ? "quincenal" : "mensual" })
         return error ? tr("No se pudo crear la categoría: {0}", [error]) : null
       }
       case "crear_deuda": {
+        const esLinea = !!(a.esTarjeta || a.esCreditoCompras)
         const saved = await addDebt({
-          nombre, montoTotal: a.monto, saldoRestante: a.monto, cuotaPeriodo: Number(a.cuota),
-          diasPago: a.diaPago ? diaDelMes(a.diaPago) : "1", tasaInteres: a.tasaMensual ?? undefined,
-          tipoDeuda: a.esTarjeta ? "TARJETA_CREDITO" : "PRESTAMO",
-          frecuenciaPago: a.frecuencia === "quincenal" ? "quincenal" : "mensual",
+          nombre, montoTotal: a.monto, saldoRestante: a.monto, cuotaPeriodo: Number(a.cuota) || 0,
+          // Tarjeta sin día: fin de mes
+          diasPago: a.diaPago ? diaDelMes(a.diaPago) : esLinea ? "31" : "1", tasaInteres: a.tasaMensual ?? undefined,
+          tipoDeuda: a.esCreditoCompras ? "CREDITO_COMPRAS" : a.esTarjeta ? "TARJETA_CREDITO" : "PRESTAMO",
+          cupoTotal: esLinea && Number(a.cupo) > 0 ? Number(a.cupo) : null,
+          frecuenciaPago: !esLinea && a.frecuencia === "quincenal" ? "quincenal" : "mensual",
           nuevaProximoPeriodo: true,
         })
         return saved ? null : tr("No se pudo crear la deuda \"{0}\"", [nombre])

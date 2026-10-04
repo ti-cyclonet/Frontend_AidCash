@@ -11,7 +11,7 @@
  * - Tipado de respuestas
  */
 
-import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt, ConnectionRole } from './types'
+import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt, ConnectionRole, DebtType, AvisoCupo } from './types'
 import { LEGAL_VERSIONS } from "./legal/kiri-legal"
 import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
 import { tr, idioma } from "@/lib/i18n"
@@ -435,7 +435,7 @@ export const debtsApi = {
     return api<{ debts: Record<string, unknown>[] }>(`/debts?estado=${estado}`)
   },
 
-  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; budgetCategoryId?: string | null; esCompartida?: boolean; connectionId?: string; montoParticipanteA?: number; montoParticipanteB?: number }) {
+  async create(data: { nombre: string; montoTotal: number; saldoRestante?: number; cuotaPeriodo: number; cupoTotal?: number | null; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; bankEntityId?: string | null; tipoDeuda?: DebtType; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; budgetCategoryId?: string | null; esCompartida?: boolean; connectionId?: string; montoParticipanteA?: number; montoParticipanteB?: number }) {
     return api<{ debt: Record<string, unknown> }>('/debts', {
       method: 'POST',
       body: data,
@@ -459,7 +459,7 @@ export const debtsApi = {
    * opciones.cuotaCompleta: con este valor quedó pagada la cuota del periodo.
    */
   async pay(id: string, monto?: number, periodo?: string, opciones: { saldoReal?: number; cuotaCompleta?: boolean } = {}) {
-    return api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean; periodo: string; esPeriodoActual: boolean; amortizacion: { montoPagado: number; pagoInteres: number; abonoCapital: number }; tasaObservadaMensual: number | null; cuotaAjustada: boolean }>(`/debts/${id}/pay`, {
+    return api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean; enCeros?: boolean; periodo: string; esPeriodoActual: boolean; amortizacion: { montoPagado: number; pagoInteres: number; abonoCapital: number }; tasaObservadaMensual: number | null; cuotaAjustada: boolean }>(`/debts/${id}/pay`, {
       method: 'POST',
       body: { ...(monto ? { monto } : {}), ...(periodo ? { periodo } : {}), ...opciones },
     })
@@ -486,9 +486,21 @@ export const debtsApi = {
   },
 
   async payWithCard(data: { tarjetaId: string; monto: number; cuotas: number; sourceType: 'debt' | 'fixed'; sourceId: string }) {
-    return api<{ success: boolean; tarjeta: { id: string; nombre: string; saldoRestante: number; cuotaPeriodo: number } | null; cuotasAgregadas: number; incrementoCuota: number; montoTotalAgregado: number }>('/debts/pay-with-card', {
+    return api<{ success: boolean; tarjeta: { id: string; nombre: string; saldoRestante: number; cuotaPeriodo: number } | null; avisoCupo: AvisoCupo | null; cuotasAgregadas: number; incrementoCuota: number; montoTotalAgregado: number }>('/debts/pay-with-card', {
       method: 'POST',
       body: data,
+    })
+  },
+
+  /**
+   * "Actualizar saldo": lo que dice el banco que se debe. Si es más que en Kiri,
+   * la diferencia son intereses y cargos (motivo 'interes') o compras que no se
+   * registraron ('compras', solo tarjetas); si es menos, es una corrección.
+   */
+  async ajustarSaldo(id: string, saldoBanco: number, motivo: 'interes' | 'compras' = 'interes') {
+    return api<{ debt: Record<string, unknown>; ajuste: { tipo: 'interes' | 'compras' | 'correccion'; monto: number; tasaObservadaMensual: number | null } | null; avisoCupo?: AvisoCupo | null }>(`/debts/${id}/ajustar-saldo`, {
+      method: 'POST',
+      body: { saldoBanco, motivo },
     })
   },
 }
@@ -597,7 +609,7 @@ export const impulseApi = {
    * libre en la misma transacción (si no, lo hace quien llama).
    */
   async create(data: { nombre: string; monto: number; categoria: string; tarjetaId?: string; cuotas?: number; esHormiga?: boolean; budgetCategoryId?: string | null; sharedCategoryId?: string | null; descontarBilletera?: boolean }) {
-    const res = await api<{ expense: Record<string, unknown>; categoriaAutomatica?: 'historial' | 'palabra_clave' | null; alertaCategoria?: AlertaCategoria | null; hogar?: HogarAlerta | null; billeteraDescontada?: boolean }>('/impulse-expenses', {
+    const res = await api<{ expense: Record<string, unknown>; categoriaAutomatica?: 'historial' | 'palabra_clave' | null; alertaCategoria?: AlertaCategoria | null; hogar?: HogarAlerta | null; avisoCupo?: AvisoCupo | null; billeteraDescontada?: boolean }>('/impulse-expenses', {
       method: 'POST',
       body: data,
     })
@@ -637,6 +649,8 @@ export interface AlertaCategoria {
   gastado: number
   limite: number
   porcentaje: number
+  /** El límite es del mes o de la quincena */
+  frecuenciaLimite?: FrecuenciaLimite
 }
 
 /** GET /budget-categories/resumen — gasto por categoría calculado en el servidor (fuente única). */
@@ -645,9 +659,13 @@ export interface ResumenCategoria {
   nombre: string
   icono: string
   color: string
-  /** Límite definido por el usuario (mensual). */
-  limiteMensual: number
-  /** Límite proporcional al rango consultado (la mitad aprox. en una quincena). */
+  /** mensual: el límite es para todo el mes de pago | quincenal: es por quincena */
+  frecuenciaLimite: FrecuenciaLimite
+  /** Rango donde se suma el gasto de esta categoría (su mes o su quincena) */
+  periodo: { inicio: string; fin: string }
+  /** Límite tal como lo puso el usuario */
+  limiteConfigurado: number
+  /** Límite comparable con el rango (igual al configurado, salvo en la vista de mes calendario) */
   limite: number
   gastado: number
   disponible: number
@@ -1346,8 +1364,11 @@ export interface BudgetCategory {
   color: string
   tipo: 'gasto' | 'ingreso' | 'ahorro'
   montoLimite: number
+  frecuenciaLimite: FrecuenciaLimite
   linkedFixedExpenseIds: string[]
 }
+
+export type FrecuenciaLimite = 'mensual' | 'quincenal'
 
 export const budgetCategoriesApi = {
   /** Listar categorías del usuario (opcionalmente filtra por tipo) */
@@ -1357,7 +1378,7 @@ export const budgetCategoriesApi = {
   },
 
   /** Crear una nueva categoría */
-  async create(data: { nombre: string; icono?: string; color?: string; tipo?: 'gasto' | 'ingreso' | 'ahorro'; montoLimite?: number; linkedFixedExpenseIds?: string[] }) {
+  async create(data: { nombre: string; icono?: string; color?: string; tipo?: 'gasto' | 'ingreso' | 'ahorro'; montoLimite?: number; frecuenciaLimite?: FrecuenciaLimite; linkedFixedExpenseIds?: string[] }) {
     return api<{ category: BudgetCategory }>('/budget-categories', {
       method: 'POST',
       body: data,

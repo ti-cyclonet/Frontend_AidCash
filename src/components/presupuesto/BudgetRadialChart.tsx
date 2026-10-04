@@ -33,6 +33,10 @@ export interface RadialCategory {
   color: string
   icon: string
   items: { emoji: string; name: string; amount: number }[]
+  /** mensual: límite para todo el mes | quincenal: por quincena */
+  frecuencia?: 'mensual' | 'quincenal'
+  /** Rango donde se suma su gasto */
+  periodo?: { inicio: string; fin: string }
 }
 
 interface Props {
@@ -54,7 +58,7 @@ function statusFor(ratio: number) {
 }
 
 function insightFor(cat: RadialCategory, frequency: 'mensual' | 'quincenal', diasCobro: string) {
-  const insight = getCategoryInsight(cat.name, cat.limit, cat.spent, frequency, diasCobro)
+  const insight = getCategoryInsight(cat.name, cat.limit, cat.spent, frequency, diasCobro, cat.periodo)
   return insight.message
 }
 
@@ -132,7 +136,7 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-foreground text-base font-bold leading-tight break-words">{cat.name}</p>
-          <p className="text-muted-foreground text-xs">{tr("Presupuesto de esta categoría")}</p>
+          <p className="text-muted-foreground text-xs">{cat.frecuencia === 'quincenal' ? tr("Presupuesto por quincena") : tr("Presupuesto mensual")}</p>
         </div>
         <button
           onClick={onEdit}

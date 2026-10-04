@@ -14,7 +14,23 @@ import type { Debt } from "@/lib/types"
  * fallback para deudas legacy sin tipoDeuda bien clasificado.
  */
 export function isCreditCard(debt: Pick<Debt, "tipoDeuda" | "nombre">): boolean {
-  return debt.tipoDeuda === "TARJETA_CREDITO" || looksLikeCreditCardName(debt.nombre)
+  return debt.tipoDeuda === "TARJETA_CREDITO" || debt.tipoDeuda === "CREDITO_COMPRAS" || looksLikeCreditCardName(debt.nombre)
+}
+
+/**
+ * Tarjetas y créditos de compras con los que se puede pagar: TODAS las que no
+ * estén saldadas, incluidas las que están en $0. Antes se filtraba por
+ * estado "activa" y una tarjeta pagada por completo desaparecía de aquí.
+ */
+export function lineasDeCredito<T extends Pick<Debt, "tipoDeuda" | "nombre" | "estado">>(debts: T[]): T[] {
+  return debts.filter(d => d.estado !== "saldada" && isCreditCard(d))
+}
+
+/** Uso del cupo si se le carga `monto` (para avisar ANTES de confirmar; solo aviso, no bloquea). */
+export function usoCupoTras(debt: Pick<Debt, "cupoTotal" | "saldoRestante">, monto: number): { pct: number; disponible: number } | null {
+  if (!debt.cupoTotal || debt.cupoTotal <= 0) return null
+  const ocupado = debt.saldoRestante + monto
+  return { pct: Math.round((ocupado / debt.cupoTotal) * 100), disponible: Math.round(debt.cupoTotal - ocupado) }
 }
 
 /**

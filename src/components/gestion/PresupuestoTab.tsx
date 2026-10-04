@@ -36,7 +36,8 @@ import { tr, localeFecha } from "@/lib/i18n"
 import { toast } from "@/hooks/use-toast"
 
 // --- Types ---
-interface BudgetCategory { id: string; name: string; budget: number; spent: number; color: string; icon: string; linkedFixedIds?: string[] }
+type FrecuenciaCat = "mensual" | "quincenal"
+interface BudgetCategory { id: string; name: string; budget: number; spent: number; color: string; icon: string; linkedFixedIds?: string[]; frecuencia: FrecuenciaCat }
 
 // --- Icons (todos Lucide, sin emojis) ---
 const ICONS = [
@@ -73,8 +74,8 @@ function filterSuggestions(input: string) {
 // Mapeo entre la forma del backend (nombre/icono/montoLimite/linkedFixedExpenseIds)
 // y la forma local que ya usaba este archivo (name/icon/budget/linkedFixedIds) —
 // se mantiene la forma local para no reescribir todo el componente de una vez.
-function fromApi(c: { id: string; nombre: string; icono: string; color: string; montoLimite: number; linkedFixedExpenseIds: string[] }): BudgetCategory {
-  return { id: c.id, name: c.nombre, budget: c.montoLimite, spent: 0, icon: c.icono, color: c.color, linkedFixedIds: c.linkedFixedExpenseIds }
+function fromApi(c: { id: string; nombre: string; icono: string; color: string; montoLimite: number; frecuenciaLimite?: FrecuenciaCat; linkedFixedExpenseIds: string[] }): BudgetCategory {
+  return { id: c.id, name: c.nombre, budget: c.montoLimite, spent: 0, icon: c.icono, color: c.color, linkedFixedIds: c.linkedFixedExpenseIds, frecuencia: c.frecuenciaLimite === "quincenal" ? "quincenal" : "mensual" }
 }
 
 // Mapear categoría de presupuesto a ImpulseCategory del backend
@@ -134,7 +135,7 @@ export function PresupuestoTab() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showSugg, setShowSugg] = useState(false)
-  const [form, setForm] = useState({ name: "", budget: "", icon: "more", color: COLORS[0] })
+  const [form, setForm] = useState<{ name: string; budget: string; icon: string; color: string; frecuencia: FrecuenciaCat }>({ name: "", budget: "", icon: "more", color: COLORS[0], frecuencia: "mensual" })
   const [linkedFixed, setLinkedFixed] = useState<string[]>([])
 
   // Gasto por categoría: lo calcula el backend (GET /budget-categories/resumen)
@@ -143,14 +144,15 @@ export function PresupuestoTab() {
   // adivinaba aquí por etiquetas "[Cat]" en el nombre y palabras clave, con
   // reglas distintas a las del "Consejo Kiri" y Balance — cada pantalla podía
   // mostrar un monto diferente para la misma categoría.
-  // `budget` = límite del PERIODO (proporcional si es quincenal); el límite
-  // mensual que define el usuario queda en `budgetMensual`.
+  // Cada categoría trae el gasto del rango que le corresponde: su mes de pago
+  // si el límite es mensual, o la quincena actual si es quincenal. El límite
+  // se usa tal cual lo puso el usuario (ya no se divide por quincena).
   const catsWithSpent = categories.map(cat => {
     const r = resumen?.categorias.find(x => x.id === cat.id)
     return {
       ...cat,
-      budgetMensual: cat.budget,
       budget: r?.limite ?? cat.budget,
+      periodo: r?.periodo,
       spent: r?.gastado ?? 0,
       estado: r?.estado ?? 'ok',
       proyeccion: r?.proyeccion ?? 0,
@@ -161,7 +163,8 @@ export function PresupuestoTab() {
     }
   })
   const sinCategoria = resumen?.sinCategoria ?? { gastado: 0, cantidad: 0, gastos: [] }
-  const esLimiteProporcional = catsWithSpent.some(c => c.budget !== c.budgetMensual)
+  const hayQuincenales = catsWithSpent.some(c => c.frecuencia === "quincenal")
+  const hayMensuales = catsWithSpent.some(c => c.frecuencia === "mensual")
 
   const totalBudget = catsWithSpent.reduce((a, c) => a + c.budget, 0)
   const totalSpent = catsWithSpent.reduce((a, c) => a + c.spent, 0)
@@ -215,15 +218,15 @@ export function PresupuestoTab() {
   const hormigaIsOver = totalHormiga > realFreeAmount * 0.5
 
   const [savingCategory, setSavingCategory] = useState(false)
-  const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length] }); setLinkedFixed([]); setShowSugg(false); setFormOpen(true) }
+  const openAdd = () => { setEditingId(null); setForm({ name: "", budget: "", icon: "more", color: COLORS[categories.length % COLORS.length], frecuencia: "mensual" }); setLinkedFixed([]); setShowSugg(false); setFormOpen(true) }
   const openEdit = (cat: BudgetCategory) => {
     const orig = categories.find(c => c.id === cat.id) ?? cat
-    setEditingId(orig.id); setForm({ name: orig.name, budget: String(orig.budget), icon: orig.icon, color: orig.color }); setLinkedFixed(orig.linkedFixedIds ?? []); setFormOpen(true)
+    setEditingId(orig.id); setForm({ name: orig.name, budget: String(orig.budget), icon: orig.icon, color: orig.color, frecuencia: orig.frecuencia }); setLinkedFixed(orig.linkedFixedIds ?? []); setFormOpen(true)
   }
   const handleSave = async () => {
     if (!form.name.trim() || !form.budget) return
     setSavingCategory(true)
-    const payload = { nombre: form.name.trim(), montoLimite: Number(form.budget), icono: form.icon, color: form.color, linkedFixedExpenseIds: linkedFixed }
+    const payload = { nombre: form.name.trim(), montoLimite: Number(form.budget), frecuenciaLimite: form.frecuencia, icono: form.icon, color: form.color, linkedFixedExpenseIds: linkedFixed }
     const { error } = editingId ? await budgetCategoriesApi.update(editingId, payload) : await budgetCategoriesApi.create(payload)
     setSavingCategory(false)
     // Antes el error se ignoraba: el formulario se cerraba y la categoría no existía
@@ -388,7 +391,7 @@ export function PresupuestoTab() {
         <div>
           <h1 className="text-lg font-black">{tr("Presupuestos y hábitos de gasto")}</h1>
           <p className="text-[10px] text-muted-foreground">{tr("Controla tus límites, entiende tus hábitos y encuentra oportunidades para ahorrar.")}</p>
-          <p className="text-[9px] font-bold text-kiri-emerald mt-0.5">{tr("{0} · el gasto por categoría se reinicia cada periodo", [getPeriodLabel(incomeFrequency, diasCobro)])}</p>
+          <p className="text-[9px] font-bold text-kiri-emerald mt-0.5">{tr("{0} · cada categoría cuenta su mes o su quincena, según la elegiste", [getPeriodLabel(incomeFrequency, diasCobro)])}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={openAdd} size="sm" className="bg-kiri-emerald text-white font-bold rounded-xl text-xs gap-1">
@@ -404,7 +407,7 @@ export function PresupuestoTab() {
       {/* 4 metricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <AnimatedStatCard label={tr("Disponible para gastar")} value={realFreeAmount} sub={tr("Tu bolsillo de gasto libre")} formatAmount={formatAmount} />
-        <MC label={tr("Total presupuestado")} value={formatAmount(totalBudget)} sub={esLimiteProporcional ? tr("Proporcional a este periodo (mes: {0})", [formatAmount(catsWithSpent.reduce((a, c) => a + c.budgetMensual, 0))]) : tr("Límites asignados a categorías")} />
+        <MC label={tr("Total presupuestado")} value={formatAmount(totalBudget)} sub={hayQuincenales && hayMensuales ? tr("Límites del mes y de la quincena") : hayQuincenales ? tr("Límites de esta quincena") : tr("Límites asignados a categorías")} />
         <MC label={tr("Total gastado")} value={formatAmount(totalSpent)} sub={tr("{0}% del presupuestado", [totalPct])} color={totalSpent > totalBudget ? "text-red-500" : "text-amber-500"} />
         <MC label={tr("Disponible restante")} value={formatAmount(Math.max(0, realFreeAmount - totalSpent))} sub={tr("{0}% sin gastar", [realFreeAmount > 0 ? Math.round((Math.max(0, realFreeAmount - totalSpent) / realFreeAmount) * 100) : 0])} />
       </div>
@@ -413,7 +416,7 @@ export function PresupuestoTab() {
       <BudgetRadialChart
         categories={catsWithSpent.map(c => ({
           id: c.id, name: c.name, spent: c.spent, limit: c.budget,
-          color: c.color, icon: c.icon,
+          color: c.color, icon: c.icon, frecuencia: c.frecuencia, periodo: c.periodo,
           items: c.breakdownItems.reduce((acc: { emoji: string; name: string; amount: number }[], e: any) => {
             const cleanName = nombreBaseGasto(e.nombre)
             const existing = acc.find(a => a.name === cleanName)
@@ -449,7 +452,7 @@ export function PresupuestoTab() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold truncate">{cat.name}</p>
-                        <p className="text-[9px] text-muted-foreground">{tr("{0}% del total", [totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0])}</p>
+                        <p className="text-[9px] text-muted-foreground">{cat.frecuencia === "quincenal" ? tr("Por quincena") : tr("Mensual")} · {tr("{0}% del total", [totalBudget > 0 ? Math.round((cat.budget / totalBudget) * 100) : 0])}</p>
                       </div>
                       <span className="text-xs font-bold shrink-0">{formatAmount(cat.budget)}</span>
                       <span className={cn("text-xs font-bold shrink-0", over && "text-red-500")}>{formatAmount(cat.spent)}</span>
@@ -786,7 +789,29 @@ export function PresupuestoTab() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">{tr("Presupuesto mensual")}</Label>
+              <Label className="text-xs font-bold">{tr("¿Cómo manejas este límite?")}</Label>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup">
+                {([
+                  { v: "mensual" as const, t: tr("Mensual"), d: tr("Para todo el mes") },
+                  { v: "quincenal" as const, t: tr("Quincenal"), d: tr("Se reinicia cada quincena") },
+                ]).map(o => (
+                  <button key={o.v} type="button" role="radio" aria-checked={form.frecuencia === o.v}
+                    onClick={() => setForm(f => ({ ...f, frecuencia: o.v }))}
+                    className={cn("rounded-xl border px-3 py-2 text-left transition-colors",
+                      form.frecuencia === o.v ? "border-kiri-emerald bg-kiri-emerald/10 text-kiri-emerald" : "border-border hover:bg-muted/40")}>
+                    <span className="block text-xs font-bold">{o.t}</span>
+                    <span className="block text-[9px] text-muted-foreground">{o.d}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[9px] text-muted-foreground leading-relaxed">
+                {form.frecuencia === "quincenal"
+                  ? tr("El monto es para cada quincena: lo que gastes se compara solo con la quincena actual.")
+                  : tr("El monto es para todo el mes: no se divide por quincenas, se suma todo lo que gastes en el mes.")}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">{form.frecuencia === "quincenal" ? tr("Presupuesto por quincena") : tr("Presupuesto mensual")}</Label>
               <MoneyInput value={form.budget} onChange={v => setForm(f => ({ ...f, budget: v }))} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
               {/* Sugerencia inteligente de Kiri */}
               {realFreeAmount > 0 && !editingId && (

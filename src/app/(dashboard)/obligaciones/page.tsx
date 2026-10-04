@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import {
   Plus, CheckCircle2, Pencil, Trash2, ReceiptText,
   AlertTriangle, Eye, EyeOff, Wallet as WalletIcon, PiggyBank, CircleDollarSign, Users,
-  ChevronDown, ChevronUp, PartyPopper,
+  ChevronDown, ChevronUp, PartyPopper, CreditCard,
 } from "lucide-react"
 import { Debt, FixedExpense, PagosPeriodo, CuotaAtrasada } from "@/lib/types"
 import {
@@ -19,7 +19,7 @@ import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { getNextPaymentInfo, formatPeriodo } from "@/lib/payment-schedule"
-import { useFinanceData } from "@/hooks/use-finance-data"
+import { useFinanceData, avisarCupo } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
 import { useBudgetCategories, useCategoriaSugerida } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
@@ -36,7 +36,8 @@ import { DueQuestion, DueQuestionKind, useDueQuestion } from "@/components/oblig
 import { esGastoHormiga } from "@/lib/hormiga"
 import type { UndoAlcance } from "@/lib/api-client"
 import { getObligationIcon, calculateDebtStrategy } from "@/lib/obligation-icons"
-import { isCreditCard } from "@/lib/debt-utils"
+import { lineasDeCredito, usoCupoTras } from "@/lib/debt-utils"
+import { TarjetaOpcion } from "@/components/obligaciones/TarjetaOpcion"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import { CelebrationModal } from "@/components/ui/celebration-modal"
 import Link from "next/link"
@@ -65,6 +66,10 @@ interface DebtForm {
   budgetCategoryId?: string | null
   yaPagoEstePeriodo?: boolean
   nuevaProximoPeriodo?: boolean
+  /** Tipo (reclasificable al editar) y, en tarjetas / créditos de compras, su cupo */
+  tipoDeuda?: Debt["tipoDeuda"]
+  cupoTotal?: string
+  tasaInteres?: string
 }
 interface FixedForm { nombre: string; monto: string; frecuencia: "mensual" | "quincenal"; diasPago: string; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; tarjetaVinculadaId?: string | null; budgetCategoryId?: string | null }
 
@@ -82,8 +87,10 @@ export default function ObligacionesPage() {
     addDebt, updateDebt, deleteDebt,
     addFixedExpense, updateFixedExpense, deleteFixedExpense,
     markPaid, undoPayDebt, marcarAtrasoPagado, markFixedPaid, undoPayFixed, marcarAtrasoFijoPagado,
-    extraIncomes, addImpulseExpense,
+    extraIncomes, addImpulseExpense, refetch,
   } = useFinanceData()
+  // "Actualizar saldo" de una tarjeta o crédito (lo que dice el banco)
+  const [saldoTarget, setSaldoTarget] = useState<Debt | null>(null)
   const { formatAmount, income, incomeFrequency } = useAppContext()
   const { user: authUser } = useAuth()
   const { toast } = useToast()
@@ -110,6 +117,15 @@ export default function ObligacionesPage() {
         icon: "🎉",
         title: tr("¡Terminaste de pagar \"{0}\"!", [result.nombre]),
         subtitle: tr("Una deuda menos, un paso más cerca de tu libertad financiera."),
+      })
+    } else if (result?.enCeros) {
+      // Una tarjeta o crédito de compras no "se termina": queda en ceros y su cupo libre
+      setCelebration({
+        icon: "💳",
+        title: tr("¡{0} quedó en ceros!", [result.nombre]),
+        subtitle: result.cupoDisponible != null
+          ? tr("Tu cupo de {0} quedó libre. La tarjeta sigue disponible para tus compras.", [formatAmount(result.cupoDisponible)])
+          : tr("No le debes nada. Sigue disponible para tus compras."),
       })
     }
     return result
@@ -690,12 +706,19 @@ export default function ObligacionesPage() {
   // ── Handlers Edit Debt ────────────────────────────────────────────────────
   const openEditDebt = (debt: Debt) => {
     setEditDebt(debt)
+    const esLineaD = debt.esLineaCredito ?? debt.tipoDeuda !== 'PRESTAMO'
     setEditDebtForm({
       nombre: debt.nombre,
       montoTotal: String(debt.montoTotal),
       saldoRestante: String(debt.saldoRestante),
-      cuotaPeriodo: String(debt.cuotaPeriodo),
-      diasPago: debt.diasPago ?? '1',
+      // En una tarjeta, cuotaPeriodo es la cuota exigible de este mes (con compras
+      // a cuotas, o tope en lo que se debe): se edita la cuota habitual
+      cuotaPeriodo: String(esLineaD ? (debt.cuotaBase ?? debt.cuotaPeriodo) : debt.cuotaPeriodo),
+      // Tarjeta sin día ("31") = fin de mes: se muestra vacío
+      diasPago: esLineaD && debt.diasPago === '31' ? '' : (debt.diasPago ?? '1'),
+      tipoDeuda: debt.tipoDeuda,
+      cupoTotal: debt.cupoTotal != null ? String(debt.cupoTotal) : "",
+      tasaInteres: debt.tasaInteres != null ? String(debt.tasaInteres) : "",
       diaCorte: "",
       frecuencia: (debt.frecuenciaPago as "mensual" | "quincenal") || "mensual",
       tipoPago: "unica",
@@ -710,7 +733,9 @@ export default function ObligacionesPage() {
   const handleEditDebtSubmit = () => {
     if (!editDebt) return
     const cuotaNew = Number(editDebtForm.cuotaPeriodo)
-    if (cuotaNew !== editDebt.cuotaPeriodo) {
+    const esLineaForm = editDebtForm.tipoDeuda !== 'PRESTAMO'
+    const cuotaActual = esLineaForm ? (editDebt.cuotaBase ?? editDebt.cuotaPeriodo) : editDebt.cuotaPeriodo
+    if (cuotaNew !== cuotaActual) {
       setIsScopeOpen(true)
     } else {
       applyDebtEdit("permanente")
@@ -722,15 +747,32 @@ export default function ObligacionesPage() {
     setSavingEdit(true)
     const newMontoTotal = Number(editDebtForm.montoTotal)
     const newSaldoRestante = Number(editDebtForm.saldoRestante)
-    const patch: Record<string, unknown> = {
-      nombre: editDebtForm.nombre,
-      montoTotal: newMontoTotal,
-      saldoRestante: newSaldoRestante || newMontoTotal,
-      diasPago: editDebtForm.diasPago,
-      frecuenciaPago: editDebtForm.frecuencia,
-      budgetCategoryId: editDebtForm.budgetCategoryId ?? null,
-      ...dueAnswerPatch(editDebtDueQ, editDebtForm),
-    }
+    const esLineaForm = editDebtForm.tipoDeuda !== 'PRESTAMO'
+    const tasa = Number((editDebtForm.tasaInteres ?? "").replace(",", "."))
+    const patch: Record<string, unknown> = esLineaForm
+      ? {
+          // Tarjeta / crédito de compras: cupo, ocupado y día opcional (vacío = fin de mes)
+          nombre: editDebtForm.nombre,
+          tipoDeuda: editDebtForm.tipoDeuda,
+          cupoTotal: Number(editDebtForm.cupoTotal) > 0 ? Number(editDebtForm.cupoTotal) : null,
+          saldoRestante: newSaldoRestante,
+          diasPago: editDebtForm.diasPago || '31',
+          frecuenciaPago: 'mensual',
+          tasaInteres: tasa > 0 ? tasa : null,
+          budgetCategoryId: editDebtForm.budgetCategoryId ?? null,
+          ...dueAnswerPatch(editDebtDueQ, editDebtForm),
+        }
+      : {
+          nombre: editDebtForm.nombre,
+          tipoDeuda: 'PRESTAMO',
+          montoTotal: newMontoTotal,
+          saldoRestante: newSaldoRestante || newMontoTotal,
+          diasPago: editDebtForm.diasPago,
+          frecuenciaPago: editDebtForm.frecuencia,
+          tasaInteres: tasa > 0 ? tasa : null,
+          budgetCategoryId: editDebtForm.budgetCategoryId ?? null,
+          ...dueAnswerPatch(editDebtDueQ, editDebtForm),
+        }
     // "Solo este mes": la cuota del periodo actual cambia y la siguiente vuelve
     // sola a la normal (antes esta opción no enviaba nada y el cambio se perdía).
     if (scope === "permanente") patch.cuotaPeriodo = Number(editDebtForm.cuotaPeriodo)
@@ -973,6 +1015,7 @@ export default function ObligacionesPage() {
               <Plus className="h-4 w-4" />{" "}{tr("Agregar deuda (tarjeta, crédito, etc.)")}</button>
           ) : (
             <>
+              <TusCupos debts={debts} formatAmount={formatAmount} />
               {(() => {
                 // Calcular estrategia de deuda para resaltar la prioritaria
                 const debtStrategy = calculateDebtStrategy(debts)
@@ -1002,6 +1045,7 @@ export default function ObligacionesPage() {
                       await updateDebt(debt.id, { pagoAutomatico: !debt.pagoAutomatico })
                     }}
                     strategyBadge={debtStrategy?.priorityDebtId === debt.id ? debtStrategy.priorityLabel : null}
+                    onActualizarSaldo={() => setSaldoTarget(debt)}
                   />
                 ))
               })()}
@@ -1104,7 +1148,7 @@ export default function ObligacionesPage() {
 
             {/* Opción: Pagar con tarjeta de crédito */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && d.id !== payDebt?.id && isCreditCard(d))
+              const tarjetas = lineasDeCredito(debts).filter(d => d.id !== payDebt?.id)
               if (tarjetas.length === 0) return null
               return (
                 <>
@@ -1117,22 +1161,14 @@ export default function ObligacionesPage() {
                   {showDebtTCOptions && (
                     <div className="space-y-3 pl-2">
                       {tarjetas.map(tc => (
-                        <button
+                        <TarjetaOpcion
                           key={tc.id}
-                          onClick={() => setSelectedDebtTC(tc.id === selectedDebtTC ? null : tc.id)}
-                          className={cn(
-                            "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
-                            selectedDebtTC === tc.id
-                              ? "border-amber-500 bg-amber-500/10"
-                              : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
-                          )}
-                        >
-                          <div>
-                            <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0} · Cuota: {1}", [formatAmount(tc.saldoRestante), formatAmount(tc.cuotaPeriodo)])}</p>
-                          </div>
-                          <span className="text-[10px] font-bold text-amber-500">{selectedDebtTC === tc.id ? "✓" : tr("Seleccionar")}</span>
-                        </button>
+                          tc={tc}
+                          selected={selectedDebtTC === tc.id}
+                          onSelect={() => setSelectedDebtTC(tc.id === selectedDebtTC ? null : tc.id)}
+                          formatAmount={formatAmount}
+                          monto={Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0))}
+                        />
                       ))}
                       {selectedDebtTC && (
                         <div className="space-y-3 pt-2 border-t border-border/50">
@@ -1153,15 +1189,20 @@ export default function ObligacionesPage() {
                               if (!payDebt || !selectedDebtTC) return
                               const monto = Math.max(0, payDebt.cuotaPeriodo - (payDebt.montoPagadoEstePeriodo ?? 0))
                               const cuotas = Number(debtTcCuotas) || 1
-                              await debtsApi.payWithCard({
+                              const { data, error } = await debtsApi.payWithCard({
                                 tarjetaId: selectedDebtTC,
                                 monto,
                                 cuotas,
                                 sourceType: 'debt',
                                 sourceId: payDebt.id,
                               })
+                              if (error) { toast({ title: tr("No se pudo registrar el pago con tarjeta"), description: error, variant: "destructive" }); return }
+                              const nombreTC = debts.find(d => d.id === selectedDebtTC)?.nombre ?? ''
                               setPayDebt(null); setShowDebtTCOptions(false); setSelectedDebtTC(null); setDebtTcCuotas("1")
-                              window.location.reload()
+                              // Sin recargar la página: se traen los datos nuevos y la billetera se entera sola
+                              await refetch()
+                              window.dispatchEvent(new Event("kiri:wallet-updated"))
+                              if (data?.avisoCupo) avisarCupo(data.avisoCupo, nombreTC)
                             }}
                             className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
                           >{tr("Confirmar pago con TC")}</Button>
@@ -1237,8 +1278,9 @@ export default function ObligacionesPage() {
 
             {/* Opción 2: Pagar con tarjeta de crédito */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+              const tarjetas = lineasDeCredito(debts)
               if (tarjetas.length === 0) return null
+              const montoFijoTC = Math.max(0, (payFixed?.frecuencia === "quincenal" ? Math.round((payFixed?.monto ?? 0) / 2) : (payFixed?.monto ?? 0)) - ((payFixed as any)?.montoPagadoEstePeriodo ?? 0))
               return (
                 <>
                   <Button
@@ -1250,22 +1292,14 @@ export default function ObligacionesPage() {
                   {showTCOptions && (
                     <div className="space-y-3 pl-2">
                       {tarjetas.map(tc => (
-                        <button
+                        <TarjetaOpcion
                           key={tc.id}
-                          onClick={() => setSelectedTC(tc.id === selectedTC ? null : tc.id)}
-                          className={cn(
-                            "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
-                            selectedTC === tc.id
-                              ? "border-amber-500 bg-amber-500/10"
-                              : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
-                          )}
-                        >
-                          <div>
-                            <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0} · Cuota: {1}", [formatAmount(tc.saldoRestante), formatAmount(tc.cuotaPeriodo)])}</p>
-                          </div>
-                          <span className="text-[10px] font-bold text-amber-500">{selectedTC === tc.id ? "✓" : tr("Seleccionar")}</span>
-                        </button>
+                          tc={tc}
+                          selected={selectedTC === tc.id}
+                          onSelect={() => setSelectedTC(tc.id === selectedTC ? null : tc.id)}
+                          formatAmount={formatAmount}
+                          monto={montoFijoTC}
+                        />
                       ))}
                       {selectedTC && (
                         <div className="space-y-3 pt-2 border-t border-border/50">
@@ -1294,15 +1328,19 @@ export default function ObligacionesPage() {
                               const montoPorPeriodo = payFixed.frecuencia === "quincenal" ? Math.round(payFixed.monto / 2) : payFixed.monto
                               const monto = Math.max(0, montoPorPeriodo - ((payFixed as any).montoPagadoEstePeriodo ?? 0))
                               const cuotas = Number(tcCuotas) || 1
-                              await debtsApi.payWithCard({
+                              const { data, error } = await debtsApi.payWithCard({
                                 tarjetaId: selectedTC,
                                 monto,
                                 cuotas,
                                 sourceType: 'fixed',
                                 sourceId: payFixed.id,
                               })
+                              if (error) { toast({ title: tr("No se pudo registrar el pago con tarjeta"), description: error, variant: "destructive" }); return }
+                              const nombreTC = debts.find(d => d.id === selectedTC)?.nombre ?? ''
                               setPayFixed(null); setShowTCOptions(false); setSelectedTC(null); setTcCuotas("1")
-                              window.location.reload()
+                              await refetch()
+                              window.dispatchEvent(new Event("kiri:wallet-updated"))
+                              if (data?.avisoCupo) avisarCupo(data.avisoCupo, nombreTC)
                             }}
                             className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
                           >{tr("Confirmar pago con TC")}</Button>
@@ -1401,29 +1439,19 @@ export default function ObligacionesPage() {
               <WalletIcon className="h-4 w-4" />{" "}{tr("Con tu disponible")}</Button>
 
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+              const tarjetas = lineasDeCredito(debts)
               if (tarjetas.length === 0) return null
               return (
                 <div className="space-y-2">
                   <p className="text-[10px] font-bold text-muted-foreground px-1 uppercase tracking-wide">{tr("O con una tarjeta de crédito")}</p>
                   {tarjetas.map(tc => (
-                    <button
+                    <TarjetaOpcion
                       key={tc.id}
-                      type="button"
-                      onClick={() => setAutoPaySelectedTC(tc.id === autoPaySelectedTC ? null : tc.id)}
-                      className={cn(
-                        "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
-                        autoPaySelectedTC === tc.id
-                          ? "border-amber-500 bg-amber-500/10"
-                          : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
-                      )}
-                    >
-                      <div>
-                        <p className="text-xs font-bold">{tc.nombre}</p>
-                        <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0}", [formatAmount(tc.saldoRestante)])}</p>
-                      </div>
-                      <span className="text-[10px] font-bold text-amber-500">{autoPaySelectedTC === tc.id ? "✓" : tr("Seleccionar")}</span>
-                    </button>
+                      tc={tc}
+                      selected={autoPaySelectedTC === tc.id}
+                      onSelect={() => setAutoPaySelectedTC(tc.id === autoPaySelectedTC ? null : tc.id)}
+                      formatAmount={formatAmount}
+                    />
                   ))}
                   {autoPaySelectedTC && (
                     <Button
@@ -1500,14 +1528,16 @@ export default function ObligacionesPage() {
                 validación del backend (montoPagadoEstePeriodo no es un campo
                 editable ahí) y siempre fallaba con 400. */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+              const tarjetas = lineasDeCredito(debts)
               if (tarjetas.length === 0) return null
               const montoTarget = insufficientTarget?.monto ?? 0
               return (
                 <div className="space-y-2">
                   <p className="text-[9px] font-bold text-muted-foreground uppercase pl-1">{tr("Pagar con tarjeta de crédito")}</p>
                   {tarjetas.map(tc => {
-                    const tasaMensual = tc.tasaInteres ? Number(tc.tasaInteres) : 1.85
+                    // La tasa real que Kiri aprendió de los pagos (si la hay), si no la registrada
+                    const tasaMensual = tc.tasaInteresAplicada ? Number(tc.tasaInteresAplicada) : tc.tasaInteres ? Number(tc.tasaInteres) : 1.85
+                    const trasCupo = usoCupoTras(tc, montoTarget)
                     const interesMes = Math.round(montoTarget * (tasaMensual / 100))
                     const selected = insufficientSelectedTC === tc.id
                     return (
@@ -1524,6 +1554,13 @@ export default function ObligacionesPage() {
                           <div className="pl-6 text-[9px] text-amber-500 space-y-0.5">
                             <p>{tr("Interés mensual estimado: +{0} ({1}%)", [formatAmount(interesMes), tasaMensual])}</p>
                             <p>{tr("Nuevo saldo tarjeta: {0}", [formatAmount(tc.saldoRestante + montoTarget)])}</p>
+                            {trasCupo && (
+                              <p className={cn("font-bold", trasCupo.disponible < 0 && "text-red-500")}>
+                                {trasCupo.disponible < 0
+                                  ? tr("Te pasarías del cupo por {0}", [formatAmount(-trasCupo.disponible)])
+                                  : tr("Te quedarían {0} de cupo ({1}% usado)", [formatAmount(trasCupo.disponible), trasCupo.pct])}
+                              </p>
+                            )}
                           </div>
                         </button>
                         {selected && (
@@ -1545,7 +1582,7 @@ export default function ObligacionesPage() {
                               onClick={async () => {
                                 if (!insufficientTarget) return
                                 setPayingInsufficientTC(true)
-                                const { error } = await debtsApi.payWithCard({
+                                const { data, error } = await debtsApi.payWithCard({
                                   tarjetaId: tc.id,
                                   monto: montoTarget,
                                   cuotas: Number(insufficientTcCuotas) || 1,
@@ -1559,7 +1596,10 @@ export default function ObligacionesPage() {
                                 }
                                 setInsufficientOpen(false); setInsufficientTarget(null)
                                 setInsufficientSelectedTC(null); setInsufficientTcCuotas("1")
-                                window.location.reload()
+                                await refetch()
+                                setPayingInsufficientTC(false)
+                                window.dispatchEvent(new Event("kiri:wallet-updated"))
+                                if (data?.avisoCupo) avisarCupo(data.avisoCupo, tc.nombre)
                               }}
                               className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 rounded-xl"
                             >
@@ -1665,6 +1705,8 @@ export default function ObligacionesPage() {
         </DialogContent>
       </Dialog>
 
+      <ActualizarSaldoDialog debt={saldoTarget} onClose={() => setSaldoTarget(null)} formatAmount={formatAmount} onDone={refetch} />
+
       {/* Add Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
@@ -1678,10 +1720,11 @@ export default function ObligacionesPage() {
                 loading={saving}
                 onSubmit={async (data) => {
                   setSaving(true)
-                  await addDebt({
+                  const creada = await addDebt({
                     nombre: data.nombre,
                     montoTotal: data.montoTotal,
                     cuotaPeriodo: data.cuotaPeriodo,
+                    cupoTotal: data.cupoTotal,
                     diasPago: data.diasPago,
                     frecuenciaPago: data.frecuenciaPago,
                     tasaInteres: data.tasaInteres || undefined,
@@ -1694,7 +1737,8 @@ export default function ObligacionesPage() {
                     budgetCategoryId: data.budgetCategoryId,
                   })
                   setSaving(false)
-                  setIsAddOpen(false)
+                  // Si falló, el formulario queda abierto con lo escrito (el error ya se avisó)
+                  if (creada) setIsAddOpen(false)
                 }}
               />
             ) : (
@@ -1921,7 +1965,7 @@ export default function ObligacionesPage() {
             {/* Pagar con tarjeta de crédito: es un consumo más, con la misma
                 lógica de tarjeta+cuotas que pagar una deuda/gasto fijo con TC. */}
             {(() => {
-              const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+              const tarjetas = lineasDeCredito(debts)
               if (tarjetas.length === 0) return null
               return (
                 <div className="space-y-1.5">
@@ -1935,23 +1979,14 @@ export default function ObligacionesPage() {
                   {expShowTCOptions && (
                     <div className="space-y-3 pl-2 pt-1">
                       {tarjetas.map(tc => (
-                        <button
+                        <TarjetaOpcion
                           key={tc.id}
-                          type="button"
-                          onClick={() => setExpSelectedTC(tc.id === expSelectedTC ? null : tc.id)}
-                          className={cn(
-                            "w-full flex items-center justify-between p-3 rounded-xl border transition-colors text-left",
-                            expSelectedTC === tc.id
-                              ? "border-amber-500 bg-amber-500/10"
-                              : "border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
-                          )}
-                        >
-                          <div>
-                            <p className="text-xs font-bold">{tc.nombre}</p>
-                            <p className="text-[9px] text-muted-foreground">{tr("Saldo: {0} · Cuota: {1}", [formatAmount(tc.saldoRestante), formatAmount(tc.cuotaPeriodo)])}</p>
-                          </div>
-                          <span className="text-[10px] font-bold text-amber-500">{expSelectedTC === tc.id ? "✓" : tr("Seleccionar")}</span>
-                        </button>
+                          tc={tc}
+                          selected={expSelectedTC === tc.id}
+                          onSelect={() => setExpSelectedTC(tc.id === expSelectedTC ? null : tc.id)}
+                          formatAmount={formatAmount}
+                          monto={Number(expMonto) || 0}
+                        />
                       ))}
                       {expSelectedTC && (
                         <div className="space-y-1.5 pt-2 border-t border-border/50">
@@ -2033,7 +2068,7 @@ export default function ObligacionesPage() {
 
 
 // ─── DebtCard ──────────────────────────────────────────────────────────────────
-function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar, onUndoAdelanto, onPagarAtraso, onMarcarAtraso, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay, strategyBadge }: {
+function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar, onUndoAdelanto, onPagarAtraso, onMarcarAtraso, onEdit, onDelete, hidden, onToggleHidden, isPeriodPriority, onToggleAutoPay, strategyBadge, onActualizarSaldo }: {
   debt: Debt; formatAmount: (n: number) => string
   onPay: () => void; onUndoPay: () => void; onAbonar: () => void; onEdit: () => void; onDelete: () => void
   onAdelantar: () => void; onUndoAdelanto: () => void
@@ -2041,8 +2076,11 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
   hidden: boolean; onToggleHidden: () => void; isPeriodPriority?: boolean
   onToggleAutoPay?: () => void
   strategyBadge?: string | null
+  /** "Mi banco dice que debo $X" (tarjetas y créditos de compras) */
+  onActualizarSaldo: () => void
 }) {
   const [showStrategyInfo, setShowStrategyInfo] = useState(false)
+  const esLinea = debt.esLineaCredito ?? debt.tipoDeuda !== 'PRESTAMO'
   const cuotasRestantes = debt.cuotaPeriodo > 0 ? Math.ceil(debt.saldoRestante / debt.cuotaPeriodo) : 0
   // Clamp a [0, 100] — en una tarjeta de crédito el saldo puede SUBIR por
   // encima de `montoTotal` (el monto con el que se creó) al hacer nuevas
@@ -2106,6 +2144,9 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
                 {(() => {
                   const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
                   const isPartial = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
+                  if (esLinea && debt.saldoRestante <= 0) {
+                    return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{tr("En ceros ✓")}</span>
+                  }
                   if (isPartial) {
                     return <span className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{tr("Pago parcial")}</span>
                   }
@@ -2161,8 +2202,13 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
           </div>
         )}
 
+        {/* Tarjeta o crédito de compras: cupo, ocupado, disponible e intereses */}
+        {esLinea && !hidden && (
+          <LineaCreditoResumen debt={debt} formatAmount={formatAmount} onAgregarCupo={onEdit} onActualizarSaldo={onActualizarSaldo} />
+        )}
+
         {/* Montos */}
-        {!hidden ? (
+        {esLinea ? null : !hidden ? (
           <div className="flex items-end justify-between">
             <div>
               <p className="text-[10px] text-muted-foreground">{tr("Saldo restante")}</p>
@@ -2189,8 +2235,8 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
           <p className="text-xl font-black text-muted-foreground">••••••</p>
         )}
 
-        {/* Barra de progreso + cuotas restantes */}
-        {!hidden && (
+        {/* Barra de progreso + cuotas restantes (un cupo no tiene "cuotas restantes") */}
+        {!hidden && !esLinea && (
           <div className="space-y-1.5">
             <Progress value={progreso} className="h-1.5" indicatorClassName="bg-cyclon-periwinkle" />
             <div className="flex justify-between items-center">
@@ -2206,6 +2252,8 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
           const montoPagadoPeriodo = debt.montoPagadoEstePeriodo ?? 0
           const isPartiallyPaid = montoPagadoPeriodo > 0 && !debt.pagadoEstePeriodo
 
+          // Tarjeta en ceros: no hay nada que pagar este mes
+          if (esLinea && debt.saldoRestante <= 0 && montoPagadoPeriodo === 0) return null
           if (debt.pagadoEstePeriodo) {
             return (
               <div className="space-y-2">
@@ -2240,6 +2288,193 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
         })()}
       </CardContent>
     </Card>
+  )
+}
+
+// ─── TusCupos — todas las tarjetas y créditos de compras juntos ──────────────
+function TusCupos({ debts, formatAmount }: { debts: Debt[]; formatAmount: (n: number) => string }) {
+  const lineas = lineasDeCredito(debts)
+  const conCupo = lineas.filter(d => d.cupoTotal != null && d.cupoTotal > 0)
+  if (lineas.length === 0) return null
+  const cupo = conCupo.reduce((s, d) => s + (d.cupoTotal ?? 0), 0)
+  const ocupado = conCupo.reduce((s, d) => s + d.saldoRestante, 0)
+  const disponible = cupo - ocupado
+  const uso = cupo > 0 ? Math.round((ocupado / cupo) * 100) : 0
+  const sinCupo = lineas.length - conCupo.length
+  return (
+    <Card className="border-none shadow-sm rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+      <CardContent className="p-4 space-y-3 bg-gradient-to-br from-amber-500/10 via-transparent to-kiri-emerald/10">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-amber-600" />{tr("Tus cupos")}</p>
+          <span className="text-[10px] text-muted-foreground">{tr("{0} tarjetas y créditos", [lineas.length])}</span>
+        </div>
+        {cupo > 0 ? (
+          <>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div><p className="text-[9px] text-muted-foreground">{tr("Cupo total")}</p><p className="text-sm font-black">{formatAmount(cupo)}</p></div>
+              <div><p className="text-[9px] text-muted-foreground">{tr("Ocupado")}</p><p className="text-sm font-black text-amber-600">{formatAmount(ocupado)}</p></div>
+              <div><p className="text-[9px] text-muted-foreground">{tr("Disponible")}</p><p className={cn("text-sm font-black", disponible < 0 ? "text-red-500" : "text-kiri-emerald")}>{formatAmount(disponible)}</p></div>
+            </div>
+            <div className="h-2 rounded-full bg-muted/50 overflow-hidden flex">
+              {conCupo.map((d, i) => (
+                <div key={d.id} title={d.nombre} className="h-full transition-all duration-700"
+                  style={{ width: `${Math.min(100, (d.saldoRestante / cupo) * 100)}%`, backgroundColor: ["#f59e0b", "#8b5cf6", "#ef4444", "#3b82f6", "#ec4899", "#14b8a6"][i % 6] }} />
+              ))}
+            </div>
+            <p className={cn("text-[10px]", uso >= 80 ? "text-red-500 font-bold" : uso >= 30 ? "text-amber-600" : "text-muted-foreground")}>
+              {uso >= 80 ? tr("Usas el {0}% de tus cupos: es mucho, intenta no cargar más compras.", [uso])
+                : uso >= 30 ? tr("Usas el {0}% de tus cupos. Lo ideal es estar por debajo del 30%.", [uso])
+                : tr("Usas el {0}% de tus cupos. ¡Vas muy bien!", [uso])}
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">{tr("Agrega el cupo de tus tarjetas (lápiz de cada una) para ver cuánto te queda disponible.")}</p>
+        )}
+        {sinCupo > 0 && cupo > 0 && (
+          <p className="text-[9px] text-muted-foreground">{tr("{0} sin cupo registrado (no se suman aquí).", [sinCupo])}</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── LineaCreditoResumen — cupo de una tarjeta o crédito de compras ──────────
+// Ocupado, disponible, % de uso y los intereses que Kiri detectó con el saldo
+// del banco. Una tarjeta no tiene "cuotas restantes" ni "% pagado": tiene cupo.
+function LineaCreditoResumen({ debt, formatAmount, onAgregarCupo, onActualizarSaldo }: {
+  debt: Debt; formatAmount: (n: number) => string; onAgregarCupo: () => void; onActualizarSaldo: () => void
+}) {
+  const uso = debt.cupoUsoPct ?? null
+  const color = uso == null ? "bg-amber-500" : uso >= 100 ? "bg-red-500" : uso >= 80 ? "bg-amber-500" : uso >= 30 ? "bg-amber-400" : "bg-kiri-emerald"
+  const tasa = debt.tasaInteresAplicada ?? debt.tasaInteres ?? null
+  return (
+    <div className="space-y-2">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] text-muted-foreground">{tr("Ocupado")}</p>
+          <p className="text-xl font-black">{formatAmount(debt.saldoRestante)}</p>
+        </div>
+        {debt.cupoDisponible != null ? (
+          <div className="text-right">
+            <p className="text-[10px] text-muted-foreground">{tr("Disponible")}</p>
+            <p className={cn("text-lg font-black", debt.cupoDisponible < 0 ? "text-red-500" : "text-kiri-emerald")}>{formatAmount(debt.cupoDisponible)}</p>
+            <p className="text-[9px] text-muted-foreground">{tr("de {0} de cupo", [formatAmount(debt.cupoTotal ?? 0)])}</p>
+          </div>
+        ) : (
+          <button onClick={onAgregarCupo} className="text-[10px] font-bold text-amber-600 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1.5 rounded-lg transition-colors text-right">
+            {tr("+ Agrega el cupo para ver cuánto te queda")}
+          </button>
+        )}
+      </div>
+      {debt.cupoTotal != null && debt.cupoTotal > 0 && (
+        <div className="space-y-1">
+          <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+            <div className={cn("h-full rounded-full transition-all duration-700 ease-out", color)} style={{ width: `${Math.min(100, uso ?? 0)}%` }} />
+          </div>
+          <div className="flex justify-between items-center text-[10px]">
+            <span className={cn("font-medium", (uso ?? 0) >= 100 ? "text-red-500" : (uso ?? 0) >= 80 ? "text-amber-600" : "text-muted-foreground")}>
+              {(uso ?? 0) >= 100 ? tr("Por encima del cupo") : tr("Usas el {0}% del cupo", [uso ?? 0])}
+            </span>
+            {debt.saldoRestante > 0 && <span className="text-muted-foreground">{tr("Cuota del mes: {0}", [formatAmount(debt.cuotaPeriodo)])}</span>}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 rounded-xl bg-muted/20 px-3 py-2">
+        <div className="text-[10px] leading-tight min-w-0">
+          {debt.ultimoInteres ? (
+            <>
+              <p className="font-bold text-red-500">{tr("Intereses y cargos detectados: {0}", [formatAmount(debt.ultimoInteres.monto)])}</p>
+              <p className="text-muted-foreground">{tasa ? tr("Tu tasa real: {0}% mensual", [Number(tasa).toLocaleString("es-CO", { maximumFractionDigits: 2 })]) : tr("Con el saldo de tu banco")}</p>
+            </>
+          ) : (
+            <p className="text-muted-foreground">{tasa ? tr("Tasa: {0}% mensual", [Number(tasa).toLocaleString("es-CO", { maximumFractionDigits: 2 })]) : tr("Kiri detecta los intereses cuando le dices cuánto dice tu banco que debes.")}</p>
+          )}
+        </div>
+        <button onClick={onActualizarSaldo} className="shrink-0 text-[10px] font-bold text-cyclon-periwinkle bg-cyclon-periwinkle/10 hover:bg-cyclon-periwinkle/20 px-2.5 py-1.5 rounded-lg transition-colors active:scale-95">
+          {tr("Actualizar saldo")}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── ActualizarSaldoDialog — "mi banco dice que debo $X" ─────────────────────
+// Kiri compara con su saldo y registra la diferencia: intereses y cargos,
+// compras que no se registraron, o una corrección si el banco dice menos.
+function ActualizarSaldoDialog({ debt, onClose, formatAmount, onDone }: {
+  debt: Debt | null; onClose: () => void; formatAmount: (n: number) => string; onDone: () => Promise<void> | void
+}) {
+  const { toast } = useToast()
+  const [valor, setValor] = useState("")
+  const [motivo, setMotivo] = useState<"interes" | "compras">("interes")
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { setValor(""); setMotivo("interes") }, [debt?.id])
+  if (!debt) return null
+  const banco = valor ? Number(valor) : null
+  const diferencia = banco != null ? Math.round(banco - debt.saldoRestante) : 0
+  const esLinea = debt.esLineaCredito ?? debt.tipoDeuda !== "PRESTAMO"
+  // Más de 8% del saldo de un mes a otro rara vez son solo intereses
+  const grande = diferencia > 0 && debt.saldoRestante > 0 && diferencia / debt.saldoRestante > 0.08
+
+  const guardar = async () => {
+    if (banco == null) return
+    setSaving(true)
+    const { data, error } = await debtsApi.ajustarSaldo(debt.id, banco, esLinea ? motivo : "interes")
+    setSaving(false)
+    if (error || !data) { toast({ title: tr("No se pudo actualizar el saldo"), description: error ?? undefined, variant: "destructive" }); return }
+    const a = data.ajuste
+    toast({
+      title: !a ? tr("Tu saldo ya cuadraba con el banco") : a.tipo === "interes" ? tr("Intereses y cargos: {0}", [formatAmount(a.monto)]) : a.tipo === "compras" ? tr("Compras sin registrar: {0}", [formatAmount(a.monto)]) : tr("Saldo corregido ({0})", [formatAmount(a.monto)]),
+      description: a?.tasaObservadaMensual != null ? tr("Tu tasa real quedó en {0}% mensual.", [a.tasaObservadaMensual.toLocaleString("es-CO", { maximumFractionDigits: 2 })]) : tr("Saldo actualizado a {0}, igual que en tu banco.", [formatAmount(banco)]),
+    })
+    await onDone()
+    onClose()
+  }
+
+  return (
+    <Dialog open={!!debt} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{tr("Actualizar saldo de {0}", [debt.nombre])}</DialogTitle>
+          <DialogDescription>{tr("Escribe cuánto dice tu banco que debes hoy. Kiri tiene {0}.", [formatAmount(debt.saldoRestante)])}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <MoneyInput value={valor} onChange={setValor} className="h-12 text-xl font-bold rounded-xl" placeholder={String(Math.round(debt.saldoRestante))} autoFocus />
+          {banco != null && Math.abs(diferencia) >= 1 && (
+            <div className="rounded-2xl bg-muted/30 p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <p className="text-xs">
+                {diferencia > 0
+                  ? tr("Debes {0} más de lo que Kiri tenía.", [formatAmount(diferencia)])
+                  : tr("Debes {0} menos: Kiri corrige el saldo.", [formatAmount(-diferencia)])}
+              </p>
+              {diferencia > 0 && esLinea && (
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { v: "interes" as const, t: tr("Intereses y cargos"), d: tr("Cuota de manejo, seguros…") },
+                    { v: "compras" as const, t: tr("Compras que no registré"), d: tr("Se agregan como gasto") },
+                  ]).map(o => (
+                    <button key={o.v} type="button" onClick={() => setMotivo(o.v)}
+                      className={cn("rounded-xl border px-3 py-2 text-left transition-colors", motivo === o.v ? "border-kiri-emerald bg-kiri-emerald/10" : "border-border hover:bg-muted/40")}>
+                      <span className="block text-[11px] font-bold">{o.t}</span>
+                      <span className="block text-[9px] text-muted-foreground">{o.d}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {grande && motivo === "interes" && esLinea && (
+                <p className="text-[10px] text-amber-600 font-medium">{tr("Es bastante para ser solo intereses: ¿no habrá compras que no registraste?")}</p>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={onClose}>{tr("Cancelar")}</Button>
+          <Button onClick={guardar} disabled={banco == null || saving} className="bg-kiri-emerald text-white font-bold rounded-xl">
+            {saving ? tr("Guardando...") : tr("Actualizar")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -2480,6 +2715,60 @@ function DebtFormFields({
 }) {
   const set = (patch: Partial<DebtForm>) => onChange({ ...form, ...patch })
   const { formatAmount } = useAppContext()
+  const esLineaForm = !!form.tipoDeuda && form.tipoDeuda !== "PRESTAMO"
+
+  if (esLineaForm) {
+    const cupo = Number(form.cupoTotal) || 0
+    const ocupado = Number(form.saldoRestante) || 0
+    const uso = cupo > 0 ? Math.round((ocupado / cupo) * 100) : 0
+    return (
+      <div className="space-y-4">
+        <TipoDeudaSelector value={form.tipoDeuda!} onChange={t => set({ tipoDeuda: t })} />
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold">{tr("Nombre")}</Label>
+          <Input value={form.nombre} onChange={e => set({ nombre: e.target.value })} className="h-11 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">{tr("Cupo total")}</Label>
+            <MoneyInput value={form.cupoTotal ?? ""} onChange={v => set({ cupoTotal: v })} className="h-11 rounded-xl" placeholder="0" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">{tr("Ocupado hoy")}</Label>
+            <MoneyInput value={form.saldoRestante} onChange={v => set({ saldoRestante: v })} className="h-11 rounded-xl" placeholder="0" />
+          </div>
+        </div>
+        {cupo > 0 && (
+          <div className="rounded-xl bg-muted/30 p-2.5 space-y-1.5">
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className={cn("h-full rounded-full transition-all duration-500", uso >= 100 ? "bg-red-500" : uso >= 80 ? "bg-amber-500" : "bg-kiri-emerald")} style={{ width: `${Math.min(100, uso)}%` }} />
+            </div>
+            <p className="text-[10px] text-muted-foreground">{tr("Disponible {0} · usas el {1}%", [formatAmount(cupo - ocupado), uso])}</p>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">{tr("Pago mensual")}</Label>
+            <MoneyInput value={form.cuotaPeriodo} onChange={v => set({ cuotaPeriodo: v })} className="h-11 rounded-xl" placeholder="0" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">{tr("Tasa mensual (%)")}</Label>
+            <Input inputMode="decimal" value={form.tasaInteres ?? ""} onChange={e => set({ tasaInteres: e.target.value.replace(/[^\d.,]/g, "") })} className="h-11 rounded-xl" placeholder={tr("Opcional")} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold">{tr("Recordarme pagar el día")}</Label>
+          <Input type="number" min={1} max={31} value={form.diasPago} onChange={e => set({ diasPago: e.target.value })} className="h-11 rounded-xl w-28 text-center font-bold" placeholder={tr("Fin de mes")} />
+          <p className="text-[9px] text-muted-foreground">{tr("Opcional. Vacío = fin de mes.")}</p>
+        </div>
+        {dueQuestion && (
+          <DueQuestion kind={dueQuestion} isEdit={isEdit} yaPago={!!form.yaPagoEstePeriodo} nueva={!!form.nuevaProximoPeriodo}
+            onChange={v => set({ yaPagoEstePeriodo: v.yaPago, nuevaProximoPeriodo: v.nueva })} />
+        )}
+        <BudgetCategorySelector value={form.budgetCategoryId} onChange={v => set({ budgetCategoryId: v })} />
+      </div>
+    )
+  }
 
   // Cálculo reactivo: cuotas restantes
   const cuotasEstimadas = (() => {
@@ -2491,6 +2780,7 @@ function DebtFormFields({
 
   return (
     <div className="space-y-4">
+      {isEdit && form.tipoDeuda && <TipoDeudaSelector value={form.tipoDeuda} onChange={t => set({ tipoDeuda: t })} />}
       {/* Nombre de la deuda — este campo es `nombre`, no `acreedor` (esta
           pantalla no expone ese campo por separado); estaba mal etiquetado
           como "Acreedor", lo que hacía parecer que el nombre real de la
@@ -2515,10 +2805,18 @@ function DebtFormFields({
         </div>
       )}
 
-      {/* Cuota por periodo */}
-      <div className="space-y-1.5">
-        <Label className="text-xs font-bold">{tr("Cuota por periodo")}</Label>
-        <MoneyInput value={form.cuotaPeriodo} onChange={v => set({ cuotaPeriodo: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+      {/* Cuota por periodo + tasa */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-bold">{tr("Cuota por periodo")}</Label>
+          <MoneyInput value={form.cuotaPeriodo} onChange={v => set({ cuotaPeriodo: v })} className="h-12 text-xl font-bold rounded-xl" placeholder="0" />
+        </div>
+        {isEdit && (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold">{tr("Tasa mensual (%)")}</Label>
+            <Input inputMode="decimal" value={form.tasaInteres ?? ""} onChange={e => set({ tasaInteres: e.target.value.replace(/[^\d.,]/g, "") })} className="h-12 rounded-xl" placeholder={tr("Opcional")} />
+          </div>
+        )}
       </div>
 
       {/* Frecuencia de pago */}
@@ -2597,6 +2895,26 @@ function DebtFormFields({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── TipoDeudaSelector — reclasificar una deuda al editarla ──────────────────
+function TipoDeudaSelector({ value, onChange }: { value: Debt["tipoDeuda"]; onChange: (t: Debt["tipoDeuda"]) => void }) {
+  const opciones: { v: Debt["tipoDeuda"]; t: string; icon: React.ReactNode }[] = [
+    { v: "TARJETA_CREDITO", t: tr("Tarjeta"), icon: <CreditCard className="h-3.5 w-3.5" /> },
+    { v: "CREDITO_COMPRAS", t: tr("Crédito de compras"), icon: <span className="text-[11px]">🛍️</span> },
+    { v: "PRESTAMO", t: tr("Préstamo"), icon: <span className="text-[11px]">🏦</span> },
+  ]
+  return (
+    <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-muted/40">
+      {opciones.map(o => (
+        <button key={o.v} type="button" onClick={() => onChange(o.v)}
+          className={cn("h-9 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-all",
+            value === o.v ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+          {o.icon}{o.t}
+        </button>
+      ))}
     </div>
   )
 }
