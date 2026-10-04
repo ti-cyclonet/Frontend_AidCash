@@ -191,15 +191,29 @@ function AccionCard({ accion: a, destinos, onChange, onRemove, error, compacto }
         )
       )}
 
-      {a.tipo === "crear_deuda" && (
-        <div className="grid grid-cols-3 gap-2">
-          <Campo label={tr("Cuota")}><MoneyInput showCurrency={false} value={a.cuota ? String(a.cuota) : ""} onChange={v => onChange({ cuota: Number(v) || null })} className="h-8 text-xs rounded-lg" placeholder="$0" /></Campo>
-          <Campo label={tr("Día de pago")}><Input inputMode="numeric" value={a.diaPago ?? ""} onChange={e => onChange({ diaPago: Math.min(31, Number(e.target.value.replace(/\D/g, "")) || 0) || null })} className="h-8 text-xs rounded-lg" placeholder="1" /></Campo>
-          <Campo label={tr("Tasa mensual %")}><Input inputMode="decimal" value={a.tasaMensual ?? ""} onChange={e => onChange({ tasaMensual: Number(e.target.value.replace(",", ".")) || null })} className="h-8 text-xs rounded-lg" placeholder={tr("Opcional")} /></Campo>
-          <label className="col-span-3 flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={!!a.esTarjeta} onChange={e => onChange({ esTarjeta: e.target.checked })} className="accent-kiri-emerald" />{tr("Es una tarjeta de crédito · la primera cuota cuenta desde el próximo periodo")}</label>
-        </div>
-      )}
+      {a.tipo === "crear_deuda" && (() => {
+        const tipoD = a.esCreditoCompras ? "compras" : a.esTarjeta ? "tarjeta" : "prestamo"
+        const esLinea = tipoD !== "prestamo"
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-muted/40">
+              {([["tarjeta", tr("Tarjeta")], ["compras", tr("Crédito compras")], ["prestamo", tr("Préstamo")]] as const).map(([v, t]) => (
+                <button key={v} type="button" onClick={() => onChange({ esTarjeta: v === "tarjeta", esCreditoCompras: v === "compras" })}
+                  className={cn("h-7 rounded-md text-[10px] font-bold transition-colors", tipoD === v ? "bg-background shadow-sm text-foreground" : "text-muted-foreground")}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {esLinea && <Campo label={tr("Cupo")}><MoneyInput showCurrency={false} value={a.cupo ? String(a.cupo) : ""} onChange={v => onChange({ cupo: Number(v) || null })} className="h-8 text-xs rounded-lg" placeholder="$0" /></Campo>}
+              <Campo label={esLinea ? tr("Pago mensual") : tr("Cuota")}><MoneyInput showCurrency={false} value={a.cuota ? String(a.cuota) : ""} onChange={v => onChange({ cuota: Number(v) || null })} className="h-8 text-xs rounded-lg" placeholder="$0" /></Campo>
+              <Campo label={esLinea ? tr("Día (opcional)") : tr("Día de pago")}><Input inputMode="numeric" value={a.diaPago ?? ""} onChange={e => onChange({ diaPago: Math.min(31, Number(e.target.value.replace(/\D/g, "")) || 0) || null })} className="h-8 text-xs rounded-lg" placeholder={esLinea ? tr("Fin de mes") : "1"} /></Campo>
+              {!esLinea && <Campo label={tr("Tasa mensual %")}><Input inputMode="decimal" value={a.tasaMensual ?? ""} onChange={e => onChange({ tasaMensual: Number(e.target.value.replace(",", ".")) || null })} className="h-8 text-xs rounded-lg" placeholder={tr("Opcional")} /></Campo>}
+            </div>
+            {esLinea && <p className="text-[10px] text-muted-foreground">{tr("El monto es lo que tienes ocupado hoy (puede ser $0). Tiene cupo y nunca se termina.")}</p>}
+          </div>
+        )
+      })()}
 
       {a.tipo === "crear_gasto_fijo" && (
         <div className="grid grid-cols-2 gap-2">
@@ -213,7 +227,14 @@ function AccionCard({ accion: a, destinos, onChange, onRemove, error, compacto }
       )}
 
       {a.tipo === "crear_categoria" && (
-        <p className="text-[10px] text-muted-foreground">{tr("El monto es el límite mensual de la categoría (0 = sin límite).")}</p>
+        <div className="space-y-1">
+          <Campo label={tr("El límite es")}>
+            <select value={a.frecuencia === "quincenal" ? "quincenal" : "mensual"} onChange={e => onChange({ frecuencia: e.target.value as Accion["frecuencia"] })} className="h-8 w-full text-xs rounded-lg border border-input bg-background px-2">
+              <option value="mensual">{tr("Para todo el mes")}</option><option value="quincenal">{tr("Por quincena")}</option>
+            </select>
+          </Campo>
+          <p className="text-[10px] text-muted-foreground">{tr("El monto es el límite de la categoría (0 = sin límite).")}</p>
+        </div>
       )}
       {a.tipo === "crear_bolsillo" && <p className="text-[10px] text-muted-foreground">{tr("El monto es la meta del bolsillo.")}</p>}
 

@@ -59,6 +59,19 @@ interface BudgetCategory {
   /** % de variación contra el periodo anterior (null si el anterior fue $0). */
   variacionPct?: number | null
   gastadoAnterior?: number
+  /** Rango donde se suma su gasto (su mes o su quincena, según cómo maneja el límite). */
+  periodo?: { inicio: string; fin: string }
+}
+
+const DIA_MS = 86_400_000
+/** Días transcurridos y totales del rango de una categoría; null si no lo trae. */
+export function diasDelRango(periodo?: { inicio: string; fin: string }, now: Date = new Date()): { elapsed: number; total: number } | null {
+  if (!periodo) return null
+  const ini = new Date(periodo.inicio).getTime(), fin = new Date(periodo.fin).getTime()
+  if (!(fin > ini)) return null
+  const total = Math.max(1, Math.round((fin - ini) / DIA_MS))
+  const hoy = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return { total, elapsed: Math.min(total, Math.max(1, Math.floor((hoy - ini) / DIA_MS) + 1)) }
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -96,10 +109,15 @@ export function analyzeBudgetCategories(
   const insights: BudgetInsight[] = []
   const analyses: CategoryAnalysis[] = []
 
-  const { elapsed: daysElapsed, total: daysInPeriod } = getDaysElapsedAndTotal(frequency, diasCobro)
-  const daysLeft = Math.max(1, daysInPeriod - daysElapsed)
+  const { elapsed: daysElapsedPeriodo, total: daysInPeriodo } = getDaysElapsedAndTotal(frequency, diasCobro)
+  const daysElapsed = daysElapsedPeriodo, daysInPeriod = daysInPeriodo
 
   for (const cat of categories) {
+    // Una categoría mensual se proyecta con los días del mes; una quincenal, con los de la quincena
+    const dias = diasDelRango(cat.periodo)
+    const daysElapsed = dias?.elapsed ?? daysElapsedPeriodo
+    const daysInPeriod = dias?.total ?? daysInPeriodo
+    const daysLeft = Math.max(1, daysInPeriod - daysElapsed)
     // El gasto viene calculado por el backend (misma cifra que el gráfico y
     // Balance) — antes este motor volvía a adivinar por palabras clave y el
     // "Consejo Kiri" podía citar un monto distinto al que mostraba la pantalla.
@@ -256,9 +274,10 @@ export function getCategoryInsight(
   spent: number,
   frequency: 'mensual' | 'quincenal',
   diasCobro: string = '',
+  periodo?: { inicio: string; fin: string },
 ): BudgetInsight {
   const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0
-  const { elapsed: daysElapsed, total: daysInPeriod } = getDaysElapsedAndTotal(frequency, diasCobro)
+  const { elapsed: daysElapsed, total: daysInPeriod } = diasDelRango(periodo) ?? getDaysElapsedAndTotal(frequency, diasCobro)
   const daysLeft = Math.max(1, daysInPeriod - daysElapsed)
   const periodPct = Math.round((daysElapsed / daysInPeriod) * 100)
   const dailyAvg = daysElapsed > 0 ? spent / daysElapsed : 0

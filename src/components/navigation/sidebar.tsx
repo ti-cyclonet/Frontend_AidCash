@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
 import { Landmark, Sprout, PiggyBank, TrendingUp, LogOut, ChevronUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users, PanelLeftClose, PanelLeftOpen, Bell } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -206,19 +207,49 @@ export function Sidebar() {
                 <TooltipTrigger asChild>
                   <Link
                     href={item.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex items-center rounded-xl text-sm font-medium transition-all duration-200 relative",
+                      "group flex items-center rounded-xl text-sm font-medium transition-colors duration-200 relative",
                       collapsed ? "justify-center h-11 w-11 mx-auto" : "gap-3 px-4 py-3",
                       isActive
-                        ? "bg-kiri-emerald/10 text-kiri-emerald font-semibold"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "text-kiri-emerald font-semibold"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     )}
                   >
-                    <item.icon className={cn("h-5 w-5 shrink-0", isActive && "text-kiri-emerald")} strokeWidth={isActive ? 2.5 : 2} />
-                    {!collapsed && <span>{item.label}</span>}
+                    {/* Resaltado del módulo activo: se desliza entre opciones */}
+                    {isActive && (
+                      <motion.span
+                        layoutId="sidebar-activo"
+                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                        className="absolute inset-0 rounded-xl bg-kiri-emerald/10 ring-1 ring-kiri-emerald/15"
+                      >
+                        {!collapsed && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-kiri-emerald" />}
+                      </motion.span>
+                    )}
+                    <motion.span
+                      className="relative shrink-0"
+                      whileHover={{ scale: 1.12, rotate: isActive ? 0 : -6 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                    >
+                      <item.icon className={cn("h-5 w-5", isActive && "text-kiri-emerald")} strokeWidth={isActive ? 2.5 : 2} />
+                    </motion.span>
+                    <AnimatePresence initial={false}>
+                      {!collapsed && (
+                        <motion.span
+                          key="label"
+                          className="relative whitespace-nowrap transition-transform duration-200 group-hover:translate-x-0.5"
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -6 }}
+                          transition={{ duration: 0.18 }}
+                        >
+                          {item.label}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                     {showBadge && (
                       <span className={cn(
-                        "h-4 min-w-4 px-1 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white",
+                        "relative h-4 min-w-4 px-1 bg-cyclon-pink rounded-full flex items-center justify-center text-[8px] font-black text-white animate-in zoom-in duration-300",
                         collapsed ? "absolute top-0.5 right-0.5" : "ml-auto"
                       )}>
                         {socialUnreadCount > 9 ? "9+" : socialUnreadCount}

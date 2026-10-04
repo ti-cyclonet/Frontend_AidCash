@@ -3,7 +3,7 @@
 import { CreditCard } from "lucide-react"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useAppContext } from "@/lib/app-context"
-import { isCreditCard } from "@/lib/debt-utils"
+import { lineasDeCredito } from "@/lib/debt-utils"
 import { tr } from "@/lib/i18n"
 
 /**
@@ -26,8 +26,8 @@ export function CreditCardSelector({ value, onChange }: Props) {
   const { debts } = useFinanceData()
   const { formatAmount } = useAppContext()
 
-  // Filtrar solo deudas tipo tarjeta de crédito activas
-  const tarjetas = debts.filter(d => d.estado === 'activa' && isCreditCard(d))
+  // Todas las tarjetas y créditos de compras, también las que están en $0
+  const tarjetas = lineasDeCredito(debts)
 
   if (tarjetas.length === 0) return null
 
@@ -43,7 +43,9 @@ export function CreditCardSelector({ value, onChange }: Props) {
         <option value="">{tr("No, pago directo")}</option>
         {tarjetas.map(t => (
           <option key={t.id} value={t.id}>
-            {t.nombre}{" "}{tr("(Saldo:")}{" "}{formatAmount(t.saldoRestante)})
+            {t.cupoDisponible != null
+              ? tr("{0} · disponible {1}", [t.nombre, formatAmount(t.cupoDisponible)])
+              : tr("{0} · debes {1}", [t.nombre, formatAmount(t.saldoRestante)])}
           </option>
         ))}
       </select>

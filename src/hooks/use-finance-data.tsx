@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
 import {
   debtsApi,
   fixedExpensesApi,
@@ -10,7 +10,7 @@ import {
   userApi,
   UndoAlcance,
 } from "@/lib/api-client"
-import { Debt, FixedExpense, ExtraIncome, ImpulseExpense, ImpulseCategory, IncomeFrequency, PagosPeriodo, CuotaAtrasada } from "@/lib/types"
+import { Debt, FixedExpense, ExtraIncome, ImpulseExpense, ImpulseCategory, IncomeFrequency, PagosPeriodo, CuotaAtrasada, AvisoCupo } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/hooks/use-toast"
 import { tr } from "@/lib/i18n"
@@ -18,6 +18,18 @@ import { tr } from "@/lib/i18n"
 /** Antes varias acciones fallaban en silencio (o quitaban de la pantalla algo que no se borró). */
 const avisarError = (titulo: string, detalle?: string | null) =>
   toast({ title: titulo, description: detalle ?? undefined, variant: "destructive" })
+
+/** Aviso tras usar una tarjeta o crédito de compras: cerca del cupo o por encima (no bloquea nada). */
+export const avisarCupo = (aviso: AvisoCupo, nombre: string) => {
+  const $ = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`
+  toast({
+    title: aviso.nivel === 'excedido' ? tr("Te pasaste del cupo de {0}", [nombre]) : tr("{0} va en el {1}% de su cupo", [nombre, aviso.usoPct]),
+    description: aviso.nivel === 'excedido'
+      ? tr("Por {0}. Si tu banco te subió el cupo, actualízalo en Obligaciones.", [$(-aviso.disponible)])
+      : tr("Te quedan {0} disponibles.", [$(aviso.disponible)]),
+    variant: aviso.nivel === 'excedido' ? 'destructive' : undefined,
+  })
+}
 
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -88,6 +100,12 @@ function mapDebt(row: Record<string, unknown>): Debt {
     proximaCuotaCubierta: Boolean(row.proximaCuotaCubierta),
     atrasos: mapAtrasos(row.atrasos),
     montoAtrasado: Number(row.montoAtrasado ?? 0),
+    esLineaCredito: Boolean(row.esLineaCredito),
+    cupoTotal: row.cupoTotal != null ? Number(row.cupoTotal) : null,
+    cupoDisponible: row.cupoDisponible != null ? Number(row.cupoDisponible) : null,
+    cupoUsoPct: row.cupoUsoPct != null ? Number(row.cupoUsoPct) : null,
+    tasaInteresAplicada: row.tasaInteresAplicada != null ? Number(row.tasaInteresAplicada) : null,
+    ultimoInteres: (row.ultimoInteres as Debt["ultimoInteres"]) ?? null,
   }
 }
 
@@ -169,9 +187,14 @@ function useFinanceDataInternal() {
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState<string | null>(null)
 
+  // Solo la PRIMERA carga muestra "Cargando…". Las siguientes (tras pagar,
+  // comprar con tarjeta, actualizar un saldo…) refrescan en silencio: antes
+  // cada refresco desmontaba las listas, la página parpadeaba y saltaba arriba.
+  const cargadoRef = useRef(false)
+  useEffect(() => { cargadoRef.current = false }, [userId])
   const fetchAll = useCallback(async () => {
     if (!userId) { setLoading(false); return }
-    setLoading(true)
+    if (!cargadoRef.current) setLoading(true)
     setDbError(null)
     try {
       const [debtsRes, fixedRes, savingsRes, extraRes, impulseRes] = await Promise.all([
@@ -192,6 +215,7 @@ function useFinanceDataInternal() {
         if (savingsRes.data?.totalAhorrado != null) setTotalAhorradoServidor(Number(savingsRes.data.totalAhorrado))
         setExtraIncomes((extraRes.data?.extraIncomes ?? []).map(mapExtraIncome))
         setImpulseExpenses((impulseRes.data?.expenses ?? []).map(mapImpulse))
+        cargadoRef.current = true
       }
     } catch (err) {
       setDbError(tr("Error de conexión con el servidor"))
@@ -246,13 +270,14 @@ function useFinanceDataInternal() {
    * que quien llamaba (ej. el onboarding) no tenía forma de saber que la deuda
    * nunca se guardó — revisa el valor de retorno.
    */
-  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: 'PRESTAMO' | 'TARJETA_CREDITO'; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; budgetCategoryId?: string | null }) => {
+  const addDebt = async (data: { nombre: string; montoTotal: number; cuotaPeriodo: number; cupoTotal?: number | null; acreedor?: string; frecuenciaPago?: string; diasPago?: string; tasaInteres?: number; prioridad?: string; saldoRestante?: number; bankEntityId?: string | null; tipoDeuda?: Debt["tipoDeuda"]; yaPagoEstePeriodo?: boolean; nuevaProximoPeriodo?: boolean; budgetCategoryId?: string | null }) => {
     if (!userId) return null
     const { data: result, error } = await debtsApi.create({
       nombre: data.nombre,
       montoTotal: data.montoTotal,
       saldoRestante: data.saldoRestante,
       cuotaPeriodo: data.cuotaPeriodo,
+      cupoTotal: data.cupoTotal,
       acreedor: data.acreedor,
       frecuenciaPago: data.frecuenciaPago as 'mensual' | 'quincenal' | undefined,
       diasPago: data.diasPago,
@@ -264,14 +289,15 @@ function useFinanceDataInternal() {
       nuevaProximoPeriodo: data.nuevaProximoPeriodo,
       budgetCategoryId: data.budgetCategoryId,
     })
-    if (error || !result) return null
+    // Antes el error se tragaba: el formulario se cerraba y la deuda no existía
+    if (error || !result) { avisarError(tr("No se pudo registrar la deuda"), error); return null }
     await fetchAll()
     return result.debt
   }
 
   const updateDebt = async (
     debtId: string,
-    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'saldoRestante' | 'cuotaPeriodo' | 'diasPago' | 'frecuenciaPago' | 'pagoAutomatico' | 'budgetCategoryId'>> & {
+    data: Partial<Pick<Debt, 'nombre' | 'montoTotal' | 'saldoRestante' | 'cuotaPeriodo' | 'diasPago' | 'frecuenciaPago' | 'pagoAutomatico' | 'budgetCategoryId' | 'tipoDeuda' | 'cupoTotal' | 'tasaInteres'>> & {
       /** Respuesta a "¿ya pagaste la cuota de este periodo?" al editar. */
       yaPagoEstePeriodo?: boolean
       nuevaProximoPeriodo?: boolean
@@ -315,6 +341,9 @@ function useFinanceDataInternal() {
     }
     const detalle = {
       liquidada: (data.debt as Record<string, unknown>).estado === 'saldada',
+      /** Tarjeta o crédito de compras que quedó en $0: sigue activa, su cupo queda libre */
+      enCeros: Boolean((data as { enCeros?: boolean }).enCeros),
+      cupoDisponible: ((data.debt as Record<string, unknown>).cupoDisponible ?? null) as number | null,
       nombre: debt.nombre,
       pagoInteres: data.amortizacion?.pagoInteres ?? 0,
       tasaObservadaMensual: data.tasaObservadaMensual ?? null,
@@ -329,20 +358,11 @@ function useFinanceDataInternal() {
     }
 
     // Actualizar estado local DIRECTAMENTE con los datos del backend (fuente de verdad)
+    // El backend devuelve la deuda completa (misma forma que GET /debts: cuota
+    // exigible, cupo, disponible, intereses detectados…).
     const backendDebt = data.debt as Record<string, unknown>
     setDebts(prev => prev.map(d =>
-      d.id === debtId ? {
-        ...d,
-        saldoRestante: Number(backendDebt.saldoRestante ?? d.saldoRestante),
-        // Para una tarjeta, este pago pudo saldar un plan de cuotas y bajar la
-        // cuota efectiva — el backend ya la recalcula, sin esto la tarjeta se
-        // quedaba mostrando la cuota vieja hasta el próximo refetch completo.
-        cuotaPeriodo: backendDebt.cuotaPeriodo != null ? Number(backendDebt.cuotaPeriodo) : d.cuotaPeriodo,
-        pagadoEstePeriodo: (backendDebt.pagadoEstePeriodo ?? false) as boolean,
-        montoPagadoEstePeriodo: backendDebt.montoPagadoEstePeriodo != null ? Number(backendDebt.montoPagadoEstePeriodo) : null,
-        estado: (backendDebt.estado as 'activa' | 'saldada' | 'vencida') ?? d.estado,
-        pagosPeriodo: mapPagosPeriodo(backendDebt.pagosPeriodo) ?? d.pagosPeriodo,
-      } : d
+      d.id === debtId ? { ...mapDebt(backendDebt), nombreParticipanteB: d.nombreParticipanteB } : d
     ))
 
     // NOTA: acá antes vinculábamos la deuda en automático a una categoría
@@ -632,10 +652,14 @@ function useFinanceDataInternal() {
       if (alerta) {
         toast({
           title: alerta.nivel === 'excedido' ? tr("Te pasaste en {0}", [alerta.categoria]) : tr("Vas en el {0}% de {1}", [alerta.porcentaje, alerta.categoria]),
-          description: tr("Llevas ${0} de ${1} este periodo.", [Math.round(alerta.gastado).toLocaleString('es-CO'), Math.round(alerta.limite).toLocaleString('es-CO')]),
+          description: alerta.frecuenciaLimite === 'quincenal'
+            ? tr("Llevas ${0} de ${1} esta quincena.", [Math.round(alerta.gastado).toLocaleString('es-CO'), Math.round(alerta.limite).toLocaleString('es-CO')])
+            : tr("Llevas ${0} de ${1} este mes.", [Math.round(alerta.gastado).toLocaleString('es-CO'), Math.round(alerta.limite).toLocaleString('es-CO')]),
           variant: alerta.nivel === 'excedido' ? 'destructive' : undefined,
         })
       }
+      // Tarjeta o crédito de compras cerca del límite o por encima (solo aviso)
+      if (result.avisoCupo) avisarCupo(result.avisoCupo, data.tarjetaId ? debts.find(d => d.id === data.tarjetaId)?.nombre ?? '' : '')
       return mapped
     }
     return null

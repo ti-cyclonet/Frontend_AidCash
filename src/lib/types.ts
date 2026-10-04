@@ -180,7 +180,8 @@ export type DebtFrequency = 'mensual' | 'quincenal';
 export type FixedExpenseCategory = 'vivienda' | 'servicios' | 'internet' | 'transporte' | 'educacion' | 'salud' | 'suscripciones' | 'otro';
 export type FixedExpenseFrequency = 'mensual' | 'quincenal' | 'semanal' | 'anual';
 
-export type DebtType = 'PRESTAMO' | 'TARJETA_CREDITO';
+/** PRESTAMO se termina; TARJETA_CREDITO y CREDITO_COMPRAS (Addi, Sistecrédito…) son cupos que se reutilizan. */
+export type DebtType = 'PRESTAMO' | 'TARJETA_CREDITO' | 'CREDITO_COMPRAS';
 
 export interface Debt {
   id: string;
@@ -223,6 +224,25 @@ export interface Debt {
   /** Cuotas de periodos ya cerrados que quedaron sin cubrir, de la más antigua a la más reciente. */
   atrasos?: CuotaAtrasada[];
   montoAtrasado?: number;
+  /** Tarjeta o crédito de compras (Addi, Sistecrédito…): cupo que se reutiliza, nunca "se termina". */
+  esLineaCredito?: boolean;
+  /** Cupo total (null si es préstamo o aún no se registró). Ocupado = saldoRestante. */
+  cupoTotal?: number | null;
+  /** cupo − ocupado (negativo si se pasó del cupo). */
+  cupoDisponible?: number | null;
+  cupoUsoPct?: number | null;
+  /** Tasa mensual que Kiri aprendió de los pagos con el saldo del banco. */
+  tasaInteresAplicada?: number | null;
+  /** Último mes con intereses y cargos detectados. */
+  ultimoInteres?: { periodo: string; monto: number } | null;
+}
+
+/** Aviso tras usar una línea de crédito (solo avisa, no bloquea). */
+export interface AvisoCupo {
+  nivel: 'alto' | 'excedido';
+  usoPct: number;
+  disponible: number;
+  mensaje: string;
 }
 
 export interface CuotaAtrasada {
