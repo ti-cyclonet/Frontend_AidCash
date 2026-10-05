@@ -207,6 +207,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         }
         setNotifications(prev => [notif, ...prev].slice(0, 50)) // máx 50
 
+        // Un premio de "Invita y gana" puede cambiar el plan (días o meses
+        // ganados) y siempre cambia el conteo de amigos: refrescar Mi plan
+        if (event === SOCKET_EVENTS.REFERRAL_JOINED || data?.tipo === "referidos") {
+          window.dispatchEvent(new Event("kiri:plan-cambio"))
+        }
+
         // Disparar sonido + notificación nativa del navegador
         import("@/lib/notifications").then(({ handleSocketNotification }) => {
           handleSocketNotification(event, data)

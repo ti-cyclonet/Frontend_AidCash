@@ -203,7 +203,7 @@ const EVENT_MESSAGES: Record<string, (data: Record<string, unknown>) => Notifica
   [SOCKET_EVENTS.REFERRAL_JOINED]: (data) => ({
     title: tr("🎉 {0} se unió a Kiri", [(data.nombre as string) ?? tr("Alguien")]),
     body: (data.message as string) ?? tr("Entró con tu enlace de invitación."),
-    url: '/misiones',
+    url: (data.route as string) ?? '/mi-plan#invita',
     tag: 'referral-joined',
     sound: 'success',
   }),

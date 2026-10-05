@@ -141,7 +141,8 @@ function RegisterContent() {
           <div className="flex items-center gap-3 rounded-2xl border border-kiri-emerald/30 bg-kiri-emerald/5 px-4 py-3">
             <span className="text-xl">💌</span>
             <p className="text-xs">
-              <strong>{invitadoPor.nombre}</strong>{" "}{tr("te invitó a Kiri. Al crear tu cuenta quedarán conectados como")}{" "}<strong>{invitadoPor.rol}</strong>.
+              <strong>{invitadoPor.nombre}</strong>{" "}{tr("te invitó a Kiri. Al crear tu cuenta quedarán conectados como")}{" "}<strong>{invitadoPor.rol}</strong>{". "}
+              <strong className="text-amber-700 dark:text-amber-300">{tr("Tienes 14 días de KIRI PLUS gratis.")}</strong>
             </p>
           </div>
         )}

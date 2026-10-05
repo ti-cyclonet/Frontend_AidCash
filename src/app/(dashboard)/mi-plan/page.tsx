@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { planApi, type FactonetInfo, type PlanDisponible, type UsoPlan } from "@/lib/api-client"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
+import { InvitaYGana } from "@/components/referidos/InvitaYGana"
 import { tr, localeFecha } from "@/lib/i18n"
 
 /**
@@ -107,6 +108,14 @@ export default function MiPlanPage() {
     return () => clearTimeout(t)
   }, [factonet])
 
+  // Desde un aviso de invitados (/mi-plan#invita): llevar a Invita y gana
+  const hayReferidos = !!plan?.referidos?.niveles
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#invita" || !hayReferidos) return
+    const t = setTimeout(() => document.getElementById("invita")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250)
+    return () => clearTimeout(t)
+  }, [hayReferidos])
+
   // Desde un límite o una función bloqueada (/mi-plan#planes): abrir los planes
   useEffect(() => {
     const abrirSiPide = () => { if (window.location.hash === "#planes") setVerPlanes(true) }
@@ -120,8 +129,9 @@ export default function MiPlanPage() {
   }
 
   const tierActual = plan?.tier ?? tierDe(plan?.planName ?? "")
-  // Con días de PLUS ganados por invitar, el plan que se paga sigue siendo
-  // FREE: se puede "quedarse" con PLUS comprándolo.
+  // Con un plan prestado (prueba de invitado o meses ganados invitando), el
+  // plan que se paga es otro (FREE, o el contrato que tenga): se puede
+  // "quedarse" con el prestado comprándolo.
   // (también si Authoriza no respondió: el plan llega "sin_conexion" pero los
   // días ganados viven en Kiri y traen su fecha de fin)
   const esPrestado = plan?.fuente === "prueba" || (plan?.fuente === "sin_conexion" && !!plan.pruebaHasta)
@@ -132,7 +142,7 @@ export default function MiPlanPage() {
   }
   const referidos = plan?.referidos
   const primerMes = plan?.primerMesInvitado
-  const tierPagado = esPrestado ? "FREE" : tierActual
+  const tierPagado = esPrestado ? (plan?.tierContrato ?? "FREE") : tierActual
   const esActual = (p: PlanDisponible) => tierDe(p.displayName || p.name) === tierPagado
   const loEstaProbando = (p: PlanDisponible) => esPrestado && tierDe(p.displayName || p.name) === tierActual
   const tienePlanPago = !!plan?.isBillable || (!esPrestado && tierActual !== "FREE" && plan?.fuente !== "acceso")
@@ -193,15 +203,15 @@ export default function MiPlanPage() {
         </Button>
       </div>
 
-      {/* Días de KIRI PLUS ganados por invitar amigos que se suscribieron */}
+      {/* Plan prestado: prueba por llegar invitado o meses ganados invitando */}
       {diasPrueba !== null && (
         <div className="rounded-2xl border border-kiri-emerald/30 bg-kiri-emerald/5 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="h-11 w-11 rounded-xl bg-kiri-emerald/10 text-kiri-emerald flex items-center justify-center shrink-0"><Gift className="h-5 w-5" /></div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-sm">
-              {diasPrueba <= 1 ? tr("Tus días de KIRI PLUS terminan hoy") : tr("Tienes KIRI PLUS por invitar amigos: te quedan {0} días", [diasPrueba])}
+              {diasPrueba <= 1 ? tr("Tus días gratis de {0} terminan hoy", [plan?.planName]) : tr("Tienes {0} gratis: te quedan {1} días", [plan?.planName, diasPrueba])}
             </p>
-            <p className="text-xs text-muted-foreground">{tr("Al terminar vuelves a KIRI FREE sin perder nada de lo que registraste.")}</p>
+            <p className="text-xs text-muted-foreground">{tr("Por llegar invitado o por invitar amigos. Al terminar vuelves a {0} sin perder nada de lo que registraste.", [plan?.tierContrato ? `KIRI ${plan.tierContrato}` : tr("KIRI FREE")])}</p>
           </div>
         </div>
       )}
@@ -312,7 +322,7 @@ export default function MiPlanPage() {
                   {(actual || probando || p.badge) && (
                     <span className={cn("absolute -top-3 left-5 text-[10px] font-black px-2.5 py-1 rounded-full",
                       actual || probando ? "bg-kiri-emerald text-white" : "bg-amber-400 text-amber-950")}>
-                      {actual ? tr("Tu plan actual") : probando ? tr("Por invitar amigos") : p.badge}
+                      {actual ? tr("Tu plan actual") : probando ? tr("Lo tienes gratis") : p.badge}
                     </span>
                   )}
                   <div>
@@ -357,43 +367,8 @@ export default function MiPlanPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Invita y gana: el amigo tiene descuento en su primer mes y tú días de PLUS */}
-      {referidos && (
-        <section className="rounded-2xl border-2 border-amber-400/40 bg-gradient-to-br from-amber-400/10 via-card to-kiri-emerald/5 p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Gift className="h-5 w-5 text-amber-600" />
-            <h2 className="text-lg font-bold">{tr("Invita y gana")}</h2>
-          </div>
-          <ul className="grid gap-2 sm:grid-cols-2 text-sm">
-            <li className="rounded-xl bg-card border border-border p-3">
-              <p className="font-bold">{tr("Tu amigo")}</p>
-              <p className="text-xs text-muted-foreground">{tr("Llega con tu enlace y tiene {0}% en su primer mes de KIRI PLUS o {1}% en KIRI PRO (pagando mensual).", [referidos.descuentoAmigo.PLUS, referidos.descuentoAmigo.PRO])}</p>
-            </li>
-            <li className="rounded-xl bg-card border border-border p-3">
-              <p className="font-bold">{tr("Tú")}</p>
-              <p className="text-xs text-muted-foreground">{tr("Ganas {0} días de KIRI PLUS cuando se suscribe y paga su primera factura, hasta {1} amigos.", [referidos.diasPorReferido, referidos.maximo])}</p>
-            </li>
-          </ul>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold">
-              <span>{tr("Amigos suscritos")}</span>
-              <span className="tabular-nums">{Math.min(referidos.suscritos, referidos.maximo)} / {referidos.maximo}</span>
-            </div>
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(100, (referidos.suscritos / referidos.maximo) * 100)}%` }} />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              {referidos.suscritos >= referidos.maximo
-                ? tr("¡Ganaste tus {0} días de KIRI PLUS por invitar! Gracias por recomendarnos.", [referidos.maximo * referidos.diasPorReferido])
-                : tr("Llevas {0} días ganados de {1} posibles.", [Math.min(referidos.suscritos, referidos.maximo) * referidos.diasPorReferido, referidos.maximo * referidos.diasPorReferido])}
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button asChild size="sm" className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"><Link href="/social">{tr("Invitar amigos")}</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href="/misiones">{tr("Ver misiones")}</Link></Button>
-          </div>
-        </section>
-      )}
+      {/* Invita y gana: premios cuando tu amigo usa Kiri y cuando se suscribe, niveles sin tope */}
+      {referidos?.niveles && <InvitaYGana referidos={referidos} />}
 
       {/* Acceso a FactoNet */}
       <section id="factonet" ref={factonetRef}
@@ -455,7 +430,8 @@ export default function MiPlanPage() {
               return (
                 <li key={v} className="space-y-1.5">
                   <div className="flex items-center justify-between text-sm gap-2">
-                    <span className="truncate">{nombre}{mensual && <span className="text-[10px] text-muted-foreground">{" "}{tr("· al mes")}</span>}</span>
+                    <span className="truncate">{nombre}{mensual && <span className="text-[10px] text-muted-foreground">{" "}{tr("· al mes")}</span>}
+                      {(x.extra ?? 0) > 0 && <span className="text-[10px] font-bold text-amber-600">{" "}{tr("(+{0} por invitar)", [x.extra])}</span>}</span>
                     <span className={cn("font-bold tabular-nums shrink-0 flex items-center gap-1", lleno && "text-amber-600")}>
                       {x.currentCount} / {x.ilimitado ? <InfinityIcon className="h-4 w-4" aria-label={tr("sin límite")} /> : x.maxValue}
                     </span>

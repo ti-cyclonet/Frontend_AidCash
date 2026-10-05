@@ -71,3 +71,49 @@ export function tocarTrueno(intensidad = 1) {
     // Audio no disponible — la tormenta sigue siendo visual
   }
 }
+
+// ─── Sonidos del minijuego del árbol ─────────────────────────────────────────
+// Tonos cortos sintetizados: notas que suben (se siente como "ganar"), sin archivos.
+
+function notas(frecuencias: number[], { paso = 0.07, dur = 0.16, tipo = "sine" as OscillatorType, volumen = 0.18 } = {}) {
+  const ac = contexto()
+  if (!ac || ac.state !== "running") return
+  try {
+    const t0 = ac.currentTime
+    frecuencias.forEach((f, i) => {
+      const t = t0 + i * paso
+      const osc = ac.createOscillator()
+      const g = ac.createGain()
+      osc.type = tipo
+      osc.frequency.setValueAtTime(f, t)
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(volumen, t + 0.012)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      osc.connect(g).connect(ac.destination)
+      osc.start(t)
+      osc.stop(t + dur + 0.02)
+    })
+  } catch {
+    // sin audio: el juego sigue siendo visual
+  }
+}
+
+/** Cosechar un fruto ("pop" + campanita; el dorado suena más brillante). */
+export function tocarCosecha(dorado = false) {
+  notas(dorado ? [880, 1175, 1568, 2093] : [660, 990], { paso: 0.06, dur: dorado ? 0.22 : 0.14, tipo: "triangle" })
+}
+
+/** Toque del árbol: más agudo mientras más largo el combo. */
+export function tocarToque(combo: number) {
+  notas([330 + Math.min(combo, 12) * 45], { dur: 0.08, tipo: "sine", volumen: 0.1 })
+}
+
+/** Premio de la sacudida o subir de nivel: arpegio de fanfarria. */
+export function tocarPremio() {
+  notas([523, 659, 784, 1047, 1319], { paso: 0.08, dur: 0.28, tipo: "triangle", volumen: 0.2 })
+}
+
+/** Riego: gotitas. */
+export function tocarRiego() {
+  notas([1400, 1100, 1250, 950], { paso: 0.09, dur: 0.09, tipo: "sine", volumen: 0.08 })
+}

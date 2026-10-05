@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Sprout } from "lucide-react"
 import { LegalDocumentView } from "@/components/legal/LegalDocumentView"
+import { BotonVolver } from "@/components/legal/BotonVolver"
 import { KIRI_HABEAS_DATA, KIRI_TERMS, legalDocument } from "@/lib/legal/kiri-legal"
 
 /** Páginas públicas: /legal/terminos y /legal/datos (se pueden abrir sin sesión). */
@@ -27,11 +28,13 @@ export default async function LegalPage({ params }: { params: Promise<{ doc: str
             <Sprout className="h-5 w-5 text-kiri-cream" strokeWidth={1.5} />
           </div>
           <span className="font-bold text-white">Kiri Finance</span>
+          <BotonVolver className="ml-auto text-kiri-cream hover:bg-white/10" />
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-6 py-8">
         <LegalDocumentView doc={doc} />
-        <nav className="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-t pt-6 text-sm">
+        <BotonVolver className="mt-8 bg-kiri-emerald text-white hover:bg-kiri-emerald/90" />
+        <nav className="mt-6 flex flex-wrap gap-x-6 gap-y-2 border-t pt-6 text-sm">
           <Link href={`/legal/${otro.key}`} className="font-bold text-kiri-emerald hover:underline">{otro.title}</Link>
           <Link href="/register" className="text-muted-foreground hover:underline">Crear cuenta</Link>
           <Link href="/login" className="text-muted-foreground hover:underline">Iniciar sesión</Link>

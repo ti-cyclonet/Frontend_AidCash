@@ -119,6 +119,31 @@ export const BADGES: BadgeDefinition[] = [
     minStreak: 0,
     pro: true,
   },
+  // ── Invita y gana (las entrega el backend: lib/referidos.ts) ──
+  {
+    id: 'ref_primer_brote',
+    nombre: tr("Primer brote"),
+    getDescripcion: () => tr("Tu primer amigo ya usa Kiri con tu enlace."),
+    icono: '🌱',
+    getCondicion: () => tr("1 amigo invitado que use Kiri"),
+    minStreak: 0,
+  },
+  {
+    id: 'ref_jardinero_social',
+    nombre: tr("Jardinero social"),
+    getDescripcion: () => tr("5 amigos usan Kiri gracias a ti."),
+    icono: '🌳',
+    getCondicion: () => tr("5 amigos invitados que usen Kiri"),
+    minStreak: 0,
+  },
+  {
+    id: 'ref_embajador',
+    nombre: tr("Embajador Kiri"),
+    getDescripcion: () => tr("10 amigos usan Kiri gracias a ti."),
+    icono: '👑',
+    getCondicion: () => tr("10 amigos invitados que usen Kiri (2 con plan)"),
+    minStreak: 0,
+  },
 ]
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -130,6 +155,8 @@ export interface StreakData {
   badgesDesbloqueados: string[]
   xpFromMissions: number
   xpFromWatering: number
+  /** XP del minijuego del árbol (frutos, sacudida, riego) */
+  xpFromJardin: number
   loading: boolean
 }
 
@@ -144,6 +171,7 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
     badgesDesbloqueados: [],
     xpFromMissions: 0,
     xpFromWatering: 0,
+    xpFromJardin: 0,
     loading: true,
   })
 
@@ -163,6 +191,7 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
           badgesDesbloqueados: (result.badges ?? []).map((b: Record<string, unknown>) => b.badgeId as string),
           xpFromMissions: result.xpFromMissions ?? 0,
           xpFromWatering: result.xpFromWatering ?? 0,
+          xpFromJardin: result.xpFromJardin ?? 0,
           loading: false,
         })
       } else {
