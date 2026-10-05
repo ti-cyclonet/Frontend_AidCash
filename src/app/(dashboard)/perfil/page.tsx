@@ -26,7 +26,8 @@ import { prepararFotoPerfil, resizeImageToDataUrl } from "@/lib/avatar-upload"
 import { activarNotificaciones, enviarPrueba, estadoPush, registrarDispositivo, type EstadoPush } from "@/lib/push-client"
 import { tr } from "@/lib/i18n"
 
-const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/"
+// Directo a la sección de preguntas frecuentes de Kiri en la landing
+const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/#faq"
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -40,7 +41,7 @@ export default function PerfilPage() {
     ? Math.max(0, Math.ceil((new Date(plan.pruebaHasta).getTime() - Date.now()) / 86_400_000))
     : null
   const detallePlan = diasPrueba !== null
-    ? tr("Días ganados por invitar · {0}", [diasPrueba <= 1 ? tr("terminan hoy") : tr("te quedan {0} días", [diasPrueba])])
+    ? tr("Días gratis · {0}", [diasPrueba <= 1 ? tr("terminan hoy") : tr("te quedan {0} días", [diasPrueba])])
     : tier === "PRO" ? tr("Todo sin límite, hogar y conexión con tu banco")
       : tier === "PLUS" ? tr("Más espacio, PDF, préstamos y más IA")
       : tr("Plan gratis · mira lo que desbloqueas")
@@ -359,7 +360,7 @@ export default function PerfilPage() {
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </a>
-            <a href="/legal/terminos" target="_blank" rel="noopener" className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
+            <a href="/legal/terminos" className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left">
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-kiri-forest/15 flex items-center justify-center text-kiri-forest dark:text-kiri-cream">
                   <ShieldCheck className="h-4 w-4" />

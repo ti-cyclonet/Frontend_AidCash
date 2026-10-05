@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect, useRef } from "react"
+import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import type { PointerEvent as ReactPointerEvent } from "react"
 import { motion, useAnimationControls } from "framer-motion"
 import { useRouter } from "next/navigation"
@@ -15,7 +15,14 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { InviteLinkModal } from "@/components/social/InviteLinkPanel"
 import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
-import { tocarTrueno, prepararAudio } from "@/lib/thunder-sound"
+import { tocarTrueno, prepararAudio, tocarToque, tocarPremio } from "@/lib/thunder-sound"
+import { usePlan } from "@/lib/plan-context"
+import {
+  useJardinJuego, useCombo, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin,
+  TOQUES_PARA_SACUDIR, ID_BARRA_XP,
+} from "@/components/jardin/juego"
+import { InvitaWidget } from "@/components/referidos/InvitaYGana"
+import { celebrarLogro } from "@/components/referidos/CompartirLogro"
 import {
   GARDEN_EVENT_RAIN, GARDEN_EVENT_STORM, GARDEN_EVENT_INCOME,
   consumirLluviaPendiente, consumirTormentaPendiente, consumirIngresoPendiente,
@@ -225,7 +232,8 @@ export default function JardinPage() {
   const { formatAmount, incomeFrequency, user } = useAppContext()
   const { user: authUser } = useAuth()
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
-  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, loading: streakLoading } = useStreaks(incomeFrequency)
+  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, loading: streakLoading } = useStreaks(incomeFrequency)
+  const { plan } = usePlan()
   const { periodData } = usePeriodBudget()
   const { budgetCategories } = useBudgetCategories()
 
@@ -275,8 +283,47 @@ export default function JardinPage() {
     })
   }
 
-  // ── Feedback del botón "Regar jardín" (splash + XP flotante antes de navegar) ──
-  const handleWaterClick = () => router.push("/ahorro")
+  // ── Minijuego: frutos, combo para sacudir y riego (components/jardin/juego) ──
+  // La XP que se gana jugando se suma aquí al instante (el servidor ya la guardó)
+  const [xpJugando, setXpJugando] = useState(0)
+  const [xpPulso, setXpPulso] = useState<{ id: number; xp: number } | null>(null)
+  const sumarXp = useCallback((xp: number) => {
+    setXpJugando(v => v + xp)
+    window.setTimeout(() => setXpPulso({ id: Date.now(), xp }), 850) // cuando el fruto llega a la barra
+  }, [])
+  const juego = useJardinJuego(sumarXp)
+  const [sacudidaKey, setSacudidaKey] = useState(0)
+  const [premio, setPremio] = useState<{ icono: string; etiqueta: string } | null>(null)
+  const [avisoJuego, setAvisoJuego] = useState<string | null>(null)
+  const sacudiendo = useRef(false)
+  const onCombo = useCallback((n: number) => {
+    if (sonidoOn) tocarToque(n)
+    if (n !== TOQUES_PARA_SACUDIR || !juego.estado || sacudiendo.current) return
+    if (juego.estado.sacudida) {
+      setAvisoJuego(tr("Ya sacudiste tu árbol hoy. Vuelve mañana por otro premio 🌙"))
+      window.setTimeout(() => setAvisoJuego(null), 2600)
+      return
+    }
+    sacudiendo.current = true
+    setSacudidaKey(k => k + 1)
+    try { navigator.vibrate?.([30, 40, 30, 40, 60]) } catch { /* sin vibración */ }
+    juego.sacudir().then(r => {
+      sacudiendo.current = false
+      if (!r) return
+      if (sonidoOn) tocarPremio()
+      window.setTimeout(() => setPremio({ icono: r.icono, etiqueta: r.etiqueta }), 450)
+    })
+  }, [juego, sonidoOn])
+  const combo = useCombo(onCombo)
+  const regar = async () => {
+    const r = await juego.regar()
+    if (!r) return false
+    setShowRainCelebration(true)
+    setRainMessage(tr("💧 ¡Regaste tu árbol! +{0} XP", [r.xp]))
+    if (rainTimer.current) window.clearTimeout(rainTimer.current)
+    rainTimer.current = window.setTimeout(() => { setShowRainCelebration(false); setRainMessage(null) }, 5000)
+    return true
+  }
 
   // ── XP y nivel actual ─────────────────────────────────────────────────────
   // Mientras streakLoading es true, streakActual/xpFromMissions todavía valen 0
@@ -284,7 +331,7 @@ export default function JardinPage() {
   // (Semilla) por un instante y se veía un parpadeo semilla→árbol real en cada
   // refresh. dataReady evita mostrar el árbol hasta tener el nivel real.
   const dataReady = !streakLoading && !financeLoading
-  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering)
+  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering, xpFromJardin) + xpJugando
   const currentLevelIdx = GARDEN_LEVELS.findIndex((l, i) =>
     i === GARDEN_LEVELS.length - 1 || currentXP < GARDEN_LEVELS[i + 1].xpRequired
   )
@@ -309,6 +356,19 @@ export default function JardinPage() {
       localStorage.setItem(LS_KEY, String(currentLevelIdx + 1))
     }
   }, [currentLevelIdx])
+  // Momentos de alegría → celebrar y ofrecer compartir (CompartirLogro)
+  useEffect(() => {
+    if (!showLevelUpGlow) return
+    if (sonidoOn) tocarPremio()
+    celebrarLogro({ clave: `nivel_${currentLevel.level}`, icono: "🌳", titulo: tr("Mi árbol Kiri subió a nivel {0}: {1}", [currentLevel.level, currentLevel.name]), detalle: tr("Cuidando mi plata todos los días, mi jardín financiero crece.") })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLevelUpGlow])
+  useEffect(() => {
+    const hitos = [7, 14, 30, 60, 100, 200, 365]
+    if (!dataReady || !hitos.includes(streakActual)) return
+    celebrarLogro({ clave: `racha_${streakActual}`, icono: "🔥", titulo: tr("{0} días seguidos cuidando mi plata", [streakActual]), detalle: tr("Mi racha en Kiri sigue viva. ¡La constancia es lo que hace crecer el árbol!") })
+  }, [dataReady, streakActual])
+
   const xpForNext = nextLevel?.xpRequired ?? currentLevel.xpRequired
   const xpProgress = xpForNext > 0 ? Math.min(100, Math.round((currentXP / xpForNext) * 100)) : 100
   const xpNeeded = Math.max(0, xpForNext - currentXP)
@@ -525,11 +585,12 @@ export default function JardinPage() {
       { texto: tr("Cuando pagues una deuda, escribe el saldo que te muestra el banco: Kiri calcula el interés real que pagaste. 🏦") },
       { texto: tr("¿Le prestaste plata a alguien que no usa Kiri? Regístralo en Obligaciones → Me deben y recuérdale por WhatsApp. 🤝"), href: "/obligaciones?tab=me_deben", cta: tr("Ver") },
       { texto: tr("Los gastos hormiga de $5.000 al día suman $150.000 al mes. Anótalos todos, así ves a dónde se va tu plata. 🐜") },
-      { texto: tr("Invita a alguien con tu enlace: quedan conectados en Social y avanzas tus misiones. 💌") },
+      { texto: tr("Invita a alguien con tu enlace: tiene 14 días de KIRI PLUS gratis y, cuando empiece a usar Kiri, los dos ganan más mensajes con Kiri Coach. 💌"), href: "/mi-plan#invita", cta: tr("Ver") },
+      ...(currentLevelIdx >= 3 ? [{ texto: tr("Cada gasto, ingreso, pago o ahorro que registras hace caer un fruto de tu árbol. ¡Cosecha los 5 del día! 🍎") }] : []),
       { texto: tr("Completa tus misiones diarias: la racha de días es lo que más hace crecer tu árbol. 🔥"), href: "/misiones", cta: tr("Misiones") },
     )
     return lista
-  }, [hayVencidas, clima, wallet.cashBalance, totalAhorrado, mesesColchon, hasBudgetCategories])
+  }, [hayVencidas, clima, wallet.cashBalance, totalAhorrado, mesesColchon, hasBudgetCategories, currentLevelIdx])
   const [consejoIdx, setConsejoIdx] = useState(0)
   const consejo = consejos[consejoIdx % consejos.length]
 
@@ -608,6 +669,20 @@ export default function JardinPage() {
                   onToggleSound={toggleSonido}
                   cloudBadge={cloudBadge}
                   onCloudsClick={() => setClimaOpen(true)}
+                  onTap={combo.tocar}
+                  sacudida={sacudidaKey}
+                  extraEscena={<>
+                    {/* Frutos caídos al pie del árbol: solo desde el nivel 4 */}
+                    {juego.estado?.frutosDesbloqueados && currentLevelIdx >= 3 && (
+                      <FrutosArbol frutos={juego.estado.frutos} sonido={sonidoOn} onCosechar={juego.cosechar} />
+                    )}
+                    <ComboBadge combo={combo.combo} sacudidaLista={!!juego.estado && !juego.estado.sacudida} />
+                    <PremioSacudida premio={premio} onCerrar={() => setPremio(null)} />
+                    {avisoJuego && (
+                      <div key={avisoJuego} className="absolute -bottom-3 left-1/2 z-40 whitespace-nowrap pointer-events-none rounded-full bg-slate-900/90 px-3.5 py-1.5 text-[11px] font-bold text-white"
+                        style={{ animation: "kiriToastPop 2.6s ease-out forwards" }}>{avisoJuego}</div>
+                    )}
+                  </>}
                 />
               ) : (
                 <div className="w-[250px] h-[250px] lg:w-[320px] lg:h-[320px] rounded-full bg-muted/30 animate-pulse" />
@@ -623,8 +698,22 @@ export default function JardinPage() {
               <Progress value={gardenHealth} className="h-1.5" indicatorClassName={hayVencidas ? "bg-slate-400" : "bg-emerald-500"} />
             </div>
 
+            {juego.estado && <HoyEnTuJardin estado={juego.estado} />}
+
             <div className="grid grid-cols-[1fr_auto] gap-2">
-              <GardenActions onWater={handleWaterClick} onInvite={() => setInvitarOpen(true)} />
+              <BotonRegar
+                regado={!!juego.estado?.regado}
+                xp={juego.estado?.xpRiego ?? 5}
+                sonido={sonidoOn}
+                onRegado={regar}
+                onYaRegado={() => router.push("/ahorro")}
+              />
+              <Button
+                onClick={() => setInvitarOpen(true)}
+                variant="outline"
+                className="h-12 px-4 rounded-2xl gap-1.5 font-bold border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10"
+              >
+                <UserPlus className="h-5 w-5" />{" "}{tr("Invitar")}</Button>
             </div>
           </div>
         </CardContent>
@@ -632,18 +721,31 @@ export default function JardinPage() {
 
       {/* ═══ XP + RECOMPENSAS ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
-        {/* XP Bar */}
+        {/* XP Bar — los frutos cosechados vuelan hasta aquí */}
         <Card className="border-none bg-card shadow-sm rounded-2xl">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0">
+            <motion.div
+              key={xpPulso?.id ?? 0}
+              className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0"
+              animate={xpPulso ? { scale: [1, 1.25, 0.95, 1], rotate: [0, -10, 8, 0] } : {}}
+              transition={{ duration: 0.5 }}
+            >
               <Sparkles className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-bold">{tr("Próximo hito: Nivel {0}", [currentLevel.level + 1])}</p>
-                <span className="text-xs text-muted-foreground">{currentXP} / {xpForNext}{" "}{tr("XP")}</span>
+            </motion.div>
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-bold truncate">{tr("Próximo hito: Nivel {0}", [currentLevel.level + 1])}</p>
+                <span className="relative text-xs text-muted-foreground tabular-nums shrink-0">
+                  {currentXP} / {xpForNext}{" "}{tr("XP")}
+                  {xpPulso && (
+                    <span key={xpPulso.id} className="absolute -top-4 right-0 text-[11px] font-black text-amber-500" style={{ animation: "kiriFloatUp 1.1s ease-out forwards" }}>+{xpPulso.xp}</span>
+                  )}
+                </span>
               </div>
-              <Progress value={xpProgress} className="h-2" indicatorClassName="bg-amber-400" />
+              <div id={ID_BARRA_XP} className="relative">
+                <Progress value={xpProgress} className="h-2.5" indicatorClassName="bg-gradient-to-r from-amber-300 to-amber-500 transition-all duration-700" />
+                {xpPulso && <span key={`b${xpPulso.id}`} className="absolute inset-0 rounded-full pointer-events-none" style={{ animation: "kiriGlowRing 0.9s ease-out 1 both", background: "radial-gradient(closest-side, rgba(251,191,36,.6), transparent)" }} />}
+              </div>
               <p className="text-[9px] text-muted-foreground">{tr("Te faltan {0} XP para desbloquear nuevas recompensas", [xpNeeded])}</p>
             </div>
           </CardContent>
@@ -665,6 +767,9 @@ export default function JardinPage() {
           </Card>
         </Link>
       </div>
+
+      {/* ═══ INVITA Y GANA — progreso al siguiente premio, siempre a la vista ═══ */}
+      {plan?.referidos?.niveles && <InvitaWidget referidos={plan.referidos} />}
 
       {/* ═══ TU PROGRESO GENERAL ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
@@ -794,26 +899,6 @@ export default function JardinPage() {
       />
       <InviteLinkModal open={invitarOpen} onClose={() => setInvitarOpen(false)} />
     </div>
-    </>
-  )
-}
-
-// ─── Acciones del jardín (regar = ir a ahorrar, invitar = enlace) ─────────────
-
-function GardenActions({ onWater, onInvite }: { onWater: () => void; onInvite: () => void }) {
-  return (
-    <>
-      <Button
-        onClick={onWater}
-        className="h-12 px-5 bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 rounded-2xl gap-2 font-bold"
-      >
-        <Droplets className="h-5 w-5" />{" "}{tr("Regar jardín")}</Button>
-      <Button
-        onClick={onInvite}
-        variant="outline"
-        className="h-12 px-4 rounded-2xl gap-1.5 font-bold border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10"
-      >
-        <UserPlus className="h-5 w-5" />{" "}{tr("Invitar")}</Button>
     </>
   )
 }
@@ -1021,7 +1106,19 @@ function GardenTreeVisual({
   onToggleSound,
   cloudBadge,
   onCloudsClick,
+  capaArbol,
+  extraEscena,
+  onTap,
+  sacudida = 0,
 }: {
+  /** Encima del árbol y moviéndose con él (los frutos del minijuego) */
+  capaArbol?: React.ReactNode
+  /** Otras capas de la escena (flores de amigos, combo, premio) */
+  extraEscena?: React.ReactNode
+  /** Cada toque al árbol (para el combo de la sacudida) */
+  onTap?: () => void
+  /** Cambia → el árbol se sacude fuerte y suelta hojas */
+  sacudida?: number
   currentLevelIdx: number
   currentLevel: GardenLevel
   gardenHealth: number
@@ -1141,7 +1238,20 @@ function GardenTreeVisual({
       { scale: 1, rotate: 0 },
       { type: "spring", stiffness: special ? 420 : 480, damping: special ? 7 : 9, mass: 0.55 }
     )
+    onTap?.()
   }
+
+  // Sacudida del minijuego: el árbol se bambolea fuerte y suelta una lluvia de hojas
+  useEffect(() => {
+    if (!sacudida) return
+    tapControls.start({ rotate: [0, -9, 8, -7, 6, -4, 3, -1, 0], scale: [1, 0.96, 1.03, 0.98, 1] }, { duration: 0.9, ease: "easeInOut" })
+    shakeControls.start({ x: [0, -6, 6, -5, 5, -2, 0] }, { duration: 0.6 })
+    const nuevas = Array.from({ length: 9 }, () => ({ id: leafIdRef.current++, x: 15 + Math.random() * 70, delay: Math.random() * 0.4 }))
+    setLeaves(prev => [...prev, ...nuevas])
+    const t = window.setTimeout(() => setLeaves(prev => prev.filter(l => !nuevas.some(n => n.id === l.id))), 3600)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sacudida])
   // Solo nivel 3+ (Planta joven en adelante) tiene copa/follaje real de donde
   // puedan caer hojas — en Semilla/Brote no hay canopy, no tiene sentido mostrarlas.
   const showFallingLeaves = gardenHealth < 65 && currentLevelIdx >= 2
@@ -1258,8 +1368,10 @@ function GardenTreeVisual({
     <div className="flex flex-col items-center gap-1.5">
       {/* Altura reservada fija: la frase cambia de largo (1-2 líneas) pero el
           árbol de abajo nunca se mueve, sin importar qué tan corta o larga sea. */}
-      <div className={cn("flex items-center justify-center", cloudBadge ? "h-2" : "h-12")}>
-        {phrase && !cloudBadge && (
+      {/* (Ya no hay píldora fija sobre las nubes: el detalle se abre al tocarlas,
+          y en tormenta la frase misma lo sugiere: "Toca las nubes…") */}
+      <div className="flex items-center justify-center h-12">
+        {phrase && (
           <div
             key={phrase}
             className="max-w-[190px] text-center text-[10px] text-foreground bg-card border border-emerald-500/30 rounded-xl px-3 py-1.5 shadow-sm backdrop-blur-sm line-clamp-2"
@@ -1476,19 +1588,6 @@ function GardenTreeVisual({
           </>
         )}
 
-        {/* Píldora bajo las nubes: invita a tocarlas */}
-        {cloudBadge && (stormVisual || gardenWeather === "nubes") && onCloudsClick && (
-          <button
-            type="button"
-            onClick={onCloudsClick}
-            className={cn(
-              "absolute top-9 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[9px] font-black shadow-md border",
-              stormVisual ? "bg-slate-900/90 text-amber-200 border-amber-400/40" : "bg-card/95 text-amber-700 dark:text-amber-300 border-amber-400/40"
-            )}
-          >
-            {cloudBadge}
-          </button>
-        )}
 
         {/* Ingreso: resplandor dorado detrás del árbol + monedas que caen */}
         {showIncome && (
@@ -1533,7 +1632,7 @@ function GardenTreeVisual({
         >
           {/* Rebote de resorte al tocar — elemento propio, no interfiere con
               la animación de reposo (idle sway) del árbol de adentro. */}
-          <motion.div animate={tapControls} style={{ transformOrigin: "bottom center" }}>
+          <motion.div animate={tapControls} className="relative" style={{ transformOrigin: "bottom center" }}>
             {currentLevelIdx === 0 ? (
               <motion.img
                 src={currentLevel.image}
@@ -1560,6 +1659,7 @@ function GardenTreeVisual({
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
               />
             )}
+            {capaArbol}
           </motion.div>
 
           {/* Destello de partículas en el punto exacto donde se tocó */}
@@ -1632,14 +1732,16 @@ function GardenTreeVisual({
           </div>
         )}
 
-        {/* Sonido de los truenos */}
-        {persistentStorm && onToggleSound && (
+        {extraEscena}
+
+        {/* Sonido del jardín (truenos, frutos, premios) */}
+        {onToggleSound && (
           <button
             type="button"
             onClick={onToggleSound}
             className="absolute bottom-1 -right-2 z-40 h-7 w-7 rounded-full bg-card/80 border border-border/60 flex items-center justify-center text-muted-foreground/70 hover:text-foreground"
-            aria-label={soundOn ? tr("Silenciar truenos") : tr("Activar sonido de truenos")}
-            title={soundOn ? tr("Silenciar truenos") : tr("Activar sonido de truenos")}
+            aria-label={soundOn ? tr("Silenciar el jardín") : tr("Activar sonido del jardín")}
+            title={soundOn ? tr("Silenciar el jardín") : tr("Activar sonido del jardín")}
           >
             {soundOn ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
           </button>

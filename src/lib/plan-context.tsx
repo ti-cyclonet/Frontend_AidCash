@@ -15,7 +15,7 @@ import { tr } from "@/lib/i18n"
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type PlanTier = "FREE" | "PLUS" | "PRO"
-/** De dónde sale el plan: contrato pagado, gratis, días de PLUS ganados por invitar, acceso interno o sin conexión con Authoriza. */
+/** De dónde sale el plan: contrato pagado, gratis, prestado (prueba de invitado o meses ganados invitando), acceso interno o sin conexión con Authoriza. */
 export type PlanFuente = "contrato" | "gratis" | "prueba" | "acceso" | "sin_conexion"
 
 export interface PlanData {
@@ -27,14 +27,34 @@ export interface PlanData {
   features: Record<string, boolean>
   limits: Record<string, { displayName: string; maxValue: number }>
   hasPlan: boolean
-  /** Hasta cuándo duran los días de KIRI PLUS ganados por invitar amigos. */
+  /** Hasta cuándo dura el plan prestado (prueba de invitado o meses ganados invitando). */
   pruebaHasta?: string | null
+  /** Con un plan ganado encima de uno pago: el plan que de verdad paga. */
+  tierContrato?: PlanTier | null
   /** Llegó invitado y aún puede usar su descuento del primer mes: { PLUS: 50, PRO: 30 } */
   descuentoInvitado?: { PLUS: number; PRO: number } | null
   /** Pagó su primera factura con descuento de invitado: se recuerda solo ese mes */
   primerMesInvitado?: { pct: number; hasta: string } | null
-  /** Amigos invitados que ya se suscribieron (cada uno da días de PLUS, hasta `maximo`) */
-  referidos?: { suscritos: number; maximo: number; diasPorReferido: number; descuentoAmigo: { PLUS: number; PRO: number } }
+  /** Invita y gana (lib/referidos.ts del backend) */
+  referidos?: ResumenReferidos
+}
+
+export interface NivelReferido { clave: string; amigos: number; pagados: number; titulo: string; icono: string; logrado: boolean }
+export interface ResumenReferidos {
+  /** Amigos con cuenta activa que llegaron con tu enlace */
+  invitados: number
+  /** Los que ya usan Kiri (3 movimientos en 2 días) o pagan */
+  activos: number
+  /** Los que ya pagaron su primera factura */
+  pagados: number
+  suscritos: number
+  niveles: NivelReferido[]
+  siguiente: (Omit<NivelReferido, "logrado"> & { faltanAmigos: number; faltanPagados: number }) | null
+  /** "Te falta 1 amigo para 1 mes gratis de tu plan." */
+  falta: string
+  premios: { clave: string; premio: string; pendiente: boolean; fecha: string; amigo: string | null }[]
+  reglas: { pruebaAmigoDias: number; bonoActivacion: { coach: number; dictado: number; escaneo: number }; activacion: { movimientos: number; dias: number } }
+  descuentoAmigo: { PLUS: number; PRO: number }
 }
 
 /** Cantidades "sin límite" (Authoriza guarda 999999). */

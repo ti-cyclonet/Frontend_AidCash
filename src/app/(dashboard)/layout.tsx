@@ -11,6 +11,7 @@ import { PlanWelcomeModal } from "@/components/providers/PlanWelcomeModal"
 import { ForcePasswordChange } from "@/components/auth/ForcePasswordChange"
 import { ConsentGate } from "@/components/legal/ConsentGate"
 import { LimitePlanDialog } from "@/components/plan/LimitePlanDialog"
+import { LogroCompartible } from "@/components/referidos/CompartirLogro"
 
 export default function DashboardLayout({
   children,
@@ -48,6 +49,7 @@ export default function DashboardLayout({
       <ForcePasswordChange />
       <ConsentGate />
       <LimitePlanDialog />
+      <LogroCompartible />
     </div>
   )
 }

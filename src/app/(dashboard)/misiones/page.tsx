@@ -29,7 +29,7 @@ const MILESTONES = [
 
 export default function MisionesPage() {
   const { incomeFrequency } = useAppContext()
-  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, loading: streakLoading, refetch: refetchStreaks } = useStreaks(incomeFrequency)
+  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, loading: streakLoading, refetch: refetchStreaks } = useStreaks(incomeFrequency)
   const { daily, weekly, onboarding, invitaciones, referidos, loading: missionsLoading, claim } = useMissions()
   const [invitarOpen, setInvitarOpen] = useState(false)
   const pendingOnboarding = onboarding.filter(m => !m.claimed)
@@ -38,7 +38,7 @@ export default function MisionesPage() {
   const [reward, setReward] = useState<{ missionKey: string; result: RewardResult } | null>(null)
 
   const loading = streakLoading || missionsLoading
-  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering)
+  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering, xpFromJardin)
 
   const handleClaim = async (missionKey: string) => {
     setClaiming(missionKey)
@@ -234,7 +234,8 @@ export default function MisionesPage() {
                   <Button size="sm" onClick={() => setInvitarOpen(true)} className="h-8 gap-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3">
                     <UserPlus className="h-3.5 w-3.5" />{" "}{tr("Invitar")}</Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-3">{tr("Cuentan tus amigos que se suscriben a KIRI PLUS o PRO con tu enlace (ellos tienen 50% o 30% en su primer mes). Por cada uno ganas 10 días de KIRI PLUS, hasta 3.")}{" "}{referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">{tr("Llevas {0}.", [referidos])}</strong>}
+                <p className="text-[11px] text-muted-foreground mb-3">{tr("Cada amigo que llega con tu enlace y usa Kiri hace crecer tu árbol. Ellos tienen 14 días de KIRI PLUS gratis; los premios de cada nivel están en Mi plan → Invita y gana.")}{" "}{referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">{tr("Llevas {0}.", [referidos])}</strong>}
+                  {" "}<Link href="/mi-plan#invita" className="font-bold text-sky-600 dark:text-sky-400 hover:underline">{tr("Ver premios")}</Link>
                 </p>
                 <div className="space-y-4">
                   {invitaciones.map((m) => {

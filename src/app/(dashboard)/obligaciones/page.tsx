@@ -46,6 +46,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import type { Loan } from "@/lib/types"
 import { tr } from "@/lib/i18n"
+import { celebrarLogro } from "@/components/referidos/CompartirLogro"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Tab = "gastos_fijos" | "deudas" | "me_deben"
@@ -118,6 +119,12 @@ export default function ObligacionesPage() {
         title: tr("¡Terminaste de pagar \"{0}\"!", [result.nombre]),
         subtitle: tr("Una deuda menos, un paso más cerca de tu libertad financiera."),
       })
+      // Después del festejo: compartir el logro (sin cifras) e invitar a un amigo
+      window.setTimeout(() => celebrarLogro({
+        clave: `deuda_${debtId}`, icono: "🎉",
+        titulo: tr("Terminé de pagar una deuda"),
+        detalle: tr("Una deuda menos, un paso más cerca de mi libertad financiera."),
+      }), 3500)
     } else if (result?.enCeros) {
       // Una tarjeta o crédito de compras no "se termina": queda en ceros y su cupo libre
       setCelebration({

@@ -35,6 +35,7 @@ import { FeatureGate } from "@/components/plan/feature-gate"
 import { SavingsSimulator } from "@/components/recommendations/savings-simulator"
 import type { SharedPocket } from "@/lib/types"
 import { tr } from "@/lib/i18n"
+import { celebrarLogro } from "@/components/referidos/CompartirLogro"
 
 // ─── Tipos de bolsillos ───────────────────────────────────────────────────────
 type PocketIcon = "piggybank" | "plane" | "home" | "education" | "car" | "health" | "star" | "wallet"
@@ -425,6 +426,12 @@ function AhorroContent() {
           title: tr("¡Alcanzaste tu meta de \"{0}\"!", [updatedPocket.nombre]),
           subtitle: tr("Ahorraste {0}. ¡Bien hecho!", [formatAmount(updatedPocket.meta)]),
         })
+        // Después del festejo: compartir el logro e invitar a un amigo
+        window.setTimeout(() => celebrarLogro({
+          clave: `meta_${updatedPocket.id}`, icono: "🎯",
+          titulo: tr("Cumplí mi meta de ahorro: {0}", [updatedPocket.nombre]),
+          detalle: tr("Ahorrando poco a poco con Kiri, lo logré."),
+        }), 3500)
       }
     } else {
       // Retirar: mismo principio — el backend devuelve el dinero a la

@@ -788,9 +788,43 @@ export const emergencyFundApi = {
 
 // ─── Gamification API ─────────────────────────────────────────────────────────
 
+/** Lo que hay hoy en el árbol: frutos por cosechar, sacudida y riego del día. */
+export interface EstadoJardin {
+  fecha: string
+  frutos: { indice: number; dorado: boolean; cosechado: boolean }[]
+  frutosMaximo: number
+  /** Los frutos salen desde el nivel `nivelFrutos` (4); antes no hay frutos */
+  frutosDesbloqueados: boolean
+  nivelFrutos: number
+  /** Cuántos frutos más puede dar hoy registrando movimientos */
+  frutosPorGanar: number
+  xpFruto: number
+  xpDorado: number
+  sacudida: { etiqueta: string; xp: number } | null
+  regado: boolean
+  xpRiego: number
+  xpHoy: number
+  xpJardin: number
+  boost: boolean
+}
+
 export const gamificationApi = {
   async getStatus() {
-    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number; xpFromWatering: number }>('/gamification/status')
+    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number; xpFromWatering: number; xpFromJardin?: number }>('/gamification/status')
+  },
+
+  // ── Minijuego del árbol (el servidor decide la XP; aquí solo se anima) ──
+  async jardin() {
+    return api<EstadoJardin>('/gamification/jardin')
+  },
+  async cosechar(indice: number) {
+    return api<{ ok: true; xp: number; dorado: boolean; doble: boolean }>('/gamification/jardin/cosechar', { method: 'POST', body: { indice } })
+  },
+  async sacudir() {
+    return api<{ ok: true; tipo: 'xp' | 'boost'; xp: number; etiqueta: string; icono: string }>('/gamification/jardin/sacudir', { method: 'POST' })
+  },
+  async regar() {
+    return api<{ ok: true; xp: number }>('/gamification/jardin/regar', { method: 'POST' })
   },
 
   async updateStreak(streakActual: number, streakMejor?: number) {
@@ -1216,7 +1250,8 @@ export interface UsoPlan {
   packageName: string
   tier?: string
   fuente?: string
-  variables: { variableName: string; displayName: string; maxValue: number; ilimitado: boolean; currentCount: number; usagePercentage: number }[]
+  /** `extra`: usos de IA ganados invitando amigos, ya sumados a maxValue */
+  variables: { variableName: string; displayName: string; maxValue: number; ilimitado: boolean; currentCount: number; usagePercentage: number; extra?: number }[]
 }
 
 export interface FacturaPendiente {
