@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PiggyBank, Plus, ArrowDownToLine, Calculator, Loader2, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
+import { PiggyBank, Plus, ArrowDownToLine, Calculator, Loader2, ChevronDown, ChevronUp, Trash2, Target } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MoneyInput } from "@/components/ui/money-input"
@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAppContext } from "@/lib/app-context"
 import type { SharedPocket, Connection } from "@/lib/types"
 import { tr } from "@/lib/i18n"
+import { AjustarMontoDialog } from "@/components/social/ajustar-monto-dialog"
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,8 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
   // ── Modales ────────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
+  // Subir o bajar la meta del ahorro
+  const [metaPocket, setMetaPocket] = useState<SharedPocket | null>(null)
   const [calcOpen, setCalcOpen] = useState(false)
 
   // ── Formularios ────────────────────────────────────────────────────────────
@@ -270,7 +273,7 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                 {/* Acciones cuando está expandido */}
                 {isExpanded && (
                   <div className="border-t border-border/50 px-4 py-3">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <Button
                         size="sm"
                         onClick={(e) => { e.stopPropagation(); setDepositForm({ pocketId: pocket.id, monto: "", nota: "", yaAhorrado: false }); setDepositOpen(true) }}
@@ -284,6 +287,13 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
                         className="rounded-xl font-bold text-xs h-9 gap-1 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
                       >
                         <ChevronUp className="h-3.5 w-3.5" />{" "}{tr("Retirar")}</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); setMetaPocket(pocket) }}
+                        className="rounded-xl font-bold text-xs h-9 gap-1 border-cyclon-sky/30 text-cyclon-sky hover:bg-cyclon-sky/10"
+                      >
+                        <Target className="h-3.5 w-3.5" />{" "}{pocket.meta > 0 ? tr("Editar meta") : tr("Poner meta")}</Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -556,6 +566,26 @@ export function SharedPocketsTab({ myId, acceptedConnections }: SharedPocketsTab
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ════ Subir o bajar la meta ════ */}
+      <AjustarMontoDialog
+        open={!!metaPocket}
+        onClose={() => setMetaPocket(null)}
+        titulo={tr("Meta de \"{0}\"", [metaPocket?.nombre ?? ""])}
+        etiquetaActual={tr("Meta actual")}
+        actual={metaPocket?.meta ?? 0}
+        textoAumentar={tr("Subir meta")}
+        textoDisminuir={tr("Bajar meta")}
+        onConfirmar={async (tipo, monto) => {
+          if (!metaPocket) return false
+          const meta = Math.max(0, metaPocket.meta + (tipo === "aumentar" ? monto : -monto))
+          const { error } = await sharedPocketsApi.update(metaPocket.id, { meta })
+          if (error) { toast({ title: error, variant: "destructive" }); return false }
+          toast({ title: tr("Nueva meta: {0}", [formatAmount(meta)]), description: tr("Le avisamos a los demás del ahorro.") })
+          load()
+          return true
+        }}
+      />
     </div>
   )
 }

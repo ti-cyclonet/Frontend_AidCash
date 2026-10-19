@@ -192,6 +192,8 @@ export interface Debt {
   saldoRestante: number;
   cuotaPeriodo: number;
   montoPagadoEstePeriodo?: number | null; // Monto REAL pagado (puede diferir de cuotaPeriodo)
+  /** "Pago total": saldo + interés pendiente del periodo (lo que la deja en $0) */
+  pagoTotal?: number;
   tasaInteres?: number | null;
   acreedor: string;
   frecuenciaPago: DebtFrequency;

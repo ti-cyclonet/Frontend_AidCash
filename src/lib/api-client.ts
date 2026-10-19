@@ -359,10 +359,11 @@ export const userApi = {
     return api<{ wallet: WalletState }>('/users/wallet')
   },
 
-  async walletIncome(monto: number, tipo: 'salario' | 'extra') {
+  /** descripcion: qué fue (ej. "Freelance") — se muestra en Balance en vez de "Ingreso extra" */
+  async walletIncome(monto: number, tipo: 'salario' | 'extra', descripcion?: string) {
     const res = await api<{ record: Record<string, unknown>; wallet: WalletState }>('/users/wallet/income', {
       method: 'POST',
-      body: { monto, tipo },
+      body: { monto, tipo, ...(descripcion?.trim() ? { descripcion: descripcion.trim().slice(0, 120) } : {}) },
     })
     // El árbol celebra con sol y monedas (ver lib/garden-events.ts)
     if (res.data) marcarSolDeIngreso(monto)
@@ -444,6 +445,11 @@ export const debtsApi = {
 
   async listShared() {
     return api<{ debts: SharedDebt[] }>('/debts/shared')
+  },
+
+  /** "Me prestaron más" / "Bajó la deuda": sube o baja total y saldo por el mismo valor (no es un pago). */
+  async ajustarMonto(id: string, tipo: 'aumentar' | 'disminuir', monto: number) {
+    return api<{ debt: Record<string, unknown> }>(`/debts/${id}/ajustar-monto`, { method: 'POST', body: { tipo, monto } })
   },
 
   async update(id: string, data: Record<string, unknown>) {
@@ -801,6 +807,9 @@ export interface EstadoJardin {
   xpFruto: number
   xpDorado: number
   sacudida: { etiqueta: string; xp: number } | null
+  /** Toques en el día que sueltan el premio mayor (50) y si ya se ganó hoy */
+  toquesPremio: number
+  premioToques: { etiqueta: string; xp: number } | null
   regado: boolean
   xpRiego: number
   xpHoy: number
@@ -810,7 +819,7 @@ export interface EstadoJardin {
 
 export const gamificationApi = {
   async getStatus() {
-    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number; xpFromWatering: number; xpFromJardin?: number }>('/gamification/status')
+    return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number; xpFromWatering: number; xpFromJardin?: number; xpFromRacha?: number }>('/gamification/status')
   },
 
   // ── Minijuego del árbol (el servidor decide la XP; aquí solo se anima) ──
@@ -825,6 +834,9 @@ export const gamificationApi = {
   },
   async regar() {
     return api<{ ok: true; xp: number }>('/gamification/jardin/regar', { method: 'POST' })
+  },
+  async premioToques() {
+    return api<{ ok: true; tipo: 'xp' | 'boost'; xp: number; etiqueta: string; icono: string }>('/gamification/jardin/toques', { method: 'POST' })
   },
 
   async updateStreak(streakActual: number, streakMejor?: number) {
@@ -1051,6 +1063,18 @@ export interface Movement {
   /** Se lista para explicar, pero no movió la billetera (ej. un préstamo que
    * se registró sin sacar plata): no cuenta en "Entró / Salió". */
   noMueveBilletera?: boolean
+  // ── Detalle (modal al tocar el movimiento) ──
+  /** Categoría de presupuesto (ej. "Mercado") */
+  categoriaNombre?: string | null
+  /** Tipo de gasto variable: cafe | comida | transporte | antojo | salida | otro */
+  categoria?: string
+  esHormiga?: boolean
+  /** Periodo al que se abonó (deudas y gastos fijos), ej. "2026-10" o "2026-10-Q1" */
+  periodo?: string
+  /** Descripción o nota libre (ej. lo que escribió al registrar un préstamo) */
+  nota?: string | null
+  /** Cómo se repartió un ingreso en la billetera */
+  reparto?: { ahorro: number; obligaciones: number; libre: number; endeudamiento: number } | null
 }
 
 export const reportsApi = {
@@ -1157,6 +1181,10 @@ export const sharedPocketsApi = {
       method: 'POST',
     })
   },
+  /** Subir o bajar la meta (o renombrar); a los demás miembros les llega aviso */
+  async update(pocketId: string, data: { nombre?: string; meta?: number }) {
+    return api<{ pocket: Record<string, unknown> }>(`/shared-pockets/${pocketId}`, { method: 'PATCH', body: data })
+  },
   async remove(pocketId: string) {
     return api<{ message: string; immediate: boolean; expiresAt?: string }>(`/shared-pockets/${pocketId}`, {
       method: 'DELETE',
@@ -1185,6 +1213,13 @@ export const loansApi = {
   /** Préstamo que YA existía (no mueve plata): la otra persona lo confirma */
   async existente(data: { otroId: string; rol: 'yo_preste' | 'me_prestaron'; monto: number; pendiente: number; descripcion?: string; fechaCompromiso?: string | null }) {
     return api<{ loan: Record<string, unknown> }>('/loans/existente', { method: 'POST', body: data })
+  },
+  /**
+   * Subir o bajar lo que se debe (quien prestó: las dos; quien debe: solo subir).
+   * enMiSaldo: la plata nueva salió/entró de MI saldo en Kiri.
+   */
+  async ajustar(loanId: string, data: { tipo: 'aumentar' | 'disminuir'; monto: number; nota?: string; enMiSaldo?: boolean }) {
+    return api<{ loan: Record<string, unknown> }>(`/loans/${loanId}/ajustar`, { method: 'POST', body: data })
   },
   /** Cambiar la fecha de pago (cualquiera de los dos; al otro le llega aviso). */
   async cambiarFecha(loanId: string, fechaCompromiso: string | null) {

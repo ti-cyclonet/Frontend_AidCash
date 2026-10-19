@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import {
   Coins, Plus, Check, XCircle, Loader2, ChevronDown, ChevronUp,
-  ArrowUpRight, ArrowDownLeft, Clock, AlertCircle, CalendarClock, History,
+  ArrowUpRight, ArrowDownLeft, Clock, AlertCircle, CalendarClock, History, PencilLine,
 } from "lucide-react"
 import { MoneyInput } from "@/components/ui/money-input"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAppContext } from "@/lib/app-context"
 import type { Loan, Connection } from "@/lib/types"
 import { tr, localeFecha } from "@/lib/i18n"
+import { AjustarMontoDialog } from "@/components/social/ajustar-monto-dialog"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,8 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
 
   // Cambiar la fecha de pago de un préstamo
   const [fechaLoan, setFechaLoan] = useState<Loan | null>(null)
+  // Subir/bajar lo que se debe sin crear otro préstamo
+  const [ajusteLoan, setAjusteLoan] = useState<Loan | null>(null)
   const [fechaValue, setFechaValue] = useState("")
   const [guardandoFecha, setGuardandoFecha] = useState(false)
   const guardarFecha = async () => {
@@ -668,6 +671,17 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                       </div>
                     )}
 
+                    {/* Subir o bajar el valor (me prestó más / corrección) */}
+                    {loan.status === "ACTIVE" && (
+                      <button
+                        type="button"
+                        onClick={() => setAjusteLoan(loan)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-[11px] font-bold text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                      >
+                        <PencilLine className="h-3.5 w-3.5" />{" "}{isLender ? tr("Editar valor (presté más o corregir)") : tr("Editar valor (me prestó más)")}
+                      </button>
+                    )}
+
                     {/* Eliminar préstamo pagado */}
                     {loan.status === "PAID" && (
                       <p className="text-[9px] text-muted-foreground text-center pt-1">{tr("Este préstamo se eliminará automáticamente en 3 días.")}</p>
@@ -679,6 +693,30 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
           )
         })
       )}
+
+      {/* ════ Modal Ajustar valor del préstamo ════ */}
+      <AjustarMontoDialog
+        open={!!ajusteLoan}
+        onClose={() => setAjusteLoan(null)}
+        titulo={tr("Editar valor del préstamo")}
+        etiquetaActual={tr("Falta por pagar")}
+        actual={ajusteLoan?.remainingAmount ?? 0}
+        permitirDisminuir={!!ajusteLoan && ajusteLoan.lenderId === myId}
+        avisoNoDisminuir={tr("Para bajar lo que debes, registra un abono y quien te prestó lo confirma.")}
+        textoAumentar={ajusteLoan?.lenderId === myId ? tr("Presté más") : tr("Me prestó más")}
+        textoDisminuir={tr("Bajar")}
+        conNota
+        casilla={t => t !== "aumentar" ? null : ajusteLoan?.lenderId === myId ? tr("Esta plata salió de mi saldo en Kiri") : tr("Esta plata entró a mi saldo en Kiri")}
+        onConfirmar={async (tipo, monto, { nota, casilla }) => {
+          if (!ajusteLoan) return false
+          const { error } = await loansApi.ajustar(ajusteLoan.id, { tipo, monto, nota, enMiSaldo: casilla })
+          if (error) { toast({ title: error, variant: "destructive" }); return false }
+          toast({ title: tipo === "aumentar" ? tr("Sumaste {0} al préstamo", [formatAmount(monto)]) : tr("Bajaste {0} del préstamo", [formatAmount(monto)]), description: tr("Le avisamos a la otra persona.") })
+          if (casilla) window.dispatchEvent(new Event("kiri:wallet-updated"))
+          load()
+          return true
+        }}
+      />
 
       {/* ════ Modal Cambiar fecha de pago ════ */}
       <Dialog open={!!fechaLoan} onOpenChange={v => { if (!v) setFechaLoan(null) }}>
@@ -843,6 +881,18 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                 </p>
               </div>
               <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-2 pb-1">
+                  <button type="button" onClick={() => setPayForm(f => ({ ...f, monto: String(selectedLoan.remainingAmount) }))}
+                    className={cn("rounded-2xl border-2 px-3 py-2 text-left transition-colors", Number(payForm.monto) === selectedLoan.remainingAmount ? "border-emerald-500 bg-emerald-500/10" : "border-border hover:border-emerald-500/50")}>
+                    <p className="text-[10px] font-bold text-muted-foreground">{tr("Pago total")}</p>
+                    <p className="text-sm font-black tabular-nums">{formatAmount(selectedLoan.remainingAmount)}</p>
+                  </button>
+                  <button type="button" onClick={() => setPayForm(f => ({ ...f, monto: "" }))}
+                    className={cn("rounded-2xl border-2 px-3 py-2 text-left transition-colors", Number(payForm.monto) !== selectedLoan.remainingAmount ? "border-cyclon-lavender bg-cyclon-lavender/10" : "border-border hover:border-cyclon-lavender/50")}>
+                    <p className="text-[10px] font-bold text-muted-foreground">{tr("Otro valor")}</p>
+                    <p className="text-sm font-black">{tr("Tú decides")}</p>
+                  </button>
+                </div>
                 <Label className="text-xs font-bold">{tr("Monto del abono")}</Label>
                 <Input
                   type="number"
@@ -921,7 +971,7 @@ export function LoansTab({ myId, acceptedConnections }: LoansTabProps) {
                   toast({ title: tr("Préstamo cancelado"), description: cancelReason === "otro" ? cancelCustom : cancelReason })
                   // Devolver al wallet del lender
                   const loan = loans.find(l => l.id === cancelLoanId)
-                  if (loan) await userApi.walletIncome(Number(loan.amount), 'extra')
+                  if (loan) await userApi.walletIncome(Number(loan.amount), 'extra', tr("Préstamo cancelado a {0}", [loan.borrower?.nombre?.split(" ")[0] ?? ""]))
                 }
                 setCancelLoanId(null); setCancelReason(""); setCancelCustom("")
                 load()

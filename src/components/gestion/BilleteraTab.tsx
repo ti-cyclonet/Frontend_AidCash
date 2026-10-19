@@ -264,7 +264,12 @@ export function BilleteraTab() {
   const handleRegisterIncome = async () => {
     if (!monto || Number(monto) <= 0) return
     setSaving(true)
-    const { data } = await userApi.walletIncome(Number(monto), tipo)
+    // Lo que escribió en "¿Qué es?" o los ingresos extra que eligió: así Balance
+    // muestra "Freelance" en vez de solo "Ingreso extra"
+    const descripcion = tipo !== 'extra' ? undefined
+      : extraSubMode === 'variado' ? extraDesc
+      : extraIncomes.filter(x => selectedExtras.includes(x.id)).map(x => x.nombre).join(', ')
+    const { data } = await userApi.walletIncome(Number(monto), tipo, descripcion)
     if (data) {
       setWallet(data.wallet)
       if (tipo === 'salario') {

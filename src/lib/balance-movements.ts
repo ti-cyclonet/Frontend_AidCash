@@ -28,6 +28,7 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       tasaInteres: p.tasaAplicada ? tr("{0}% M.V.", [Number(p.tasaAplicada).toFixed(2)]) : undefined,
       acreedor: p.acreedor as string | undefined,
       tarjetaNombre: p.tarjetaNombre as string | null | undefined,
+      periodo: p.periodo as string | undefined,
     })
   }
 
@@ -46,6 +47,8 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       monto: p.montoPagado as number,
       estado: 'pagado',
       tarjetaNombre: p.tarjetaNombre as string | null | undefined,
+      periodo: p.periodo as string | undefined,
+      categoriaNombre: p.categoriaNombre as string | null | undefined,
     })
   }
 
@@ -61,18 +64,26 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       monto: e.monto as number,
       estado: 'pagado',
       tarjetaNombre: e.tarjetaNombre as string | null | undefined,
+      categoria: e.categoria as string,
+      categoriaNombre: e.categoriaNombre as string | null | undefined,
+      esHormiga: !!e.esHormiga,
     })
   }
 
   for (const r of (report.incomeRecords ?? [])) {
+    const esSalario = (r.tipo as string) === 'salario'
+    // La descripción que escribió ("Freelance", "venta…") manda sobre el genérico
+    const descripcion = ((r.descripcion as string | null) ?? "").trim()
+    const num = (v: unknown) => Number(v ?? 0)
     movements.push({
       id: (r.id as string) ?? `ir-${Math.random()}`,
       fecha: r.createdAt as string,
-      nombre: (r.tipo as string) === 'salario' ? tr("Sueldo") : tr("Ingreso extra"),
+      nombre: descripcion || (esSalario ? tr("Sueldo") : tr("Ingreso extra")),
       tipo: "ingresos",
-      tipoLabel: (r.tipo as string) === 'salario' ? tr("Salario") : tr("Extra"),
+      tipoLabel: esSalario ? tr("Salario") : descripcion ? tr("Ingreso extra") : tr("Extra"),
       monto: r.monto as number,
       estado: 'pagado',
+      reparto: { ahorro: num(r.aAhorro), obligaciones: num(r.aObligaciones), libre: num(r.aLibre), endeudamiento: num(r.aEndeudamiento) },
     })
   }
 
@@ -136,6 +147,7 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       monto: p.monto,
       direccion: p.previo ? undefined : p.rol === 'preste' ? 'salida' : 'entrada',
       noMueveBilletera: !!p.previo,
+      nota: p.descripcion,
     })
   }
   for (const a of report.social?.abonos ?? []) {

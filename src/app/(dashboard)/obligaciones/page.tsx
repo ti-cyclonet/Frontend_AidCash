@@ -47,6 +47,8 @@ import { useToast } from "@/hooks/use-toast"
 import type { Loan } from "@/lib/types"
 import { tr } from "@/lib/i18n"
 import { celebrarLogro } from "@/components/referidos/CompartirLogro"
+import { getPeriodDateRange, getPeriodRangeLabel } from "@/lib/period-filter"
+import { esDelPeriodo, pendienteDelPeriodo, pagadoDelPeriodo, ordenarObligaciones } from "@/lib/obligaciones-periodo"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Tab = "gastos_fijos" | "deudas" | "me_deben"
@@ -92,7 +94,7 @@ export default function ObligacionesPage() {
   } = useFinanceData()
   // "Actualizar saldo" de una tarjeta o crédito (lo que dice el banco)
   const [saldoTarget, setSaldoTarget] = useState<Debt | null>(null)
-  const { formatAmount, income, incomeFrequency } = useAppContext()
+  const { formatAmount, income, incomeFrequency, diasCobro } = useAppContext()
   const { user: authUser } = useAuth()
   const { toast } = useToast()
 
@@ -190,8 +192,15 @@ export default function ObligacionesPage() {
     })
   }, [activeTab, celebration])
 
-  // ── Filtro de estado (Todas / Pendientes / Pagadas) ────────────────────────
-  const [statusFilter, setStatusFilter] = useState<"todas" | "pendientes" | "pagadas">("todas")
+  // ── Filtro de estado (Este periodo / Todas / Pendientes / Pagadas) ─────────
+  // "Este periodo" va primero y por defecto: al entrar se ve cuánto toca pagar
+  const [statusFilter, setStatusFilter] = useState<FiltroEstado>("periodo")
+  const rangoPeriodo = useMemo(() => getPeriodDateRange(incomeFrequency, diasCobro ?? ""), [incomeFrequency, diasCobro])
+  const pasaFiltro = <T extends Debt | FixedExpense>(item: T) =>
+    statusFilter === "todas" ? true
+      : statusFilter === "periodo" ? esDelPeriodo(item, rangoPeriodo)
+      : statusFilter === "pendientes" ? !item.pagadoEstePeriodo
+      : item.pagadoEstePeriodo
 
   // ── Items ocultos (ojo) — persistente en localStorage ────────────────────
   const [hiddenItems, setHiddenItems] = useState<Set<string>>(() => {
@@ -447,6 +456,15 @@ export default function ObligacionesPage() {
     await payAndCelebrate(payDebt.id, restante > 0 ? restante : undefined, 'actual', {
       saldoReal: saldoRealDebt ? Number(saldoRealDebt) : undefined,
     })
+    const { data } = await userApi.getWallet()
+    if (data) setWallet(data.wallet)
+    setPayDebt(null)
+  }
+
+  // "Pago total" como en la tarjeta: saldo + interés del periodo, la deja en $0
+  const confirmPagoTotal = async () => {
+    if (!payDebt) return
+    await payAndCelebrate(payDebt.id, pagoTotalDe(payDebt))
     const { data } = await userApi.getWallet()
     if (data) setWallet(data.wallet)
     setPayDebt(null)
@@ -937,15 +955,10 @@ export default function ObligacionesPage() {
       ════════════════════════════════════════════════════════════ */}
       {activeTab === "gastos_fijos" && (
         <div className="space-y-3">
-          {/* Filtros */}
-          <div className="flex gap-2">
-            {(["todas", "pendientes", "pagadas"] as const).map(f => (
-              <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
-                statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
-                {f === "todas" ? tr("Todas") : f === "pendientes" ? tr("Pendientes") : tr("Pagadas")}
-              </button>
-            ))}
-          </div>
+          <FiltrosEstado value={statusFilter} onChange={setStatusFilter} />
+          {statusFilter === "periodo" && !loading && (
+            <ResumenPeriodo items={fixedExpenses.filter(fe => esDelPeriodo(fe, rangoPeriodo))} rango={getPeriodRangeLabel(incomeFrequency, diasCobro ?? "")} formatAmount={formatAmount} tipo="gastos" />
+          )}
 
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">{tr("Cargando...")}</p>
@@ -957,12 +970,7 @@ export default function ObligacionesPage() {
               <Plus className="h-4 w-4" />{" "}{tr("Agregar gasto fijo (Netflix, arriendo, etc.)")}</button>
           ) : (
             <>
-              {[...fixedExpenses]
-                .filter(fe => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !fe.pagadoEstePeriodo : fe.pagadoEstePeriodo)
-                .sort((a, b) => {
-                  if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                  return 0
-                }).map(fe => (
+              {ordenarObligaciones(fixedExpenses.filter(pasaFiltro), periodPriorityIds).map(fe => (
                 <FixedCard
                   key={fe.id}
                   item={fe}
@@ -1002,15 +1010,10 @@ export default function ObligacionesPage() {
       ════════════════════════════════════════════════════════════ */}
       {activeTab === "deudas" && (
         <div className="space-y-3">
-          {/* Filtros */}
-          <div className="flex gap-2">
-            {(["todas", "pendientes", "pagadas"] as const).map(f => (
-              <button key={f} onClick={() => setStatusFilter(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors",
-                statusFilter === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
-                {f === "todas" ? tr("Todas") : f === "pendientes" ? tr("Pendientes") : tr("Pagadas")}
-              </button>
-            ))}
-          </div>
+          <FiltrosEstado value={statusFilter} onChange={setStatusFilter} />
+          {statusFilter === "periodo" && !loading && (
+            <ResumenPeriodo items={debts.filter(d => esDelPeriodo(d, rangoPeriodo))} rango={getPeriodRangeLabel(incomeFrequency, diasCobro ?? "")} formatAmount={formatAmount} tipo="deudas" />
+          )}
 
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">{tr("Cargando...")}</p>
@@ -1026,12 +1029,7 @@ export default function ObligacionesPage() {
               {(() => {
                 // Calcular estrategia de deuda para resaltar la prioritaria
                 const debtStrategy = calculateDebtStrategy(debts)
-                return [...debts]
-                  .filter(d => statusFilter === "todas" ? true : statusFilter === "pendientes" ? !d.pagadoEstePeriodo : d.pagadoEstePeriodo)
-                  .sort((a, b) => {
-                    if (a.pagadoEstePeriodo !== b.pagadoEstePeriodo) return a.pagadoEstePeriodo ? 1 : -1
-                    return 0
-                  }).map(debt => (
+                return ordenarObligaciones(debts.filter(pasaFiltro), periodPriorityIds).map(debt => (
                   <DebtCard
                     key={debt.id}
                     debt={debt}
@@ -1073,6 +1071,7 @@ export default function ObligacionesPage() {
               </button>
               {showSettled && (
                 <div className="space-y-2 mt-2">
+                  <p className="text-[10px] text-muted-foreground">{tr("Cada deuda saldada sale de esta lista 7 días después de terminarla (sus pagos siguen en Balance).")}</p>
                   {settledDebts.map(d => (
                     <Card key={d.id as string} className="border-none bg-emerald-500/5 rounded-2xl">
                       <CardContent className="p-3 flex items-center gap-3">
@@ -1151,7 +1150,22 @@ export default function ObligacionesPage() {
               />
             )}
             <Button onClick={confirmFullPay} className="bg-cyclon-mint text-cyclon-periwinkle hover:bg-cyclon-mint/80 h-14 text-base font-bold rounded-2xl gap-2">
-              <CheckCircle2 className="h-5 w-5" />{tr("Pagar ({0})", [formatAmount(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)))])}</Button>
+              <CheckCircle2 className="h-5 w-5" />{payDebt?.esLineaCredito ? tr("Pago mínimo ({0})", [formatAmount(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)))]) : tr("Pagar cuota ({0})", [formatAmount(Math.max(0, (payDebt?.cuotaPeriodo ?? 0) - (payDebt?.montoPagadoEstePeriodo ?? 0)))])}</Button>
+
+            {/* Pago total: como en el extracto de la tarjeta, deja la deuda en $0 */}
+            {payDebt && pagoTotalDe(payDebt) > Math.max(0, payDebt.cuotaPeriodo - (payDebt.montoPagadoEstePeriodo ?? 0)) + 1 && (
+              <Button
+                variant="outline"
+                onClick={confirmPagoTotal}
+                disabled={pagoTotalDe(payDebt) > wallet.cashBalance}
+                className="h-12 rounded-2xl border-2 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/5 font-bold text-sm gap-2 flex-col !h-auto py-2"
+              >
+                <span>{tr("Pago total ({0})", [formatAmount(pagoTotalDe(payDebt))])}</span>
+                <span className="text-[10px] font-medium opacity-80">
+                  {pagoTotalDe(payDebt) > wallet.cashBalance ? tr("Tu saldo ({0}) no alcanza", [formatAmount(wallet.cashBalance)]) : payDebt.esLineaCredito ? tr("Queda en $0 y liberas todo el cupo") : tr("Terminas de pagar la deuda")}
+                </span>
+              </Button>
+            )}
 
             {/* Opción: Pagar con tarjeta de crédito */}
             {(() => {
@@ -1252,6 +1266,29 @@ export default function ObligacionesPage() {
               <strong>{abonoTarget?.nombre}</strong>{" "}{tr("· Saldo restante: {0}", [formatAmount(abonoTarget?.saldoRestante ?? 0)])}</DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
+            {/* Sugerencias como en la tarjeta: pago total u otro valor */}
+            {abonoTarget && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAbonoAmount(String(pagoTotalDe(abonoTarget)))}
+                  className={cn("rounded-2xl border-2 px-3 py-2.5 text-left transition-colors",
+                    Number(abonoAmount) === pagoTotalDe(abonoTarget) ? "border-emerald-500 bg-emerald-500/10" : "border-border hover:border-emerald-500/50")}
+                >
+                  <p className="text-[10px] font-bold text-muted-foreground">{tr("Pago total")}</p>
+                  <p className="text-sm font-black tabular-nums">{formatAmount(pagoTotalDe(abonoTarget))}</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAbonoAmount("")}
+                  className={cn("rounded-2xl border-2 px-3 py-2.5 text-left transition-colors",
+                    Number(abonoAmount) !== pagoTotalDe(abonoTarget) ? "border-cyclon-periwinkle bg-cyclon-periwinkle/10" : "border-border hover:border-cyclon-periwinkle/50")}
+                >
+                  <p className="text-[10px] font-bold text-muted-foreground">{tr("Otro valor")}</p>
+                  <p className="text-sm font-black">{tr("Tú decides")}</p>
+                </button>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">{tr("Monto a abonar")}</Label>
               <MoneyInput value={abonoAmount} onChange={v => setAbonoAmount(v)} className="h-12 text-xl font-bold rounded-xl" placeholder="0" autoFocus />
@@ -2299,15 +2336,23 @@ function DebtCard({ debt, formatAmount, onPay, onUndoPay, onAbonar, onAdelantar,
 }
 
 // ─── TusCupos — todas las tarjetas y créditos de compras juntos ──────────────
+// La barra junta todos los cupos: cada color es lo que ocupa una tarjeta y lo
+// gris es lo libre. Debajo, cada tarjeta con su color, su propia barra y cuánto
+// le queda — así se sabe a qué corresponde cada pedazo de la línea.
+const COLORES_CUPO = ["#f59e0b", "#8b5cf6", "#3b82f6", "#ec4899", "#14b8a6", "#ef4444"]
+
 function TusCupos({ debts, formatAmount }: { debts: Debt[]; formatAmount: (n: number) => string }) {
   const lineas = lineasDeCredito(debts)
   const conCupo = lineas.filter(d => d.cupoTotal != null && d.cupoTotal > 0)
+  const [abierto, setAbierto] = useState(true)
   if (lineas.length === 0) return null
   const cupo = conCupo.reduce((s, d) => s + (d.cupoTotal ?? 0), 0)
   const ocupado = conCupo.reduce((s, d) => s + d.saldoRestante, 0)
   const disponible = cupo - ocupado
   const uso = cupo > 0 ? Math.round((ocupado / cupo) * 100) : 0
-  const sinCupo = lineas.length - conCupo.length
+  const sinCupo = lineas.filter(d => !(d.cupoTotal != null && d.cupoTotal > 0))
+  const colorDe = (id: string) => COLORES_CUPO[conCupo.findIndex(d => d.id === id) % COLORES_CUPO.length]
+  const nivel = (pct: number) => pct >= 80 ? "text-red-500" : pct >= 30 ? "text-amber-600" : "text-kiri-emerald"
   return (
     <Card className="border-none shadow-sm rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
       <CardContent className="p-4 space-y-3 bg-gradient-to-br from-amber-500/10 via-transparent to-kiri-emerald/10">
@@ -2317,28 +2362,77 @@ function TusCupos({ debts, formatAmount }: { debts: Debt[]; formatAmount: (n: nu
         </div>
         {cupo > 0 ? (
           <>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-[9px] text-muted-foreground">{tr("Cupo total")}</p><p className="text-sm font-black">{formatAmount(cupo)}</p></div>
-              <div><p className="text-[9px] text-muted-foreground">{tr("Ocupado")}</p><p className="text-sm font-black text-amber-600">{formatAmount(ocupado)}</p></div>
-              <div><p className="text-[9px] text-muted-foreground">{tr("Disponible")}</p><p className={cn("text-sm font-black", disponible < 0 ? "text-red-500" : "text-kiri-emerald")}>{formatAmount(disponible)}</p></div>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[10px] text-muted-foreground">{tr("Disponible para usar")}</p>
+                <p className={cn("text-2xl font-black tabular-nums leading-tight", disponible < 0 ? "text-red-500" : "text-kiri-emerald")}>{formatAmount(disponible)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-muted-foreground">{tr("Ocupado {0} de {1}", [formatAmount(ocupado), formatAmount(cupo)])}</p>
+                <p className={cn("text-sm font-black", nivel(uso))}>{tr("{0}% usado", [uso])}</p>
+              </div>
             </div>
-            <div className="h-2 rounded-full bg-muted/50 overflow-hidden flex">
-              {conCupo.map((d, i) => (
-                <div key={d.id} title={d.nombre} className="h-full transition-all duration-700"
-                  style={{ width: `${Math.min(100, (d.saldoRestante / cupo) * 100)}%`, backgroundColor: ["#f59e0b", "#8b5cf6", "#ef4444", "#3b82f6", "#ec4899", "#14b8a6"][i % 6] }} />
-              ))}
+
+            {/* Barra total: un color por tarjeta + lo libre */}
+            <div className="relative">
+              <div className="h-3 rounded-full bg-muted/60 overflow-hidden flex">
+                {conCupo.map(d => (
+                  <div key={d.id} title={`${d.nombre}: ${formatAmount(d.saldoRestante)}`} className="h-full transition-all duration-700 first:rounded-l-full border-r border-background/60 last:border-r-0"
+                    style={{ width: `${Math.max(0, Math.min(100, (d.saldoRestante / cupo) * 100))}%`, backgroundColor: colorDe(d.id) }} />
+                ))}
+              </div>
+              {/* Marca del 30% recomendado */}
+              <div className="absolute -top-1 bottom-[-4px] w-px bg-foreground/40" style={{ left: "30%" }} />
+              <span className="absolute -bottom-4 text-[8px] text-muted-foreground -translate-x-1/2" style={{ left: "30%" }}>{tr("30% ideal")}</span>
             </div>
-            <p className={cn("text-[10px]", uso >= 80 ? "text-red-500 font-bold" : uso >= 30 ? "text-amber-600" : "text-muted-foreground")}>
+
+            <p className={cn("text-[10px] pt-3", uso >= 80 ? "text-red-500 font-bold" : uso >= 30 ? "text-amber-600" : "text-muted-foreground")}>
               {uso >= 80 ? tr("Usas el {0}% de tus cupos: es mucho, intenta no cargar más compras.", [uso])
                 : uso >= 30 ? tr("Usas el {0}% de tus cupos. Lo ideal es estar por debajo del 30%.", [uso])
                 : tr("Usas el {0}% de tus cupos. ¡Vas muy bien!", [uso])}
             </p>
+
+            {/* Detalle por tarjeta: qué es cada color */}
+            <div className="border-t border-border/50 pt-2">
+              <button onClick={() => setAbierto(v => !v)} className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-wider py-1">
+                <span>{tr("Cada tarjeta")}</span>
+                {abierto ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {abierto && (
+                <ul className="space-y-2.5 pt-1">
+                  {[...conCupo].sort((a, b) => b.saldoRestante / (b.cupoTotal ?? 1) - a.saldoRestante / (a.cupoTotal ?? 1)).map(d => {
+                    const pct = Math.round((d.saldoRestante / (d.cupoTotal ?? 1)) * 100)
+                    const libre = (d.cupoTotal ?? 0) - d.saldoRestante
+                    return (
+                      <li key={d.id} className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: colorDe(d.id) }} />
+                          <span className="text-xs font-bold truncate flex-1">{d.nombre}</span>
+                          <span className={cn("text-[10px] font-black tabular-nums", nivel(pct))}>{pct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden ml-[18px]">
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, pct)}%`, backgroundColor: colorDe(d.id) }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground ml-[18px] tabular-nums">
+                          <span>{tr("Usado {0} de {1}", [formatAmount(d.saldoRestante), formatAmount(d.cupoTotal ?? 0)])}</span>
+                          <span className={cn("font-bold", libre < 0 ? "text-red-500" : "text-kiri-emerald")}>{tr("Libre {0}", [formatAmount(libre)])}</span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                  {sinCupo.map(d => (
+                    <li key={d.id} className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0 border border-dashed border-muted-foreground/50" />
+                      <span className="truncate flex-1">{d.nombre}</span>
+                      <span>{tr("Debes {0} · sin cupo registrado", [formatAmount(d.saldoRestante)])}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </>
         ) : (
           <p className="text-[11px] text-muted-foreground">{tr("Agrega el cupo de tus tarjetas (lápiz de cada una) para ver cuánto te queda disponible.")}</p>
-        )}
-        {sinCupo > 0 && cupo > 0 && (
-          <p className="text-[9px] text-muted-foreground">{tr("{0} sin cupo registrado (no se suman aquí).", [sinCupo])}</p>
         )}
       </CardContent>
     </Card>
@@ -3040,4 +3134,70 @@ function FieldInput({ label, value, onChange, type = "text", placeholder }: {
       <Input type={type} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} className="h-11 rounded-xl" />
     </div>
   )
+}
+
+// ─── Filtro "Este periodo" y su resumen ─────────────────────────────────────
+
+type FiltroEstado = "periodo" | "todas" | "pendientes" | "pagadas"
+
+function FiltrosEstado({ value, onChange }: { value: FiltroEstado; onChange: (f: FiltroEstado) => void }) {
+  const etiquetas: Record<FiltroEstado, string> = { periodo: tr("Este periodo"), todas: tr("Todas"), pendientes: tr("Pendientes"), pagadas: tr("Pagadas") }
+  return (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      {(["periodo", "todas", "pendientes", "pagadas"] as const).map(f => (
+        <button key={f} onClick={() => onChange(f)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors whitespace-nowrap",
+          value === f ? "bg-cyclon-periwinkle text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted")}>
+          {etiquetas[f]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Cuánto toca pagar en el periodo actual: lo que falta, lo ya pagado y cuántas quedan. */
+function ResumenPeriodo({ items, rango, formatAmount, tipo }: {
+  items: (Debt | FixedExpense)[]
+  rango: string
+  formatAmount: (n: number) => string
+  tipo: "gastos" | "deudas"
+}) {
+  const falta = items.reduce((a, i) => a + pendienteDelPeriodo(i), 0)
+  const pagado = items.reduce((a, i) => a + pagadoDelPeriodo(i), 0)
+  const pendientes = items.filter(i => pendienteDelPeriodo(i) > 0).length
+  const total = falta + pagado
+  const pct = total > 0 ? Math.round((pagado / total) * 100) : 0
+  if (items.length === 0) {
+    return (
+      <div className="rounded-2xl bg-emerald-500/10 px-4 py-3 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+        {tipo === "gastos" ? tr("Este periodo ({0}) no te toca pagar ningún gasto fijo 🎉", [rango]) : tr("Este periodo ({0}) no te toca pagar ninguna deuda 🎉", [rango])}
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-2xl border border-amber-400/50 bg-amber-500/5 px-4 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{tipo === "gastos" ? tr("Gastos fijos de este periodo") : tr("Deudas de este periodo")}</p>
+          <p className="text-[11px] text-muted-foreground">{rango}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-[10px] text-muted-foreground">{falta > 0 ? tr("Te toca pagar") : tr("Todo pagado")}</p>
+          <p className={cn("text-xl font-black tabular-nums", falta > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>{formatAmount(falta > 0 ? falta : pagado)}</p>
+        </div>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
+        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {pendientes > 0
+          ? tr("{0} de {1} por pagar · ya pagaste {2} de {3}", [pendientes, items.length, formatAmount(pagado), formatAmount(total)])
+          : tr("Pagaste las {0} de este periodo 🎉", [items.length])}
+      </p>
+    </div>
+  )
+}
+
+/** Lo que deja la deuda en $0 (saldo + interés del periodo); sin el dato del servidor, el saldo. */
+function pagoTotalDe(d: Debt): number {
+  return Math.round(d.pagoTotal ?? d.saldoRestante)
 }

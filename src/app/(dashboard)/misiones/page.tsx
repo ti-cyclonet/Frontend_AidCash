@@ -29,7 +29,7 @@ const MILESTONES = [
 
 export default function MisionesPage() {
   const { incomeFrequency } = useAppContext()
-  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, loading: streakLoading, refetch: refetchStreaks } = useStreaks(incomeFrequency)
+  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, xpFromRacha, loading: streakLoading, refetch: refetchStreaks } = useStreaks(incomeFrequency)
   const { daily, weekly, onboarding, invitaciones, referidos, loading: missionsLoading, claim } = useMissions()
   const [invitarOpen, setInvitarOpen] = useState(false)
   const pendingOnboarding = onboarding.filter(m => !m.claimed)
@@ -38,7 +38,7 @@ export default function MisionesPage() {
   const [reward, setReward] = useState<{ missionKey: string; result: RewardResult } | null>(null)
 
   const loading = streakLoading || missionsLoading
-  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering, xpFromJardin)
+  const currentXP = calculateGardenXP(xpFromRacha, badgesDesbloqueados.length, xpFromMissions, xpFromWatering, xpFromJardin)
 
   const handleClaim = async (missionKey: string) => {
     setClaiming(missionKey)

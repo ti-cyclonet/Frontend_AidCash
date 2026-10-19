@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { HandCoins, Plus, Loader2, Landmark, CreditCard } from "lucide-react"
+import { HandCoins, Plus, Loader2, Landmark, CreditCard, PencilLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MoneyInput } from "@/components/ui/money-input"
@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAppContext } from "@/lib/app-context"
 import type { Connection, SharedDebt } from "@/lib/types"
 import { tr } from "@/lib/i18n"
+import { AjustarMontoDialog } from "@/components/social/ajustar-monto-dialog"
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,8 @@ export function SocialDebtsTab({ myId, acceptedConnections }: SocialDebtsTabProp
   const [debts, setDebts] = useState<SharedDebt[]>([])
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
+  // Subir o bajar la deuda (me prestaron más / corrección) — solo quien la creó
+  const [ajusteDebt, setAjusteDebt] = useState<SharedDebt | null>(null)
 
   const eligibleConnections = useMemo(
     () => acceptedConnections.filter(c => c.role === "PARTNER" || c.role === "FAMILY"),
@@ -125,10 +128,37 @@ export function SocialDebtsTab({ myId, acceptedConnections }: SocialDebtsTabProp
                 <span>{d.isOwner ? tr("Tú") : d.ownerName}: <b>{formatAmount(d.ownerShare)}</b></span>
                 <span>{d.isOwner ? d.peerName : tr("Tú")}: <b>{formatAmount(d.peerShare)}</b></span>
               </div>
+              {d.isOwner && (
+                <button
+                  type="button"
+                  onClick={() => setAjusteDebt(d)}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-[11px] font-bold text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                >
+                  <PencilLine className="h-3.5 w-3.5" />{" "}{tr("Editar valor (me prestaron más o corregir)")}
+                </button>
+              )}
             </CardContent>
           </Card>
         ))
       )}
+
+      <AjustarMontoDialog
+        open={!!ajusteDebt}
+        onClose={() => setAjusteDebt(null)}
+        titulo={tr("Editar valor de \"{0}\"", [ajusteDebt?.nombre ?? ""])}
+        etiquetaActual={tr("Falta por pagar")}
+        actual={ajusteDebt ? (ajusteDebt.saldoRestante ?? ajusteDebt.montoTotal) : 0}
+        textoAumentar={tr("Me prestaron más")}
+        textoDisminuir={tr("Bajar")}
+        onConfirmar={async (tipo, monto) => {
+          if (!ajusteDebt) return false
+          const { error } = await debtsApi.ajustarMonto(ajusteDebt.id, tipo, monto)
+          if (error) { toast({ title: error, variant: "destructive" }); return false }
+          toast({ title: tipo === "aumentar" ? tr("Sumaste {0} a la deuda", [formatAmount(monto)]) : tr("Bajaste {0} de la deuda", [formatAmount(monto)]) })
+          load()
+          return true
+        }}
+      />
 
       <NewSharedDebtModal
         open={createOpen}
