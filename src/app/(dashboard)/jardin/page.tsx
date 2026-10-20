@@ -18,7 +18,7 @@ import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
 import { tocarTrueno, prepararAudio, tocarToque, tocarPremio } from "@/lib/thunder-sound"
 import { usePlan } from "@/lib/plan-context"
 import {
-  useJardinJuego, useCombo, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin,
+  useJardinJuego, useCombo, useToquesDelDia, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin,
   TOQUES_PARA_SACUDIR, ID_BARRA_XP,
 } from "@/components/jardin/juego"
 import { InvitaWidget } from "@/components/referidos/InvitaYGana"
@@ -37,7 +37,7 @@ import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { userApi, loansApi, connectionsApi, WalletState } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
-import { calculateGardenXP } from "@/lib/garden-xp"
+import { calculateGardenXP, progresoNivel } from "@/lib/garden-xp"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import type { Debt, FixedExpense, Loan } from "@/lib/types"
@@ -232,7 +232,7 @@ export default function JardinPage() {
   const { formatAmount, incomeFrequency, user } = useAppContext()
   const { user: authUser } = useAuth()
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
-  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, loading: streakLoading } = useStreaks(incomeFrequency)
+  const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, xpFromRacha, loading: streakLoading } = useStreaks(incomeFrequency)
   const { plan } = usePlan()
   const { periodData } = usePeriodBudget()
   const { budgetCategories } = useBudgetCategories()
@@ -315,6 +315,22 @@ export default function JardinPage() {
     })
   }, [juego, sonidoOn])
   const combo = useCombo(onCombo)
+  // 50 toques en el día (no hace falta seguidos) → premio mayor, 1 vez al día
+  const ganandoToques = useRef(false)
+  const onMetaToques = useCallback(() => {
+    if (!juego.estado || juego.estado.premioToques || ganandoToques.current) return
+    ganandoToques.current = true
+    try { navigator.vibrate?.([40, 30, 40, 30, 80]) } catch { /* sin vibración */ }
+    setSacudidaKey(k => k + 1)
+    juego.ganarToques().then(r => {
+      ganandoToques.current = false
+      if (!r) return
+      if (sonidoOn) tocarPremio()
+      window.setTimeout(() => setPremio({ icono: r.icono, etiqueta: r.etiqueta }), 450)
+    })
+  }, [juego, sonidoOn])
+  const toquesDia = useToquesDelDia(juego.estado?.fecha, juego.estado?.toquesPremio ?? 50, onMetaToques)
+  const tocarArbol = useCallback(() => { combo.tocar(); toquesDia.contar() }, [combo, toquesDia])
   const regar = async () => {
     const r = await juego.regar()
     if (!r) return false
@@ -331,7 +347,7 @@ export default function JardinPage() {
   // (Semilla) por un instante y se veía un parpadeo semilla→árbol real en cada
   // refresh. dataReady evita mostrar el árbol hasta tener el nivel real.
   const dataReady = !streakLoading && !financeLoading
-  const currentXP = calculateGardenXP(streakActual, badgesDesbloqueados.length, xpFromMissions, xpFromWatering, xpFromJardin) + xpJugando
+  const currentXP = calculateGardenXP(xpFromRacha, badgesDesbloqueados.length, xpFromMissions, xpFromWatering, xpFromJardin) + xpJugando
   const currentLevelIdx = GARDEN_LEVELS.findIndex((l, i) =>
     i === GARDEN_LEVELS.length - 1 || currentXP < GARDEN_LEVELS[i + 1].xpRequired
   )
@@ -369,9 +385,10 @@ export default function JardinPage() {
     celebrarLogro({ clave: `racha_${streakActual}`, icono: "🔥", titulo: tr("{0} días seguidos cuidando mi plata", [streakActual]), detalle: tr("Mi racha en Kiri sigue viva. ¡La constancia es lo que hace crecer el árbol!") })
   }, [dataReady, streakActual])
 
-  const xpForNext = nextLevel?.xpRequired ?? currentLevel.xpRequired
-  const xpProgress = xpForNext > 0 ? Math.min(100, Math.round((currentXP / xpForNext) * 100)) : 100
-  const xpNeeded = Math.max(0, xpForNext - currentXP)
+  // La barra arranca en 0 en cada nivel y se llena con lo que cuesta el siguiente
+  const nivelXp = progresoNivel(currentXP, currentLevel.xpRequired, nextLevel?.xpRequired ?? null)
+  const xpProgress = nivelXp.pct
+  const xpNeeded = nivelXp.faltan
 
   // ── Lluvia por ahorro — la registra la capa de API al aportar a un
   //    bolsillo (lib/garden-events.ts): si estás viendo el árbol llueve en el
@@ -669,7 +686,7 @@ export default function JardinPage() {
                   onToggleSound={toggleSonido}
                   cloudBadge={cloudBadge}
                   onCloudsClick={() => setClimaOpen(true)}
-                  onTap={combo.tocar}
+                  onTap={tocarArbol}
                   sacudida={sacudidaKey}
                   extraEscena={<>
                     {/* Frutos caídos al pie del árbol: solo desde el nivel 4 */}
@@ -698,7 +715,7 @@ export default function JardinPage() {
               <Progress value={gardenHealth} className="h-1.5" indicatorClassName={hayVencidas ? "bg-slate-400" : "bg-emerald-500"} />
             </div>
 
-            {juego.estado && <HoyEnTuJardin estado={juego.estado} />}
+            {juego.estado && <HoyEnTuJardin estado={juego.estado} toques={toquesDia.toques} />}
 
             <div className="grid grid-cols-[1fr_auto] gap-2">
               <BotonRegar
@@ -734,9 +751,9 @@ export default function JardinPage() {
             </motion.div>
             <div className="flex-1 space-y-1.5 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-bold truncate">{tr("Próximo hito: Nivel {0}", [currentLevel.level + 1])}</p>
+                <p className="text-sm font-bold truncate">{nextLevel ? tr("Nivel {0} → Nivel {1}", [currentLevel.level, nextLevel.level]) : tr("Nivel máximo: {0}", [currentLevel.name])}</p>
                 <span className="relative text-xs text-muted-foreground tabular-nums shrink-0">
-                  {currentXP} / {xpForNext}{" "}{tr("XP")}
+                  {nextLevel ? <>{nivelXp.xp} / {nivelXp.meta}</> : nivelXp.xp}{" "}{tr("XP")}
                   {xpPulso && (
                     <span key={xpPulso.id} className="absolute -top-4 right-0 text-[11px] font-black text-amber-500" style={{ animation: "kiriFloatUp 1.1s ease-out forwards" }}>+{xpPulso.xp}</span>
                   )}
@@ -746,7 +763,7 @@ export default function JardinPage() {
                 <Progress value={xpProgress} className="h-2.5" indicatorClassName="bg-gradient-to-r from-amber-300 to-amber-500 transition-all duration-700" />
                 {xpPulso && <span key={`b${xpPulso.id}`} className="absolute inset-0 rounded-full pointer-events-none" style={{ animation: "kiriGlowRing 0.9s ease-out 1 both", background: "radial-gradient(closest-side, rgba(251,191,36,.6), transparent)" }} />}
               </div>
-              <p className="text-[9px] text-muted-foreground">{tr("Te faltan {0} XP para desbloquear nuevas recompensas", [xpNeeded])}</p>
+              <p className="text-[9px] text-muted-foreground">{nextLevel ? tr("Te faltan {0} XP para llegar a {1}", [xpNeeded, nextLevel.name]) : tr("¡Tu árbol llegó a lo más alto! Sigue sumando XP")}</p>
             </div>
           </CardContent>
         </Card>

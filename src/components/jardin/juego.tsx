@@ -70,6 +70,14 @@ export function useJardinJuego(onXp: (xp: number) => void) {
     return data
   }, [cargar, onXp])
 
+  const ganarToques = useCallback(async () => {
+    const { data, error } = await gamificationApi.premioToques()
+    if (error || !data) { cargar(); return null }
+    setEstado(e => e && { ...e, premioToques: { etiqueta: data.etiqueta, xp: data.xp }, xpHoy: e.xpHoy + data.xp, xpJardin: e.xpJardin + data.xp, boost: e.boost || data.tipo === "boost" })
+    if (data.xp) onXp(data.xp)
+    return data
+  }, [cargar, onXp])
+
   const regar = useCallback(async () => {
     const { data, error } = await gamificationApi.regar()
     if (error || !data) { cargar(); return null }
@@ -78,7 +86,7 @@ export function useJardinJuego(onXp: (xp: number) => void) {
     return data
   }, [cargar, onXp])
 
-  return { estado, cosechar, sacudir, regar, recargar: cargar }
+  return { estado, cosechar, sacudir, ganarToques, regar, recargar: cargar }
 }
 
 // ─── Frutos caídos al pie del árbol ──────────────────────────────────────────
@@ -241,6 +249,31 @@ export function useCombo(onCombo: (n: number) => void) {
   return { combo, tocar, reiniciar }
 }
 
+/**
+ * Toques al árbol en el día (no hace falta que sean seguidos). Se guardan por
+ * dispositivo y fecha; al llegar a `meta` el servidor entrega el premio (1 al día).
+ */
+export function useToquesDelDia(fecha: string | undefined, meta: number, onMeta: () => void) {
+  const [toques, setToques] = useState(0)
+  const actual = useRef(0)
+  const clave = fecha ? `kiri_toques_${fecha}` : null
+  useEffect(() => {
+    if (!clave) return
+    let n = 0
+    try { n = parseInt(localStorage.getItem(clave) ?? "0", 10) || 0 } catch { /* sin storage */ }
+    actual.current = n
+    setToques(n)
+  }, [clave])
+  const contar = useCallback(() => {
+    if (!clave) return
+    actual.current += 1
+    setToques(actual.current)
+    try { localStorage.setItem(clave, String(actual.current)) } catch { /* sin storage */ }
+    if (actual.current === meta) onMeta()
+  }, [clave, meta, onMeta])
+  return { toques, contar }
+}
+
 export function ComboBadge({ combo, sacudidaLista }: { combo: number; sacudidaLista: boolean }) {
   return (
     <AnimatePresence>
@@ -359,7 +392,7 @@ export function BotonRegar({ regado, xp, sonido, onRegado, onYaRegado }: {
 
 // ─── Hoy en tu jardín ────────────────────────────────────────────────────────
 
-export function HoyEnTuJardin({ estado }: { estado: EstadoJardin }) {
+export function HoyEnTuJardin({ estado, toques }: { estado: EstadoJardin; toques: number }) {
   const cosechados = estado.frutos.filter(f => f.cosechado).length
   const pendientes = estado.frutos.length - cosechados
   // Los frutos (y su chip) solo existen desde el nivel 4
@@ -367,6 +400,7 @@ export function HoyEnTuJardin({ estado }: { estado: EstadoJardin }) {
     ...(estado.frutosDesbloqueados ? [{ ok: pendientes === 0 && estado.frutosPorGanar === 0, icono: "🍎", texto: tr("Frutos {0}/{1}", [cosechados, estado.frutosMaximo]) }] : []),
     { ok: !!estado.sacudida, icono: "🎁", texto: estado.sacudida ? tr("Sacudido") : tr("Toca 5 veces") },
     { ok: estado.regado, icono: "💧", texto: estado.regado ? tr("Regado") : tr("Riega") },
+    { ok: !!estado.premioToques, icono: "👆", texto: estado.premioToques ? tr("{0} toques", [estado.toquesPremio]) : tr("Toques {0}/{1}", [Math.min(toques, estado.toquesPremio), estado.toquesPremio]) },
   ]
   const pista = pendientes > 0
     ? tr("Toca los frutos que cayeron al pie del árbol para cosecharlos 🍎")
@@ -376,6 +410,8 @@ export function HoyEnTuJardin({ estado }: { estado: EstadoJardin }) {
         ? tr("Toca el árbol 5 veces seguidas para sacudirlo: suelta un premio 🎁")
         : !estado.regado
           ? tr("Mantén presionado Regar para darle agua a tu árbol 💧")
+          : !estado.premioToques
+            ? tr("Toca tu árbol {0} veces hoy y suelta un premio grande 🎉 (te faltan {1})", [estado.toquesPremio, Math.max(0, estado.toquesPremio - toques)])
           : estado.frutosDesbloqueados
             ? tr("¡Jardín al día! Mañana hay frutos nuevos 🌙")
             : tr("¡Jardín al día! Desde el nivel {0} tu árbol también da frutos 🍎", [estado.nivelFrutos])

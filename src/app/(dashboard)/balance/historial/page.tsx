@@ -150,7 +150,7 @@ export default function HistorialPage() {
     if (filtro !== "todos") res = res.filter(m => m.tipo === filtro)
     if (busqueda) {
       const q = busqueda.toLowerCase()
-      res = res.filter(m => m.nombre.toLowerCase().includes(q) || m.tipoLabel.toLowerCase().includes(q) || (m.acreedor ?? "").toLowerCase().includes(q))
+      res = res.filter(m => m.nombre.toLowerCase().includes(q) || m.tipoLabel.toLowerCase().includes(q) || (m.acreedor ?? "").toLowerCase().includes(q) || (m.categoriaNombre ?? "").toLowerCase().includes(q) || (m.tarjetaNombre ?? "").toLowerCase().includes(q))
     }
     return res
   }, [report, rango, filtro, busqueda])

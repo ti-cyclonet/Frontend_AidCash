@@ -157,6 +157,8 @@ export interface StreakData {
   xpFromWatering: number
   /** XP del minijuego del árbol (frutos, sacudida, riego) */
   xpFromJardin: number
+  /** XP acumulada por días de racha (no baja al perder la racha) */
+  xpFromRacha: number
   loading: boolean
 }
 
@@ -172,6 +174,7 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
     xpFromMissions: 0,
     xpFromWatering: 0,
     xpFromJardin: 0,
+    xpFromRacha: 0,
     loading: true,
   })
 
@@ -192,6 +195,7 @@ export function useStreaks(incomeFrequency: IncomeFrequency = 'mensual') {
           xpFromMissions: result.xpFromMissions ?? 0,
           xpFromWatering: result.xpFromWatering ?? 0,
           xpFromJardin: result.xpFromJardin ?? 0,
+          xpFromRacha: result.xpFromRacha ?? 0,
           loading: false,
         })
       } else {

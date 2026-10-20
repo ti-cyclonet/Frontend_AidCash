@@ -154,7 +154,7 @@ export function useEjecutarAcciones() {
         return r ? null : tr("No se pudo registrar el gasto \"{0}\"", [nombre])
       }
       case "ingreso": {
-        const { error } = await userApi.walletIncome(a.monto, a.tipoIngreso === "salario" ? "salario" : "extra")
+        const { error } = await userApi.walletIncome(a.monto, a.tipoIngreso === "salario" ? "salario" : "extra", nombre || undefined)
         return error ? tr("No se pudo registrar el ingreso: {0}", [error]) : null
       }
       case "pago_obligacion": {
