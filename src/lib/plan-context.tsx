@@ -106,15 +106,15 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     exclusiveBadges: false, prioritySupport: false,
   }
   const FREE_LIMITS: PlanData["limits"] = {
-    nCategorias: { displayName: tr("categorías"), maxValue: 5 },
-    nDeudas: { displayName: "deudas", maxValue: 5 },
-    nGastosFijos: { displayName: "gastos fijos", maxValue: 8 },
-    nBolsillos: { displayName: "bolsillos", maxValue: 3 },
-    nMeDeben: { displayName: tr("personas que te deben"), maxValue: 3 },
+    nCategorias: { displayName: tr("categorías"), maxValue: 3 },
+    nDeudas: { displayName: "deudas", maxValue: 3 },
+    nGastosFijos: { displayName: "gastos fijos", maxValue: 4 },
+    nBolsillos: { displayName: "bolsillos", maxValue: 2 },
+    nMeDeben: { displayName: tr("personas que te deben"), maxValue: 1 },
     nIngresosExtra: { displayName: "ingresos extra", maxValue: 2 },
     nConexiones: { displayName: "conexiones", maxValue: 2 },
-    mesesProyeccion: { displayName: tr("meses de proyección"), maxValue: 3 },
-    mesesHistorial: { displayName: tr("meses de historial"), maxValue: 3 },
+    mesesProyeccion: { displayName: tr("meses de proyección"), maxValue: 0 },
+    mesesHistorial: { displayName: tr("meses de historial"), maxValue: 1 },
   }
   const PLAN_FREE: PlanData = { planName: tr("KIRI FREE"), tier: "FREE", fuente: "gratis", features: FREE_FEATURES, limits: FREE_LIMITS, hasPlan: false }
 
