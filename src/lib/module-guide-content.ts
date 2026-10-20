@@ -188,7 +188,7 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
       { icon: "🎙️", title: tr("Dictado por voz"), description: tr("Di algo como \"almorcé 18 mil, pagué el arriendo y ahorré 100 mil para el viaje\". Kiri separa cada cosa y la ubica: el gasto en su categoría, el pago en tu obligación, el ahorro en tu bolsillo. También entiende ingresos, préstamos (\"le presté 50 mil a Juan\"), deudas nuevas y categorías nuevas. Si prefieres, escríbelo.") },
       { icon: "📷", title: tr("Escáner de recibos"), description: tr("Toma o sube la foto de un recibo o factura: Kiri lee el comercio, el total y los productos. Puedes registrarlo todo en uno o separar por productos, y si reconoce una factura de tus gastos fijos (luz, internet…) la registra como pago. Si lee el valor pero no sabe a qué corresponde, tú eliges a dónde va.") },
       { icon: "💬", title: tr("Kiri Coach"), description: tr("Pregúntale lo que sea de la app (\"¿cómo funciona el presupuesto del hogar?\") o de tu plata (\"¿cómo voy este mes?\", \"¿qué deuda pago primero?\"). Conoce tus datos reales, te explica cada movimiento y también puede dejar listo un registro para que lo confirmes.") },
-      { icon: "🔋", title: tr("Tu cuota de IA"), description: tr("Cada plan trae mensajes, dictados y escaneos al mes (FREE 10/10/3, PLUS 150/100/30, PRO 500/300/100). Invitando amigos ganas usos extra que se suman a los de tu plan. Kiri te muestra cuántos te quedan y se renuevan el día 1. Separar un recibo por productos es de KIRI PRO.") },
+      { icon: "🔋", title: tr("Tu cuota de IA"), description: tr("Cada plan trae mensajes, dictados y escaneos al mes (FREE 5/5/3, PLUS 150/100/30, PRO 500/300/100). Invitando amigos ganas usos extra que se suman a los de tu plan. Kiri te muestra cuántos te quedan y se renuevan el día 1. Separar un recibo por productos es de KIRI PRO.") },
     ],
   },
   {
@@ -204,9 +204,9 @@ export const MODULE_GUIDES: ModuleGuideData[] = [
     bgGradient: "from-amber-500/10 to-amber-900/5",
     borderColor: "border-amber-500/20",
     items: [
-      { icon: "🌱", title: tr("KIRI FREE · $0"), description: tr("Registra gastos, ingresos y pagos sin límite, con árbol, misiones y fondo de emergencia. Incluye 5 categorías, 3 bolsillos, 5 deudas, 8 gastos fijos, 2 conexiones, 3 meses de historial y proyecciones a 3 meses.") },
+      { icon: "🌱", title: tr("KIRI FREE · $0"), description: tr("Registra gastos, ingresos y pagos sin límite, con árbol, misiones y fondo de emergencia. Incluye 3 categorías, 2 bolsillos, 3 deudas, 4 gastos fijos, 1 registro en Me deben, 2 conexiones y el historial del mes actual. Las proyecciones son de KIRI PLUS.") },
       { icon: "✨", title: tr("KIRI PLUS · $14.900/mes"), description: tr("O $139.000 al año. 20 categorías, 10 bolsillos y deudas sin límite; préstamos y deudas compartidas, 3 bolsillos compartidos, proyecciones a 24 meses con recorte de gastos hormiga, 24 meses de historial y PDF.") },
-      { icon: "👑", title: tr("KIRI PRO · $24.900/mes"), description: tr("O $229.000 al año. Todo sin límite, presupuesto del hogar en pareja, conexión con tu banco, escenarios guardados, historial completo, insignias exclusivas y soporte prioritario.") },
+      { icon: "👑", title: tr("KIRI PRO · $24.900/mes"), description: tr("O $229.000 al año. Registros sin límite, presupuesto del hogar en pareja, escáner que separa el recibo por productos, escenarios guardados, historial completo, más IA, insignias exclusivas y soporte prioritario. La conexión con tu banco llega pronto.") },
       { icon: "🎁", title: tr("Invita y gana"), description: tr("Tu amigo llega con 14 días de KIRI PLUS gratis y 50% en su primer mes (30% en PRO). Cuando registra sus primeros movimientos, los dos ganan +20 mensajes, +10 dictados y +5 escaneos de Kiri Coach; cuando se suscribe, tú ganas 1 mes gratis de tu plan (si ya pagas, en tu factura). Sin tope, con niveles: 3 amigos = 1 mes gratis, 10 amigos = 3 meses de PRO, 25 = PRO por 1 año.") },
       { icon: "🚧", title: tr("Límites del plan"), description: tr("Si llegas a un límite, Kiri te avisa y te lleva a Mi plan: nunca pierdes lo que ya registraste.") },
     ],

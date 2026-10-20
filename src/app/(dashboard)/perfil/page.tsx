@@ -42,7 +42,7 @@ export default function PerfilPage() {
     : null
   const detallePlan = diasPrueba !== null
     ? tr("Días gratis · {0}", [diasPrueba <= 1 ? tr("terminan hoy") : tr("te quedan {0} días", [diasPrueba])])
-    : tier === "PRO" ? tr("Todo sin límite, hogar y conexión con tu banco")
+    : tier === "PRO" ? tr("Registros sin límite, hogar y más IA")
       : tier === "PLUS" ? tr("Más espacio, PDF, préstamos y más IA")
       : tr("Plan gratis · mira lo que desbloqueas")
 

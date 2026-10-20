@@ -42,8 +42,8 @@ export function ProyeccionesTab() {
   const { formatAmount, income, incomeFrequency, tipoIngreso, ingresoEstimado } = useAppContext()
   const { debts, fixedExpenses, totalAhorrado, extraIncomes, loading } = useFinanceData()
 
-  const { limite, hasFeature } = usePlan()
-  // FREE ve hasta 3 meses; PLUS y PRO hasta 24
+  const { limite, hasFeature, loading: planLoading } = usePlan()
+  // KIRI FREE no tiene proyecciones (0 meses); PLUS y PRO hasta 24
   const maxMeses = limite("mesesProyeccion") ?? 24
   const puedeHormiga = maxMeses > 3
   const puedeEscenarios = hasFeature("savedScenarios")
@@ -124,6 +124,18 @@ export function ProyeccionesTab() {
     ? calculateProjections({ ...datos, ahorroInicial: totalAhorrado, aporteExtra: aporteTotal, meses })
     : null, [listo, datos, totalAhorrado, aporteTotal, meses])
 
+  if (!planLoading && maxMeses <= 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-14 px-6 text-center space-y-4">
+        <div className="h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+          <Lock className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+        </div>
+        <h3 className="text-lg font-bold">{tr("Proyecciones es de KIRI PLUS")}</h3>
+        <p className="text-sm text-muted-foreground max-w-sm">{tr("Mira cómo crece tu plata mes a mes, el día en que quedas libre de deudas y cuánto ahorras de 3 a 24 meses.")}</p>
+        <Link href="/mi-plan#planes" className="inline-flex items-center justify-center rounded-xl bg-kiri-emerald px-5 h-11 text-sm font-bold text-white">{tr("Ver planes")}</Link>
+      </div>
+    )
+  }
   if (!listo) {
     return <div className="space-y-4"><div className="h-28 rounded-2xl bg-muted/30 animate-pulse" /><div className="h-40 rounded-2xl bg-muted/30 animate-pulse" /><div className="h-64 rounded-2xl bg-muted/30 animate-pulse" /></div>
   }

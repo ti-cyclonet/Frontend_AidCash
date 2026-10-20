@@ -3125,4 +3125,10 @@ export const EN: Record<string, string> = {
   "Me prestaron más": "They lent me more",
   "Sumaste {0} a la deuda": "You added {0} to the debt",
   "Bajaste {0} de la deuda": "You took {0} off the debt",
+  "Registros sin límite, hogar y más IA": "Unlimited records, household and more AI",
+  "Proyecciones es de KIRI PLUS": "Projections are part of KIRI PLUS",
+  "Mira cómo crece tu plata mes a mes, el día en que quedas libre de deudas y cuánto ahorras de 3 a 24 meses.": "See how your money grows month by month, the day you become debt-free and how much you save over 3 to 24 months.",
+  "Cada plan trae mensajes, dictados y escaneos al mes (FREE 5/5/3, PLUS 150/100/30, PRO 500/300/100). Invitando amigos ganas usos extra que se suman a los de tu plan. Kiri te muestra cuántos te quedan y se renuevan el día 1. Separar un recibo por productos es de KIRI PRO.": "Each plan includes monthly messages, dictations and scans (FREE 5/5/3, PLUS 150/100/30, PRO 500/300/100). Inviting friends earns you extra uses on top of your plan's. Kiri shows how many you have left and they renew on the 1st. Splitting a receipt by item is KIRI PRO.",
+  "Registra gastos, ingresos y pagos sin límite, con árbol, misiones y fondo de emergencia. Incluye 3 categorías, 2 bolsillos, 3 deudas, 4 gastos fijos, 1 registro en Me deben, 2 conexiones y el historial del mes actual. Las proyecciones son de KIRI PLUS.": "Record unlimited expenses, income and payments, with your tree, missions and emergency fund. Includes 3 categories, 2 pockets, 3 debts, 4 fixed expenses, 1 Owed to me record, 2 connections and the current month's history. Projections are part of KIRI PLUS.",
+  "O $229.000 al año. Registros sin límite, presupuesto del hogar en pareja, escáner que separa el recibo por productos, escenarios guardados, historial completo, más IA, insignias exclusivas y soporte prioritario. La conexión con tu banco llega pronto.": "Or $229,000 a year. Unlimited records, household budget for couples, scanner that splits receipts by item, saved scenarios, full history, more AI, exclusive badges and priority support. Bank connection is coming soon.",
 }
