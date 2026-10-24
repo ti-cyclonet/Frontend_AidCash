@@ -15,7 +15,8 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
-import { useFinanceData } from "@/hooks/use-finance-data"
+import { useFinanceData, avisarCupo } from "@/hooks/use-finance-data"
+import { TarjetaOpcion } from "@/components/obligaciones/TarjetaOpcion"
 import { userApi, WalletState } from "@/lib/api-client"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { getCurrentQuincena, getPeriodRangeLabel, getNextPeriodLabel, isGenuinelyOverdue } from "@/lib/period-filter"
@@ -27,6 +28,7 @@ import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/in
 import { Debt, FixedExpense } from "@/lib/types"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
 import { tr } from "@/lib/i18n"
+import { toast } from "@/hooks/use-toast"
 
 // ─── Animated Amount ──────────────────────────────────────────────────────────
 
@@ -177,7 +179,12 @@ export function BilleteraTab() {
   }, [frequencyExpanded, obligationsExpanded])
   const [monto, setMonto] = useState("")
   const [tipo, setTipo] = useState<"salario" | "extra">("salario")
-  const [extraSubMode, setExtraSubMode] = useState<"variado" | "sueldo_extra">("variado")
+  const [extraSubMode, setExtraSubMode] = useState<"variado" | "sueldo_extra" | "avance">("variado")
+  // Avance de tarjeta de crédito: el monto entra a la billetera; a la tarjeta
+  // va monto + comisión, dividido en las cuotas elegidas.
+  const [avanceTC, setAvanceTC] = useState<string | null>(null)
+  const [avanceCuotas, setAvanceCuotas] = useState("1")
+  const [avanceComision, setAvanceComision] = useState("")
   const [selectedExtras, setSelectedExtras] = useState<string[]>([])
   const [extraDesc, setExtraDesc] = useState("")
   const [saving, setSaving] = useState(false)
@@ -260,8 +267,36 @@ export function BilleteraTab() {
     return { total: nextDebts.reduce((a, d) => a + d.cuotaPeriodo, 0) + nextFixed.reduce((a, f) => a + f.monto, 0) }
   }, [debts, fixedExpenses, periodDebts, periodFixed])
 
+  // Solo tarjetas de crédito: un crédito de compras no da avances en efectivo
+  const tarjetasAvance = useMemo(() => debts.filter(d => d.tipoDeuda === "TARJETA_CREDITO" && d.estado !== "saldada"), [debts])
+  const esAvance = tipo === "extra" && extraSubMode === "avance"
+  const avanceDeuda = (Number(monto) || 0) + (Number(avanceComision) || 0)
+  const avanceNumCuotas = Math.min(48, Math.max(1, Math.round(Number(avanceCuotas) || 1)))
+
+  const resetAvance = () => { setAvanceTC(null); setAvanceCuotas("1"); setAvanceComision("") }
+
+  const handleRegisterAvance = async () => {
+    if (!avanceTC || !monto || Number(monto) <= 0) return
+    setSaving(true)
+    const { data, error } = await userApi.walletAvanceTarjeta({
+      tarjetaId: avanceTC, monto: Number(monto), cuotas: avanceNumCuotas, comision: Number(avanceComision) || 0, descripcion: extraDesc,
+    })
+    setSaving(false)
+    if (error || !data) {
+      toast({ title: tr("No se pudo registrar el avance"), description: error ?? tr("Intenta de nuevo."), variant: "destructive" })
+      return
+    }
+    setWallet(data.wallet)
+    if (data.avisoCupo) avisarCupo(data.avisoCupo, tarjetasAvance.find(t => t.id === avanceTC)?.nombre ?? "")
+    // La tarjeta subió su saldo (y su cuota desde el próximo extracto)
+    refetch()
+    window.dispatchEvent(new Event("kiri:wallet-updated"))
+    setIncomeOpen(false); setMonto(""); setExtraDesc(""); resetAvance()
+  }
+
   // Handlers
   const handleRegisterIncome = async () => {
+    if (esAvance) return handleRegisterAvance()
     if (!monto || Number(monto) <= 0) return
     setSaving(true)
     // Lo que escribió en "¿Qué es?" o los ingresos extra que eligió: así Balance
@@ -698,7 +733,7 @@ export function BilleteraTab() {
       </Card>
 
       {/* ═══ MODAL REGISTRAR INGRESO ═══ */}
-      <Dialog open={incomeOpen} onOpenChange={setIncomeOpen}>
+      <Dialog open={incomeOpen} onOpenChange={v => { setIncomeOpen(v); if (!v) resetAvance() }}>
         <DialogContent className="sm:max-w-lg lg:max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-kiri-emerald" />{" "}{tr("Registrar Ingreso")}</DialogTitle>
@@ -744,12 +779,60 @@ export function BilleteraTab() {
             {/* Modo Extra — 2 sub-opciones */}
             {tipo === "extra" && (
               <>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => setExtraSubMode("variado")} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
                     extraSubMode === "variado" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>{tr("Ingreso variado")}</button>
                   <button onClick={() => setExtraSubMode("sueldo_extra")} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
                     extraSubMode === "sueldo_extra" ? "border-cyclon-lavender bg-cyclon-lavender/5 text-cyclon-lavender" : "border-muted text-muted-foreground")}>{tr("Sueldo extra")}</button>
+                  <button onClick={() => { setExtraSubMode("avance"); setMonto(""); setSelectedExtras([]) }} className={cn("h-10 rounded-xl border-2 text-xs font-bold transition-colors",
+                    extraSubMode === "avance" ? "border-amber-500 bg-amber-500/5 text-amber-600" : "border-muted text-muted-foreground")}>{tr("Avance TC")}</button>
                 </div>
+
+                {extraSubMode === "avance" && (
+                  <div className="space-y-3">
+                    {tarjetasAvance.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-3">{tr("No tienes tarjetas de crédito registradas. Agrégala en Obligaciones para registrar un avance.")}</p>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Monto del avance")}</Label>
+                          <MoneyInput value={monto} onChange={setMonto} className="h-14 text-2xl font-bold bg-muted/30 border-none rounded-2xl" placeholder="0" />
+                          <p className="text-[10px] text-muted-foreground">{tr("Lo que te entregaron en efectivo: esto se suma a tu billetera.")}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿Con qué tarjeta?")}</Label>
+                          {tarjetasAvance.map(tc => (
+                            <TarjetaOpcion key={tc.id} tc={tc} selected={avanceTC === tc.id}
+                              onSelect={() => setAvanceTC(avanceTC === tc.id ? null : tc.id)}
+                              formatAmount={formatAmount} monto={avanceDeuda} />
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿A cuántas cuotas?")}</Label>
+                            <Input type="number" min="1" max="48" value={avanceCuotas} onChange={e => setAvanceCuotas(e.target.value)} className="h-11 rounded-xl text-center font-bold" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Comisión del banco")}</Label>
+                            <MoneyInput value={avanceComision} onChange={setAvanceComision} className="h-11 rounded-xl font-bold" placeholder="0" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground -mt-1">{tr("¿Cuánto te cobró la tarjeta por hacer el avance? Se suma a la deuda, no a tu billetera.")}</p>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("¿Para qué? (opcional)")}</Label>
+                          <Input value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder={tr("Ej: Arreglo del carro, matrícula...")} className="rounded-xl" />
+                        </div>
+                        {Number(monto) > 0 && avanceTC && (
+                          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 space-y-1">
+                            <p className="text-xs font-medium">{tr("Entran {0} a tu billetera.", [formatAmount(Number(monto))])}</p>
+                            <p className="text-xs font-medium">{tr("A la tarjeta se suman {0}", [formatAmount(avanceDeuda)])}{Number(avanceComision) > 0 && <span className="text-muted-foreground">{" "}{tr("(incluye {0} de comisión)", [formatAmount(Number(avanceComision))])}</span>}</p>
+                            <p className="text-[10px] text-muted-foreground">{tr("Su cuota sube {0}/mes desde el próximo extracto, durante {1} {2}.", [formatAmount(Math.round(avanceDeuda / avanceNumCuotas)), avanceNumCuotas, avanceNumCuotas === 1 ? tr("mes") : tr("meses")])}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {extraSubMode === "variado" && (
                   <div className="space-y-3">
@@ -811,10 +894,10 @@ export function BilleteraTab() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc(""); setSelectedExtras([]) }}>{tr("Cancelar")}</Button>
-            <Button onClick={handleRegisterIncome} disabled={saving || !monto || Number(monto) <= 0}
-              className={cn("font-bold rounded-xl px-6", tipo === "salario" ? "bg-kiri-emerald text-white" : "bg-cyclon-lavender text-white")}>
-              {saving ? "Distribuyendo..." : tipo === "salario" ? (variable ? tr("Registrar ingreso") : tr("Sí, registrar mi Sueldo Base")) : tr("Registrar")}
+            <Button variant="ghost" onClick={() => { setIncomeOpen(false); setMonto(""); setExtraDesc(""); setSelectedExtras([]); resetAvance() }}>{tr("Cancelar")}</Button>
+            <Button onClick={handleRegisterIncome} disabled={saving || !monto || Number(monto) <= 0 || (esAvance && !avanceTC)}
+              className={cn("font-bold rounded-xl px-6", tipo === "salario" ? "bg-kiri-emerald text-white" : esAvance ? "bg-amber-500 text-white" : "bg-cyclon-lavender text-white")}>
+              {saving ? "Distribuyendo..." : tipo === "salario" ? (variable ? tr("Registrar ingreso") : tr("Sí, registrar mi Sueldo Base")) : esAvance ? tr("Registrar avance") : tr("Registrar")}
             </Button>
           </DialogFooter>
         </DialogContent>

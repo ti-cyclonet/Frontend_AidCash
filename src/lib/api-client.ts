@@ -370,6 +370,18 @@ export const userApi = {
     return res
   },
 
+  /**
+   * Avance de tarjeta de crédito: `monto` entra a la billetera y en la tarjeta
+   * queda monto + comisión, dividido en `cuotas` desde el próximo extracto.
+   * En Balance sale como "Avance TC" y no cuenta como ingreso real.
+   */
+  async walletAvanceTarjeta(body: { tarjetaId: string; monto: number; cuotas: number; comision: number; descripcion?: string }) {
+    return api<{ record: Record<string, unknown>; wallet: WalletState; avisoCupo: AvisoCupo | null }>('/users/wallet/avance-tarjeta', {
+      method: 'POST',
+      body: { ...body, descripcion: body.descripcion?.trim() ? body.descripcion.trim().slice(0, 120) : undefined },
+    })
+  },
+
   /** Lo que tiene hoy en total (test inicial): punto de partida del Sueldo Real, no un ingreso. */
   async walletSaldoInicial(monto: number) {
     return api<{ wallet: WalletState }>('/users/wallet/saldo-inicial', { method: 'POST', body: { monto } })
@@ -1052,6 +1064,9 @@ export interface Movement {
   saldoPosterior?: number
   tasaInteres?: string
   acreedor?: string
+  /** Ingreso que fue un avance de tarjeta de crédito (no cuenta como ingreso real;
+   * eliminarlo también revierte la deuda en la tarjeta). */
+  esAvance?: boolean
   /** Si el pago se hizo con tarjeta de crédito, el nombre de esa tarjeta —
    * null/undefined significa que salió del disponible en efectivo. */
   tarjetaNombre?: string | null
