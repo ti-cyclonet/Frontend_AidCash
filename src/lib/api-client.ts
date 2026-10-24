@@ -632,7 +632,7 @@ export const impulseApi = {
       body: data,
     })
     // El árbol reacciona con tormenta (ver lib/garden-events.ts)
-    if (res.data?.expense?.esHormiga) marcarTormentaHormiga(String(res.data.expense.nombre ?? data.nombre))
+    if (res.data?.expense?.esHormiga) marcarTormentaHormiga(String(res.data.expense.nombre ?? data.nombre), Number(res.data.expense.monto ?? data.monto) || 0)
     return res
   },
 

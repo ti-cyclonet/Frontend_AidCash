@@ -117,3 +117,78 @@ export function tocarPremio() {
 export function tocarRiego() {
   notas([1400, 1100, 1250, 950], { paso: 0.09, dur: 0.09, tipo: "sine", volumen: 0.08 })
 }
+
+// ─── Sonidos del árbol 3D ────────────────────────────────────────────────────
+// Ráfagas de ruido filtrado (mismo estilo sintetizado, sin archivos).
+
+let ruido: AudioBuffer | null = null
+function bufferRuido(ac: AudioContext) {
+  if (ruido && ruido.sampleRate === ac.sampleRate) return ruido
+  ruido = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate)
+  const d = ruido.getChannelData(0)
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
+  return ruido
+}
+
+function rafaga({ freq, tipo, q = 1, dur, volumen }: { freq: number; tipo: BiquadFilterType; q?: number; dur: number; volumen: number }) {
+  const ac = contexto()
+  if (!ac || ac.state !== "running") return
+  try {
+    const t0 = ac.currentTime
+    const s = ac.createBufferSource()
+    s.buffer = bufferRuido(ac)
+    const f = ac.createBiquadFilter()
+    f.type = tipo
+    f.frequency.value = freq
+    f.Q.value = q
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.exponentialRampToValueAtTime(volumen, t0 + Math.min(0.04, dur * 0.3))
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+    s.connect(f).connect(g).connect(ac.destination)
+    s.start(t0, Math.random())
+    s.stop(t0 + dur + 0.05)
+  } catch {
+    // sin audio: el árbol sigue siendo visual
+  }
+}
+
+/** Hojas que se sacuden (solo cuando el árbol ya tiene hojas). */
+export function tocarHojas() {
+  rafaga({ freq: 3800, tipo: "highpass", dur: 0.4, volumen: 0.13 })
+}
+
+/** Una manzana que cae al piso. */
+export function tocarGolpe() {
+  rafaga({ freq: 220, tipo: "lowpass", dur: 0.18, volumen: 0.35 })
+}
+
+/** Toque suave (hormiguero, la hormiga toma lo que compró). */
+export function tocarPop() {
+  notas([520, 780], { paso: 0.05, dur: 0.09, tipo: "sine", volumen: 0.07 })
+}
+
+let lluviaGain: GainNode | null = null
+/** Lluvia de fondo continua; 0 la apaga. */
+export function ponerLluvia(intensidad: number) {
+  if (!ctx && intensidad <= 0) return
+  const ac = contexto()
+  if (!ac || ac.state !== "running") return
+  try {
+    if (!lluviaGain) {
+      const s = ac.createBufferSource()
+      s.buffer = bufferRuido(ac)
+      s.loop = true
+      const hp = ac.createBiquadFilter()
+      hp.type = "highpass"
+      hp.frequency.value = 1500
+      lluviaGain = ac.createGain()
+      lluviaGain.gain.value = 0
+      s.connect(hp).connect(lluviaGain).connect(ac.destination)
+      s.start()
+    }
+    lluviaGain.gain.setTargetAtTime(Math.max(0, intensidad) * 0.09, ac.currentTime, 0.4)
+  } catch {
+    // sin audio
+  }
+}

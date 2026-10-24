@@ -1,0 +1,154 @@
+<title>Árbol Kiri 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap">
+<style>
+/* Layout: una columna como tu app; el escenario 3D reemplaza la imagen del árbol, el resto es el mismo panel (salud, riego, hitos, niveles). */
+:root{
+  --bg:#0b120d; --card:#111c17; --stage:#0f1a14; --track:#1f2e25; --line:rgba(255,255,255,.08);
+  --text:#eef4ef; --muted:#8fa196; --gold:#efb72d; --green:#31ec68; --chip:#20614b;
+  --water-bg:#122c29; --water-line:#1f5b57; --water:#6fe3e0; --warn:#ff7a59;
+  --font:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme: dark;
+}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);
+  padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+.col{max-width:640px;margin:0 auto;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px}
+h1{margin:0;font-size:clamp(24px,5vw,32px);line-height:1.1;font-weight:800;letter-spacing:-.01em}
+.lead{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.45;max-width:52ch}
+.stagewrap{position:relative;margin-top:14px;border-radius:18px;overflow:hidden;background:var(--stage);aspect-ratio:16/11;max-height:70vh;min-height:300px}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;cursor:pointer}
+
+.pill{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(10,18,14,.72);border:1px solid var(--line);color:var(--text);
+  font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:999px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:opacity .4s}
+.pill.off{opacity:0}
+.sndbtn{position:absolute;right:10px;bottom:10px;width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:rgba(10,18,14,.72);color:var(--text);display:grid;place-items:center;cursor:pointer}
+.sndbtn[aria-pressed="false"]{color:var(--muted)}
+.toast{position:absolute;left:50%;bottom:16px;transform:translate(-50%,8px);opacity:0;pointer-events:none;background:rgba(10,18,14,.86);border:1px solid var(--line);padding:8px 14px;border-radius:12px;font-weight:800;font-size:14px;transition:.3s;max-width:90%;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.preview{display:none;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;background:#1a2a20;border:1px solid var(--line);border-radius:14px;padding:8px 12px;font-size:13px;font-weight:700}
+.preview.on{display:flex}
+.preview button{background:none;border:0;color:var(--green);font:800 13px var(--font);cursor:pointer;padding:6px}
+
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lab{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+.pct{font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:99px;background:var(--track);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;width:15%;border-radius:99px;background:var(--warn);transition:width .8s,background .8s}
+.bar.xp i{background:var(--gold)}
+.small{font-size:12px;color:var(--muted)}
+.today{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.today .k{font-size:11.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.chip{font-size:12.5px;font-weight:800;padding:4px 10px;border-radius:999px;background:#17241c;border:1px solid var(--line);color:var(--muted)}
+.chip.done{background:var(--chip);border-color:#2c8a69;color:#bff7dd}
+.xpt{margin-left:auto;color:var(--gold);font-weight:800;font-size:12.5px}
+.hold{margin-top:12px;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px;border-radius:14px;border:1px solid var(--water-line);background:var(--water-bg);color:var(--water);
+  font:800 15px var(--font);cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;position:relative;overflow:hidden}
+.hold .fill{position:absolute;inset:0;width:0;background:rgba(111,227,224,.18);pointer-events:none}
+.hold span{position:relative;display:flex;align-items:center;gap:10px}
+.hold.on{border-color:var(--water)}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+.milestone{display:flex;align-items:center;gap:14px}
+.ico{width:44px;height:44px;border-radius:14px;background:#2a2410;display:grid;place-items:center;color:var(--gold);flex:none}
+.milestone .grow{flex:1;min-width:0}
+.milestone b{font-size:15px}
+
+.lv-head{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px}
+.lv-head svg{color:var(--green)}
+.levels{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:12px}
+.lv{background:#0e1812;border:1px solid var(--line);border-radius:14px;padding:10px 4px 8px;display:grid;justify-items:center;gap:6px;cursor:pointer;color:var(--text);font-family:var(--font);text-align:center}
+.lv svg{width:34px;height:34px;color:#6f8377}
+.lv .n{font-size:11px;font-weight:800}
+.lv .s{font-size:10px;color:var(--muted);line-height:1.2;min-height:24px}
+.lv .tag{font-size:10px;font-weight:800;border-radius:8px;padding:3px 6px;background:#17241c;color:var(--muted)}
+.lv.cur{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+.lv.cur .tag{background:var(--green);color:#052712}
+.lv.view{background:#16261c;border-color:#3d6a50}
+.lv.view svg{color:var(--green)}
+
+.sim{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sim .k{font-size:12px;font-weight:800;color:var(--muted);margin-right:4px}
+.sim button{background:#17241c;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:7px 14px;font:800 13px var(--font);cursor:pointer}
+.sim button[aria-pressed="true"]{background:var(--chip);border-color:#2c8a69;color:#bff7dd}
+.fail{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-weight:800}
+@media (max-width:560px){
+  .stagewrap{aspect-ratio:4/5;max-height:none}
+  .levels{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .card{padding:14px}
+}
+@media (prefers-reduced-motion:reduce){.pill,.toast,.bar i{transition:none}}
+</style>
+
+<div class="col">
+  <section class="card">
+    <h1 id="ttl">En tormenta</h1>
+    <p class="lead" id="lead">Tienes 2 obligaciones vencidas. Toca las nubes para verlas y ponte al día.</p>
+
+    <div class="stagewrap" id="stagewrap">
+      <canvas id="c" role="img" aria-label="Tu árbol en 3D. Toca el árbol para sacudirlo; toca el hormiguero para que salga una hormiga; arrastra a los lados para girar."></canvas>
+      <div class="pill" id="pill">Ponte al día y vuelve el sol</div>
+      <button class="sndbtn" id="btnSound" aria-pressed="true" aria-label="Sonido">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path id="sndW" d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/></svg>
+      </button>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+    <div class="preview" id="prev"><span id="prevT">Vista previa</span><button id="prevB">Volver a mi árbol</button></div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Salud del jardín</div>
+      <div class="pct" id="hpct">15%</div>
+    </div>
+    <div class="bar" id="hbar"><i id="hfill"></i></div>
+
+    <div class="today">
+      <span class="k">Hoy en tu jardín</span>
+      <span class="chip" id="chShake">Sacudido</span>
+      <span class="chip" id="chWater">Riega</span>
+      <span class="xpt" id="xpToday">+0 XP hoy</span>
+    </div>
+    <p class="small" style="margin:10px 0 0">Mantén presionado Regar para darle agua a tu árbol.</p>
+    <button class="hold" id="btnHold" aria-label="Mantén presionado para regar, más 5 XP">
+      <i class="fill" id="holdFill"></i>
+      <span><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5c3.6 4.3 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.4-6.7 6-11z"/></svg>Mantén para regar · +5 XP</span>
+    </button>
+  </section>
+
+  <section class="card milestone">
+    <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.6L19.5 9l-5.7 1.4L12 16l-1.8-5.6L4.5 9l5.7-1.4zM18.5 14l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg></div>
+    <div class="grow">
+      <div class="row"><b id="msT">Próximo hito: Nivel 2</b><span class="small" id="msX">495 / 850 XP</span></div>
+      <div class="bar xp"><i id="xfill" style="width:58%"></i></div>
+      <div class="small" id="msN" style="margin-top:6px">Te faltan 355 XP para desbloquear nuevas recompensas</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="lv-head"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21v-8M12 13c0-4-3-6-7-6 0 4 3 6 7 6zM12 11c0-3 2-5 6-5 0 3-2 5-6 5z"/></svg>Así crece tu jardín</div>
+    <p class="small" style="margin:4px 0 0">Toca un nivel para ver cómo se ve tu árbol ahí.</p>
+    <div class="levels" id="levels"></div>
+  </section>
+
+  <section class="card sim">
+    <span class="k">Simular tus finanzas:</span>
+    <button data-w="clear" aria-pressed="false">Al día</button>
+    <button data-w="rain" aria-pressed="false">Pago por vencer</button>
+    <button data-w="storm" aria-pressed="true">Obligaciones vencidas</button>
+  </section>
+
+  <section class="card sim">
+    <span class="k">Registrar gasto hormiga:</span>
+    <button data-gh="cafe">☕ Café $6.500</button>
+    <button data-gh="hamb">🍔 Hamburguesa $18.900</button>
+    <button data-gh="uber">🚕 Uber $12.000</button>
+    <button data-gh="gaseosa">🥤 Gaseosa $3.500</button>
+    <button data-gh="helado">🍦 Helado $5.000</button>
+    <button data-gh="domi">🛵 Domicilio $9.000</button>
+    <button data-gh="varios">🐜 Varios a la vez</button>
+  </section>
+</div>

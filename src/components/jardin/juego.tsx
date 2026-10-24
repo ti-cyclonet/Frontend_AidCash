@@ -102,6 +102,26 @@ const POS_PISO = [
 
 interface Vuelo { id: number; x: number; y: number; dorado: boolean; xp: number }
 
+/**
+ * Cosechar un fruto: vibra, suena, lo confirma el servidor y el fruto vuela
+ * desde (x, y) hasta la barra de XP. Lo usan los frutos en imagen y el árbol 3D.
+ */
+export function useCosechaFrutos(sonido: boolean, onCosechar: (indice: number) => Promise<{ xp: number; dorado: boolean } | null>) {
+  const [vuelos, setVuelos] = useState<Vuelo[]>([])
+  const idRef = useRef(0)
+  const cosechar = useCallback(async (indice: number, dorado: boolean, x: number, y: number) => {
+    prepararAudio()
+    vibrar(dorado ? [12, 40, 18] : 12)
+    if (sonido) tocarCosecha(dorado)
+    const res = await onCosechar(indice)
+    if (!res) return
+    const id = ++idRef.current
+    setVuelos(v => [...v, { id, x, y, dorado: res.dorado, xp: res.xp }])
+    window.setTimeout(() => setVuelos(v => v.filter(o => o.id !== id)), 1400)
+  }, [sonido, onCosechar])
+  return { cosechar, vuelos }
+}
+
 export function FrutosArbol({ frutos, sonido, onCosechar }: {
   frutos: EstadoJardin["frutos"]
   sonido: boolean
@@ -109,23 +129,14 @@ export function FrutosArbol({ frutos, sonido, onCosechar }: {
 }) {
   const pos = POS_PISO
   const [cayendo, setCayendo] = useState<number[]>([])
-  const [vuelos, setVuelos] = useState<Vuelo[]>([])
-  const idRef = useRef(0)
+  const { cosechar, vuelos } = useCosechaFrutos(sonido, onCosechar)
 
   const tocar = async (e: React.PointerEvent<HTMLButtonElement>, f: EstadoJardin["frutos"][number]) => {
     e.stopPropagation()
-    prepararAudio()
     if (cayendo.includes(f.indice)) return
     const r = e.currentTarget.getBoundingClientRect()
     setCayendo(c => [...c, f.indice])
-    vibrar(f.dorado ? [12, 40, 18] : 12)
-    if (sonido) tocarCosecha(f.dorado)
-    const res = await onCosechar(f.indice)
-    if (res) {
-      const id = ++idRef.current
-      setVuelos(v => [...v, { id, x: r.left + r.width / 2, y: r.top + r.height / 2, dorado: res.dorado, xp: res.xp }])
-      window.setTimeout(() => setVuelos(v => v.filter(x => x.id !== id)), 1400)
-    }
+    await cosechar(f.indice, f.dorado, r.left + r.width / 2, r.top + r.height / 2)
     window.setTimeout(() => setCayendo(c => c.filter(i => i !== f.indice)), 700)
   }
 
@@ -190,7 +201,7 @@ function Fruto({ dorado }: { dorado: boolean }) {
 }
 
 /** Fruto que vuela desde el árbol hasta la barra de XP (+N XP flotando). */
-function VuelosXP({ vuelos }: { vuelos: Vuelo[] }) {
+export function VuelosXP({ vuelos }: { vuelos: Vuelo[] }) {
   const [montado, setMontado] = useState(false)
   useEffect(() => setMontado(true), [])
   if (!montado) return null
@@ -333,26 +344,32 @@ export function PremioSacudida({ premio, onCerrar }: { premio: { icono: string; 
 
 // ─── Regar: mantener presionado ──────────────────────────────────────────────
 
-export function BotonRegar({ regado, xp, sonido, onRegado, onYaRegado }: {
+export function BotonRegar({ regado, xp, sonido, onRegado, onYaRegado, onRegando }: {
   regado: boolean
   xp: number
   sonido: boolean
   onRegado: () => Promise<boolean>
   onYaRegado: () => void
+  /** Mientras se mantiene presionado (para mostrar la regadera del árbol 3D) */
+  onRegando?: (activo: boolean) => void
 }) {
   const [progreso, setProgreso] = useState(0)
   const raf = useRef<number | null>(null)
   const inicio = useRef(0)
+  const regando = useRef(false)
   const DUR = 900
 
   const soltar = () => {
     if (raf.current) cancelAnimationFrame(raf.current)
     raf.current = null
     setProgreso(p => (p >= 1 ? p : 0))
+    if (regando.current) { regando.current = false; onRegando?.(false) }
   }
   const presionar = () => {
     prepararAudio()
     if (regado) { onYaRegado(); return }
+    regando.current = true
+    onRegando?.(true)
     inicio.current = performance.now()
     const paso = async (t: number) => {
       const p = Math.min(1, (t - inicio.current) / DUR)

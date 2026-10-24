@@ -8,8 +8,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
-  Wallet, Heart, TrendingUp, TrendingDown, Sparkles,
-  Flame, PiggyBank, ShieldCheck, ChevronRight,
+  Heart, Sparkles,
+  Flame, ChevronRight,
   Droplets, Lock, Check, Gift, Lightbulb, UserPlus, Volume2, VolumeX, CloudLightning, CalendarClock,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -18,22 +18,22 @@ import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
 import { tocarTrueno, prepararAudio, tocarToque, tocarPremio } from "@/lib/thunder-sound"
 import { usePlan } from "@/lib/plan-context"
 import {
-  useJardinJuego, useCombo, useToquesDelDia, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin,
+  useJardinJuego, useCombo, useToquesDelDia, useCosechaFrutos, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin, VuelosXP,
   TOQUES_PARA_SACUDIR, ID_BARRA_XP,
 } from "@/components/jardin/juego"
+import { ArbolKiri3D, type ClimaArbol, type GastoHormigaCola } from "@/components/jardin/arbol3d/ArbolKiri3D"
+import { nombreBaseGasto } from "@/lib/hormiga"
 import { InvitaWidget } from "@/components/referidos/InvitaYGana"
 import { celebrarLogro } from "@/components/referidos/CompartirLogro"
 import {
   GARDEN_EVENT_RAIN, GARDEN_EVENT_STORM, GARDEN_EVENT_INCOME,
-  consumirLluviaPendiente, consumirTormentaPendiente, consumirIngresoPendiente,
+  consumirLluviaPendiente, consumirTormentasPendientes, consumirIngresoPendiente,
 } from "@/lib/garden-events"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
-import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { userApi, loansApi, connectionsApi, WalletState } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
@@ -234,7 +234,6 @@ export default function JardinPage() {
   const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
   const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, xpFromRacha, loading: streakLoading } = useStreaks(incomeFrequency)
   const { plan } = usePlan()
-  const { periodData } = usePeriodBudget()
   const { budgetCategories } = useBudgetCategories()
 
   const [wallet, setWallet] = useState<WalletState>({
@@ -245,20 +244,6 @@ export default function JardinPage() {
     const refresh = () => userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) })
     window.addEventListener("kiri:wallet-updated", refresh)
     return () => window.removeEventListener("kiri:wallet-updated", refresh)
-  }, [])
-
-  // Meta total de los bolsillos de ahorro reales (para la barra de "Ahorro"
-  // del jardín) — antes leía de una clave de localStorage que la página de
-  // Ahorro dejó de escribir hace tiempo, así que para cualquier usuario con
-  // bolsillos reales siempre daba 0 y caía al fallback arbitrario de abajo.
-  const [realPocketsMeta, setRealPocketsMeta] = useState(0)
-  useEffect(() => {
-    import("@/lib/api-client").then(({ savingsPocketsApi }) => {
-      savingsPocketsApi.list().then(({ data }) => {
-        const withMeta = (data?.pockets ?? []).filter(p => p.meta > 0)
-        if (withMeta.length > 0) setRealPocketsMeta(withMeta.reduce((a, p) => a + Number(p.meta), 0))
-      })
-    })
   }, [])
 
   // ── Clima según obligaciones (vencidas → tormenta, próximas → nubes) ──────
@@ -331,9 +316,27 @@ export default function JardinPage() {
   }, [juego, sonidoOn])
   const toquesDia = useToquesDelDia(juego.estado?.fecha, juego.estado?.toquesPremio ?? 50, onMetaToques)
   const tocarArbol = useCallback(() => { combo.tocar(); toquesDia.contar() }, [combo, toquesDia])
+  const cosecha = useCosechaFrutos(sonidoOn, juego.cosechar)
+  // Mientras se mantiene presionado Regar, la regadera del árbol 3D echa agua
+  const [regandoBoton, setRegandoBoton] = useState(false)
+  // Árbol 3D: si el dispositivo no tiene WebGL se vuelve al árbol en imágenes
+  const [fallo3D, setFallo3D] = useState(false)
+  // "Así crece tu jardín": tocar un nivel lo muestra en el árbol 3D
+  const [vistaNivel, setVistaNivel] = useState<number | null>(null)
+  const arbolRef = useRef<HTMLDivElement>(null)
+  // Regadera del árbol 3D tras regar, ahorrar o cuando un amigo riega: un
+  // momento corto (el mensaje y el clima "¡Buen ahorro!" duran aparte)
+  const [regadera, setRegadera] = useState(false)
+  const regaderaTimer = useRef<number | null>(null)
+  const sacarRegadera = () => {
+    setRegadera(true)
+    if (regaderaTimer.current) window.clearTimeout(regaderaTimer.current)
+    regaderaTimer.current = window.setTimeout(() => setRegadera(false), 2800)
+  }
   const regar = async () => {
     const r = await juego.regar()
     if (!r) return false
+    sacarRegadera()
     setShowRainCelebration(true)
     setRainMessage(tr("💧 ¡Regaste tu árbol! +{0} XP", [r.xp]))
     if (rainTimer.current) window.clearTimeout(rainTimer.current)
@@ -397,8 +400,9 @@ export default function JardinPage() {
   const [rainMessage, setRainMessage] = useState<string | null>(null)
   const rainTimer = useRef<number | null>(null)
   const celebrarAhorro = (monto?: number) => {
+    sacarRegadera()
     setShowRainCelebration(true)
-    setRainMessage(monto ? tr("💧 Ahorraste {0}. ¡Cae la lluvia del crecimiento!", [formatAmount(monto)]) : tr("💧 Ahorro registrado. ¡Cae la lluvia del crecimiento!"))
+    setRainMessage(monto ? tr("💧 Ahorraste {0}. ¡Tu ahorro riega tu árbol!", [formatAmount(monto)]) : tr("💧 Ahorro registrado. ¡Tu ahorro riega tu árbol!"))
     if (rainTimer.current) window.clearTimeout(rainTimer.current)
     rainTimer.current = window.setTimeout(() => { setShowRainCelebration(false); setRainMessage(null) }, 8000)
   }
@@ -450,6 +454,7 @@ export default function JardinPage() {
     // La lluvia empieza de una vez (antes esperaba a que se fuera el mensaje
     // y casi nadie la alcanzaba a ver); el mensaje sale debajo del árbol.
     setWateredMessage(message)
+    sacarRegadera()
     setShowRainCelebration(true)
     if (rainTimer.current) window.clearTimeout(rainTimer.current)
     rainTimer.current = window.setTimeout(() => setShowRainCelebration(false), 8000)
@@ -484,25 +489,34 @@ export default function JardinPage() {
   }, [])
 
   // ── Tormenta de "gasto hormiga" — reacción visual (rayo + nubes oscuras +
-  //    lluvia oscura + vibración), sin hormigas dibujadas. Se dispara desde
-  //    cualquier pantalla vía CustomEvent (ver addImpulseExpense en
-  //    use-finance-data.tsx) — si el usuario está viendo el árbol justo
-  //    cuando registra el gasto, lo ve reaccionar en el momento.
+  //    lluvia oscura + vibración) y, en el árbol 3D, una hormiga por cada
+  //    gasto que sube al tronco y baja cargándolo. Se dispara desde cualquier
+  //    pantalla vía CustomEvent (ver impulseExpensesApi.create) — si el usuario
+  //    está viendo el árbol justo cuando registra el gasto, lo ve en el momento.
   const [showStorm, setShowStorm] = useState(false)
   const [stormMessage, setStormMessage] = useState<string | null>(null)
   const stormTimer = useRef<number | null>(null)
+  const [gastosHormiga, setGastosHormiga] = useState<GastoHormigaCola[]>([])
+  const gastoIdRef = useRef(0)
   const dispararTormentaHormiga = (nombre?: string) => {
     setStormMessage(nombre ? tr("🐜 Gasto hormiga: \"{0}\". La tormenta debilita el jardín", [nombre]) : tr("🐜 Gasto hormiga detectado. La tormenta debilita el jardín"))
     setShowStorm(true)
     if (stormTimer.current) window.clearTimeout(stormTimer.current)
     stormTimer.current = window.setTimeout(() => { setShowStorm(false); setStormMessage(null) }, 4500)
   }
+  const llegaronGastosHormiga = (lista: { nombre?: string; monto?: number }[]) => {
+    if (!lista.length) return
+    const ultimo = lista[lista.length - 1]
+    dispararTormentaHormiga(ultimo.nombre ? nombreBaseGasto(ultimo.nombre) : undefined)
+    setGastosHormiga(prev => [...prev, ...lista.map(g => ({ id: ++gastoIdRef.current, nombre: nombreBaseGasto(g.nombre ?? "") || tr("Gasto"), monto: Number(g.monto) || 0 }))])
+  }
   useEffect(() => {
-    const pendiente = consumirTormentaPendiente()
-    if (pendiente) window.setTimeout(() => dispararTormentaHormiga(pendiente.nombre), 1100)
+    const pendientes = consumirTormentasPendientes()
+    if (pendientes.length) window.setTimeout(() => llegaronGastosHormiga(pendientes), 1100)
     const onImpulse = (e: Event) => {
-      consumirTormentaPendiente()
-      dispararTormentaHormiga((e as CustomEvent<{ nombre?: string }>).detail?.nombre)
+      consumirTormentasPendientes()
+      const detalle = (e as CustomEvent<{ nombre?: string; monto?: number }>).detail
+      llegaronGastosHormiga([detalle ?? {}])
     }
     window.addEventListener(GARDEN_EVENT_STORM, onImpulse)
     return () => window.removeEventListener(GARDEN_EVENT_STORM, onImpulse)
@@ -561,29 +575,19 @@ export default function JardinPage() {
 
   // Clima financiero — ver getGardenWeather.
   const gardenWeather = getGardenWeather(hayVencidas, clima.proximas.length > 0, showRainCelebration)
+  // En el árbol 3D el ahorro y el riego no traen lluvia: sale la regadera.
+  // El cielo solo depende de las obligaciones.
+  const climaArbol: ClimaArbol = hayVencidas ? "tormenta" : clima.proximas.length > 0 ? "nubes" : "sol"
+  const frase = useCyclePhrase(GARDEN_PHRASES[healthLabel] ?? [])
   const cloudBadge = hayVencidas
     ? tr("⚡ {0} vencida{1} · toca aquí", [clima.vencidas.length, clima.vencidas.length === 1 ? "" : "s"])
     : clima.proximas.length > 0 ? tr("☁️ {0} por vencer · toca aquí", [clima.proximas.length]) : null
 
-  // ── Tu progreso general ─────────────────────────────────────────────────
-  // Antes: "Sueldo 100%" (barra llena con cualquier saldo), "Deudas 93%" (lo
-  // que FALTA, se leía como avance) y "Libertad financiera" = ahorro /
-  // (ahorro + deuda), que con cualquier crédito grande quedaba en 0% siempre.
-  // Ahora cada barra responde una pregunta concreta.
-  const ingresoPeriodo = periodData?.effectiveIncome ?? 0
-  const disponiblePct = ingresoPeriodo > 0
-    ? Math.min(100, Math.round((wallet.cashBalance / ingresoPeriodo) * 100))
-    : wallet.cashBalance > 0 ? 100 : 0
-  const savingsPct = realPocketsMeta > 0 ? Math.min(100, Math.round((totalAhorrado / realPocketsMeta) * 100)) : 0
+  // Colchón: cuántos meses de obligaciones podrías cubrir solo con tus ahorros (Consejo Kiri)
   const deudasActivas = debts.filter(d => d.estado === "activa")
-  const deudaOriginal = deudasActivas.reduce((a, d) => a + Number(d.montoTotal), 0)
-  const deudaSaldo = deudasActivas.reduce((a, d) => a + Number(d.saldoRestante ?? d.montoTotal), 0)
-  const deudaPagadaPct = deudaOriginal > 0 ? Math.max(0, Math.min(100, Math.round((1 - deudaSaldo / deudaOriginal) * 100))) : 0
-  // Colchón: cuántos meses de obligaciones podrías cubrir solo con tus ahorros
   const gastoMensualObligaciones = deudasActivas.reduce((a, d) => a + (d.cuotaBase ?? d.cuotaPeriodo) * (d.frecuenciaPago === "quincenal" ? 2 : 1), 0)
     + fixedExpenses.reduce((a, f) => a + Number(f.monto), 0)
   const mesesColchon = gastoMensualObligaciones > 0 ? totalAhorrado / gastoMensualObligaciones : null
-  const COLCHON_META_MESES = 3
 
   // ── Consejo Kiri ────────────────────────────────────────────────────────
   // Antes: una de 4 frases genéricas según el día del mes y un "Ver más
@@ -595,7 +599,7 @@ export default function JardinPage() {
     if (hayVencidas) lista.push({ texto: tr("Tienes {0} pago{1} vencido{2}. Empieza por el más antiguo: los atrasos suelen cobrar intereses de mora. ⛈️", [clima.vencidas.length, clima.vencidas.length === 1 ? "" : "s", clima.vencidas.length === 1 ? "" : "s"]), href: "/obligaciones", cta: tr("Pagar") })
     if (clima.proximas.length > 0) lista.push({ texto: tr("{0} vence pronto ({1}). Separa ese dinero desde ya para no gastarlo. ☁️", [clima.proximas[0].nombre, clima.proximas[0].etiqueta.toLowerCase()]), href: "/obligaciones", cta: tr("Ver") })
     if (wallet.cashBalance <= 0) lista.push({ texto: tr("Registra tu sueldo real cuando lo recibas: es la base para que Kiri reparta tu dinero y veas el sol en tu jardín. ☀️"), href: "/gestion?tab=billetera", cta: tr("Registrar") })
-    if (totalAhorrado <= 0) lista.push({ texto: tr("Aún no tienes ahorros. Empieza con poco: un bolsillo con una meta pequeña ya hace llover en tu jardín. 🌧️"), href: "/ahorro", cta: tr("Ahorrar") })
+    if (totalAhorrado <= 0) lista.push({ texto: tr("Aún no tienes ahorros. Empieza con poco: un bolsillo con una meta pequeña ya riega tu jardín. 💧"), href: "/ahorro", cta: tr("Ahorrar") })
     if (mesesColchon !== null && mesesColchon < 1) lista.push({ texto: tr("Tu colchón de emergencia cubre menos de un mes de obligaciones. La meta sana son 3 meses. 🛡️"), href: "/ahorro", cta: tr("Ahorrar") })
     if (!hasBudgetCategories) lista.push({ texto: tr("Crea categorías de presupuesto y Kiri te avisará cuando estés cerca del límite en cada una. 📊"), href: "/gestion", cta: tr("Crear") })
     lista.push(
@@ -664,6 +668,75 @@ export default function JardinPage() {
               <p className="text-[11px] lg:text-xs text-muted-foreground mt-1">{gardenRecommendation}</p>
             </div>
 
+            {dataReady && !fallo3D ? (
+              <div ref={arbolRef} className="space-y-2 scroll-mt-24">
+                {/* Frase con personalidad, encima del árbol */}
+                <div className="flex items-center justify-center h-10">
+                  {frase && (
+                    <div key={frase} className="max-w-[260px] text-center text-[11px] text-foreground bg-card border border-emerald-500/30 rounded-xl px-3 py-1.5 shadow-sm line-clamp-2" style={{ animation: "kiriBubblePop .4s ease" }}>
+                      {frase}
+                    </div>
+                  )}
+                </div>
+                <ArbolKiri3D
+                  nivel={currentLevelIdx + 1}
+                  progreso={nivelXp.meta > 0 ? nivelXp.xp / nivelXp.meta : 1}
+                  vistaPrevia={vistaNivel}
+                  clima={climaArbol}
+                  tormentaHormiga={showStorm}
+                  regando={regandoBoton || regadera}
+                  regandoBoton={regandoBoton}
+                  ingreso={showIncome}
+                  salud={gardenHealth}
+                  manzanasArbol={!!juego.estado && !juego.estado.sacudida}
+                  sonido={sonidoOn}
+                  frutos={juego.estado?.frutosDesbloqueados && currentLevelIdx >= 3 ? juego.estado.frutos : null}
+                  sacudida={sacudidaKey}
+                  subioNivel={showLevelUpGlow}
+                  gastosHormiga={gastosHormiga}
+                  formatAmount={formatAmount}
+                  onTap={tocarArbol}
+                  onNubes={() => setClimaOpen(true)}
+                  onCosechar={cosecha.cosechar}
+                  onFallo={() => setFallo3D(true)}
+                >
+                  {wateredMessage && (
+                    <MensajeEscena key={wateredMessage} className={cn("bg-sky-500 text-white border-sky-300/40", stormMessage || incomeMessage || rainMessage ? "bottom-14" : "bottom-3")} duracion={4}>
+                      <Droplets className="inline h-3.5 w-3.5 -mt-0.5 mr-1" />{wateredMessage}
+                    </MensajeEscena>
+                  )}
+                  {stormMessage ? (
+                    <MensajeEscena key={stormMessage} className="bottom-3 text-amber-200 border-amber-400/30" brillo="rgba(251,191,36,0.35)">{stormMessage}</MensajeEscena>
+                  ) : incomeMessage ? (
+                    <MensajeEscena key={incomeMessage} className="bottom-3 text-amber-100 border-amber-400/40" brillo="rgba(251,191,36,0.4)">{incomeMessage}</MensajeEscena>
+                  ) : rainMessage ? (
+                    <MensajeEscena key={rainMessage} className="bottom-3 text-sky-100 border-sky-400/40" brillo="rgba(56,189,248,0.35)">{rainMessage}</MensajeEscena>
+                  ) : avisoJuego ? (
+                    <MensajeEscena key={avisoJuego} className="bottom-3 text-white border-white/10" duracion={2.6}>{avisoJuego}</MensajeEscena>
+                  ) : null}
+                  <div className="absolute inset-3 pointer-events-none">
+                    <ComboBadge combo={combo.combo} sacudidaLista={!!juego.estado && !juego.estado.sacudida} />
+                  </div>
+                  <PremioSacudida premio={premio} onCerrar={() => setPremio(null)} />
+                  <button
+                    type="button"
+                    onClick={toggleSonido}
+                    className="absolute bottom-2.5 right-2.5 z-40 h-9 w-9 rounded-xl border border-white/10 bg-slate-900/70 text-white/90 backdrop-blur-sm flex items-center justify-center hover:text-white"
+                    aria-label={sonidoOn ? tr("Silenciar el jardín") : tr("Activar sonido del jardín")}
+                    title={sonidoOn ? tr("Silenciar el jardín") : tr("Activar sonido del jardín")}
+                  >
+                    {sonidoOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 opacity-70" />}
+                  </button>
+                </ArbolKiri3D>
+                {vistaNivel !== null && (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs font-bold">
+                    <span className="min-w-0 truncate">{tr("Vista previa del Nivel {0} · {1}", [vistaNivel, GARDEN_LEVELS[vistaNivel - 1].name])}</span>
+                    <button type="button" onClick={() => setVistaNivel(null)} className="shrink-0 font-black text-emerald-600 dark:text-emerald-400 hover:underline">{tr("Volver a mi árbol")}</button>
+                  </div>
+                )}
+                <VuelosXP vuelos={cosecha.vuelos} />
+              </div>
+            ) : (
             <div className="flex justify-center items-center">
               {dataReady ? (
                 <GardenTreeVisual
@@ -671,7 +744,6 @@ export default function JardinPage() {
                   currentLevel={currentLevel}
                   gardenHealth={gardenHealth}
                   gardenWeather={gardenWeather}
-                  streakActual={streakActual}
                   showLevelUpGlow={showLevelUpGlow}
                   healthLabel={healthLabel}
                   sizeClass="w-[250px] h-[250px] lg:w-[320px] lg:h-[320px]"
@@ -702,9 +774,10 @@ export default function JardinPage() {
                   </>}
                 />
               ) : (
-                <div className="w-[250px] h-[250px] lg:w-[320px] lg:h-[320px] rounded-full bg-muted/30 animate-pulse" />
+                <div className="w-full aspect-[4/5] sm:aspect-[16/11] sm:max-h-[70vh] min-h-[300px] rounded-[18px] bg-muted/30 animate-pulse" />
               )}
             </div>
+            )}
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
@@ -724,6 +797,7 @@ export default function JardinPage() {
                 sonido={sonidoOn}
                 onRegado={regar}
                 onYaRegado={() => router.push("/ahorro")}
+                onRegando={setRegandoBoton}
               />
               <Button
                 onClick={() => setInvitarOpen(true)}
@@ -788,49 +862,13 @@ export default function JardinPage() {
       {/* ═══ INVITA Y GANA — progreso al siguiente premio, siempre a la vista ═══ */}
       {plan?.referidos?.niveles && <InvitaWidget referidos={plan.referidos} />}
 
-      {/* ═══ TU PROGRESO GENERAL ═══ */}
-      <Card className="border-none bg-card shadow-sm rounded-2xl">
-        <CardContent className="p-4 lg:p-5 space-y-4">
-          <h3 className="text-sm font-bold flex items-center gap-2">{tr("Tu progreso general")}{" "}<TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Metrica
-              icon={Wallet} color="text-emerald-600 dark:text-emerald-400" barra="bg-emerald-500"
-              titulo={tr("Disponible")} valor={<OdometerAmount value={wallet.cashBalance} formatAmount={formatAmount} className="text-sm font-black text-emerald-600 dark:text-emerald-400" />}
-              pct={disponiblePct}
-              detalle={ingresoPeriodo > 0 ? tr("{0}% de tu ingreso del periodo", [disponiblePct]) : tr("Registra tu ingreso para compararlo")}
-            />
-            <Metrica
-              icon={PiggyBank} color="text-blue-600 dark:text-blue-400" barra="bg-blue-500"
-              titulo={tr("Ahorros")} valor={formatAmount(totalAhorrado)}
-              pct={savingsPct}
-              detalle={realPocketsMeta > 0 ? tr("{0}% de tu meta de {1}", [savingsPct, formatAmount(realPocketsMeta)]) : tr("Ponle una meta a tus bolsillos")}
-            />
-            <Metrica
-              icon={TrendingDown} color="text-red-600 dark:text-red-400" barra="bg-emerald-500"
-              titulo={tr("Deudas")} valor={formatAmount(totalDeuda)}
-              pct={deudaPagadaPct}
-              detalle={deudasActivas.length > 0 ? tr("Llevas {0}% pagado", [deudaPagadaPct]) : tr("Sin deudas 🎉")}
-            />
-            <Metrica
-              icon={ShieldCheck} color="text-purple-600 dark:text-purple-400" barra="bg-purple-500"
-              titulo={tr("Colchón de emergencia")}
-              valor={textoColchon(mesesColchon)}
-              pct={mesesColchon === null ? 0 : Math.min(100, Math.round((mesesColchon / COLCHON_META_MESES) * 100))}
-              detalle={mesesColchon === null ? tr("Registra tus obligaciones para calcularlo") : tr("Meses de obligaciones que cubren tus ahorros · meta {0}", [COLCHON_META_MESES])}
-            />
-          </div>
-          <Link href="/balance" className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:text-foreground pt-2 border-t border-border/50">{tr("Ver detalle completo")}{" "}<ChevronRight className="h-3 w-3" />
-          </Link>
-        </CardContent>
-      </Card>
-
       {/* ═══ ASÍ CRECE TU JARDÍN — Timeline de niveles ═══ */}
       <Card className="border-none bg-card shadow-sm rounded-2xl">
         <CardContent className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-bold flex items-center gap-2">{tr("🌿 Así crece tu jardín")}</h3>
             <p className="text-[10px] text-muted-foreground">{tr("Cada paso cuenta. Tú decides hasta dónde puede llegar.")}</p>
+            {dataReady && !fallo3D && <p className="text-[10px] text-muted-foreground">{tr("Toca un nivel para ver cómo se ve tu árbol ahí.")}</p>}
           </div>
 
           {/* Niveles grid */}
@@ -840,14 +878,27 @@ export default function JardinPage() {
               const isCurrent = i === currentLevelIdx
               const isNext = i === currentLevelIdx + 1
               const isLocked = i > currentLevelIdx + 1
+              const viendo = vistaNivel === level.level
+              const verNivel = () => {
+                if (!dataReady || fallo3D) return
+                setVistaNivel(isCurrent || viendo ? null : level.level)
+                arbolRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
 
               return (
-                <div key={level.level} className="flex flex-col items-center gap-2">
+                <div
+                  key={level.level}
+                  className={cn("flex flex-col items-center gap-2 rounded-xl py-1", dataReady && !fallo3D && "cursor-pointer hover:bg-muted/40", viendo && "bg-emerald-500/10")}
+                  onClick={verNivel}
+                  role={dataReady && !fallo3D ? "button" : undefined}
+                  aria-label={dataReady && !fallo3D ? tr("Ver el árbol en el nivel {0}", [level.level]) : undefined}
+                >
                   {/* Imagen */}
                   <div className={cn(
                     "relative h-16 w-16 rounded-xl flex items-center justify-center overflow-hidden",
                     isCurrent && "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background",
-                    (isNext || isLocked) && "opacity-40 grayscale",
+                    viendo && !isCurrent && "ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-background",
+                    (isNext || isLocked) && !viendo && "opacity-40 grayscale",
                   )}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={level.image} alt={level.name} className="h-14 w-14 object-contain" />
@@ -920,39 +971,6 @@ export default function JardinPage() {
   )
 }
 
-/** "—", "Menos de 1 día", "12 días", "1.5 meses"… */
-function textoColchon(meses: number | null): string {
-  if (meses === null) return "—"
-  if (meses < 1) {
-    const dias = Math.floor(meses * 30)
-    return dias < 1 ? tr("Menos de 1 día") : tr("{0} día{1}", [dias, dias === 1 ? "" : "s"])
-  }
-  const m = meses < 10 ? Math.round(meses * 10) / 10 : Math.round(meses)
-  return `${m} ${m === 1 ? "mes" : "meses"}`
-}
-
-function Metrica({ icon: Icon, color, barra, titulo, valor, pct, detalle }: {
-  icon: typeof Wallet
-  color: string
-  barra: string
-  titulo: string
-  valor: React.ReactNode
-  pct: number
-  detalle: string
-}) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <div className="flex items-center gap-2">
-        <Icon className={cn("h-4 w-4 shrink-0", color)} />
-        <span className="text-xs">{titulo}</span>
-      </div>
-      {typeof valor === "string" ? <p className={cn("text-sm font-black", color)}>{valor}</p> : valor}
-      <Progress value={pct} className="h-1.5" indicatorClassName={barra} />
-      <p className="text-[10px] text-muted-foreground">{detalle}</p>
-    </div>
-  )
-}
-
 // ─── Modal del clima: qué está vencido y qué vence pronto ─────────────────────
 
 function ClimaObligacionesModal({ open, onClose, vencidas, proximas, formatAmount, onIr }: {
@@ -1006,6 +1024,18 @@ function ClimaObligacionesModal({ open, onClose, vencidas, proximas, formatAmoun
 }
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
+
+/** Mensaje abajo del árbol 3D (tormenta, ahorro, ingreso, riego de un amigo). */
+function MensajeEscena({ className, brillo, duracion = 4.3, children }: { className?: string; brillo?: string; duracion?: number; children: React.ReactNode }) {
+  return (
+    <div
+      className={cn("absolute left-1/2 z-40 max-w-[calc(100%-6.5rem)] text-center pointer-events-none rounded-2xl border bg-slate-900/90 px-3.5 py-1.5 text-[11px] font-bold leading-snug", className)}
+      style={{ animation: `kiriToastPop ${duracion}s ease-out forwards`, boxShadow: brillo ? `0 0 16px 2px ${brillo}` : undefined }}
+    >
+      {children}
+    </div>
+  )
+}
 
 /**
  * Sol del clima financiero — antes era un solo círculo de gradiente radial
@@ -1097,18 +1127,17 @@ function TapBurst({ x, y, special, emoji }: { x: number; y: number; special: boo
  * Envuelve tu <img>/<motion.img> real (sin tocar tus assets de /garden/) con:
  * - filtro de ánimo (moodFilter) según salud
  * - clima financiero (sol / lluvia / nubes) como capas superpuestas
- * - luciérnagas si la racha es alta, hojas cayendo si la salud es baja
+ * - hojas cayendo si la salud es baja
  * - burbuja de frase con personalidad, encima del árbol
  *
- * Se instancia una vez para mobile y otra para desktop (igual que ya hacías
- * con el árbol), cada una con su propio tamaño vía `sizeClass`.
+ * Respaldo del árbol 3D (ArbolKiri3D): solo se usa si el dispositivo no
+ * soporta WebGL.
  */
 function GardenTreeVisual({
   currentLevelIdx,
   currentLevel,
   gardenHealth,
   gardenWeather,
-  streakActual,
   showLevelUpGlow,
   healthLabel,
   sizeClass,
@@ -1140,7 +1169,6 @@ function GardenTreeVisual({
   currentLevel: GardenLevel
   gardenHealth: number
   gardenWeather: GardenWeather
-  streakActual: number
   showLevelUpGlow: boolean
   healthLabel: string
   sizeClass: string
@@ -1272,54 +1300,7 @@ function GardenTreeVisual({
   // Solo nivel 3+ (Planta joven en adelante) tiene copa/follaje real de donde
   // puedan caer hojas — en Semilla/Brote no hay canopy, no tiene sentido mostrarlas.
   const showFallingLeaves = gardenHealth < 65 && currentLevelIdx >= 2
-  const showFireflies = streakActual >= 7
   const phrase = useCyclePhrase(GARDEN_PHRASES[healthLabel] ?? [])
-
-  // Rutas aleatorias por luciérnaga — no un círculo prolijo, sino vuelo errático
-  // tipo luciérnaga real. Se generan una sola vez por montaje (useMemo con deps
-  // vacías), cada una con sus propios waypoints/duración/retraso.
-  const fireflyPaths = useMemo(() => {
-    const RANGE = 85   // radio máximo desde el centro
-    const STEP = 30    // desplazamiento máximo entre un punto y el siguiente
-    const clamp = (n: number) => Math.max(-RANGE, Math.min(RANGE, n))
-
-    return Array.from({ length: 3 }, () => {
-      const waypoints = 10
-      // Paseo aleatorio: cada punto es un paso corto desde el anterior (no un
-      // salto largo a cualquier lugar), así el trazo se ve como un vuelo que
-      // deriva suavemente en vez de rectas quebradas entre puntos lejanos.
-      let x = (Math.random() - 0.5) * RANGE
-      let y = (Math.random() - 0.5) * RANGE
-      const xs = [x]
-      const ys = [y]
-      for (let i = 1; i < waypoints; i++) {
-        x = clamp(x + (Math.random() - 0.5) * STEP * 2)
-        y = clamp(y + (Math.random() - 0.5) * STEP * 2)
-        xs.push(x)
-        ys.push(y)
-      }
-      xs.push(xs[0])
-      ys.push(ys[0])
-
-      // Tiempo de cada tramo proporcional a su distancia — sin esto, tramos
-      // cortos y largos duran lo mismo y el vuelo se ve con frenones/acelerones
-      // poco naturales.
-      const segmentDist = xs.slice(1).map((_, i) => Math.hypot(xs[i + 1] - xs[i], ys[i + 1] - ys[i]))
-      const total = segmentDist.reduce((a, b) => a + b, 0) || 1
-      let acc = 0
-      const times = [0, ...segmentDist.map((d) => (acc += d) / total)]
-
-      return {
-        x: xs,
-        y: ys,
-        opacity: xs.map(() => 0.55 + Math.random() * 0.45),
-        times,
-        duration: 14 + Math.random() * 8,
-        delay: Math.random() * 2,
-      }
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (!showFallingLeaves) return
@@ -1638,7 +1619,7 @@ function GardenTreeVisual({
         )}
 
         {/* Árbol real — mismas 3 variantes de animación que ya tenías. z-10: va
-            delante del clima (sol/lluvia/nubes) pero detrás de luciérnagas/hojas.
+            delante del clima (sol/lluvia/nubes) pero detrás de las hojas.
             El wrapper usa margin (no transform) para no chocar con el transform
             inline que Framer Motion ya aplica en el árbol animado. */}
         <div
@@ -1684,21 +1665,6 @@ function GardenTreeVisual({
             <TapBurst key={b.id} x={b.x} y={b.y} special={b.special} emoji={b.emoji} />
           ))}
         </div>
-
-        {/* Luciérnagas — racha ≥ 7 días. z-30: siempre visibles por delante del árbol.
-            Parten de un único punto central (left/top 50%); Framer Motion anima cada
-            una por su propia ruta de waypoints aleatorios (fireflyPaths) — vuelo
-            errático, no un círculo prolijo, y cada luciérnaga es distinta. */}
-        {showFireflies &&
-          fireflyPaths.map((path, i) => (
-            <motion.span
-              key={i}
-              className="absolute left-1/2 top-1/2 z-30 w-1.5 h-1.5 rounded-full bg-amber-400 pointer-events-none"
-              style={{ boxShadow: "0 0 8px 3px rgba(251,191,36,0.75)" }}
-              animate={{ x: path.x, y: path.y, opacity: path.opacity }}
-              transition={{ duration: path.duration, delay: path.delay, times: path.times, repeat: Infinity, ease: "easeInOut" }}
-            />
-          ))}
 
         {/* Hojas cayendo — salud < 65%, nivel 3+. Nacen a media altura (más o
             menos donde está el follaje), no desde arriba del todo (ahí está el

@@ -39,9 +39,18 @@ export function marcarLluviaDeAhorro(monto: number) {
   marcar(LLUVIA_KEY, { monto }, GARDEN_EVENT_RAIN)
 }
 
-/** Se registró un gasto hormiga. */
-export function marcarTormentaHormiga(nombre: string) {
-  marcar(TORMENTA_KEY, { nombre }, GARDEN_EVENT_STORM)
+/**
+ * Se registró un gasto hormiga. A diferencia de la lluvia y el sol, aquí se
+ * guarda una lista: cada gasto sale como una hormiga cuando entras al Jardín.
+ */
+export function marcarTormentaHormiga(nombre: string, monto = 0) {
+  if (typeof window === "undefined") return
+  const detalle = { nombre, monto }
+  try {
+    const previos = leerLista<{ nombre: string; monto: number }>(TORMENTA_KEY)
+    localStorage.setItem(porUsuario(TORMENTA_KEY), JSON.stringify([...previos, { ...detalle, at: Date.now() }].slice(-20)))
+  } catch { /* sin storage */ }
+  window.dispatchEvent(new CustomEvent(GARDEN_EVENT_STORM, { detail: detalle }))
 }
 
 /** Se registró un ingreso (sueldo o extra) en la billetera. */
@@ -62,7 +71,24 @@ function consumir<T>(key: string): T | null {
   }
 }
 
+/** Gastos hormiga pendientes y vigentes (acepta el formato viejo de un solo gasto). */
+function leerLista<T>(key: string): T[] {
+  const raw = localStorage.getItem(porUsuario(key))
+  if (!raw) return []
+  const data = JSON.parse(raw) as (T & { at: number }) | (T & { at: number })[]
+  return (Array.isArray(data) ? data : [data]).filter(d => Date.now() - d.at <= VIGENCIA_MS)
+}
+
 /** Lo llama el Jardín al entrar (y al recibir el evento en vivo). */
 export const consumirLluviaPendiente = () => consumir<{ monto: number }>(LLUVIA_KEY)
-export const consumirTormentaPendiente = () => consumir<{ nombre: string }>(TORMENTA_KEY)
 export const consumirIngresoPendiente = () => consumir<{ monto: number }>(INGRESO_KEY)
+export function consumirTormentasPendientes(): { nombre: string; monto: number }[] {
+  if (typeof window === "undefined") return []
+  try {
+    const lista = leerLista<{ nombre: string; monto?: number }>(TORMENTA_KEY)
+    localStorage.removeItem(porUsuario(TORMENTA_KEY))
+    return lista.map(g => ({ nombre: g.nombre, monto: Number(g.monto) || 0 }))
+  } catch {
+    return []
+  }
+}
