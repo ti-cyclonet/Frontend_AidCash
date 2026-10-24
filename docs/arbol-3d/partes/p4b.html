@@ -1,0 +1,240 @@
+
+/* ---------- crecimiento ---------- */
+let treeS=0.4,thick=0.25;const hg0=new THREE.Color(0x35603a),hg1=new THREE.Color(0x5f8a6a),hg2=new THREE.Color(0x4d7a3f);
+const BSTART=[-0.9,1.0,3.0,5.0],LSTART=[-1.2,1.8,3.8,5.8],GX=[0,1.9,3.8,6.2,8.4,10];
+function applyGrowth(G){
+  thick=piece(G,GX,[.13,.3,.58,.82,.95,1.05]);
+  barkMat.color.copy(barkTint).lerp(barkWhite,smooth(G/1.8));
+  const D=piece(G,GX,[.43,.47,.55,.8,1,1]);
+  for(let i=0;i<branches.length;i++){
+    const b=branches[i];b.vis=b.depth===0?(0.3+0.7*smooth(G/4.6)):(b.early?Math.max(0.95*smooth((G+0.3)/1.1),smooth((G-BSTART[1])/1.8)):smooth((G-BSTART[b.depth])/1.8));
+    b.pivot.scale.setScalar(Math.max(b.vis,0.0001));b.pivot.visible=b.vis>0.002;b.mesh.scale.set(thick,1,thick);
+    if(b.depth>0)b.pivot.position.x=b.attX*thick;
+  }
+  flare.scale.set(thick,1,thick);
+  for(let i=0;i<leaves.length;i++){
+    const L=leaves[i],b=L.branch;let s=backOut((G-(LSTART[b.depth]+(L.mid?0.5:0)))/1.4);if(b.early&&!L.mid)s=Math.max(s,backOut((G+0.1)/1.0)*lerp(1.7,1,smooth((G-1.5)/2.5)));
+    if(!L.mid&&b.kids.length)s*=1-(b.depth===0?0.97:0.9)*b.kids[0].vis;
+    L.s=s;const n=Math.max(1,Math.round(L.N*D));if(n!==L.n){L.n=n;L.mesh.geometry.setDrawRange(0,n*UNIT)}
+  }
+  const fs=smooth((G-7.4)/0.9),bs=smooth((G-8.4)/0.8);
+  for(let i=0;i<apples.length;i++){const a=apples[i],s=fs*a.grow*1.25;a.mesh.scale.setScalar(Math.max(s,0.0001));a.mesh.visible=s>0.01}
+  for(let i=0;i<blossoms.length;i++){const m=blossoms[i].mesh,s=bs*0.36;m.scale.setScalar(Math.max(s,0.0001));m.visible=bs>0.01}
+}
+function treeTop(G){return piece(G,GX,[0.6,1.8,4.0,6.9,7.9,8.4])}
+
+/* ---------- bucle ---------- */
+let last=performance.now(),t=0,audAcc=0,sT=1.5,instant=true,intro=true;sView=0.4;
+function targetS(){
+  const L=viewLevel||real.level;let p;
+  if(viewLevel&&viewLevel!==real.level)p=0.55;
+  else p=NEED[L-1]?clamp(real.xp/NEED[L-1]):0.9;
+  return clamp((L-1)+p,0,6);
+}
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.05,(now-last)/1000);last=now;t+=dt;
+
+  /* clima */
+  const W=WX[weather],k=1-Math.exp(-dt*(instant?40:1.5));
+  cur.top.lerp(W.cTop,k);cur.bottom.lerp(W.cBot,k);cur.cloud.lerp(W.cCloud,k);cur.sunCol.lerp(W.cSun,k);
+  cur.sun=lerp(cur.sun,W.sun,k);cur.hemi=lerp(cur.hemi,W.hemi,k);cur.wind=lerp(cur.wind,W.wind,k);
+  cur.rain=lerp(cur.rain,W.rain,k);cur.glow=lerp(cur.glow,W.glow,k);cur.cover=lerp(cur.cover,W.cover,k);
+  const gust=0.5+0.5*Math.sin(t*0.37)*Math.sin(t*0.91+2);
+  windS=cur.wind*(0.72+0.5*gust);
+  if(weather==='storm'){nextBolt-=dt;if(nextBolt<=0){strike();nextBolt=3+Math.random()*5}}
+  flash=Math.max(0,flash-dt*3.4);
+  if(boltLife>0){boltLife-=dt;if(boltMesh)boltMesh.visible=Math.sin(t*120)>-0.4;if(boltLife<=0&&boltMesh){scene.remove(boltMesh);boltMesh.geometry.dispose();boltMesh=null}}
+  tmpA.copy(cur.top).lerp(WHITE,flash*0.5);tmpB.copy(cur.bottom).lerp(WHITE,flash*0.55);
+  skyU.top.value.copy(tmpA);skyU.bottom.value.copy(tmpB);scene.fog.color.copy(tmpB);hillMats[0].color.copy(tmpB).lerp(hg0,0.62);hillMats[1].color.copy(tmpB).lerp(hg1,0.4);hillMats[2].color.copy(tmpB).lerp(hg2,0.72);
+  hemi.intensity=cur.hemi+flash*1.3;sun.intensity=cur.sun+flash*0.35;sun.color.copy(cur.sunCol);
+  sunGlow.material.opacity=cur.glow;
+  cloudMat.color.copy(cur.cloud);cloudMat.emissive.copy(cur.cloud).multiplyScalar(0.42);
+
+  /* crecimiento suavizado */
+  sT=targetS();if(intro){if(t<1.3)sT=0.4;else if(Math.abs(sT-sView)<0.01)intro=false}
+  sView+=intro?Math.sign(sT-sView)*Math.min(Math.abs(sT-sView),dt*(0.35+0.9*Math.min(1,Math.abs(sT-sView)))):(sT-sView)*(1-Math.exp(-dt*(instant?40:2.4)));
+  if(Math.abs(sT-sView)<0.0008)sView=sT;
+  const G=sView>=1?piece(sView,[1,2,3,4,5,6],[0,1.9,3.8,6.2,8.4,10]):0;
+  Gd=G;
+  const emerge=smooth((sView-0.8)/0.35);
+  treeS=piece(G,[0,1.9,3.8,6.2,10],[.62,.62,.72,.88,1]);
+  applyGrowth(G);
+  popV+=(-95*pop-9*popV)*dt;pop+=popV*dt;
+  shakeAmp*=Math.exp(-dt*2.1);if(shakeAmp<0.002)shakeAmp=0;
+  root.visible=emerge>0.01;root.scale.setScalar(Math.max(0.0001,treeS*emerge*(1+pop*0.14)));
+  roots.scale.setScalar(Math.max(0.0001,smooth((G-1.6)/2.2)));
+  root.rotation.z=-(windS*0.014)+Math.sin(t*22)*shakeAmp*0.01;root.rotation.x=Math.cos(t*19+1)*shakeAmp*0.007;
+  leafU.uTime.value=t;leafU.uWind.value=windS*motion+shakeAmp*1.2;
+
+  /* semilla: dos mitades que se abren */
+  const open=smooth((sView-0.7)/0.55),gone=smooth((sView-1.6)/0.8);
+  seedG.visible=gone<0.999;seedG.scale.setScalar(Math.max(0.0001,1.45*(1-gone*0.9)));
+  const wob=(sView<0.9?Math.sin(t*(2+sView*5))*0.02*smooth((sView-0.4)/0.4):0)+shakeAmp*Math.sin(t*30)*0.06;
+  halfR.rotation.z=-(0.03+open*0.95)+wob;halfL.rotation.z=(0.03+open*0.95)-wob;halfR.position.x=open*0.1;halfL.position.x=-open*0.1;
+
+  contact.scale.setScalar(1.5+treeS*2.8*Math.max(emerge,0.25));contact.material.opacity=0.2+0.32*clamp(cur.sun/1.05);
+  /* humedad */
+  wet=clamp(wet+((cur.rain>0.3||holding)?0.35:-0.025)*dt,0,1);
+  soilMat.color.copy(soilDry).lerp(soilWet,wet);grassMat.color.copy(grassDry).lerp(grassWet,wet);
+
+  /* ramas */
+  const gm=(0.5+windS*1.0)*motion;
+  for(let i=0;i<branches.length;i++){
+    const b=branches[i],d=b.depth;if(!b.pivot.visible)continue;
+    const amp=(0.004+0.006*d)*gm;
+    const sh=shakeAmp*Math.sin(t*(23+d)+d*0.7+b.phase*.3)*(0.012+0.011*d);
+    b.pivot.rotation.x=b.base.x+Math.sin(t*(1.15+0.12*d)+b.phase)*amp+sh;
+    b.pivot.rotation.z=b.base.z+Math.cos(t*(0.95+0.1*d)+b.phase*1.3)*amp+sh*0.6;
+  }
+  for(let i=0;i<leaves.length;i++){
+    const L=leaves[i];
+    if(L.s<=0.002||!L.branch.pivot.visible){L.g.visible=false;L.g.scale.setScalar(0.0001);continue}
+    L.g.visible=true;L.g.scale.setScalar(L.s*(1+shakeAmp*0.07*Math.sin(t*31+L.seed)));
+  }
+  for(let i=0;i<apples.length;i++){const a=apples[i];if(a.grow<1)a.grow=Math.min(1,a.grow+dt/22)}
+
+  /* jardín según el nivel */
+  const Lv=viewLevel||real.level,idx=Lv-1;
+  const nb=Math.min(NB,[0.3,0.42,0.58,0.74,0.88,1][idx]*NB|0),nf=Math.min(NF,[0,6,14,24,40,60][idx]);
+  blades.count=nb;stems.count=nf;heads.count=nf;flowerSp.count=nf;
+  const pn=0;   /* sin plantitas de hojas en el piso */
+  for(let i=0;i<gPlants.length;i++){const pl=gPlants[i];pl.m.scale.setScalar(i<pn?0.95*pl.k:0.0001);pl.m.rotation.z=Math.sin(t*1.5+pl.ph)*0.05*windS*motion}
+  const lean=windS*0.06;
+  for(let i=0;i<nb;i++){
+    const b=bd[i];dummy.position.set(b.x,b.y||0,b.z);
+    dummy.rotation.set(Math.cos(t*1.3+b.ph)*0.06*windS*motion,b.yaw,-(lean*1.5+Math.sin(t*(1.6+b.f)+b.ph)*0.08*(0.4+windS)*motion),'ZXY');
+    dummy.scale.set(b.w||1,b.h*(1-0.15*wet),b.w||1);dummy.updateMatrix();blades.setMatrixAt(i,dummy.matrix);
+  }
+  blades.instanceMatrix.needsUpdate=true;
+  for(let i=0;i<flies.length;i++){
+    const f=flies[i],u=f.userData,on=Lv===6&&weather!=='storm'&&cur.rain<0.7;f.visible=on;if(!on)continue;
+    const fp=function(tt){const a=tt*0.5*u.sp+u.ph;return [Math.cos(a)*u.R,u.h+Math.sin(tt*1.3+u.ph)*0.4+Math.sin(a*2)*0.3,Math.sin(a*1.3)*u.R*0.8]};
+    const lift=u.low?0:treeTop(G)*0.25,dip=-1.4*smooth((Math.sin(t*0.27+u.ph*1.7)-0.55)/0.45);
+    const p=fp(t),q2=fp(t+0.06);f.position.set(p[0],Math.max(0.55+Hgt(p[0],p[2]),p[1]+lift+dip),p[2]);
+    f.rotation.set(0,Math.atan2(q2[0]-p[0],q2[2]-p[2]),(q2[1]-p[1])*-2);
+    const fl=0.2+0.95*Math.sin(t*22+u.ph);u.wr.rotation.z=fl;u.wl.rotation.z=-fl;
+  }
+
+  /* nubes */
+  const baseY=Math.max(3.2,treeTop(G)*Math.max(.55,Math.min(1,emerge+.4)))+0.6;
+  for(let i=0;i<clouds.length;i++){
+    const c=clouds[i],u=c.userData,cv=cur.cover;
+    c.position.x=lerp(u.clearX,u.stormX,cv)+Math.sin(t*u.sp+u.ph)*(0.5+windS*0.4);
+    c.position.z=lerp(u.clearZ,u.stormZ,cv);
+    c.position.y=baseY+lerp(u.clearY,u.stormY,cv)+Math.sin(t*0.6+u.ph)*0.12;
+    u.bump=Math.max(0,(u.bump||0)-dt*1.6);
+    c.scale.setScalar(lerp(0.75,0.8,cv)*u.sc*(1+u.bump*0.18*Math.sin(u.bump*14)));
+    c.visible=cv>0.03||i<2;
+  }
+  cloudMat.opacity=1;
+
+  /* lluvia */
+  const rv=cur.rain>0.02;rainLines.visible=rv;
+  if(rv){
+    const rt=baseY+0.4,sl=windS*0.28,fall=0.85+cur.rain*0.4;
+    for(let i=0;i<RN;i++){
+      let y=rainHead[i*3+1]-rainSpd[i]*dt*fall,x=rainHead[i*3]+windS*2*dt;
+      if(y<0)y+=rt;if(y>rt)y=y%rt;
+      if(x>10)x-=20;
+      rainHead[i*3]=x;rainHead[i*3+1]=y;const z=rainHead[i*3+2],o=i*6;
+      rainPos[o]=x;rainPos[o+1]=y;rainPos[o+2]=z;rainPos[o+3]=x-sl;rainPos[o+4]=y+0.8;rainPos[o+5]=z;
+    }
+    rainGeo.attributes.position.needsUpdate=true;rainGeo.setDrawRange(0,Math.floor(RN*cur.rain*0.62)*2);rainMat.opacity=0.18+0.2*cur.rain;
+  }
+
+  /* regadera */
+  canP+=((holding?1:0)-canP)*(1-Math.exp(-dt*7));
+  can.visible=canP>0.02;
+  if(can.visible){
+    can.position.lerpVectors(canAway,canHome,smooth(canP));
+    can.rotation.z=0.74*smooth((canP-0.6)/0.4);
+    if(holding&&canP>0.9){
+      holdT+=dt;pourAcc+=dt*90;can.updateMatrixWorld(true);canTip.getWorldPosition(vTmp);
+      while(pourAcc>=1){pourAcc-=1;emit(drops,vTmp.x+(Math.random()-.5)*.1,vTmp.y,vTmp.z+(Math.random()-.5)*.18,-1.4-Math.random()*.6,-0.3+Math.random()*.4,(Math.random()-.5)*.5,1.4)}
+      holdFill.style.width=Math.min(100,holdT/1.5*100)+'%';
+      if(holdT>=1.5&&!holdPaid){holdPaid=true;waterDone=true;gainXP(5);say('+5 XP · Regaste tu árbol',1800)}
+    }
+  }
+  for(let i=0;i<drops.n;i++){
+    if(drops.life[i]<=0)continue;drops.life[i]-=dt;drops.vel[i*3+1]-=18*dt;
+    drops.pos[i*3]+=drops.vel[i*3]*dt;drops.pos[i*3+1]+=drops.vel[i*3+1]*dt;drops.pos[i*3+2]+=drops.vel[i*3+2]*dt;
+    if(drops.pos[i*3+1]<0.05||drops.life[i]<=0){drops.life[i]=0;drops.pos[i*3+1]=-100}
+  }
+  drops.p.geometry.attributes.position.needsUpdate=true;
+
+  /* destellos */
+  for(let i=0;i<sparks.n;i++){
+    const l=sparks.life[i];if(l<=0){sparks.col[i*3]=sparks.col[i*3+1]=sparks.col[i*3+2]=0;continue}
+    sparks.life[i]=l-dt;sparks.vel[i*3+1]-=1.2*dt;
+    sparks.pos[i*3]+=sparks.vel[i*3]*dt;sparks.pos[i*3+1]+=sparks.vel[i*3+1]*dt;sparks.pos[i*3+2]+=sparks.vel[i*3+2]*dt;
+    const f=clamp(l/0.8);sparks.col[i*3]=f;sparks.col[i*3+1]=0.82*f;sparks.col[i*3+2]=0.3*f;
+    if(sparks.life[i]<=0)sparks.pos[i*3+1]=-100;
+  }
+  sparks.p.geometry.attributes.position.needsUpdate=true;sparks.p.geometry.attributes.color.needsUpdate=true;
+
+  /* hojas y manzanas que caen */
+  for(let i=0;i<leafFall.length;i++){
+    const f=leafFall[i];if(!f.on)continue;f.age+=dt;
+    if(f.state===0){
+      f.v.y=Math.max(f.v.y-3*dt,-1.2);
+      f.m.position.x+=(f.v.x+Math.sin(t*3.2+f.seed)*0.6+windS*0.8)*dt;f.m.position.z+=(f.v.z+Math.cos(t*2.6+f.seed)*0.45)*dt;f.m.position.y+=f.v.y*dt;
+      f.m.rotation.x+=f.spin.x*dt;f.m.rotation.y+=f.spin.y*dt;f.m.rotation.z+=f.spin.z*dt;
+      const gy=Hgt(f.m.position.x,f.m.position.z)+0.04;if(f.m.position.y<=gy){f.m.position.y=gy;f.state=1;f.age=0;f.m.rotation.set(-Math.PI/2,0,f.seed)}
+    }else if(f.age>2.5){const s=1-(f.age-2.5)/1.2;if(s<=0){f.on=false;f.m.visible=false}else f.m.scale.setScalar(s)}
+  }
+  for(let i=0;i<appleFall.length;i++){
+    const f=appleFall[i];if(!f.on)continue;const rad=0.16*f.m.scale.x;
+    if(f.rest<=0){
+      f.v.y-=16*dt;f.m.position.addScaledVector(f.v,dt);
+      const gyA=Hgt(f.m.position.x,f.m.position.z)+rad;if(f.m.position.y<=gyA){f.m.position.y=gyA;
+        if(!f.landed){f.landed=true;gainXP(5);audio.thud();say('+5 XP · Fruto',1400);
+          for(let s=0;s<14;s++)emit(sparks,f.m.position.x,rad+.1,f.m.position.z,(Math.random()-.5)*1.6,1+Math.random()*1.6,(Math.random()-.5)*1.6,.7+Math.random()*.5)}
+        f.v.y*=-0.38;f.v.x*=0.6;f.v.z*=0.6;if(Math.abs(f.v.y)<0.8){f.v.set(0,0,0);f.rest=1.6}}
+    }else{f.rest-=dt;if(f.rest<1)f.m.scale.multiplyScalar(Math.max(0,1-dt*3));if(f.rest<=0||f.m.scale.x<0.02){f.on=false;f.m.visible=false}}
+  }
+
+  sprouts.visible=Lv>=3;clovers.count=clovers.count;
+  fallU.uTime.value=t;if(fallU.mist){const ms=1+0.06*Math.sin(t*2.3);fallU.mist.scale.set(2.6*ms,1.2*ms,1)}
+  tickAnts(dt);tickStrolls(dt);waterTex.offset.y-=dt*0.08;waterTex.offset.x+=dt*0.01;
+  oceanU.uTime.value=t;oceanU.uBright.value=0.55+0.45*clamp(cur.sun/1.05)+flash*0.3;
+  for(let i=0;i<farClouds.length;i++){farClouds[i].material.color.copy(cur.cloud);farClouds[i].material.opacity=0.95*(1-cur.cover*0.5)}
+
+  /* cámara: encuadra el árbol según su tamaño */
+  cam.drag*=Math.exp(-dt*(ptr.size?0:1.6));
+  const aspect=camera.aspect,tanH=Math.tan(camera.fov*Math.PI/360);
+  const top=treeTop(G)*Math.max(.5,Math.min(1,emerge+.3))+0.4;
+  const kk=clamp(top/5),y0=lerp(-3.9,-3.7,kk),y1=top+lerp(0.9,1.3,kk),visH=y1-y0;
+  const dH=visH/(2*tanH),dW=lerp(12.4,11.6,clamp(top/7))/(2*tanH*aspect);
+  const dT=Math.max(dH,dW,5.6),kc=intro?1:1-Math.exp(-dt*(instant?40:2.2));
+  cam.zIdle+=dt;if(cam.zIdle>1.2&&!ptr.size)cam.zoom+=(1-cam.zoom)*(1-Math.exp(-dt*1.1));
+  cam.r=lerp(cam.r,dT*cam.zoom,cam.zIdle<0.05?1-Math.exp(-dt*12):kc);cam.ty=lerp(cam.ty,(y0+y1)/2+lerp(0.4,0.0,kk),kc);cam.ph=lerp(cam.ph||1.31,lerp(1.29,1.33,kk),kc);
+  const th=0.28+cam.drag,ph=cam.ph;   /* vista fija, un poco elevada: sin rotación */
+  camera.position.set(cam.r*Math.sin(ph)*Math.sin(th),cam.ty+cam.r*Math.cos(ph),cam.r*Math.sin(ph)*Math.cos(th));
+  camera.lookAt(0,cam.ty,0);
+
+  audAcc+=dt;if(audAcc>0.25){audAcc=0;audio.setRain(cur.rain)}
+  instant=false;
+  renderer.render(scene,camera);
+}
+
+/* API mínima para conectar con tu app */
+window.KiriTree={
+  setState:function(o){
+    if(o.level){real.level=clamp(Math.round(o.level),1,6)}
+    if(typeof o.xp==='number')real.xp=o.xp;
+    if(o.weather&&WX[o.weather])weather=o.weather;
+    if(o.preview!==undefined){viewLevel=o.preview;clearFalls();intro=false}
+    if(o.instant)instant=true;
+    paintUI();
+  },
+  top:function(){root.updateMatrixWorld(true);let m=0,w=0;branches.forEach(function(b){if(!b.pivot.visible)return;const v=b.pivot.localToWorld(new THREE.Vector3(b.bend,b.len,0));m=Math.max(m,v.y);w=Math.max(w,Math.hypot(v.x,v.z))});return [+m.toFixed(2),+w.toFixed(2),+Gd.toFixed(2),+treeS.toFixed(2)]},
+  shake:function(){shake(1)},
+  water:function(){holdStart()},stopWater:function(){holdEnd()},
+  /* gastoHormiga({nombre:'Café',monto:6500}) o un arreglo de gastos */
+  gastoHormiga:function(g){gastoHormiga(g)}
+};
+paintUI();
+requestAnimationFrame(frame);
+})();
+</script>

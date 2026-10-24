@@ -72,6 +72,7 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
 
   for (const r of (report.incomeRecords ?? [])) {
     const esSalario = (r.tipo as string) === 'salario'
+    const esAvance = (r.tipo as string) === 'avance'
     // La descripción que escribió ("Freelance", "venta…") manda sobre el genérico
     const descripcion = ((r.descripcion as string | null) ?? "").trim()
     const num = (v: unknown) => Number(v ?? 0)
@@ -80,7 +81,8 @@ export function buildMovements(report: BalanceReport | null): Movement[] {
       fecha: r.createdAt as string,
       nombre: descripcion || (esSalario ? tr("Sueldo") : tr("Ingreso extra")),
       tipo: "ingresos",
-      tipoLabel: esSalario ? tr("Salario") : descripcion ? tr("Ingreso extra") : tr("Extra"),
+      tipoLabel: esSalario ? tr("Salario") : esAvance ? tr("Avance TC") : descripcion ? tr("Ingreso extra") : tr("Extra"),
+      esAvance,
       monto: r.monto as number,
       estado: 'pagado',
       reparto: { ahorro: num(r.aAhorro), obligaciones: num(r.aObligaciones), libre: num(r.aLibre), endeudamiento: num(r.aEndeudamiento) },

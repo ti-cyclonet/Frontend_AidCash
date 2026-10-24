@@ -292,7 +292,7 @@ export default function HistorialPage() {
             {esIngreso ? (
               <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5">
                 <li>{tr("Se descuentan {0} de tu disponible y de los bolsillos de tu billetera a los que fue.", [formatAmount(aEliminar?.monto ?? 0)])}</li>
-                <li>{tr("Deja de contar en tus ingresos del Balance.")}</li>
+                <li>{aEliminar?.esAvance ? tr("Se revierte la deuda que dejó en tu tarjeta (monto + comisión).") : tr("Deja de contar en tus ingresos del Balance.")}</li>
                 <li>{tr("Los pagos que ya hiciste con esa plata siguen registrados (se ven aparte en el historial).")}</li>
                 <li>{tr("Desaparece de este historial. No se puede deshacer.")}</li>
               </ul>
