@@ -73,7 +73,7 @@ const steps = [
     label: tr("Tu jardín"),
     title: tr("Tu árbol"),
     titleHighlight: tr("reacciona a tus finanzas"),
-    description: tr("Cada decisión que tomas se ve en tu jardín: crece con tus buenos hábitos y te avisa cuando algo necesita atención."),
+    description: tr("Cada decisión que tomas se ve en tu árbol 3D: crece con tus buenos hábitos, se seca si lo descuidas y te avisa cuando algo necesita atención."),
     cardExplanation: tr("Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel. Y si conectas a tu pareja en Social, llevan juntos el presupuesto del hogar."),
     icon: <Sprout className="h-6 w-6" />,
     accentColor: "from-emerald-500/20 to-emerald-600/5",
@@ -440,8 +440,9 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
                   <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2.5 shadow-lg flex flex-col justify-center">
                     {[
-                      { e: "🌧️", t: tr("Ahorras"), d: tr("Llueve sobre tu árbol.") },
-                      { e: "☀️", t: tr("Registras tu ingreso"), d: tr("Sale el sol y caen monedas.") },
+                      { e: "💧", t: tr("Ahorras"), d: tr("Sale la regadera y riega tu árbol.") },
+                      { e: "☀️", t: tr("Registras tu ingreso"), d: tr("Una luz dorada nutre tu árbol.") },
+                      { e: "🐜", t: tr("Haces un gasto hormiga"), d: tr("Una hormiga sube al árbol y se lleva lo que compraste.") },
                       { e: "☁️", t: tr("Un pago está por vencer"), d: tr("Se nubla. Toca las nubes para ver cuál.") },
                       { e: "⛈️", t: tr("Tienes pagos vencidos"), d: tr("Llega la tormenta hasta que te pongas al día.") },
                     ].map(x => (

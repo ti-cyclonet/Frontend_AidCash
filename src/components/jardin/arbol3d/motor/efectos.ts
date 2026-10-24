@@ -71,7 +71,6 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
       f.on = true; f.landed = false; f.rest = 0; f.m.visible = true; f.m.scale.setScalar(s); f.m.position.set(x, y, z); f.v.set((Math.random() - .5) * 1, 0, (Math.random() - .5) * 1); return
     }
   }
-  function clearFalls() { leafFall.forEach(f => { f.on = false; f.m.visible = false }); appleFall.forEach(f => { f.on = false; f.m.visible = false }) }
   function burstSparks(S: number) {
     for (let i = 0; i < 90; i++) {
       const a = Math.random() * 6.28, r = (0.6 + Math.random() * 2) * (0.5 + S)
@@ -227,7 +226,7 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
   }
 
   return {
-    spawnLeaf, spawnApple, clearFalls, burstSparks, ponerFrutos, tocarFruto, tick,
+    spawnLeaf, spawnApple, burstSparks, ponerFrutos, tocarFruto, tick,
     setSuelo(fn: (x: number, z: number) => number) { sueloY = fn },
   }
 }

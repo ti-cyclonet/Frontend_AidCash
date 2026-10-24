@@ -18,7 +18,7 @@ import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
 import { tocarTrueno, prepararAudio, tocarToque, tocarPremio } from "@/lib/thunder-sound"
 import { usePlan } from "@/lib/plan-context"
 import {
-  useJardinJuego, useCombo, useToquesDelDia, useCosechaFrutos, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin, VuelosXP,
+  useJardinJuego, useCombo, useToquesSeguidos, useCosechaFrutos, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin, VuelosXP,
   TOQUES_PARA_SACUDIR, ID_BARRA_XP,
 } from "@/components/jardin/juego"
 import { ArbolKiri3D, type ClimaArbol, type GastoHormigaCola } from "@/components/jardin/arbol3d/ArbolKiri3D"
@@ -300,7 +300,7 @@ export default function JardinPage() {
     })
   }, [juego, sonidoOn])
   const combo = useCombo(onCombo)
-  // 50 toques en el día (no hace falta seguidos) → premio mayor, 1 vez al día
+  // 50 toques seguidos (si para más de 1,2 s vuelve a 0) → premio mayor, 1 vez al día
   const ganandoToques = useRef(false)
   const onMetaToques = useCallback(() => {
     if (!juego.estado || juego.estado.premioToques || ganandoToques.current) return
@@ -314,16 +314,13 @@ export default function JardinPage() {
       window.setTimeout(() => setPremio({ icono: r.icono, etiqueta: r.etiqueta }), 450)
     })
   }, [juego, sonidoOn])
-  const toquesDia = useToquesDelDia(juego.estado?.fecha, juego.estado?.toquesPremio ?? 50, onMetaToques)
+  const toquesDia = useToquesSeguidos(juego.estado?.toquesPremio ?? 50, onMetaToques)
   const tocarArbol = useCallback(() => { combo.tocar(); toquesDia.contar() }, [combo, toquesDia])
   const cosecha = useCosechaFrutos(sonidoOn, juego.cosechar)
   // Mientras se mantiene presionado Regar, la regadera del árbol 3D echa agua
   const [regandoBoton, setRegandoBoton] = useState(false)
   // Árbol 3D: si el dispositivo no tiene WebGL se vuelve al árbol en imágenes
   const [fallo3D, setFallo3D] = useState(false)
-  // "Así crece tu jardín": tocar un nivel lo muestra en el árbol 3D
-  const [vistaNivel, setVistaNivel] = useState<number | null>(null)
-  const arbolRef = useRef<HTMLDivElement>(null)
   // Regadera del árbol 3D tras regar, ahorrar o cuando un amigo riega: un
   // momento corto (el mensaje y el clima "¡Buen ahorro!" duran aparte)
   const [regadera, setRegadera] = useState(false)
@@ -668,20 +665,20 @@ export default function JardinPage() {
               <p className="text-[11px] lg:text-xs text-muted-foreground mt-1">{gardenRecommendation}</p>
             </div>
 
-            {dataReady && !fallo3D ? (
-              <div ref={arbolRef} className="space-y-2 scroll-mt-24">
+            {!fallo3D ? (
+              <div className="space-y-2">
                 {/* Frase con personalidad, encima del árbol */}
                 <div className="flex items-center justify-center h-10">
-                  {frase && (
+                  {dataReady && frase && (
                     <div key={frase} className="max-w-[260px] text-center text-[11px] text-foreground bg-card border border-emerald-500/30 rounded-xl px-3 py-1.5 shadow-sm line-clamp-2" style={{ animation: "kiriBubblePop .4s ease" }}>
                       {frase}
                     </div>
                   )}
                 </div>
                 <ArbolKiri3D
+                  datosListos={dataReady}
                   nivel={currentLevelIdx + 1}
                   progreso={nivelXp.meta > 0 ? nivelXp.xp / nivelXp.meta : 1}
-                  vistaPrevia={vistaNivel}
                   clima={climaArbol}
                   tormentaHormiga={showStorm}
                   regando={regandoBoton || regadera}
@@ -728,12 +725,6 @@ export default function JardinPage() {
                     {sonidoOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 opacity-70" />}
                   </button>
                 </ArbolKiri3D>
-                {vistaNivel !== null && (
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs font-bold">
-                    <span className="min-w-0 truncate">{tr("Vista previa del Nivel {0} · {1}", [vistaNivel, GARDEN_LEVELS[vistaNivel - 1].name])}</span>
-                    <button type="button" onClick={() => setVistaNivel(null)} className="shrink-0 font-black text-emerald-600 dark:text-emerald-400 hover:underline">{tr("Volver a mi árbol")}</button>
-                  </div>
-                )}
                 <VuelosXP vuelos={cosecha.vuelos} />
               </div>
             ) : (
@@ -868,7 +859,6 @@ export default function JardinPage() {
           <div>
             <h3 className="text-sm font-bold flex items-center gap-2">{tr("🌿 Así crece tu jardín")}</h3>
             <p className="text-[10px] text-muted-foreground">{tr("Cada paso cuenta. Tú decides hasta dónde puede llegar.")}</p>
-            {dataReady && !fallo3D && <p className="text-[10px] text-muted-foreground">{tr("Toca un nivel para ver cómo se ve tu árbol ahí.")}</p>}
           </div>
 
           {/* Niveles grid */}
@@ -878,27 +868,14 @@ export default function JardinPage() {
               const isCurrent = i === currentLevelIdx
               const isNext = i === currentLevelIdx + 1
               const isLocked = i > currentLevelIdx + 1
-              const viendo = vistaNivel === level.level
-              const verNivel = () => {
-                if (!dataReady || fallo3D) return
-                setVistaNivel(isCurrent || viendo ? null : level.level)
-                arbolRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-              }
 
               return (
-                <div
-                  key={level.level}
-                  className={cn("flex flex-col items-center gap-2 rounded-xl py-1", dataReady && !fallo3D && "cursor-pointer hover:bg-muted/40", viendo && "bg-emerald-500/10")}
-                  onClick={verNivel}
-                  role={dataReady && !fallo3D ? "button" : undefined}
-                  aria-label={dataReady && !fallo3D ? tr("Ver el árbol en el nivel {0}", [level.level]) : undefined}
-                >
+                <div key={level.level} className="flex flex-col items-center gap-2">
                   {/* Imagen */}
                   <div className={cn(
                     "relative h-16 w-16 rounded-xl flex items-center justify-center overflow-hidden",
                     isCurrent && "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background",
-                    viendo && !isCurrent && "ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-background",
-                    (isNext || isLocked) && !viendo && "opacity-40 grayscale",
+                    (isNext || isLocked) && "opacity-40 grayscale",
                   )}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={level.image} alt={level.name} className="h-14 w-14 object-contain" />

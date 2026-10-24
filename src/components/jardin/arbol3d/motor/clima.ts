@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import type { Rng } from "./utilidades"
+import { lerp, rng, smooth, type Rng } from "./utilidades"
 
 /** Clima del jardín: nubes tocables, presets de cielo/luz, lluvia y rayos. */
 
@@ -9,7 +9,8 @@ interface PresetWX { top: string; bottom: string; cloud: string; sunCol: string;
 const BASE: Record<ClimaWX, PresetWX> = {
   clear: { top: "#4a9bd4", bottom: "#d6ecee", cloud: "#ffffff", sunCol: "#fff0d2", sun: 1.05, hemi: .7, wind: .35, rain: 0, glow: 1, cover: 0 },
   rain: { top: "#76909f", bottom: "#b6c6cb", cloud: "#aab6bc", sunCol: "#dfe7ee", sun: .32, hemi: .6, wind: .8, rain: .65, glow: .08, cover: .75 },
-  storm: { top: "#232e39", bottom: "#4f5d69", cloud: "#434b54", sunCol: "#b9c6d6", sun: .1, hemi: .42, wind: 1.9, rain: 1, glow: 0, cover: 1 },
+  /* más clara que en el prototipo: con la tormenta el árbol tiene que seguir viéndose */
+  storm: { top: "#3c4c5a", bottom: "#76868f", cloud: "#59626b", sunCol: "#c9d4e0", sun: .42, hemi: .82, wind: 1.9, rain: .85, glow: 0, cover: 1 },
 }
 export interface WXColores { cTop: THREE.Color; cBot: THREE.Color; cCloud: THREE.Color; cSun: THREE.Color; sun: number; hemi: number; wind: number; rain: number; glow: number; cover: number }
 export const WX = Object.fromEntries((Object.keys(BASE) as ClimaWX[]).map(k => {
@@ -38,6 +39,20 @@ export function crearNubes(scene: THREE.Scene, R: Rng) {
     const g = new THREE.Group() as Nube, n = 5 + Math.floor(R() * 3)
     for (let k = 0; k < n; k++) { const m = new THREE.Mesh(cloudGeo, cloudMat); const s = 0.4 + R() * 0.45; m.scale.set(s * 1.3, s * .85, s); m.position.set((k - n / 2) * 0.6 + R() * .25, R() * .3, (R() - .5) * .6); g.add(m); cloudHit.push(m) }
     g.userData = { clearX: (i % 2 ? 1 : -1) * (5.5 + R() * 3), clearZ: -4 - R() * 6, clearY: 1.2 + R() * 3.2, stormX: (i - 2) * 2.4, stormZ: -2.5 - R() * 2.5, stormY: -0.2 + (i % 2) * .6, sp: 0.2 + R() * 0.3, ph: R() * 6.28, sc: 0.8 + R() * 0.5, bump: 0 }
+    cloudsRoot.add(g); clouds.push(g)
+  }
+  /* anillo de nubes sobre la isla para que en tormenta la rodeen por todos lados
+     (generador propio para no mover el sorteo de R); las que quedan del lado de
+     la cámara van más altas y más lejos para no tapar el árbol */
+  const r2 = rng(909), N = 11, haciaCamara = Math.atan2(Math.cos(0.28), Math.sin(0.28))
+  for (let i = 0; i < N; i++) {
+    const g = new THREE.Group() as Nube, n = 5 + Math.floor(r2() * 3)
+    for (let k = 0; k < n; k++) { const m = new THREE.Mesh(cloudGeo, cloudMat); const s = 0.45 + r2() * 0.45; m.scale.set(s * 1.3, s * .85, s); m.position.set((k - n / 2) * 0.6 + r2() * .25, r2() * .3, (r2() - .5) * .6); g.add(m); cloudHit.push(m) }
+    const a = i / N * Math.PI * 2 + (r2() - .5) * 0.35
+    const dif = Math.abs(Math.atan2(Math.sin(a - haciaCamara), Math.cos(a - haciaCamara))), frente = smooth(1 - dif / 1.3)
+    const rad = lerp(5.6, 8, frente) + r2() * 0.8
+    g.rotation.y = -a + Math.PI / 2
+    g.userData = { clearX: Math.cos(a) * 15, clearZ: Math.sin(a) * 15, clearY: 3 + r2() * 2, stormX: Math.cos(a) * rad, stormZ: Math.sin(a) * rad, stormY: lerp(0.2, 3.4, frente) + r2() * 0.6, sp: 0.15 + r2() * 0.25, ph: r2() * 6.28, sc: 0.85 + r2() * 0.45, bump: 0 }
     cloudsRoot.add(g); clouds.push(g)
   }
   return { cloudMat, clouds, cloudHit }

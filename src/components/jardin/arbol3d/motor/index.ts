@@ -6,7 +6,7 @@ import { crearEfectos } from "./efectos"
 import { crearEscena } from "./escena"
 import { crearMariposas } from "./fauna"
 import { crearHormigas, type GastoHormiga3D } from "./hormigas"
-import { consumirBordillo, consumirColinas, crearDetallesIsla, crearIsla } from "./isla"
+import { consumirBordillo, consumirColinas, crearDetallesIsla, crearIsla, TEX } from "./isla"
 import { Hgt } from "./terreno"
 import { clamp, lerp, piece, rng, smooth } from "./utilidades"
 
@@ -24,8 +24,6 @@ export interface EstadoArbol3D {
   nivel: number
   /** Progreso dentro del nivel, 0–1 */
   progreso: number
-  /** Nivel que se está previsualizando (null = el real) */
-  vistaPrevia: number | null
   clima: ClimaArbol
   /** Tormenta pasajera de un gasto hormiga */
   tormentaHormiga: boolean
@@ -62,6 +60,8 @@ export interface OpcionesMotor {
 }
 
 export interface MotorArbol3D {
+  /** Arranca la animación (la intro de la semilla) cuando la página ya tiene los datos reales */
+  iniciar: (e: EstadoArbol3D) => void
   actualizar: (e: Partial<EstadoArbol3D>) => void
   /** Toque normal (fuerte = false) o sacudida del combo, que tumba las manzanas */
   sacudir: (fuerte: boolean) => void
@@ -74,20 +74,35 @@ export interface MotorArbol3D {
 
 const WX_DE: Record<ClimaArbol, ClimaWX> = { sol: "clear", nubes: "rain", tormenta: "storm" }
 
-export function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): MotorArbol3D {
+/** Precarga una textura (máx. 2,5 s); null si no llega, y la isla la pide después. */
+function cargarImagen(src: string) {
+  return new Promise<HTMLImageElement | null>(res => {
+    const im = new Image(), t = window.setTimeout(() => res(null), 2500)
+    im.onload = () => { window.clearTimeout(t); res(im) }
+    im.onerror = () => { window.clearTimeout(t); res(null) }
+    im.src = src
+  })
+}
+
+export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): Promise<MotorArbol3D> {
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches, motion = reduce ? 0.5 : 1
   const mobile = matchMedia("(pointer:coarse)").matches || innerWidth < 700
   const R = rng(7741)
   const est: EstadoArbol3D = { ...op.estado }
+  /* la construcción se reparte en varias tareas para no congelar la página mientras carga */
+  const pausa = () => new Promise<void>(r => window.setTimeout(r, 0))
 
   /* misma secuencia de construcción que el prototipo (comparten el generador R) */
   const esc = crearEscena(canvas, mobile)
   const { renderer, scene, camera, world, skyU, sunGlow, hemi, sun, oceanU, farClouds } = esc
-  const isla = crearIsla(esc, R)
+  const imgTierra = await cargarImagen(TEX + "farm_soil_diff.jpg")
+  const isla = crearIsla(esc, R, imgTierra)
+  await pausa()
   consumirColinas(R)
   const { cloudMat, clouds, cloudHit } = crearNubes(scene, R)
   const fruta = crearPiezasFruta()
   const arbol = crearArbol(world, R, fruta)
+  await pausa()
   const { root, roots, branches, leaves, apples, seedG, halfR, halfL, leafU, toqueFacil } = arbol
   const flies = crearMariposas(scene)
   consumirBordillo(R)
@@ -101,6 +116,7 @@ export function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): M
   arbol.ramaExtra()
   const efectos = crearEfectos(scene, arbol.leafTex, arbol.flowerTex, leafU.uSeco, fruta)
   efectos.setSuelo(hormigas.groundY)
+  await pausa()
   const lluvia = crearLluvia(scene)
   const rayos = crearRayos(scene)
   const { blades, bd, NB, NF, stems, grassMat, grassDry, grassWet, soilMat, soilDry, soilWet, contact, waterTex } = isla
@@ -118,7 +134,6 @@ export function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): M
   const dummy = new THREE.Object3D()
   const timers = new Set<number>()
   const despues = (ms: number, fn: () => void) => { const id = window.setTimeout(() => { timers.delete(id); fn() }, ms); timers.add(id) }
-  apples.forEach(a => { a.grow = est.manzanasArbol ? 1 : 0 })
   const golpe = () => { if (t - ultimoGolpe > 0.07) { ultimoGolpe = t; op.sonidos.golpe() } }
 
   function strike() {
@@ -176,13 +191,13 @@ export function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): M
   const ro = new ResizeObserver(resize); if (canvas.parentElement) ro.observe(canvas.parentElement); resize()
 
   function targetS() {
-    const L = est.vistaPrevia ?? est.nivel
-    const p = est.vistaPrevia && est.vistaPrevia !== est.nivel ? 0.55 : (L >= 6 ? 0.9 : clamp(est.progreso))
+    const L = est.nivel
+    const p = L >= 6 ? 0.9 : clamp(est.progreso)
     return clamp((L - 1) + p, 0, 6)
   }
 
   /* ---------- bucle ---------- */
-  let last = performance.now(), raf = 0, enVista = true, vivo = true
+  let last = performance.now(), raf = 0, enVista = true, vivo = true, arrancado = false
   function frame(now: number) {
     raf = requestAnimationFrame(frame)
     const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt
@@ -261,7 +276,7 @@ export function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): M
     }
 
     /* jardín según el nivel */
-    const Lv = est.vistaPrevia ?? est.nivel, idx = clamp(Lv, 1, 6) - 1
+    const Lv = est.nivel, idx = clamp(Lv, 1, 6) - 1
     const nb = Math.min(NB, [0.3, 0.42, 0.58, 0.74, 0.88, 1][idx] * NB | 0), nf = Math.min(NF, [0, 6, 14, 24, 40, 60][idx])
     blades.count = nb; stems.count = nf; flowerSp.count = nf
     const lean = windS * 0.06
@@ -310,17 +325,25 @@ export function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMotor): M
   }
 
   /* el bucle se pausa fuera de pantalla o con la pestaña oculta */
-  function reanudar() { if (!vivo || raf || !enVista || document.hidden) return; last = performance.now(); raf = requestAnimationFrame(frame) }
+  function reanudar() { if (!vivo || !arrancado || raf || !enVista || document.hidden) return; last = performance.now(); raf = requestAnimationFrame(frame) }
   function pausar() { if (raf) { cancelAnimationFrame(raf); raf = 0 } op.sonidos.lluvia(0) }
   const io = new IntersectionObserver(e => { enVista = e[0]?.isIntersecting ?? true; if (enVista) reanudar(); else pausar() })
   io.observe(canvas)
   const vis = () => { if (document.hidden) pausar(); else reanudar() }
   document.addEventListener("visibilitychange", vis)
-  reanudar()
+  /* los shaders se compilan mientras la página espera sus datos */
+  await pausa()
+  resize(); camara.encuadrar(1, 1, true, true); renderer.compile(scene, camera)
 
   return {
+    iniciar(e) {
+      if (arrancado) return
+      Object.assign(est, e)
+      weather = climaWX(); Object.assign(cur, climaActual(weather)); nextBolt = 1.4
+      apples.forEach(a => { a.grow = est.manzanasArbol ? 1 : 0 })
+      arrancado = true; t = 0; instant = true; reanudar()
+    },
     actualizar(e) {
-      if (e.vistaPrevia !== undefined && e.vistaPrevia !== est.vistaPrevia) { efectos.clearFalls(); intro = false }
       Object.assign(est, e)
     },
     sacudir(fuerte) { shake(fuerte ? 1.6 : 1, fuerte) },

@@ -18,9 +18,10 @@ export type { ClimaArbol, FrutoArbol3D }
 export interface GastoHormigaCola { id: number; nombre: string; monto: number }
 
 interface Props {
+  /** La página ya tiene el nivel y el clima reales: arranca la intro. La escena se construye antes, mientras cargan los datos. */
+  datosListos: boolean
   nivel: number
   progreso: number
-  vistaPrevia: number | null
   clima: ClimaArbol
   tormentaHormiga: boolean
   /** Regadera echando agua (botón Regar, ahorro o un amigo que regó) */
@@ -79,14 +80,14 @@ export function ArbolKiri3D(props: Props) {
     const timers = new Set<number>()
     const despues = (ms: number, fn: () => void) => { const id = window.setTimeout(() => { timers.delete(id); fn() }, ms); timers.add(id) }
     if (!soportaWebGL()) { propsRef.current.onFallo(); return }
-    import("./motor").then(({ crearMotorArbol }) => {
+    import("./motor").then(async ({ crearMotorArbol }) => {
       if (cancelado || !canvasRef.current) return
       const p = propsRef.current
       const suena = () => propsRef.current.sonido
       try {
-        motor = crearMotorArbol(canvasRef.current, {
+        motor = await crearMotorArbol(canvasRef.current, {
           estado: {
-            nivel: p.nivel, progreso: p.progreso, vistaPrevia: p.vistaPrevia, clima: p.clima, tormentaHormiga: p.tormentaHormiga,
+            nivel: p.nivel, progreso: p.progreso, clima: p.clima, tormentaHormiga: p.tormentaHormiga,
             regando: p.regando, ingreso: p.ingreso, salud: p.salud, manzanasArbol: p.manzanasArbol,
           },
           sonidos: {
@@ -105,9 +106,10 @@ export function ArbolKiri3D(props: Props) {
           alTerminarHormigas: total => mostrarAvisoRef.current(tr("🐜 Hoy se fueron {0} en gastos hormiga", [propsRef.current.formatAmount(total)]), 3200),
         })
       } catch {
-        propsRef.current.onFallo()
+        if (!cancelado) propsRef.current.onFallo()
         return
       }
+      if (cancelado) { motor.destruir(); motor = null; return }
       motorRef.current = motor
       setListo(true)
     }).catch(() => { if (!cancelado) propsRef.current.onFallo() })
@@ -122,10 +124,17 @@ export function ArbolKiri3D(props: Props) {
   }, [])
 
   // ── Estado → motor ────────────────────────────────────────────────────────
-  const { nivel, progreso, vistaPrevia, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, frutos, sacudida, subioNivel, gastosHormiga } = props
+  const { datosListos, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, frutos, sacudida, subioNivel, gastosHormiga } = props
   useEffect(() => {
-    motorRef.current?.actualizar({ nivel, progreso, vistaPrevia, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol })
-  }, [listo, nivel, progreso, vistaPrevia, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol])
+    motorRef.current?.actualizar({ nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol })
+  }, [listo, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol])
+
+  // La intro arranca cuando la escena está construida y la página tiene los datos reales
+  useEffect(() => {
+    if (!listo || !datosListos) return
+    motorRef.current?.iniciar({ nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listo, datosListos])
 
   useEffect(() => { motorRef.current?.ponerFrutos(frutos) }, [listo, frutos])
 
@@ -172,7 +181,7 @@ export function ArbolKiri3D(props: Props) {
         role="img"
         aria-label={tr("Tu árbol en 3D. Toca el árbol para sacudirlo; toca el hormiguero para que salga una hormiga; arrastra a los lados para girar.")}
       />
-      {!listo && <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-sky-200/60 to-teal-300/40 dark:from-slate-800/60 dark:to-emerald-900/30" />}
+      {(!listo || !datosListos) && <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-sky-200/60 to-teal-300/40 dark:from-slate-800/60 dark:to-emerald-900/30" />}
       {aviso && (
         <div
           key={aviso.id}
