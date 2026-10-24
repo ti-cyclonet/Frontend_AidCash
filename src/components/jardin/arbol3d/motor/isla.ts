@@ -14,13 +14,15 @@ export interface Flor { x: number; z: number; y: number; h: number; c: number }
  * árbol, rocas, pasto y flores. Respeta el orden de llamadas a `R` del prototipo
  * para que todo quede exactamente en el mismo sitio.
  */
-export function crearIsla(esc: Escena, R: Rng) {
+export function crearIsla(esc: Escena, R: Rng, imgTierra: HTMLImageElement | null) {
   const { world } = esc
   const loader = new THREE.TextureLoader()
 
   /* textura del suelo: manchas tonales, tierra descubierta, musgo y borde seco */
-  let soilImg: HTMLImageElement | null = null
-  const soilTex = loader.load(TEX + "farm_soil_diff.jpg", t => { soilImg = t.image as HTMLImageElement; groundTex.redraw() })
+  /* con la tierra ya precargada el césped se pinta una sola vez; si no llegó a tiempo se repinta al cargar */
+  let soilImg: HTMLImageElement | null = imgTierra
+  const soilTex = imgTierra ? new THREE.Texture(imgTierra) : loader.load(TEX + "farm_soil_diff.jpg", t => { soilImg = t.image as HTMLImageElement; groundTex.redraw() })
+  if (imgTierra) soilTex.needsUpdate = true
   soilTex.wrapS = soilTex.wrapT = THREE.RepeatWrapping; soilTex.repeat.set(1.07, 1.07); soilTex.anisotropy = 4
   const soilNor = loader.load(TEX + "farm_soil_nor_gl.jpg"); soilNor.wrapS = soilNor.wrapT = THREE.RepeatWrapping; soilNor.repeat.set(2, 2)
 
@@ -38,12 +40,22 @@ export function crearIsla(esc: Escena, R: Rng) {
       for (let i = 0; i < 160; i++) blob(r() * S, r() * S, 14 + r() * 40, r() < .33 ? "rgba(150,186,90,.22)" : (r() < .5 ? "rgba(46,86,34,.22)" : "rgba(120,150,70,.18)"))
       /* hierba fina: miles de trazos cortos en verdes naturales */
       const GC = ["78,124,52", "104,150,66", "130,170,82", "58,100,40", "150,180,96", "92,120,50"]
+      /* agrupados por color, opacidad y grosor: unas pocas pinceladas en vez de 26.000 */
       g.lineCap = "round"
+      const lotes = new Map<number, number[]>()
       for (let i = 0; i < 26000; i++) {
         const x = r() * S, y = r() * S, l = 2 + r() * 5, a = -1.57 + (r() - .5) * 1.4
-        g.strokeStyle = "rgba(" + GC[(r() * GC.length) | 0] + "," + (0.35 + r() * 0.4) + ")"; g.lineWidth = 0.8 + r() * 1.1
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke()
+        const ci = (r() * GC.length) | 0, ai = Math.min(3, (r() * 4) | 0), wi = Math.min(2, (r() * 3) | 0), key = ci * 12 + ai * 3 + wi
+        let lote = lotes.get(key); if (!lote) lotes.set(key, lote = [])
+        lote.push(x, y, x + Math.cos(a) * l, y + Math.sin(a) * l)
       }
+      lotes.forEach((seg, key) => {
+        const ci = Math.floor(key / 12), ai = Math.floor(key / 3) % 4, wi = key % 3
+        g.strokeStyle = "rgba(" + GC[ci] + "," + (0.35 + (ai + 0.5) * 0.1) + ")"; g.lineWidth = 0.8 + (wi + 0.5) * 0.37
+        g.beginPath()
+        for (let k = 0; k < seg.length; k += 4) { g.moveTo(seg[k], seg[k + 1]); g.lineTo(seg[k + 2], seg[k + 3]) }
+        g.stroke()
+      })
       /* algo de tierra que asoma entre la hierba */
       if (soilImg) {
         const tl = lienzo(160); tl.g.drawImage(soilImg, 0, 0, 160, 160)

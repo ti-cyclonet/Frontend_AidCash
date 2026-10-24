@@ -261,27 +261,22 @@ export function useCombo(onCombo: (n: number) => void) {
 }
 
 /**
- * Toques al árbol en el día (no hace falta que sean seguidos). Se guardan por
- * dispositivo y fecha; al llegar a `meta` el servidor entrega el premio (1 al día).
+ * Toques seguidos al árbol: no se acumulan en el día; si pasan más de 1,2 s
+ * sin tocar, la cuenta vuelve a 0. Al llegar a `meta` seguidos el servidor
+ * entrega el premio (1 al día).
  */
-export function useToquesDelDia(fecha: string | undefined, meta: number, onMeta: () => void) {
+export function useToquesSeguidos(meta: number, onMeta: () => void) {
   const [toques, setToques] = useState(0)
   const actual = useRef(0)
-  const clave = fecha ? `kiri_toques_${fecha}` : null
-  useEffect(() => {
-    if (!clave) return
-    let n = 0
-    try { n = parseInt(localStorage.getItem(clave) ?? "0", 10) || 0 } catch { /* sin storage */ }
-    actual.current = n
-    setToques(n)
-  }, [clave])
+  const timer = useRef<number | null>(null)
   const contar = useCallback(() => {
-    if (!clave) return
     actual.current += 1
     setToques(actual.current)
-    try { localStorage.setItem(clave, String(actual.current)) } catch { /* sin storage */ }
     if (actual.current === meta) onMeta()
-  }, [clave, meta, onMeta])
+    if (timer.current) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => { actual.current = 0; setToques(0) }, 1200)
+  }, [meta, onMeta])
+  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current) }, [])
   return { toques, contar }
 }
 
@@ -428,7 +423,7 @@ export function HoyEnTuJardin({ estado, toques }: { estado: EstadoJardin; toques
         : !estado.regado
           ? tr("Mantén presionado Regar para darle agua a tu árbol 💧")
           : !estado.premioToques
-            ? tr("Toca tu árbol {0} veces hoy y suelta un premio grande 🎉 (te faltan {1})", [estado.toquesPremio, Math.max(0, estado.toquesPremio - toques)])
+            ? tr("Toca tu árbol {0} veces seguidas, sin parar, y suelta un premio grande 🎉", [estado.toquesPremio])
           : estado.frutosDesbloqueados
             ? tr("¡Jardín al día! Mañana hay frutos nuevos 🌙")
             : tr("¡Jardín al día! Desde el nivel {0} tu árbol también da frutos 🍎", [estado.nivelFrutos])

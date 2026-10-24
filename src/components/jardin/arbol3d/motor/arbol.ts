@@ -75,42 +75,66 @@ function makeBranchGeo(len: number, rb: number, rt: number, bend: number, rad = 
 }
 
 /* ---------- hojas en corazón ---------- */
-const UPV = new THREE.Vector3(0, 1, 0)
 export const UNIT = HN * 2 * 3
-interface Acum { pos: number[]; nrm: number[]; uv: number[]; col: number[]; fl: number[] }
+/** Vértices de un racimo en arreglos tipados (sin objetos temporales: hay ~7.800 hojas). */
+interface Acum { pos: Float32Array; nrm: Float32Array; uv: Float32Array; col: Float32Array; fl: Float32Array; v: number }
 const LEAF_TINTS = [[0.62, 0.72, 0.55], [0.78, 0.88, 0.66], [0.92, 1.0, 0.78], [1.0, 1.0, 0.72], [0.7, 0.82, 0.6]]
-function pushHeart(A: Acum, B: THREE.Vector3, axis: THREE.Vector3, roll: number, L: number, fold: number, curl: number, ao: number, ph: number, tint: number[]) {
-  const yv = axis.clone().normalize(), sv = new THREE.Vector3().crossVectors(yv, UPV); if (sv.lengthSq() < 1e-4) sv.set(1, 0, 0); sv.normalize()
-  const nv = new THREE.Vector3().crossVectors(sv, yv).normalize(), cr = Math.cos(roll), sr = Math.sin(roll)
-  const s2 = sv.clone().multiplyScalar(cr).addScaledVector(nv, sr), n2 = nv.clone().multiplyScalar(cr).addScaledVector(sv, -sr)
-  const P = (x: number, y: number) => { const z = (fold * Math.abs(x) - curl * y * y) * L; return B.clone().addScaledVector(s2, x * L).addScaledVector(yv, y * L).addScaledVector(n2, z) }
-  const C: [number, number] = [0, 0.38]
-  function tri(a: [number, number], b: [number, number], c: [number, number]) {
-    const pa = P(a[0], a[1]), pb = P(b[0], b[1]), pc = P(c[0], c[1])
-    const fn = new THREE.Vector3().crossVectors(pb.clone().sub(pa), pc.clone().sub(pa))
-    let q: [[number, number], THREE.Vector3][] = [[a, pa], [b, pb], [c, pc]]; if (fn.dot(n2) < 0) q = [q[0], q[2], q[1]]
-    q.forEach(e => {
-      const p = e[1], xy = e[0], out = p.clone().normalize(), nn = n2.clone().multiplyScalar(0.38).addScaledVector(out, 0.62).normalize()
-      A.pos.push(p.x, p.y, p.z); A.nrm.push(nn.x, nn.y, nn.z); A.uv.push((xy[0] + 0.75) / 1.5, 1 - (xy[1] + 0.36) / 1.4)
-      const k = ao * (0.9 + 0.1 * Math.min(1, xy[1])); A.col.push(k * tint[0], k * tint[1], k * tint[2]); A.fl.push(ph, clamp(xy[1]))
-    })
+/* contorno de medio corazón como triángulos (centro, p0, p1), ya en el orden de las dos mitades */
+const TRIS: number[] = []
+for (let i = 0; i < HN; i++) { const p0 = LEAF_LP[i], p1 = LEAF_LP[i + 1]; TRIS.push(0, 0.38, p0[0], p0[1], p1[0], p1[1], 0, 0.38, -p1[0], p1[1], -p0[0], p0[1]) }
+const QP = new Float64Array(9)
+function pushHeart(A: Acum, bx: number, by: number, bz: number, ax: number, ay: number, az: number, roll: number, L: number, fold: number, curl: number, ao: number, ph: number, tint: number[]) {
+  let l = Math.sqrt(ax * ax + ay * ay + az * az) || 1
+  const yx = ax / l, yy = ay / l, yz = az / l
+  /* sv = yv × arriba; si son paralelos se usa el eje x */
+  let sx = -yz, sz = yx; l = sx * sx + sz * sz
+  if (l < 1e-4) { sx = 1; sz = 0 } else { l = Math.sqrt(l); sx /= l; sz /= l }
+  /* nv = sv × yv */
+  let nx = -sz * yy, ny = sz * yx - sx * yz, nz = sx * yy; l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1; nx /= l; ny /= l; nz /= l
+  const cr = Math.cos(roll), sr = Math.sin(roll)
+  const s2x = sx * cr + nx * sr, s2y = ny * sr, s2z = sz * cr + nz * sr
+  const n2x = nx * cr - sx * sr, n2y = ny * cr, n2z = nz * cr - sz * sr
+  for (let t = 0; t < TRIS.length; t += 6) {
+    for (let k = 0; k < 3; k++) {
+      const x = TRIS[t + k * 2], y = TRIS[t + k * 2 + 1], z = (fold * Math.abs(x) - curl * y * y) * L
+      QP[k * 3] = bx + s2x * x * L + yx * y * L + n2x * z
+      QP[k * 3 + 1] = by + s2y * x * L + yy * y * L + n2y * z
+      QP[k * 3 + 2] = bz + s2z * x * L + yz * y * L + n2z * z
+    }
+    /* normal de la cara: si apunta al revés de n2 se invierte el orden */
+    const e1x = QP[3] - QP[0], e1y = QP[4] - QP[1], e1z = QP[5] - QP[2], e2x = QP[6] - QP[0], e2y = QP[7] - QP[1], e2z = QP[8] - QP[2]
+    const fx = e1y * e2z - e1z * e2y, fy = e1z * e2x - e1x * e2z, fz = e1x * e2y - e1y * e2x
+    const invertir = fx * n2x + fy * n2y + fz * n2z < 0
+    for (let j = 0; j < 3; j++) {
+      const k = invertir && j ? 3 - j : j
+      const px = QP[k * 3], py = QP[k * 3 + 1], pz = QP[k * 3 + 2], x = TRIS[t + k * 2], y = TRIS[t + k * 2 + 1]
+      const ol = Math.sqrt(px * px + py * py + pz * pz) || 1
+      let mx = n2x * 0.38 + px / ol * 0.62, my = n2y * 0.38 + py / ol * 0.62, mz = n2z * 0.38 + pz / ol * 0.62
+      const ml = Math.sqrt(mx * mx + my * my + mz * mz) || 1; mx /= ml; my /= ml; mz /= ml
+      const v = A.v++, c = ao * (0.9 + 0.1 * Math.min(1, y))
+      A.pos[v * 3] = px; A.pos[v * 3 + 1] = py; A.pos[v * 3 + 2] = pz
+      A.nrm[v * 3] = mx; A.nrm[v * 3 + 1] = my; A.nrm[v * 3 + 2] = mz
+      A.uv[v * 2] = (x + 0.75) / 1.5; A.uv[v * 2 + 1] = 1 - (y + 0.36) / 1.4
+      A.col[v * 3] = c * tint[0]; A.col[v * 3 + 1] = c * tint[1]; A.col[v * 3 + 2] = c * tint[2]
+      A.fl[v * 2] = ph; A.fl[v * 2 + 1] = clamp(y)
+    }
   }
-  for (let i = 0; i < HN; i++) { const p0 = LEAF_LP[i], p1 = LEAF_LP[i + 1]; tri(C, [p0[0], p0[1]], [p1[0], p1[1]]); tri(C, [-p1[0], p1[1]], [-p0[0], p0[1]]) }
 }
 function makeCluster(seed: number, N: number, L0: number, spread: number) {
-  const r = rng(seed), A: Acum = { pos: [], nrm: [], uv: [], col: [], fl: [] }
+  const r = rng(seed), nv = N * UNIT
+  const A: Acum = { pos: new Float32Array(nv * 3), nrm: new Float32Array(nv * 3), uv: new Float32Array(nv * 2), col: new Float32Array(nv * 3), fl: new Float32Array(nv * 2), v: 0 }
   for (let i = 0; i < N; i++) {
     const th = i * 2.399 + r() * 0.8, el = 0.05 + r() * 1.1, ce = Math.cos(el)
-    const d = new THREE.Vector3(ce * Math.cos(th), Math.sin(el), ce * Math.sin(th)), pl = (0.2 + 0.26 * r()) * spread, B = d.clone().multiplyScalar(pl)
-    const axis = d.clone(); axis.y -= 0.3 + 0.9 * r(); axis.normalize()
+    const dx = ce * Math.cos(th), dy = Math.sin(el), dz = ce * Math.sin(th), pl = (0.2 + 0.26 * r()) * spread
+    const ay = dy - (0.3 + 0.9 * r())
     const L = L0 * (0.82 + 0.36 * r()), ao = 0.72 + 0.28 * Math.min(1, (pl + L * 0.5) / 0.85)
-    let tint = LEAF_TINTS[Math.floor(r() * LEAF_TINTS.length)]; if (d.y < 0.05) tint = [tint[0] * 0.8, tint[1] * 0.82, tint[2] * 0.8]
-    pushHeart(A, B, axis, (r() - .5) * 1.2, L, 0.04 + 0.1 * r(), 0.05 + 0.1 * r(), ao * (0.93 + 0.12 * r()), r() * 6.28, tint)
+    let tint = LEAF_TINTS[Math.floor(r() * LEAF_TINTS.length)]; if (dy < 0.05) tint = [tint[0] * 0.8, tint[1] * 0.82, tint[2] * 0.8]
+    pushHeart(A, dx * pl, dy * pl, dz * pl, dx, ay, dz, (r() - .5) * 1.2, L, 0.04 + 0.1 * r(), 0.05 + 0.1 * r(), ao * (0.93 + 0.12 * r()), r() * 6.28, tint)
   }
   const g = new THREE.BufferGeometry()
-  g.setAttribute("position", new THREE.Float32BufferAttribute(A.pos, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(A.nrm, 3))
-  g.setAttribute("uv", new THREE.Float32BufferAttribute(A.uv, 2)); g.setAttribute("color", new THREE.Float32BufferAttribute(A.col, 3))
-  g.setAttribute("aFl", new THREE.Float32BufferAttribute(A.fl, 2)); return g
+  g.setAttribute("position", new THREE.BufferAttribute(A.pos, 3)); g.setAttribute("normal", new THREE.BufferAttribute(A.nrm, 3))
+  g.setAttribute("uv", new THREE.BufferAttribute(A.uv, 2)); g.setAttribute("color", new THREE.BufferAttribute(A.col, 3))
+  g.setAttribute("aFl", new THREE.BufferAttribute(A.fl, 2)); return g
 }
 
 /* ---------- el árbol ---------- */
@@ -159,6 +183,15 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
   const petalMatTree = new THREE.MeshLambertMaterial({ map: flowerTex, alphaTest: .5, side: THREE.DoubleSide, emissive: 0x555555 })
 
   let clSeed = 500
+  /* racimos de hojas: 6 variantes por tamaño, giradas al azar en cada rama (antes ~115 distintos);
+     los del mismo tamaño comparten densidad, así que también comparten el rango de dibujo */
+  const VARIANTES = 6, racimos = new Map<number, THREE.BufferGeometry[]>()
+  function racimo(N: number) {
+    const lista = racimos.get(N) ?? []; racimos.set(N, lista)
+    const seed = clSeed++
+    if (lista.length < VARIANTES) { const g = makeCluster(seed, N, 0.2, 1.3); lista.push(g); return g }
+    return lista[seed % VARIANTES]
+  }
   const root = new THREE.Group(); world.add(root)
   const branches: Rama[] = [], leaves: Racimo[] = [], apples: Manzana[] = [], blossoms: { mesh: THREE.Mesh; L: Racimo }[] = [], hitMeshes: THREE.Object3D[] = []
 
@@ -174,7 +207,7 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
 
   function addCluster(pivot: THREE.Group, b: Rama, y: number, xOff: number, r: number, mid: boolean, N: number) {
     const g = new THREE.Group(); g.position.set(xOff, y, 0)
-    const mesh = new THREE.Mesh(makeCluster(clSeed++, N, 0.2, 1.3), leafMat)
+    const mesh = new THREE.Mesh(racimo(N), leafMat)
     mesh.scale.setScalar(r); mesh.rotation.y = R() * 6.28; mesh.castShadow = true; mesh.receiveShadow = true
     g.add(mesh); pivot.add(g); hitMeshes.push(mesh)
     const L: Racimo = { g, mesh, branch: b, mid, r, s: 0, seed: R() * 6.28, N, n: N }; leaves.push(L); return L
