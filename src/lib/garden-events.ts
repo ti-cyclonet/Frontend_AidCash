@@ -21,6 +21,8 @@ const VIGENCIA_MS = 24 * 60 * 60 * 1000
 export const GARDEN_EVENT_RAIN = "kiri:saving-registered"
 export const GARDEN_EVENT_STORM = "kiri:impulse-registered"
 export const GARDEN_EVENT_INCOME = "kiri:income-registered"
+/** Se pagó una obligación o se saldó una deuda: el Jardín vuelve a pedir sus monedas y cofres. */
+export const GARDEN_EVENT_MONEDAS = "kiri:garden-coins"
 
 // Por cuenta: si en el mismo navegador entra otra persona, no hereda la
 // lluvia / el rayo / el sol pendientes de la anterior.
@@ -51,6 +53,16 @@ export function marcarTormentaHormiga(nombre: string, monto = 0) {
     localStorage.setItem(porUsuario(TORMENTA_KEY), JSON.stringify([...previos, { ...detalle, at: Date.now() }].slice(-20)))
   } catch { /* sin storage */ }
   window.dispatchEvent(new CustomEvent(GARDEN_EVENT_STORM, { detail: detalle }))
+}
+
+/**
+ * Pago de una obligación (cuota de deuda o gasto fijo). Las monedas las abona el
+ * servidor; esto solo avisa al Jardín si está abierto. Si la deuda quedó
+ * saldada también ganó un cofre común.
+ */
+export function marcarPagoRealizado(refId: string, deudaSaldada = false) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent(GARDEN_EVENT_MONEDAS, { detail: { motivo: deudaSaldada ? "deuda" : "pago", refId } }))
 }
 
 /** Se registró un ingreso (sueldo o extra) en la billetera. */

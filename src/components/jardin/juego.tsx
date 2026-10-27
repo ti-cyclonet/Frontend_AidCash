@@ -19,12 +19,17 @@ import { createPortal } from "react-dom"
 import { AnimatePresence, motion } from "framer-motion"
 import { Droplets, Sparkles, Sprout } from "lucide-react"
 import { gamificationApi, type EstadoJardin } from "@/lib/api-client"
-import { tocarCosecha, tocarPremio, tocarRiego, tocarToque, prepararAudio } from "@/lib/thunder-sound"
+import { tocarCosecha, tocarRiego, prepararAudio } from "@/lib/thunder-sound"
 import { GARDEN_EVENT_RAIN, GARDEN_EVENT_STORM, GARDEN_EVENT_INCOME } from "@/lib/garden-events"
 import { cn } from "@/lib/utils"
 import { tr } from "@/lib/i18n"
+import { esNativo, vibrar as vibrarNativo } from "@/lib/nativo"
 
-const vibrar = (ms: number | number[]) => { try { navigator.vibrate?.(ms) } catch { /* sin vibración */ } }
+/* en la app nativa usa la vibración del sistema (iPhone incluido); en la web, la del navegador */
+const vibrar = (ms: number | number[]) => {
+  if (esNativo()) { vibrarNativo(Array.isArray(ms) ? "logro" : ms >= 20 ? "fuerte" : "toque"); return }
+  try { navigator.vibrate?.(ms) } catch { /* sin vibración */ }
+}
 
 /** id del elemento al que vuelan los frutos (la barra de XP del jardín) */
 export const ID_BARRA_XP = "kiri-barra-xp"

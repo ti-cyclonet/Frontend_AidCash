@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts"
 import {
-  Wallet, ReceiptText, ChevronRight,
+  Wallet, ChevronRight,
   TrendingUp, Sparkles, Eye, Flame,
   TreePine, CalendarDays,
 } from "lucide-react"

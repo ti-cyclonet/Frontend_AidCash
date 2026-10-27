@@ -79,7 +79,6 @@ export function GamificationLeaderboard({ entries }: Props) {
         <div className="px-5 pb-5 space-y-1">
           {sorted.map((entry, idx) => {
             const position = idx + 1
-            const isTop3 = position <= 3
 
             return (
               <div

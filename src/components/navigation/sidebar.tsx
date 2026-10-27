@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useRef, useEffect } from "react"
-import { Landmark, Sprout, PiggyBank, TrendingUp, LogOut, ChevronUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users, PanelLeftClose, PanelLeftOpen, Bell } from "lucide-react"
+import { Landmark, Sprout, PiggyBank, TrendingUp, Settings, Lock, Coins, Moon, Sun, Camera, Globe, BookOpen, Users, PanelLeftClose, PanelLeftOpen, Bell } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -35,7 +35,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, idioma, setIdioma } = useAppContext()
-  const { signOut, user: authUser } = useAuth()
+  const { user: authUser } = useAuth()
   const { unreadCount, socialUnreadCount, notifications, markAllRead, clearNotifications } = useSocket()
 
   const [collapsed, setCollapsed] = useState(false)
@@ -67,11 +67,6 @@ export function Sidebar() {
     document.addEventListener("pointerdown", handler)
     return () => document.removeEventListener("pointerdown", handler)
   }, [notifsOpen])
-
-  const handleLogout = async () => {
-    await signOut()
-    router.replace("/login")
-  }
 
   // Mismo flujo que Perfil (lib/avatar-upload): antes esto guardaba la foto
   // original en base64 sin comprimir; si pasaba de 700 KB el backend la

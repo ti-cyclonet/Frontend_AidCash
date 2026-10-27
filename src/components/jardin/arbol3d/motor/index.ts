@@ -1,9 +1,14 @@
 import * as THREE from "three"
-import { crearArbol, crearPiezasFruta, GX, treeTop } from "./arbol"
+import { crearArbol, crearPiezasFruta, GX } from "./arbol"
+import { crearCerca, RADIO_CERCA } from "./cerca"
+import { crearCofre, type TipoCofre3D } from "./cofre"
+import { crearHabitantes, type ClaveHabitante, type FinanzasIsla } from "./habitantes"
+import { ACCESORIOS, EQUIPADO_INICIAL, type AspectoFruto, type Equipado } from "./especies"
 import { crearCamara } from "./camara"
 import { climaActual, crearLluvia, crearNubes, crearRayos, WX, type ClimaWX } from "./clima"
 import { crearEfectos } from "./efectos"
 import { crearEscena } from "./escena"
+import { crearPaisaje } from "./paisaje"
 import { crearMariposas } from "./fauna"
 import { crearHormigas, type GastoHormiga3D } from "./hormigas"
 import { consumirBordillo, consumirColinas, crearDetallesIsla, crearIsla, TEX } from "./isla"
@@ -16,7 +21,7 @@ import { clamp, lerp, piece, rng, smooth } from "./utilidades"
  * servidor. Port del prototipo docs/arbol-3d/arbol-kiri-3d.html.
  */
 
-export type { GastoHormiga3D }
+export type { GastoHormiga3D, Equipado, TipoCofre3D, ClaveHabitante, FinanzasIsla }
 export type ClimaArbol = "sol" | "nubes" | "tormenta"
 
 export interface EstadoArbol3D {
@@ -35,6 +40,10 @@ export interface EstadoArbol3D {
   salud: number
   /** Manzanas colgando: se caen con la sacudida del día y vuelven al día siguiente */
   manzanasArbol: boolean
+  /** Avance del fondo de emergencia (0–100): levanta la cerca */
+  fondo: number
+  /** Lo que los habitantes de la isla muestran: ahorro del mes y racha */
+  finanzas: FinanzasIsla
 }
 
 export interface FrutoArbol3D { indice: number; dorado: boolean; cosechado: boolean }
@@ -50,13 +59,25 @@ export interface SonidosArbol {
 
 export interface OpcionesMotor {
   estado: EstadoArbol3D
+  /** Especie, color de hojas y accesorios puestos */
+  equipado?: Partial<Equipado>
+  /** Habitantes que el usuario tiene en su isla */
+  habitantes?: string[]
   sonidos: SonidosArbol
   formatearMonto: (monto: number) => string
+  /** Etiqueta de la hormiga que frena la cerca */
+  textoProtegido: string
   alTocarArbol: () => void
   alTocarNubes: () => void
   alCosechar: (indice: number, dorado: boolean, x: number, y: number) => void
   alTocarHormiga: (gasto: GastoHormiga3D | null) => void
-  alTerminarHormigas: (total: number) => void
+  alTerminarHormigas: (total: number, frenados: number) => void
+  /** La cerca acaba de quedar completa (no se avisa al cargar) */
+  alCompletarCerca: () => void
+  /** Tocaron el cofre: la app pide el premio al servidor y luego llama a abrirCofre() o cancelarCofre() */
+  alTocarCofre: (tipo: TipoCofre3D) => void
+  /** Tocaron un habitante (la app muestra lo que significa o abre su pantalla) */
+  alTocarHabitante: (clave: ClaveHabitante) => void
 }
 
 export interface MotorArbol3D {
@@ -69,6 +90,14 @@ export interface MotorArbol3D {
   rayo: () => void
   subirNivel: () => void
   ponerFrutos: (frutos: FrutoArbol3D[] | null) => void
+  /** Cambia la especie, el color de hojas o los accesorios al momento */
+  equipar: (e: Partial<Equipado>) => void
+  /** Cofre pendiente que se muestra en la isla (null = ninguno) */
+  mostrarCofre: (tipo: TipoCofre3D | null) => void
+  abrirCofre: () => void
+  cancelarCofre: () => void
+  /** Qué habitantes hay en la isla */
+  ponerHabitantes: (lista: string[]) => void
   destruir: () => void
 }
 
@@ -94,7 +123,7 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
 
   /* misma secuencia de construcción que el prototipo (comparten el generador R) */
   const esc = crearEscena(canvas, mobile)
-  const { renderer, scene, camera, world, skyU, sunGlow, hemi, sun, oceanU, farClouds } = esc
+  const { renderer, scene, camera, world, skyU, sunGlow, solVisible, hemi, sun, oceanU, farClouds } = esc
   const imgTierra = await cargarImagen(TEX + "farm_soil_diff.jpg")
   const isla = crearIsla(esc, R, imgTierra)
   await pausa()
@@ -109,15 +138,20 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
   const detalles = crearDetallesIsla(esc, isla, arbol.flowerTex, arbol.barkMat, R)
   const fuente = getComputedStyle(document.body).fontFamily || "system-ui, sans-serif"
   const hormigas = crearHormigas(world, isla, arbol, detalles.flowerSp, {
-    formatear: op.formatearMonto, fuente, pop: () => op.sonidos.pop(), alTerminar: total => op.alTerminarHormigas(total),
+    formatear: op.formatearMonto, fuente, pop: () => op.sonidos.pop(), alTerminar: (total, frenados) => op.alTerminarHormigas(total, frenados),
+    cercaCompleta: () => cerca.completa(), radioCerca: RADIO_CERCA, textoProtegido: op.textoProtegido,
   })
   const { sprouts, fallU, mist } = detalles.completar()
-  arbol.orientarBrote()
-  arbol.ramaExtra()
-  const efectos = crearEfectos(scene, arbol.leafTex, arbol.flowerTex, leafU.uSeco, fruta)
+  const efectos = crearEfectos(scene, arbol.texturaHojas, arbol.flowerTex, leafU.uSeco, fruta)
   efectos.setSuelo(hormigas.groundY)
+  const cerca = crearCerca(world, isla.bd, efectos.chispas)
+  cerca.ponerFondo(est.fondo); cerca.fijar()
+  const cofre = crearCofre(world, efectos.estallido)
+  const habitantes = crearHabitantes({ world, chispas: efectos.chispas, alturaArbol: () => arbol.treeTop(Gd), fuente })
+  habitantes.poner(op.habitantes ?? ["chanchito"])
   await pausa()
   const lluvia = crearLluvia(scene)
+  const paisaje = crearPaisaje(scene)
   const rayos = crearRayos(scene)
   const { blades, bd, NB, NF, stems, grassMat, grassDry, grassWet, soilMat, soilDry, soilWet, contact, waterTex } = isla
   const flowerSp = detalles.flowerSp
@@ -130,10 +164,48 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
   let treeS = 0.4, Gd = 0, sView = 0.4, t = 0, audAcc = 0, instant = true, intro = true
   let seco = 0, secoAcc = 0, ingresoK = 0, ultimoGolpe = 0
   const tmpA = new THREE.Color(), tmpB = new THREE.Color(), WHITE = new THREE.Color(0xdfe8ff), GOLD = new THREE.Color(0xffc861)
-  const vTmp = new THREE.Vector3(), sTmp = new THREE.Vector3()
+  /* ---------- hora del día: la isla sigue el reloj del usuario ----------
+   * De noche el cielo se vuelve azul profundo con estrellas, el sol pasa a ser
+   * la luna y la luz baja (sin dejar de ver el árbol); al amanecer y al
+   * atardecer todo toma luz dorada. Para probar otra hora: localStorage
+   * "kiri_hora_prueba" = "21.5". */
+  const NOCHE_TOP = new THREE.Color(0x0d1c3a), NOCHE_BOT = new THREE.Color(0x2a3d63), DORADO_TOP = new THREE.Color(0x6a78b8), DORADO_BOT = new THREE.Color(0xf6b07c)
+  const LUNA = new THREE.Color(0xa9bdff), NARANJA = new THREE.Color(0xffa45c), NUCLEO_SOL = new THREE.Color(0xfffbe8), NUCLEO_LUNA = new THREE.Color(0xe4ebff)
+  const horaActual = () => {
+    try { const p = Number(localStorage.getItem("kiri_hora_prueba")); if (localStorage.getItem("kiri_hora_prueba") && Number.isFinite(p)) return ((p % 24) + 24) % 24 } catch { /* sin storage */ }
+    const d = new Date(); return d.getHours() + d.getMinutes() / 60
+  }
+  const nocheDe = (h: number) => h >= 7.5 && h <= 17.5 ? 0 : h >= 20 || h <= 5 ? 1 : h > 17.5 ? smooth((h - 17.5) / 2.5) : 1 - smooth((h - 5) / 2.5)
+  const doradoDe = (h: number) => Math.max(0, 1 - Math.abs(h - 18.3) / 1.5) + 0.75 * Math.max(0, 1 - Math.abs(h - 6.3) / 1.3)
+  let hora = horaActual(), horaAcc = 0, noche = nocheDe(hora), dorado = doradoDe(hora)
+  const vTmp = new THREE.Vector3(), sTmp = new THREE.Vector3(), solPos = new THREE.Vector3()
   const dummy = new THREE.Object3D()
   const timers = new Set<number>()
   const despues = (ms: number, fn: () => void) => { const id = window.setTimeout(() => { timers.delete(id); fn() }, ms); timers.add(id) }
+  /* ---------- especie, color y accesorios ---------- */
+  const eq: Equipado = { ...EQUIPADO_INICIAL }
+  function equipar(e: Partial<Equipado>) {
+    const antes = { ...eq }; Object.assign(eq, e)
+    const cambia = (k: keyof Equipado) => antes[k] !== eq[k] || !equipado
+    if (cambia("especie")) {
+      arbol.construir(eq.especie)
+      apples.forEach(a => { a.grow = est.manzanasArbol ? 1 : 0 })
+      if (equipado && arrancado) { popV = 4; efectos.burstSparks(Math.max(treeS, .3)) }
+    }
+    if (cambia("color") || cambia("especie")) { arbol.ponerColor(eq.color); efectos.ponerTexturaHojas(arbol.texturaHojas) }
+    if (cambia("hormiguero")) hormigas.ponerAspecto(ACCESORIOS.hormiguero[eq.hormiguero] ?? ACCESORIOS.hormiguero.arena)
+    if (cambia("cerca")) cerca.ponerAspecto(ACCESORIOS.cerca[eq.cerca] ?? ACCESORIOS.cerca.blanca)
+    if (cambia("regadera")) efectos.ponerRegadera(ACCESORIOS.regadera[eq.regadera] ?? ACCESORIOS.regadera.azul)
+    if (cambia("frutos") || cambia("especie")) {
+      /* "auto" = el fruto propio de la especie; los dorados del minijuego no cambian */
+      const f = (ACCESORIOS.frutos[eq.frutos] ?? {}) as AspectoFruto
+      fruta.fruitMat.color.set(f.c ?? arbol.especie.fruta.color); fruta.fruitMat.metalness = f.metal ?? 0; fruta.fruitMat.roughness = f.metal ? 0.25 : 0.38
+    }
+    equipado = true
+  }
+  let equipado = false
+  equipar(op.equipado ?? {})
+
   const golpe = () => { if (t - ultimoGolpe > 0.07) { ultimoGolpe = t; op.sonidos.golpe() } }
 
   function strike() {
@@ -175,6 +247,10 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     const rc = canvas.getBoundingClientRect(); ndc.set(((cx - rc.left) / rc.width) * 2 - 1, -((cy - rc.top) / rc.height) * 2 + 1); ray.setFromCamera(ndc, camera)
     const fruto = efectos.tocarFruto(ray)
     if (fruto) { op.alCosechar(fruto.indice, fruto.dorado, cx, cy); return }
+    const cofreTocado = cofre.tocar(ray)
+    if (cofreTocado) { op.sonidos.pop(); op.alTocarCofre(cofreTocado); return }
+    const habitante = habitantes.tocar(ray)
+    if (habitante) { op.sonidos.pop(); op.alTocarHabitante(habitante); return }
     if (weather !== "clear" && ray.intersectObjects(cloudHit, false).length) { clouds.forEach(c => { c.userData.bump = 1 }); op.alTocarNubes(); return }
     const hormiga = hormigas.tocarHormiga(ray)
     if (hormiga !== undefined) { op.alTocarHormiga(hormiga); return }
@@ -188,6 +264,25 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     const w = Math.max(1, p.clientWidth), h = Math.max(1, p.clientHeight)
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix()
   }
+
+  /* ---------- fluidez ----------
+   * Resolución adaptable: si el celular no alcanza ~45 fps se baja la resolución
+   * de a poco (y se sube si sobra). En reposo se dibuja a 30 fps (el viento se ve
+   * igual y el celular no se calienta); con un toque, arrastre, lluvia o cualquier
+   * efecto vuelve a 60 fps unos segundos. */
+  const dprMax = Math.min(window.devicePixelRatio || 1, mobile ? 1.75 : 2), dprMin = Math.min(dprMax, mobile ? 0.9 : 1)
+  let dpr = dprMax, turboHasta = 0, medida = 0, cuadros = 0, holgura = 0
+  const animar = (seg = 6) => { turboHasta = Math.max(turboHasta, performance.now() + seg * 1000) }
+  const alInteractuar = () => animar()
+  canvas.addEventListener("pointerdown", alInteractuar); canvas.addEventListener("pointermove", alInteractuar); canvas.addEventListener("wheel", alInteractuar, { passive: true })
+  function ajustarCalidad(intervaloMs: number) {
+    medida += intervaloMs; cuadros++
+    if (medida < 1500) return
+    const prom = medida / cuadros; medida = 0; cuadros = 0
+    if (prom > 22 && dpr > dprMin) { dpr = Math.max(dprMin, dpr - 0.25); holgura = 0; renderer.setPixelRatio(dpr); resize() }
+    else if (prom < 17.5 && dpr < dprMax) { if (++holgura >= 4) { holgura = 0; dpr = Math.min(dprMax, dpr + 0.25); renderer.setPixelRatio(dpr); resize() } }
+    else holgura = 0
+  }
   const ro = new ResizeObserver(resize); if (canvas.parentElement) ro.observe(canvas.parentElement); resize()
 
   function targetS() {
@@ -200,7 +295,12 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
   let last = performance.now(), raf = 0, enVista = true, vivo = true, arrancado = false
   function frame(now: number) {
     raf = requestAnimationFrame(frame)
-    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt
+    const intervalo = now - last
+    const turbo = intro || now < turboHasta || cur.rain > 0.25 || est.regando || flash > 0
+    /* pantallas de 90/120 Hz: tope de 60 fps aunque haya movimiento */
+    if (intervalo < (turbo ? 1000 / 70 : 1000 / 31)) return
+    if (turbo && !intro) ajustarCalidad(intervalo)
+    const dt = Math.min(0.05, intervalo / 1000); last = now; t += dt
 
     /* clima */
     const w = climaWX()
@@ -215,11 +315,23 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     flash = Math.max(0, flash - dt * 3.4)
     rayos.tick(dt, t)
     ingresoK = lerp(ingresoK, est.ingreso ? 1 : 0, 1 - Math.exp(-dt * 2))
-    tmpA.copy(cur.top).lerp(WHITE, flash * 0.5); tmpB.copy(cur.bottom).lerp(WHITE, flash * 0.55)
+    horaAcc += dt; if (horaAcc > 30) { horaAcc = 0; hora = horaActual() }
+    const kh = instant ? 1 : 1 - Math.exp(-dt * 0.6)
+    noche = lerp(noche, nocheDe(hora), kh); dorado = lerp(dorado, doradoDe(hora) * (1 - cur.cover * 0.7), kh)
+    tmpA.copy(cur.top).lerp(NOCHE_TOP, noche * 0.92).lerp(DORADO_TOP, dorado * 0.45).lerp(WHITE, flash * 0.5)
+    tmpB.copy(cur.bottom).lerp(NOCHE_BOT, noche * 0.88).lerp(DORADO_BOT, dorado * 0.55).lerp(WHITE, flash * 0.55)
     skyU.top.value.copy(tmpA); skyU.bottom.value.copy(tmpB); (scene.fog as THREE.Fog).color.copy(tmpB)
-    hemi.intensity = cur.hemi + flash * 1.3 + ingresoK * 0.12; sun.intensity = cur.sun + flash * 0.35 + ingresoK * 0.45; sun.color.copy(cur.sunCol).lerp(GOLD, ingresoK * 0.55)
-    sunGlow.material.opacity = Math.max(cur.glow, ingresoK); sunGlow.scale.setScalar(60 * (1 + 0.3 * ingresoK * (1 + 0.08 * Math.sin(t * 2.2))))
-    cloudMat.color.copy(cur.cloud); cloudMat.emissive.copy(cur.cloud).multiplyScalar(0.42)
+    /* de noche baja la luz, pero el árbol se sigue viendo (luz de luna fría) */
+    hemi.intensity = (cur.hemi + ingresoK * 0.12) * (1 - 0.42 * noche) + flash * 1.3
+    sun.intensity = (cur.sun + ingresoK * 0.45) * (1 - 0.6 * noche) + flash * 0.35
+    sun.color.copy(cur.sunCol).lerp(LUNA, noche * 0.85).lerp(NARANJA, dorado * 0.5).lerp(GOLD, ingresoK * 0.55)
+    sunGlow.material.opacity = Math.max(cur.glow * (1 - noche * 0.85), ingresoK)
+    /* el sol visible se apaga con lluvia y tormenta; de noche es la luna */
+    solVisible.disco.material.opacity = solVisible.halo.material.opacity = (solVisible.nucleo.material as THREE.MeshBasicMaterial).opacity = cur.glow
+    ;(solVisible.nucleo.material as THREE.MeshBasicMaterial).color.copy(NUCLEO_SOL).lerp(NUCLEO_LUNA, noche)
+    solVisible.disco.scale.setScalar(9 * (1 - 0.3 * noche)); solVisible.halo.scale.setScalar(34 * (1 - 0.45 * noche)); solVisible.nucleo.scale.setScalar(1 - 0.25 * noche)
+    sunGlow.scale.setScalar(60 * (1 + 0.3 * ingresoK * (1 + 0.08 * Math.sin(t * 2.2))))
+    cloudMat.color.copy(cur.cloud).multiplyScalar(1 - 0.5 * noche); cloudMat.emissive.copy(cloudMat.color).multiplyScalar(0.42)
 
     /* crecimiento suavizado */
     let sT = targetS(); if (intro) { if (t < 1.3) sT = 0.4; else if (Math.abs(sT - sView) < 0.01) intro = false }
@@ -247,7 +359,7 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     const wob = (sView < 0.9 ? Math.sin(t * (2 + sView * 5)) * 0.02 * smooth((sView - 0.4) / 0.4) : 0) + shakeAmp * Math.sin(t * 30) * 0.06
     halfR.rotation.z = -(0.03 + open * 0.95) + wob; halfL.rotation.z = (0.03 + open * 0.95) - wob; halfR.position.x = open * 0.1; halfL.position.x = -open * 0.1
     /* zona de toque fácil para semilla y brote */
-    const alto = treeTop(G) * Math.max(.5, Math.min(1, emerge + .3))
+    const alto = arbol.treeTop(G) * Math.max(.5, Math.min(1, emerge + .3))
     toqueFacil.scale.setScalar(Math.max(0.8, alto * 0.55)); toqueFacil.position.y = Math.max(0.45, alto * 0.45)
 
     contact.scale.setScalar(1.5 + treeS * 2.8 * Math.max(emerge, 0.25)); (contact.material as THREE.MeshBasicMaterial).opacity = 0.2 + 0.32 * clamp(cur.sun / 1.05)
@@ -289,14 +401,14 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     for (const f of flies) {
       const u = f.userData, on = Lv === 6 && weather !== "storm" && cur.rain < 0.7; f.visible = on; if (!on) continue
       const fp = (tt: number) => { const a = tt * 0.5 * u.sp + u.ph; return [Math.cos(a) * u.R, u.h + Math.sin(tt * 1.3 + u.ph) * 0.4 + Math.sin(a * 2) * 0.3, Math.sin(a * 1.3) * u.R * 0.8] }
-      const lift = u.low ? 0 : treeTop(G) * 0.25, dip = -1.4 * smooth((Math.sin(t * 0.27 + u.ph * 1.7) - 0.55) / 0.45)
+      const lift = u.low ? 0 : arbol.treeTop(G) * 0.25, dip = -1.4 * smooth((Math.sin(t * 0.27 + u.ph * 1.7) - 0.55) / 0.45)
       const p = fp(t), q2 = fp(t + 0.06); f.position.set(p[0], Math.max(0.55 + Hgt(p[0], p[2]), p[1] + lift + dip), p[2])
       f.rotation.set(0, Math.atan2(q2[0] - p[0], q2[2] - p[2]), (q2[1] - p[1]) * -2)
       const fl = 0.2 + 0.95 * Math.sin(t * 22 + u.ph); u.wr.rotation.z = fl; u.wl.rotation.z = -fl
     }
 
     /* nubes */
-    const baseY = Math.max(3.2, treeTop(G) * Math.max(.55, Math.min(1, emerge + .4))) + 0.6
+    const baseY = Math.max(3.2, arbol.treeTop(G) * Math.max(.55, Math.min(1, emerge + .4))) + 0.6
     clouds.forEach((c, i) => {
       const u = c.userData, cv = cur.cover
       c.position.x = lerp(u.clearX, u.stormX, cv) + Math.sin(t * u.sp + u.ph) * (0.5 + windS * 0.4)
@@ -308,16 +420,23 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     })
 
     lluvia.tick(dt, cur.rain, windS, baseY + 0.4)
-    efectos.tick({ dt, t, windS, holding: est.regando, ingreso: est.ingreso, altura: treeTop(G) * 0.8 + 0.6, golpe, alRegar: () => op.sonidos.riego() })
+    efectos.tick({ dt, t, windS, holding: est.regando, ingreso: est.ingreso, altura: arbol.treeTop(G) * 0.8 + 0.6, golpe, alRegar: () => op.sonidos.riego() })
 
     sprouts.visible = Lv >= 3
     fallU.uTime.value = t; { const ms = 1 + 0.06 * Math.sin(t * 2.3); mist.scale.set(2.6 * ms, 1.2 * ms, 1) }
-    hormigas.tick(dt); waterTex.offset.y -= dt * 0.08; waterTex.offset.x += dt * 0.01
-    oceanU.uTime.value = t; oceanU.uBright.value = 0.55 + 0.45 * clamp(cur.sun / 1.05) + flash * 0.3
-    for (const fc of farClouds) { fc.material.color.copy(cur.cloud); fc.material.opacity = 0.95 * (1 - cur.cover * 0.5) }
+    cerca.tick(dt, !instant); cofre.tick(dt, !intro && t > 2.5); habitantes.tick(dt, t, { fin: est.finanzas, ingreso: est.ingreso, regando: est.regando }); hormigas.tick(dt); waterTex.offset.y -= dt * 0.08; waterTex.offset.x += dt * 0.01
+    oceanU.uTime.value = t; oceanU.uBright.value = (0.55 + 0.45 * clamp(cur.sun / 1.05)) * (1 - 0.5 * noche) + flash * 0.3
+    for (const fc of farClouds) { fc.material.color.copy(cur.cloud).multiplyScalar(1 - 0.5 * noche); fc.material.opacity = 0.95 * (1 - cur.cover * 0.5) }
+    paisaje.tick(dt, t, noche, cur.cover)
 
     /* cámara: encuadra el árbol según su tamaño */
     camara.encuadrar(dt, alto + 0.4, intro, instant)
+    /* el sol acompaña la vista: arriba a la derecha, sobre el horizonte */
+    {
+      const yaw = Math.atan2(-camera.position.x, -camera.position.z) - 0.26, el = 0.065, D = 95
+      solPos.set(camera.position.x + Math.sin(yaw) * Math.cos(el) * D, camera.position.y + Math.sin(el) * D, camera.position.z + Math.cos(yaw) * Math.cos(el) * D)
+      solVisible.disco.position.copy(solPos); solVisible.halo.position.copy(solPos); solVisible.nucleo.position.copy(solPos); solVisible.nucleo.lookAt(camera.position)
+    }
 
     audAcc += dt; if (audAcc > 0.25) { audAcc = 0; op.sonidos.lluvia(cur.rain) }
     instant = false
@@ -339,21 +458,37 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     iniciar(e) {
       if (arrancado) return
       Object.assign(est, e)
+      cerca.ponerFondo(est.fondo); cerca.fijar()
       weather = climaWX(); Object.assign(cur, climaActual(weather)); nextBolt = 1.4
       apples.forEach(a => { a.grow = est.manzanasArbol ? 1 : 0 })
-      arrancado = true; t = 0; instant = true; reanudar()
+      arrancado = true; t = 0; instant = true; animar(8); reanudar()
     },
     actualizar(e) {
+      const fondoAntes = est.fondo
+      /* clima, crecimiento o cerca cambian con transición: se ve a 60 fps */
+      animar(5)
       Object.assign(est, e)
+      if (e.fondo !== undefined && e.fondo !== fondoAntes) {
+        const completa = cerca.ponerFondo(est.fondo)
+        if (!arrancado) cerca.fijar()
+        else if (e.fondo > fondoAntes) { op.sonidos.pop(); if (completa) op.alCompletarCerca() }
+      }
     },
-    sacudir(fuerte) { shake(fuerte ? 1.6 : 1, fuerte) },
-    gastoHormiga(lista) { hormigas.gastoHormiga(lista) },
-    rayo() { strike() },
-    subirNivel() { popV = 4; efectos.burstSparks(Math.max(treeS, .3)) },
+    sacudir(fuerte) { animar(); shake(fuerte ? 1.6 : 1, fuerte) },
+    /* cada hormiga camina un buen rato: se mantiene a 60 fps mientras dura el desfile */
+    gastoHormiga(lista) { animar(14 + lista.length * 6); hormigas.gastoHormiga(lista) },
+    rayo() { animar(4); strike() },
+    subirNivel() { animar(); popV = 4; efectos.burstSparks(Math.max(treeS, .3)) },
     ponerFrutos(frutos) { efectos.ponerFrutos(frutos) },
+    equipar(e) { animar(3); equipar(e) },
+    mostrarCofre(tipo) { animar(3); cofre.mostrar(tipo) },
+    abrirCofre() { animar(5); cofre.abrir() },
+    ponerHabitantes(lista) { animar(3); habitantes.poner(lista) },
+    cancelarCofre() { cofre.cancelar() },
     destruir() {
       vivo = false; pausar(); io.disconnect(); ro.disconnect(); document.removeEventListener("visibilitychange", vis)
       timers.forEach(id => window.clearTimeout(id)); timers.clear()
+      canvas.removeEventListener("pointerdown", alInteractuar); canvas.removeEventListener("pointermove", alInteractuar); canvas.removeEventListener("wheel", alInteractuar)
       camara.destruir(); rayos.quitar()
       const texturas = new Set<THREE.Texture>()
       scene.traverse(o => {

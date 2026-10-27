@@ -172,7 +172,8 @@ export function crearIsla(esc: Escena, R: Rng, imgTierra: HTMLImageElement | nul
   })()
 
   const soilMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: soilTex, normalMap: soilNor, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.95 })
-  const soilDry = new THREE.Color(0xd2a47c), soilWet = new THREE.Color(0x8c6a50)
+  /* más clara: en tormenta se veía como un hueco negro */
+  const soilDry = new THREE.Color(0xf0c49a), soilWet = new THREE.Color(0xc49c78)
   const mound: THREE.Mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), soilMat)
   mound.scale.set(0.95, 0.07, 0.95); mound.receiveShadow = true; world.add(mound)
 

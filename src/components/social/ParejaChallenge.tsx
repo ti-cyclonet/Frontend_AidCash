@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Heart } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { connectionsApi } from "@/lib/api-client"

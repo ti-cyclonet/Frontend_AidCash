@@ -12,9 +12,9 @@ import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { tocarGolpe, tocarHojas, tocarPop, tocarRiego, tocarTrueno, ponerLluvia } from "@/lib/thunder-sound"
 import { tr } from "@/lib/i18n"
-import type { ClimaArbol, FrutoArbol3D, MotorArbol3D } from "./motor"
+import type { ClaveHabitante, ClimaArbol, Equipado, FinanzasIsla, FrutoArbol3D, MotorArbol3D, TipoCofre3D } from "./motor"
 
-export type { ClimaArbol, FrutoArbol3D }
+export type { ClaveHabitante, ClimaArbol, FinanzasIsla, FrutoArbol3D, TipoCofre3D }
 export interface GastoHormigaCola { id: number; nombre: string; monto: number }
 
 interface Props {
@@ -31,6 +31,13 @@ interface Props {
   ingreso: boolean
   salud: number
   manzanasArbol: boolean
+  /** Avance del fondo de emergencia (0–100): levanta la cerca */
+  fondo: number
+  /** Ahorro del mes y racha: los habitantes de la isla lo muestran */
+  finanzas: FinanzasIsla
+  /** Habitantes que el usuario puso en su isla */
+  habitantes: string[]
+  onHabitante: (clave: ClaveHabitante) => void
   sonido: boolean
   frutos: FrutoArbol3D[] | null
   /** Cambia → sacudida fuerte del combo (tumba las manzanas) */
@@ -43,6 +50,12 @@ interface Props {
   onCosechar: (indice: number, dorado: boolean, x: number, y: number) => void
   /** WebGL no disponible: la página vuelve al árbol en imágenes */
   onFallo: () => void
+  /** Especie, color de hojas y accesorios puestos */
+  equipado?: Partial<Equipado>
+  /** Cofre pendiente que aparece en la isla (null = ninguno) */
+  cofre: TipoCofre3D | null
+  /** Tocaron el cofre: la página lo abre en el servidor. true = se abrió (la tapa se abre), false = vuelve a esperar */
+  onAbrirCofre: (tipo: TipoCofre3D) => Promise<boolean>
   /** Capas encima del canvas (mensajes, combo, premio, sonido) */
   children?: ReactNode
 }
@@ -86,9 +99,11 @@ export function ArbolKiri3D(props: Props) {
       const suena = () => propsRef.current.sonido
       try {
         motor = await crearMotorArbol(canvasRef.current, {
+          equipado: p.equipado,
+          habitantes: p.habitantes,
           estado: {
             nivel: p.nivel, progreso: p.progreso, clima: p.clima, tormentaHormiga: p.tormentaHormiga,
-            regando: p.regando, ingreso: p.ingreso, salud: p.salud, manzanasArbol: p.manzanasArbol,
+            regando: p.regando, ingreso: p.ingreso, salud: p.salud, manzanasArbol: p.manzanasArbol, fondo: p.fondo, finanzas: p.finanzas,
           },
           sonidos: {
             hojas: () => { if (suena()) tocarHojas() },
@@ -99,11 +114,21 @@ export function ArbolKiri3D(props: Props) {
             lluvia: v => ponerLluvia(suena() ? v : 0),
           },
           formatearMonto: n => propsRef.current.formatAmount(n),
+          textoProtegido: tr("Protegido"),
           alTocarArbol: () => propsRef.current.onTap(),
           alTocarNubes: () => propsRef.current.onNubes(),
           alCosechar: (i, dorado, x, y) => propsRef.current.onCosechar(i, dorado, x, y),
           alTocarHormiga: g => mostrarAvisoRef.current(g ? tr("🐜 {0} · -{1}", [g.nombre, propsRef.current.formatAmount(g.monto)]) : tr("🐜 De paseo"), 2200),
-          alTerminarHormigas: total => mostrarAvisoRef.current(tr("🐜 Hoy se fueron {0} en gastos hormiga", [propsRef.current.formatAmount(total)]), 3200),
+          alTerminarHormigas: (total, frenados) => mostrarAvisoRef.current(frenados > 0
+            ? (frenados === 1 ? tr("Tu fondo de emergencia frenó 1 gasto hormiga") : tr("Tu fondo de emergencia frenó {0} gastos hormiga", [frenados]))
+            : tr("🐜 Hoy se fueron {0} en gastos hormiga", [propsRef.current.formatAmount(total)]), 3200),
+          alCompletarCerca: () => mostrarAvisoRef.current(tr("¡Cerca completa! Los gastos hormiga ya no alcanzan tu árbol"), 3200),
+          alTocarHabitante: clave => propsRef.current.onHabitante(clave),
+          alTocarCofre: tipo => {
+            propsRef.current.onAbrirCofre(tipo)
+              .then(ok => { if (ok) motorRef.current?.abrirCofre(); else motorRef.current?.cancelarCofre() })
+              .catch(() => motorRef.current?.cancelarCofre())
+          },
         })
       } catch {
         if (!cancelado) propsRef.current.onFallo()
@@ -124,19 +149,38 @@ export function ArbolKiri3D(props: Props) {
   }, [])
 
   // ── Estado → motor ────────────────────────────────────────────────────────
-  const { datosListos, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, frutos, sacudida, subioNivel, gastosHormiga } = props
+  const { datosListos, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, fondo, finanzas, frutos, sacudida, subioNivel, gastosHormiga } = props
+  // las finanzas llegan como objeto nuevo en cada render: se comparan por valor
+  const claveFinanzas = JSON.stringify(finanzas)
   useEffect(() => {
-    motorRef.current?.actualizar({ nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol })
-  }, [listo, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol])
+    motorRef.current?.actualizar({ nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, fondo, finanzas })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listo, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, fondo, claveFinanzas])
 
   // La intro arranca cuando la escena está construida y la página tiene los datos reales
   useEffect(() => {
     if (!listo || !datosListos) return
-    motorRef.current?.iniciar({ nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol })
+    motorRef.current?.iniciar({ nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, fondo, finanzas })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listo, datosListos])
 
   useEffect(() => { motorRef.current?.ponerFrutos(frutos) }, [listo, frutos])
+
+  // Especie, color y accesorios: se aplican al momento (la clave evita reaplicar por identidad del objeto)
+  const claveEquipado = JSON.stringify(props.equipado ?? {})
+  useEffect(() => {
+    if (props.equipado) motorRef.current?.equipar(props.equipado)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listo, claveEquipado])
+
+  const { cofre } = props
+  useEffect(() => { motorRef.current?.mostrarCofre(cofre) }, [listo, cofre])
+
+  const claveHabitantes = props.habitantes.join(",")
+  useEffect(() => {
+    motorRef.current?.ponerHabitantes(props.habitantes)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listo, claveHabitantes])
 
   // Tormenta del gasto hormiga: dos rayos seguidos (la tormenta fija por vencidas la maneja el motor)
   useEffect(() => {

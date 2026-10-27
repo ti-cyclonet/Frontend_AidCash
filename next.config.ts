@@ -1,6 +1,11 @@
 // @ts-nocheck — @ducanh2912/next-pwa v10 types are incomplete; workboxOptions works at runtime
 import type { NextConfig } from 'next'
 import withPWAInit from '@ducanh2912/next-pwa'
+import { createHash } from 'crypto'
+import { readFileSync } from 'fs'
+
+// Versión del diccionario inglés: el navegador lo guarda con esta clave (lib/i18n.ts)
+const hashIngles = (() => { try { return createHash('sha1').update(readFileSync('./src/lib/i18n-en.ts')).digest('hex').slice(0, 10) } catch { return 'x' } })()
 
 const withPWA = withPWAInit({
   dest: 'public',
@@ -66,6 +71,7 @@ const withPWA = withPWAInit({
 })
 
 const nextConfig: NextConfig = {
+  env: { KIRI_EN_HASH: hashIngles },
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
   images: {

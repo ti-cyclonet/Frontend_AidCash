@@ -25,7 +25,6 @@ import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
 import { ConfigIngresoDialog } from "./ConfigIngresoDialog"
 import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/ingresos"
-import { Debt, FixedExpense } from "@/lib/types"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
 import { tr } from "@/lib/i18n"
 import { toast } from "@/hooks/use-toast"
@@ -407,7 +406,6 @@ export function BilleteraTab() {
     // Endeudamiento mantiene su valor como "capacidad máxima de endeudamiento"
     endeudamiento: Math.round(realAllocation.debtCapAmount),
   }
-  const totalDisponible = realAllocation.freeAmount + realAllocation.debtCapAmount
   const pocketPcts: Record<string, number> = {
     ahorro: Math.round(realAllocation.savingsPct),
     obligaciones: Math.min(100, Math.round(realAllocation.obligationsPct)),

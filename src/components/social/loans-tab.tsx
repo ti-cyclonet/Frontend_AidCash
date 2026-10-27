@@ -74,10 +74,6 @@ function SelectorFecha({ value, onChange }: { value: string; onChange: (v: strin
   )
 }
 
-function initials(name: string) {
-  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
-}
-
 const STATUS_LABEL: Record<string, string> = {
   PENDING_APPROVAL:              tr("Esperando aprobación"),
   PENDING_BORROWER_CONFIRMATION: tr("Con interés propuesto"),

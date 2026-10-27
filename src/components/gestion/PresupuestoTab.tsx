@@ -1,7 +1,6 @@
 ﻿"use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { motion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,27 +9,25 @@ import { MoneyInput } from "@/components/ui/money-input"
 import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import {
-  Plus, Pencil, ArrowLeft,
+  Plus, Pencil, 
   Utensils, Car, Gamepad2, Dumbbell, Heart, ShoppingBag, Wifi, GraduationCap, MoreHorizontal,
   PawPrint, Home, Baby, Plane, Gift, Wrench,
-  Lightbulb, MapPin, Receipt, AlertTriangle, PiggyBank, CircleDollarSign, Trash2, Coffee,
+  Lightbulb, MapPin, PiggyBank, Trash2, Coffee,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { OdometerAmount } from "@/components/ui/odometer-amount"
 import { useAppContext } from "@/lib/app-context"
-import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { userApi, WalletState, budgetCategoriesApi } from "@/lib/api-client"
-import { analyzeBudgetCategories, BudgetInsight, getCategoryInsight } from "@/lib/budget-insights"
-import { useCategoryResumen, useCategoriaSugerida } from "@/hooks/use-budget-categories"
+import { budgetCategoriesApi } from "@/lib/api-client"
+import type { ImpulseCategory } from "@/lib/types"
+import { analyzeBudgetCategories, BudgetInsight } from "@/lib/budget-insights"
+import { useCategoryResumen } from "@/hooks/use-budget-categories"
 import { useGastoLibre } from "@/hooks/use-gasto-libre"
 import { getPeriodLabel } from "@/lib/period-filter"
 import { SUGGESTIONS } from "@/lib/budget-category-spend"
-import { ImpulseCategory } from "@/lib/types"
-import { esGastoHormiga, nombreBaseGasto } from "@/lib/hormiga"
+import { nombreBaseGasto } from "@/lib/hormiga"
 import Link from "next/link"
 import { TopConsumosSection } from "./TopConsumosSection"
-import { DesgloseGastosSection } from "./DesgloseGastosSection"
 import { BudgetRadialChart, CategoryDetail } from "@/components/presupuesto/BudgetRadialChart"
 import { tr, localeFecha } from "@/lib/i18n"
 import { toast } from "@/hooks/use-toast"
@@ -78,31 +75,11 @@ function fromApi(c: { id: string; nombre: string; icono: string; color: string; 
   return { id: c.id, name: c.nombre, budget: c.montoLimite, spent: 0, icon: c.icono, color: c.color, linkedFixedIds: c.linkedFixedExpenseIds, frecuencia: c.frecuenciaLimite === "quincenal" ? "quincenal" : "mensual" }
 }
 
-// Mapear categoría de presupuesto a ImpulseCategory del backend
-function mapToImpulseCategory(budgetCatName: string): ImpulseCategory {
-  const lower = budgetCatName.toLowerCase()
-  if (lower.includes("alimenta") || lower.includes("comida") || lower.includes("restaur")) return "comida"
-  if (lower.includes("transport") || lower.includes("vehic")) return "transporte"
-  if (lower.includes("ocio") || lower.includes("salida") || lower.includes("fiesta")) return "salida"
-  if (lower.includes("cafe") || lower.includes("café")) return "cafe"
-  if (lower.includes("antojo") || lower.includes("compra") || lower.includes("ropa")) return "antojo"
-  return "otro"
-}
-
 // --- Component ---
 export function PresupuestoTab() {
   const { formatAmount, incomeFrequency, diasCobro } = useAppContext()
-  const { allocation } = usePeriodBudget()
-  const { impulseExpenses, addImpulseExpense, impulseThisPeriod, totalImpulseThisPeriod, removeImpulseExpense, setImpulseHormiga, setImpulseCategoria, fixedExpenses } = useFinanceData()
+  const { impulseExpenses, totalImpulseThisPeriod, removeImpulseExpense, setImpulseHormiga, setImpulseCategoria, fixedExpenses } = useFinanceData()
   const { resumen, refreshResumen } = useCategoryResumen('periodo')
-
-  const [wallet, setWallet] = useState<WalletState>({ cashBalance: 0, ahorro: 0, obligaciones: 0, libre: 0, endeudamiento: 0 })
-  const [walletError, setWalletError] = useState(false)
-  useEffect(() => {
-    userApi.getWallet()
-      .then(({ data, error }) => { if (data) setWallet(data.wallet); if (error) setWalletError(true) })
-      .catch(() => setWalletError(true))
-  }, [])
 
   // Gasto libre = el MISMO número de la tarjeta "Gasto libre" de Billetera
   // (saldo real − obligaciones pendientes − ahorro sugerido). Antes aquí se
@@ -111,11 +88,9 @@ export function PresupuestoTab() {
   const { gastoLibre: realFreeAmount } = useGastoLibre()
 
   const [categories, setCategories] = useState<BudgetCategory[]>([])
-  const [categoriesLoading, setCategoriesLoading] = useState(true)
   const fetchCategories = async () => {
     const { data } = await budgetCategoriesApi.list()
     if (data) setCategories(data.categories.map(fromApi))
-    setCategoriesLoading(false)
     refreshResumen()
   }
   useEffect(() => { fetchCategories() }, [])
@@ -131,7 +106,6 @@ export function PresupuestoTab() {
     }, 50)
     return () => clearTimeout(t)
   }, [selectedId])
-  const [radialView, setRadialView] = useState<null | 'all' | 'category'>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showSugg, setShowSugg] = useState(false)
@@ -170,7 +144,6 @@ export function PresupuestoTab() {
   const totalSpent = catsWithSpent.reduce((a, c) => a + c.spent, 0)
   const totalPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
   const selectedCat = catsWithSpent.find(c => c.id === selectedId) ?? null
-  const circ = 2 * Math.PI * 42
 
   // ═══ INSIGHTS: Analizar gastos y generar recomendaciones ═══
   const [insightsModalOpen, setInsightsModalOpen] = useState(false)
@@ -214,7 +187,6 @@ export function PresupuestoTab() {
   const hormigaUsagePct = realFreeAmount > 0
     ? Math.min(100, Math.round((totalHormiga / realFreeAmount) * 100))
     : 0
-  const hormigaRemaining = Math.max(0, realFreeAmount - totalImpulseThisPeriod)
   const hormigaIsOver = totalHormiga > realFreeAmount * 0.5
 
   const [savingCategory, setSavingCategory] = useState(false)
@@ -250,140 +222,6 @@ export function PresupuestoTab() {
     await fetchCategories()
   }
 
-  // ═══ REGISTRAR GASTO — modal con categorías del presupuesto ═══
-  const [expenseModalOpen, setExpenseModalOpen] = useState(false)
-  const [expNombre, setExpNombre] = useState("")
-  const [expMonto, setExpMonto] = useState("")
-  const [expCategoria, setExpCategoria] = useState<string>("")
-  const [expSaving, setExpSaving] = useState(false)
-  const [autoDetected, setAutoDetected] = useState<string | null>(null)
-  // null = usar la sugerencia automática (monto chico o palabra clave)
-  const [isDetectedHormiga, setIsDetectedHormiga] = useState<boolean | null>(null)
-  const [detectedImpulseCategory, setDetectedImpulseCategory] = useState<ImpulseCategory | null>(null)
-  const hormigaSugerido = !!expNombre && Number(expMonto) > 0 && esGastoHormiga(expNombre, Number(expMonto))
-  const hormigaActivo = isDetectedHormiga ?? hormigaSugerido
-
-  // Keywords que indican gastos hormiga (pequeños, cotidianos, impulsivos)
-  const HORMIGA_KEYWORDS: { keys: string[]; category: ImpulseCategory }[] = [
-    { keys: ["café", "cafe", "starbucks", "tinto", "capuchino", "latte", "espresso", "juan valdez"], category: "cafe" },
-    { keys: ["almuerzo", "cena", "desayuno", "hamburguesa", "pizza", "empanada", "arepa", "sandwich", "sushi", "comida rapida", "domicilio", "rappi", "ifood", "uber eats", "snack", "helado", "postre"], category: "comida" },
-    { keys: ["uber", "taxi", "didi", "bus", "metro", "transmilenio", "pasaje", "parqueadero", "peaje"], category: "transporte" },
-    { keys: ["dulce", "chocolate", "galleta", "chicle", "golosina", "antojo", "maquina", "vending", "tienda", "papas", "gaseosa", "jugo"], category: "antojo" },
-    { keys: ["bar", "cerveza", "trago", "rumba", "fiesta", "discoteca", "cine", "boliche", "karaoke", "concierto", "cover", "entrada", "boleta"], category: "salida" },
-    { keys: ["propina", "limosna", "parquimetro", "fotocopia", "impresion", "recarga", "minutos"], category: "otro" },
-  ]
-
-  function detectIfHormiga(text: string): { isHormiga: boolean; category: ImpulseCategory | null } {
-    const lower = text.toLowerCase().trim()
-    if (!lower) return { isHormiga: false, category: null }
-    for (const group of HORMIGA_KEYWORDS) {
-      if (group.keys.some(k => lower.includes(k))) {
-        return { isHormiga: true, category: group.category }
-      }
-    }
-    return { isHormiga: false, category: null }
-  }
-
-  // Auto-detectar categoría cuando cambia la descripción
-  const handleExpNombreChange = (value: string) => {
-    setExpNombre(value)
-
-    // 1. Detectar si podría ser gasto hormiga (SOLO sugerencia, no activar automáticamente)
-    const hormigaResult = detectIfHormiga(value)
-    setDetectedImpulseCategory(hormigaResult.category)
-    // NO activar isDetectedHormiga automáticamente — el usuario decide
-
-    // 2. La categoría la sugiere el backend (ver efecto de `categoriaSugerida`).
-  }
-
-  // Kiri sugiere la categoría mientras se escribe — primero por el historial
-  // del usuario ("InDriver" ya lo pusiste en Transporte), luego por palabras
-  // clave. Solo rellena si el usuario todavía no eligió una a mano.
-  const categoriaSugerida = useCategoriaSugerida(expenseModalOpen ? expNombre : "")
-  const [expCategoriaManual, setExpCategoriaManual] = useState(false)
-  useEffect(() => {
-    setAutoDetected(categoriaSugerida?.nombre ?? null)
-    if (categoriaSugerida && !expCategoriaManual) setExpCategoria(categoriaSugerida.nombre)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoriaSugerida])
-  const categoryIdPorNombre = (nombre: string) => categories.find(c => c.name === nombre)?.id ?? null
-
-  const openExpenseModal = (preselectedCategory?: string) => {
-    setExpCategoriaManual(!!preselectedCategory)
-    setExpNombre("")
-    setExpMonto("")
-    setExpCategoria(preselectedCategory ?? "")
-    setAutoDetected(null)
-    setIsDetectedHormiga(null)
-    setDetectedImpulseCategory(null)
-    setExpenseModalOpen(true)
-  }
-
-  const handleRegisterExpense = async () => {
-    if (!expNombre || !expMonto || Number(expMonto) <= 0) return
-    const monto = Number(expMonto)
-
-    // Determinar la categoría del presupuesto (puede ser vacía si el usuario no selecciona)
-    const budgetCat = expCategoria && expCategoria !== "__hormiga__" ? expCategoria : ""
-
-    // Verificar disponibilidad contra el presupuesto de la categoría
-    const generalAvailable = Math.max(0, realFreeAmount - totalSpent)
-
-    if (budgetCat) {
-      const cat = catsWithSpent.find(c => c.name === budgetCat)
-      if (cat && cat.budget > 0) {
-        const catAvailable = cat.budget - cat.spent
-        if (monto > catAvailable || monto > generalAvailable) {
-          setExpenseModalOpen(false)
-          setInsufficientExpOpen(true)
-          return
-        }
-      }
-    } else {
-      if (generalAvailable > 0 && monto > generalAvailable) {
-        setExpenseModalOpen(false)
-        setInsufficientExpOpen(true)
-        return
-      }
-    }
-
-    // Registrar el gasto como impulseExpense (una única transacción)
-    // El nombre se tagea con la categoría para la vinculación; si es hormiga
-    // va en su propio campo (esHormiga), no como 🐜 dentro del nombre.
-    setExpSaving(true)
-    const impulseCategory = detectedImpulseCategory ?? mapToImpulseCategory(budgetCat || expNombre)
-
-    // La categoría va en su propio campo (FK), no como "[Cat]" dentro del nombre.
-    await addImpulseExpense({ nombre: expNombre, monto, categoria: impulseCategory, esHormiga: hormigaActivo, budgetCategoryId: budgetCat ? categoryIdPorNombre(budgetCat) : null })
-    setExpSaving(false)
-    setExpenseModalOpen(false)
-    setExpNombre("")
-    setExpMonto("")
-    setExpCategoria("")
-    setIsDetectedHormiga(null)
-    setDetectedImpulseCategory(null)
-  }
-
-  // Modal de insuficiencia para presupuesto
-  const [insufficientExpOpen, setInsufficientExpOpen] = useState(false)
-
-  const handleExpForceRegister = async () => {
-    if (!expNombre || !expMonto) return
-    setExpSaving(true)
-    const impulseCategory = mapToImpulseCategory(expCategoria)
-    await addImpulseExpense({ nombre: expNombre, monto: Number(expMonto), categoria: impulseCategory, esHormiga: hormigaActivo, budgetCategoryId: expCategoria ? categoryIdPorNombre(expCategoria) : null })
-    setExpSaving(false)
-    setInsufficientExpOpen(false)
-    setExpNombre("")
-    setExpMonto("")
-    setExpCategoria("")
-    setIsDetectedHormiga(null)
-  }
-
-  const handleExpCancel = () => {
-    setInsufficientExpOpen(false)
-  }
-
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -398,11 +236,6 @@ export function PresupuestoTab() {
             <Plus className="h-3.5 w-3.5" />{" "}{tr("Agregar categoría")}</Button>
         </div>
       </div>
-
-      {walletError && (
-        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-[11px] font-medium rounded-xl px-3 py-2">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{tr("No pudimos cargar tu billetera — los montos de abajo pueden no ser exactos.")}</div>
-      )}
 
       {/* 4 metricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -924,218 +757,6 @@ export function PresupuestoTab() {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL REGISTRAR GASTO --- */}
-      <Dialog open={expenseModalOpen} onOpenChange={v => { if (!v) { setExpenseModalOpen(false); setExpNombre(""); setExpMonto(""); setExpCategoria(""); setAutoDetected(null); setIsDetectedHormiga(null); setDetectedImpulseCategory(null) } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-kiri-emerald" />{tr("Registrar gasto")}</DialogTitle>
-            <DialogDescription>{tr("El gasto se registrará en la categoría seleccionada y descontará de tu presupuesto.")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">{tr("Descripción")}</Label>
-              <Input
-                placeholder={tr("Ej: Mercado semanal, Uber al trabajo, Netflix...")}
-                value={expNombre}
-                onChange={e => handleExpNombreChange(e.target.value)}
-                className="h-10 rounded-xl"
-                autoFocus
-              />
-              {/* Detección inteligente de categoría */}
-              {autoDetected && expCategoria === autoDetected && !expCategoriaManual && (
-                <p className="text-[9px] text-kiri-emerald flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />{" "}{tr("Categoría sugerida: {0}", [autoDetected])}{categoriaSugerida?.fuente === 'historial' && <span className="text-muted-foreground">{tr("· así lo registraste antes")}</span>}
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">{tr("Monto")}</Label>
-              <MoneyInput
-                value={expMonto}
-                onChange={v => setExpMonto(v)}
-                className="h-12 text-lg font-bold rounded-xl"
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold">{tr("Categoría")}</Label>
-              {/* Categorías del presupuesto */}
-              {categories.length > 0 ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {categories.map(cat => (
-                    <button
-                      key={cat.id}
-                      onClick={() => { setExpCategoria(expCategoria === cat.name ? "" : cat.name); setExpCategoriaManual(true) }}
-                      className={cn(
-                        "flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-colors",
-                        expCategoria === cat.name
-                          ? "border-kiri-emerald bg-kiri-emerald/5"
-                          : "border-muted text-muted-foreground hover:border-kiri-emerald/30"
-                      )}
-                    >
-                      <div className="h-7 w-7 rounded-lg flex items-center justify-center text-white" style={{ backgroundColor: cat.color }}>
-                        <span className="scale-[0.55]">{getIcon(cat.icon)}</span>
-                      </div>
-                      <span className="text-[9px] font-bold truncate max-w-full">{cat.name}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-xl text-center">{tr("Crea categorías con “Agregar” para organizar tu presupuesto.")}</p>
-              )}
-            </div>
-
-            {/* ═══ CLASIFICACIÓN: ¿Es gasto hormiga? ═══ */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between p-3 rounded-xl border border-muted bg-muted/10">
-                <div className="flex items-center gap-2">
-                  <Coffee className="h-4 w-4 text-cyclon-pink" />
-                  <div>
-                    <p className="text-xs font-bold">{tr("🐜 Marcar como gasto hormiga")}</p>
-                    <p className="text-[9px] text-muted-foreground">{tr("Pequeño gasto cotidiano o impulsivo")}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDetectedHormiga(!hormigaActivo)}
-                  className={cn(
-                    "relative h-6 w-11 rounded-full transition-colors",
-                    hormigaActivo ? "bg-cyclon-pink" : "bg-muted"
-                  )}
-                >
-                  <span className={cn(
-                    "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-                    hormigaActivo && "translate-x-5"
-                  )} />
-                </button>
-              </div>
-              {hormigaActivo && (
-                <p className="text-[9px] text-cyclon-pink flex items-center gap-1 px-1">
-                  <Coffee className="h-3 w-3" />
-                  {isDetectedHormiga === null ? tr("Kiri lo marcó como hormiga (monto pequeño o consumo cotidiano). Puedes desmarcarlo.") : tr("Kiri analizará este gasto como hábito de consumo.")}
-                </p>
-              )}
-            </div>
-
-            {/* Warning si se va a exceder el presupuesto de la categoría seleccionada */}
-            {expCategoria && expCategoria !== "__hormiga__" && Number(expMonto) > 0 && (() => {
-              const cat = catsWithSpent.find(c => c.name === expCategoria)
-              if (!cat) return null
-              const newTotal = cat.spent + Number(expMonto)
-              if (newTotal > cat.budget * 0.8) {
-                const isOver = newTotal > cat.budget
-                return (
-                  <div className={cn(
-                    "flex items-start gap-2 p-2.5 rounded-xl text-xs",
-                    isOver ? "bg-red-500/10 text-red-500" : "bg-amber-500/10 text-amber-600"
-                  )}>
-                    <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>
-                      {isOver
-                        ? tr("Este gasto excederá tu presupuesto de {0} ({1}).", [expCategoria, formatAmount(cat.budget)])
-                        : tr("Estarás al {0}% de tu presupuesto de {1}.", [Math.round((newTotal / cat.budget) * 100), expCategoria])}
-                    </span>
-                  </div>
-                )
-              }
-              return null
-            })()}
-          </div>
-          <DialogFooter className="gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setExpenseModalOpen(false)}>{tr("Cancelar")}</Button>
-            <Button
-              onClick={handleRegisterExpense}
-              disabled={expSaving || !expNombre || !expMonto || Number(expMonto) <= 0}
-              className="bg-kiri-emerald text-white font-bold rounded-xl px-6"
-            >
-              {expSaving ? "Guardando..." : tr("Registrar")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* --- MODAL PRESUPUESTO INSUFICIENTE --- */}
-      <Dialog open={insufficientExpOpen} onOpenChange={v => !v && handleExpCancel()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-500">
-              <AlertTriangle className="h-5 w-5" />{" "}{tr("Presupuesto insuficiente")}</DialogTitle>
-            <DialogDescription>
-              {(() => {
-                const generalAvail = Math.max(0, realFreeAmount - totalSpent)
-                if (expCategoria) {
-                  const cat = catsWithSpent.find(c => c.name === expCategoria)
-                  const catAvail = Math.max(0, (cat?.budget ?? 0) - (cat?.spent ?? 0))
-                  const effectiveAvail = Math.min(catAvail, generalAvail)
-                  return tr("Tu disponible en {0} es {1}, pero necesitas {2}.", [expCategoria, formatAmount(effectiveAvail), formatAmount(Number(expMonto))])
-                }
-                return tr("Tu disponible restante es {0}, pero necesitas {1}.", [formatAmount(generalAvail), formatAmount(Number(expMonto))])
-              })()}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-3">
-            <Card className="border-none bg-red-500/5 rounded-2xl">
-              <CardContent className="p-4 text-center space-y-1">
-                <p className="text-xs text-muted-foreground">{tr("Disponible en {0}", [expCategoria || tr("gasto libre")])}</p>
-                <p className="text-lg font-black">{(() => {
-                  const generalAvail = Math.max(0, realFreeAmount - totalSpent)
-                  if (expCategoria) {
-                    const cat = catsWithSpent.find(c => c.name === expCategoria)
-                    const catAvail = Math.max(0, (cat?.budget ?? 0) - (cat?.spent ?? 0))
-                    return formatAmount(Math.min(catAvail, generalAvail))
-                  }
-                  return formatAmount(generalAvail)
-                })()}</p>
-                <p className="text-xs text-red-500 font-bold">{tr("Necesitas: {0}", [formatAmount(Number(expMonto))])}</p>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="space-y-2 pt-2">
-            {/* Opción 1: Registrar de todas formas (exceder) */}
-            {wallet.cashBalance > 0 && (
-              <button
-                onClick={handleExpForceRegister}
-                className="w-full text-left p-4 rounded-2xl border-2 border-amber-500/40 bg-amber-500/5 hover:border-amber-500 transition-colors space-y-0.5"
-              >
-                <div className="flex items-center gap-2">
-                  <CircleDollarSign className="h-4 w-4 text-amber-500" />
-                  <p className="font-bold text-sm">{tr("Usar más del presupuesto asignado")}</p>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">{tr("Registrar de todas formas. Excederás tu presupuesto.")}</p>
-              </button>
-            )}
-
-            {/* Opción 2: Usar ahorro */}
-            {wallet.ahorro > 0 && (
-              <button
-                onClick={handleExpForceRegister}
-                className="w-full text-left p-4 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500 transition-colors space-y-0.5"
-              >
-                <div className="flex items-center gap-2">
-                  <PiggyBank className="h-4 w-4 text-emerald-500" />
-                  <p className="font-bold text-sm">{tr("Usar ahorro")}</p>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">{tr("Cubrir con tu ahorro disponible ({0}).", [formatAmount(wallet.ahorro)])}</p>
-              </button>
-            )}
-
-            {/* Opción 3: Registrar como nueva deuda */}
-            <Link href="/obligaciones">
-              <button className="w-full text-left p-4 rounded-2xl border-2 border-cyclon-lavender/40 bg-cyclon-lavender/5 hover:border-cyclon-lavender transition-colors space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-cyclon-lavender" />
-                  <p className="font-bold text-sm">{tr("Registrar como nueva deuda")}</p>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">{tr("Si pediste prestado para cubrir este gasto, agrégalo como obligación.")}</p>
-              </button>
-            </Link>
-
-            {/* Cancelar */}
-            <Button variant="ghost" onClick={handleExpCancel} className="w-full text-muted-foreground mt-1">{tr("Cancelar")}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
     </div>
   )

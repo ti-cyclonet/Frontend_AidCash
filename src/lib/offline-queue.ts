@@ -233,7 +233,7 @@ async function registerBackgroundSync(): Promise<void> {
 
 // ─── Procesamiento de la cola (usado tanto por SW como por fallback) ──────────
 
-import { api, getAccessToken } from './api-client'
+import { api } from './api-client'
 
 
 /**
