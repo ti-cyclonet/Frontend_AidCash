@@ -13,8 +13,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { DebtSimulator } from "@/components/recommendations/debt-simulator"
-import { SavingsSimulator, type EscenarioAhorro } from "@/components/recommendations/savings-simulator"
+import dynamic from "next/dynamic"
+import type { EscenarioAhorro } from "@/components/recommendations/savings-simulator"
 import { SimulacionCard } from "@/components/coach/SimulacionCard"
 import { getPeriodData } from "@/lib/period-filter"
 import { calculateBudgetAllocation } from "@/lib/budget-logic"
@@ -26,6 +26,11 @@ import {
 } from "@/lib/kiri-acciones"
 import { usePlan } from "@/lib/plan-context"
 import { tr } from "@/lib/i18n"
+
+// Los simuladores traen la librería de gráficas (recharts): se cargan solo cuando el
+// coach abre uno, no en cada pantalla donde está el botón del coach.
+const DebtSimulator = dynamic(() => import("@/components/recommendations/debt-simulator").then(m => m.DebtSimulator), { ssr: false })
+const SavingsSimulator = dynamic(() => import("@/components/recommendations/savings-simulator").then(m => m.SavingsSimulator), { ssr: false })
 import { unirFrases, esIOS, esAndroid } from "@/lib/dictado-voz"
 
 /** "Te quedan 7 mensajes este mes" (nada si es ilimitado o aún no se sabe). */

@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import { aplicarSequedad, LEAF_LP, type PiezasFruta } from "./arbol"
+import type { AspectoRegadera } from "./especies"
 import { Hgt } from "./terreno"
 import { clamp, glowTex, smooth } from "./utilidades"
 
@@ -10,9 +11,11 @@ interface Particulas { p: THREE.Points; pos: Float32Array; col: Float32Array | n
 export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerTex: THREE.Texture, uSeco: { value: number }, fruta: PiezasFruta) {
   /* ---------- regadera ---------- */
   const can = new THREE.Group(); can.visible = false; scene.add(can)
+  const canMats: { b?: THREE.MeshStandardMaterial; d?: THREE.MeshStandardMaterial } = {}
   {
     const bm = new THREE.MeshStandardMaterial({ color: 0x3aa0c0, roughness: .45, metalness: .2 })
     const dm = new THREE.MeshStandardMaterial({ color: 0x2a7a96, roughness: .45, metalness: .2 })
+    canMats.b = bm; canMats.d = dm
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.52, 16), bm); body.castShadow = true; can.add(body)
     const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.05, 16), dm); lid.position.y = 0.285; can.add(lid)
     const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.085, 0.72, 10), dm); sp.position.set(-0.5, 0.1, 0); sp.rotation.z = 0.9; sp.castShadow = true; can.add(sp)
@@ -227,6 +230,14 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
 
   return {
     spawnLeaf, spawnApple, burstSparks, ponerFrutos, tocarFruto, tick,
+    chispas(x: number, y: number, z: number, n: number) { for (let k = 0; k < n; k++) emit(sparks, x, y, z, (Math.random() - .5) * 0.6, 0.8 + Math.random(), (Math.random() - .5) * 0.6, 0.6) },
+    /** Chispas que salen hacia arriba y a los lados (el cofre al abrirse) */
+    estallido(x: number, y: number, z: number, n: number) {
+      for (let k = 0; k < n; k++) { const a = Math.random() * 6.28; emit(sparks, x, y, z, Math.cos(a) * 0.8, 1.4 + Math.random() * 1.6, Math.sin(a) * 0.8, 0.9 + Math.random() * 0.6) }
+    },
+    /** Las hojas que caen usan la misma textura (el mismo color) que el árbol */
+    ponerTexturaHojas(tex: THREE.Texture) { fallMats.forEach((m, i) => { m.map = tex; m.color.setScalar([0.85, 1, 1.08, 0.78][i]) }) },
+    ponerRegadera(a: AspectoRegadera) { canMats.b!.color.set(a.b); canMats.d!.color.set(a.d); canMats.b!.metalness = canMats.d!.metalness = a.metal ?? 0.2 },
     setSuelo(fn: (x: number, z: number) => number) { sueloY = fn },
   }
 }

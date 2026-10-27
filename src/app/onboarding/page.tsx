@@ -9,12 +9,11 @@ import { MoneyInput } from "@/components/ui/money-input"
 import { Label } from "@/components/ui/label"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { useAuth } from "@/lib/auth-context"
 import {
   ChevronRight, ChevronLeft, Clock, Shield,
-  Calendar, CalendarDays, Wallet, PiggyBank,
-  CheckCircle2, XCircle, Sparkles, Rocket, Target, Brain,
-  Plus, Trash2, ReceiptText, Landmark, Zap,
+  Calendar, CalendarDays, Wallet, 
+  CheckCircle2, XCircle, Sparkles, Target, Brain,
+  Plus, ReceiptText, Landmark, Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DueQuestion, useDueQuestion } from "@/components/obligaciones/DueQuestion"
@@ -47,9 +46,8 @@ interface OnboardingObligation {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { setOnboardingDone, setUser, user, configurarIngreso, formatAmount } = useAppContext()
+  const { setOnboardingDone, configurarIngreso, formatAmount } = useAppContext()
   const { updateUserProfile, addDebt, addFixedExpense, addExtraIncome } = useFinanceData()
-  const { user: authUser } = useAuth()
 
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -64,7 +62,6 @@ export default function OnboardingPage() {
   const [diaPago1, setDiaPago1] = useState("")
   const [diaPago2, setDiaPago2] = useState("")
   const [incomeValue, setIncomeValue] = useState("")
-  const [metaAhorro, setMetaAhorro] = useState("")
   const [tieneIngresoExtra, setTieneIngresoExtra] = useState<boolean | null>(null)
   const [extraNombre, setExtraNombre] = useState("")
   const [extraMonto, setExtraMonto] = useState("")

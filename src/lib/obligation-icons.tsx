@@ -3,7 +3,7 @@
 import {
   Zap, Wifi, Home, Car, Heart, GraduationCap, Smartphone,
   Tv, Music, Dumbbell, ShoppingBag, CreditCard, Building2,
-  Banknote, Landmark, Receipt, MoreHorizontal, Droplets, Flame,
+  Landmark, Receipt, Droplets, Flame,
 } from "lucide-react"
 import { tr } from "@/lib/i18n"
 

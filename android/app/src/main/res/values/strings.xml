@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kiri Finance</string>
+    <string name="title_activity_main">Kiri Finance</string>
+    <string name="package_name">co.cyclonet.kiri</string>
+    <string name="custom_url_scheme">co.cyclonet.kiri</string>
+</resources>

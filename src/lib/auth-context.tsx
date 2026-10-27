@@ -22,6 +22,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+/*
+ * Usuario recordado en el dispositivo: la app arranca al instante con él (antes cada
+ * apertura esperaba /auth/me para mostrar algo) y lo confirma con el servidor detrás.
+ */
+const CLAVE_USUARIO = "kiri_auth_user"
+function leerUsuarioGuardado(): AuthUser | null {
+  try {
+    const u = JSON.parse(localStorage.getItem(CLAVE_USUARIO) ?? "null") as AuthUser | null
+    return u && u.id === getUserId() ? u : null
+  } catch { return null }
+}
+function guardarUsuario(u: AuthUser | null) {
+  try { if (u) localStorage.setItem(CLAVE_USUARIO, JSON.stringify(u)); else localStorage.removeItem(CLAVE_USUARIO) } catch { /* sin storage */ }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,23 +48,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // Obtener datos del usuario actual
-    authApi.me().then(({ data, error }) => {
-      if (error || !data) {
-        clearTokens()
-        setUser(null)
-      } else {
+    const guardado = leerUsuarioGuardado()
+    if (guardado) { setUser(guardado); setLoading(false) }
+
+    // Se confirma con el servidor. SOLO un 401 cierra la sesión: sin red, con el
+    // servidor caído o con "demasiadas solicitudes" la sesión sigue siendo válida
+    // (antes cualquier error borraba los tokens y sacaba al usuario).
+    let cancelado = false
+    const validar = async (intento = 0) => {
+      const { data, status } = await authApi.me()
+      if (cancelado) return
+      if (data) {
         const u = data.user
         hidratarGuias(u.id as string, u.guiasVistas)
-        setUser({
-          id: u.id as string,
-          nombre: u.nombre as string,
-          correo: u.correo as string,
-          onboardingDone: u.onboardingDone as boolean,
-        })
+        const actual = { id: u.id as string, nombre: u.nombre as string, correo: u.correo as string, onboardingDone: u.onboardingDone as boolean }
+        setUser(actual); guardarUsuario(actual); setLoading(false)
+        return
       }
+      if (status === 401) { clearTokens(); guardarUsuario(null); setUser(null); setLoading(false); return }
+      if (intento < 3) { window.setTimeout(() => validar(intento + 1), [1500, 4000, 8000][intento]); return }
       setLoading(false)
-    })
+    }
+    validar()
+    return () => { cancelado = true }
   }, [])
 
   const signIn = async (email: string, password: string) => {
@@ -57,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error }
     if (data) {
       hidratarGuias(data.user.id, (data.user as unknown as { guiasVistas?: string[] }).guiasVistas)
-      setUser(data.user)
+      setUser(data.user); guardarUsuario(data.user)
     }
     return { error: null }
   }
@@ -68,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If verification is required, do NOT log the user in
     const verificationRequired = (data as any)?.verificationRequired
     if (data && !verificationRequired) {
-      setUser(data.user)
+      setUser(data.user); guardarUsuario(data.user)
     }
     return { error: null, verificationRequired }
   }
@@ -78,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // sale — si no, clearAvatar ya no sabría qué slot de IndexedDB limpiar.
     const userId = getUserId()
     await authApi.logout()
-    setUser(null)
+    setUser(null); guardarUsuario(null)
     if (userId) clearAvatar(userId).catch(() => {})
     // Limpiar TODO el caché del perfil
     localStorage.removeItem("kiri_income")

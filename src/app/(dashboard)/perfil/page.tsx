@@ -14,10 +14,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Moon, Sun, Coins, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X, Bell, ShieldCheck } from "lucide-react"
+import { Moon, Sun, Lock, LogOut, ChevronRight, Camera, Pencil, Globe, Timer, HelpCircle, BookOpen, MessageCircle, Sparkles, Crown, Image as ImageIcon, X, Bell, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-import { useAppContext, Currency } from "@/lib/app-context"
+import { useAppContext } from "@/lib/app-context"
 import { useAuth } from "@/lib/auth-context"
 import { usePlan } from "@/lib/plan-context"
 import { ConexionBancoCard } from "@/components/plan/ConexionBancoCard"
@@ -29,9 +29,11 @@ import { tr } from "@/lib/i18n"
 // Directo a la sección de preguntas frecuentes de Kiri en la landing
 const FAQ_URL = "https://www.cyclonet.com.co/kiri-finance/#faq"
 
+import { EliminarCuenta } from "@/components/perfil/EliminarCuenta"
+
 export default function PerfilPage() {
   const router = useRouter()
-  const { user, setUser, currency, setCurrency, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout, idioma, setIdioma } = useAppContext()
+  const { user, setUser, isDarkMode, setIsDarkMode, inactivityTimeout, setInactivityTimeout, idioma, setIdioma } = useAppContext()
   const { signOut, user: authUser } = useAuth()
   const { plan } = usePlan()
   const displayEmail = authUser?.correo ?? user.correo
@@ -383,6 +385,8 @@ export default function PerfilPage() {
       >
         <LogOut className="h-5 w-5" />{tr("Cerrar Sesión")}</Button>
 
+      <EliminarCuenta onEliminada={handleLogout} />
+
       <div className="text-center pt-4">
         <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{tr("Kiri Finance v1.0.0")}</p>
       </div>
@@ -705,7 +709,7 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     }
 
     setLoading(true)
-    const { data, error: apiError } = await api<{ message: string }>("/auth/change-password", {
+    const { error: apiError } = await api<{ message: string }>("/auth/change-password", {
       method: "POST",
       body: { currentPassword, newPassword },
     })

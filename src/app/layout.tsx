@@ -7,6 +7,7 @@ import { SocketProvider } from '@/lib/socket-context'
 import { AuthGuard } from '@/components/auth-guard'
 import { Toaster } from '@/components/ui/toaster'
 import { FinanceDataProvider } from '@/hooks/use-finance-data'
+import { NativoInit } from '@/components/providers/NativoInit'
 
 export const metadata: Metadata = {
   title: 'Kiri Finance',
@@ -56,6 +57,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   </AuthGuard>
                 </FinanceDataProvider>
                 <Toaster />
+                <NativoInit />
               </SocketProvider>
             </PlanProvider>
           </AppProvider>

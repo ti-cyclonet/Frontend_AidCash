@@ -164,7 +164,7 @@ export default function AhorroPage() {
 function AhorroContent() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("ahorro")
   const { formatAmount, savingsAmount, metaAhorro, setMetaAhorro, incomeFrequency } = useAppContext()
-  const { savingsHistory, totalAhorrado, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
+  const { savingsHistory, addSavingsEntry, fixedExpenses, loading } = useFinanceData()
   const { user: authUser } = useAuth()
   const { allocation } = usePeriodBudget()
   const { toast } = useToast()

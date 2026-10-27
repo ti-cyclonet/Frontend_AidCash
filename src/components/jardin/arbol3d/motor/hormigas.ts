@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import type { Arbol } from "./arbol"
+import type { AspectoHormiguero } from "./especies"
 import type { Isla } from "./isla"
 import { Hgt, HILL_XZ } from "./terreno"
 import { backOut, clamp, hash3, lerp, rng, smooth, vnoise } from "./utilidades"
@@ -100,12 +101,21 @@ export interface OpcionesHormigas {
   formatear: (monto: number) => string
   fuente: string
   pop: () => void
-  alTerminar: (total: number) => void
+  /** Al terminar la fila: cuánto se fue y cuántos gastos frenó la cerca */
+  alTerminar: (total: number, frenados: number) => void
+  /** Cerca del fondo de emergencia completa: las hormigas no pasan */
+  cercaCompleta: () => boolean
+  radioCerca: number
+  /** Etiqueta verde de la hormiga frenada por la cerca (traducida) */
+  textoProtegido: string
 }
 
 export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flowerSp: THREE.InstancedMesh, op: OpcionesHormigas) {
   const { bd, flw, stems, mound } = isla
   const hillG = new THREE.Group(); hillG.position.copy(HILL); hillG.scale.setScalar(HS); world.add(hillG)
+  /* para cambiar de aspecto: cuánto mezcla cada vértice entre los dos colores, y los materiales */
+  const tonos: number[] = []
+  let hillGeo!: THREE.LatheGeometry, lipMat!: THREE.MeshStandardMaterial, pebMat!: THREE.MeshStandardMaterial
   {
     /* montículo arenoso con bultos */
     const prof = [[0.92, 0], [0.84, 0.05], [0.7, 0.15], [0.55, 0.29], [0.4, 0.43], [0.27, 0.54], [0.14, 0.61], [0.0, 0.635]].map(p => new THREE.Vector2(p[0], p[1]))
@@ -114,10 +124,10 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = Math.hypot(x, z)
       if (r > 0.01 && y > 0.01) { const k = 1 + (vnoise(x * 4.2 + 3, z * 4.2 + y * 3) - 0.5) * 0.22; p.setX(i, x * k); p.setZ(i, z * k); p.setY(i, y * (1 + (vnoise(z * 5, x * 5) - 0.5) * 0.12)) }
-      cc.copy(ca).lerp(cb, clamp(0.25 + (hash3(x * 9, y * 9, z * 9) - .5) * 0.6 + (0.4 - y) * 0.3)); cols.push(cc.r, cc.g, cc.b)
+      const tt = clamp(0.25 + (hash3(x * 9, y * 9, z * 9) - .5) * 0.6 + (0.4 - y) * 0.3); tonos.push(tt); cc.copy(ca).lerp(cb, tt); cols.push(cc.r, cc.g, cc.b)
     }
     g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3)); g.computeVertexNormals()
-    const hill = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }))
+    const hill = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })); hillGeo = g
     hill.castShadow = true; hill.receiveShadow = true; hillG.add(hill)
     /* boca: túnel oscuro + labio */
     const a = Math.atan2(HOLE_DIR.x, HOLE_DIR.z)
@@ -125,10 +135,10 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
     const tunMat = new THREE.MeshBasicMaterial({ color: 0x140b05, polygonOffset: true, polygonOffsetFactor: -2 })
     const tun = new THREE.Mesh(new THREE.CircleGeometry(1, 24), tunMat)
     tun.scale.set(0.19, 0.16, 1); tun.position.set(0, 0.165, 0.7); tun.rotation.x = -0.5; tun.renderOrder = 3; mouth.add(tun)
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(1, 0.22, 8, 24, Math.PI * 1.15), new THREE.MeshStandardMaterial({ color: 0xb67a42, roughness: 1 }))
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(1, 0.22, 8, 24, Math.PI * 1.15), lipMat = new THREE.MeshStandardMaterial({ color: 0xb67a42, roughness: 1 }))
     lip.scale.set(0.21, 0.19, 0.2); lip.position.set(0, 0.165, 0.675); lip.rotation.set(-0.55, 0, -0.07 * Math.PI); lip.castShadow = true; mouth.add(lip)
     /* piedritas y granos */
-    const pb = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), 70)
+    const pb = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7), pebMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), 70)
     const d = new THREE.Object3D(), rr = rng(919), holeAng = Math.atan2(HOLE_DIR.z, HOLE_DIR.x)
     for (let i = 0; i < 70; i++) {
       const ang = rr() * 6.283, onHill = i < 42, rad = onHill ? 0.15 + rr() * 0.7 : 0.85 + rr() * 0.55
@@ -202,19 +212,19 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
     for (let h = antHit.length - 1; h >= 0; h--) if (antHit[h].userData.ant === m) antHit.splice(h, 1)
   }
 
-  function priceTag(txt: string) {
+  function priceTag(txt: string, color = "#d83a3a") {
     const c = document.createElement("canvas"); c.width = 256; c.height = 80; const g = c.getContext("2d")!
     g.fillStyle = "rgba(255,255,255,.96)"; g.beginPath(); g.moveTo(40, 8); g.arcTo(248, 8, 248, 72, 32); g.arcTo(248, 72, 8, 72, 32); g.arcTo(8, 72, 8, 8, 32); g.arcTo(8, 8, 248, 8, 32); g.closePath(); g.fill()
     let size = 40; g.font = `800 ${size}px ${op.fuente}`
     while (g.measureText(txt).width > 220 && size > 18) { size -= 2; g.font = `800 ${size}px ${op.fuente}` }
-    g.fillStyle = "#d83a3a"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 128, 42)
+    g.fillStyle = color; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 128, 42)
     const t = new THREE.CanvasTexture(c); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true })); s.scale.set(2.1, 0.66, 1); s.renderOrder = 20; return s
   }
 
   /* --- ruta: boca del hormiguero → base del tronco → sube → baja → vuelve --- */
-  interface Viaje { m: Hormiga; g: GastoHormiga3D; type: string; t: number; s: number; wait: number; item: THREE.Group | null; step: number; a: number; side: THREE.Vector3; wig: number; B: THREE.Vector3; uTop: number; L0: number; L1: number; L2: number }
+  interface Viaje { m: Hormiga; g: GastoHormiga3D; type: string; t: number; s: number; wait: number; item: THREE.Group | null; step: number; a: number; side: THREE.Vector3; wig: number; B: THREE.Vector3; uTop: number; L0: number; L1: number; L2: number; bloqueada: boolean }
   const ants: Viaje[] = [], antQueue: GastoHormiga3D[] = []
-  let antTotal = 0, antPending = 0, antSpawnT = 0
+  let antTotal = 0, antPending = 0, antSpawnT = 0, frenados = 0
   const AV = new THREE.Vector3(), AN = new THREE.Vector3(), AF = new THREE.Vector3(), AX = new THREE.Vector3(), AP = new THREE.Vector3(), AM = new THREE.Matrix4()
   const T1 = new THREE.Vector3(), T2 = new THREE.Vector3()
   const mouthP = HILL.clone().addScaledVector(HOLE_DIR, 0.8 * HS)
@@ -243,7 +253,12 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
     /* recalcula la ruta según el tamaño actual del árbol */
     arbol.root.updateMatrixWorld(true)
     const vis = arbol.root.visible && arbol.root.scale.x > 0.12 && arbol.branches[0].pivot.visible
-    if (vis) { arbol.trunkPoint(A.a, 0.01, AV, AN); A.B = AV.clone().addScaledVector(AN, 0.04); A.B.y = 0; A.uTop = 0.62; arbol.trunkPoint(A.a, A.uTop, AP); A.L2 = AP.distanceTo(AV) }
+    if (A.bloqueada) {
+      /* camina solo hasta la cerca, del lado del hormiguero */
+      const ang = Math.atan2(mouthP.z, mouthP.x) + A.wig * 0.6, ra = op.radioCerca + 0.22
+      A.B = new THREE.Vector3(Math.cos(ang) * ra, 0, Math.sin(ang) * ra); A.L2 = 0; A.uTop = 0
+    }
+    else if (vis) { arbol.trunkPoint(A.a, 0.01, AV, AN); A.B = AV.clone().addScaledVector(AN, 0.04); A.B.y = 0; A.uTop = 0.62; arbol.trunkPoint(A.a, A.uTop, AP); A.L2 = AP.distanceTo(AV) }
     else { A.B = new THREE.Vector3(Math.cos(A.a) * 0.42, 0, Math.sin(A.a) * 0.42); A.L2 = 0; A.uTop = 0 }
     A.L0 = 0.5; A.L1 = mouthP.distanceTo(A.B)
   }
@@ -259,7 +274,7 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
        coordenadas del tronco, que está girado con el árbol) para que se vea trepar */
     const haciaHormiguero = Math.atan2(mouthP.z, mouthP.x), haciaCamara = Math.atan2(Math.cos(0.28), Math.sin(0.28))
     const a = haciaHormiguero * 0.55 + haciaCamara * 0.45 + arbol.root.rotation.y + (Math.random() - .5) * 0.5
-    const A: Viaje = { m, g, type: objetoParaGasto(g.nombre), t: 0, s: 0, wait: 0, item: null, step: 0, a, side: new THREE.Vector3(-mouthP.z, 0, mouthP.x).normalize(), wig: (Math.random() - .5) * 0.6, B: new THREE.Vector3(), uTop: 0, L0: 0.5, L1: 1, L2: 0 }
+    const A: Viaje = { m, g, type: objetoParaGasto(g.nombre), t: 0, s: 0, wait: 0, item: null, step: 0, a, side: new THREE.Vector3(-mouthP.z, 0, mouthP.x).normalize(), wig: (Math.random() - .5) * 0.6, B: new THREE.Vector3(), uTop: 0, L0: 0.5, L1: 1, L2: 0, bloqueada: op.cercaCompleta() }
     ants.push(A); return A
   }
   function gastoHormiga(lista: GastoHormiga3D[]) {
@@ -269,8 +284,8 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
 
   /* el valor del gasto aparece sobre el hormiguero cuando la hormiga entra */
   const pops: { s: THREE.Sprite; t: number; y0: number }[] = []
-  function popTag(txt: string) {
-    const sp = priceTag(txt); sp.scale.set(1.15, 0.36, 1); const y0 = Hgt(HILL.x, HILL.z) + 0.63 * HS + 0.35
+  function popTag(txt: string, color?: string) {
+    const sp = priceTag(txt, color); sp.scale.set(1.15, 0.36, 1); const y0 = Hgt(HILL.x, HILL.z) + 0.63 * HS + 0.35
     sp.position.set(HILL.x + (Math.random() - .5) * 0.25, y0, HILL.z); sp.material.opacity = 0; world.add(sp); pops.push({ s: sp, t: 0, y0 })
   }
   function animarPatas(u: DatosHormiga, ph: number, t: number) {
@@ -291,17 +306,26 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
       const spd = 0.95; let moving = true
       if (A.step === 0) { /* sale y sube al tronco */ m.visible = true; A.s = Math.min(Ltot, A.s + spd * dt); m.scale.setScalar(ANT_S * Math.max(0.0001, smooth(A.t / 0.5))); if (A.s >= Ltot) { A.step = 1; A.wait = 0 } }
       else if (A.step === 1) {
-        /* arriba: toma el gasto */ moving = false; A.wait += dt
-        if (!A.item) { A.item = ITEMS[A.type](); A.item.scale.setScalar(0.0001); u.carry.add(A.item); op.pop() }
-        A.item.scale.setScalar(Math.max(0.0001, backOut(A.wait / 0.45) * 1.05))
-        if (A.wait > 0.75) A.step = 2
+        moving = false; A.wait += dt
+        if (A.bloqueada) {
+          /* choca con la cerca: mueve la cabeza y se devuelve sin nada */
+          u.head.rotation.y = Math.sin(A.wait * 14) * 0.35
+          if (A.wait - dt <= 0) op.pop()
+          if (A.wait > 1.1) { u.head.rotation.y = 0; A.step = 2 }
+        } else {
+          /* arriba: toma el gasto */
+          if (!A.item) { A.item = ITEMS[A.type](); A.item.scale.setScalar(0.0001); u.carry.add(A.item); op.pop() }
+          A.item.scale.setScalar(Math.max(0.0001, backOut(A.wait / 0.45) * 1.05))
+          if (A.wait > 0.75) A.step = 2
+        }
       }
       else if (A.step === 2) { /* baja y vuelve cargando */ A.s = Math.max(0, A.s - spd * 0.85 * dt); if (A.s <= 0) { A.step = 3; A.wait = 0 } }
       else {
         /* entra al hormiguero */ moving = false; A.wait += dt; const k = 1 - smooth(A.wait / 0.5); m.scale.setScalar(Math.max(0.0001, ANT_S * k))
         if (A.wait > 0.5) {
-          quitarHormiga(m); ants.splice(i, 1); antPending--; antTotal += A.g.monto; popTag("-" + op.formatear(A.g.monto))
-          if (antPending <= 0 && !antQueue.length) op.alTerminar(antTotal)
+          quitarHormiga(m); ants.splice(i, 1); antPending--
+          if (A.bloqueada) { frenados++; popTag(op.textoProtegido, "#1f8a4c") } else { antTotal += A.g.monto; popTag("-" + op.formatear(A.g.monto)) }
+          if (antPending <= 0 && !antQueue.length) { op.alTerminar(antTotal, frenados); frenados = 0 }
           continue
         }
       }
@@ -347,6 +371,26 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
   }
   function tocarHormiguero(ray: THREE.Raycaster) { if (!ray.intersectObjects(hillHit, false).length) return false; strollAnt(); return true }
 
-  return { gastoHormiga, tick(dt: number) { tickAnts(dt); tickStrolls(dt) }, tocarHormiga, tocarHormiguero, groundY, hayHormigas: () => ants.length > 0 || antQueue.length > 0 }
+  /* "Casita hongo": sombrero de hongo rojo con puntos sobre el montículo */
+  const sombrero = (() => {
+    const g = new THREE.Group(), red = new THREE.MeshStandardMaterial({ color: 0xd8322c, roughness: 0.55 }), wh = new THREE.MeshStandardMaterial({ color: 0xfff7ea, roughness: 0.7 })
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 14, 0, 6.283, 0, Math.PI / 2), red); cap.scale.set(1, 0.62, 1); cap.castShadow = true; g.add(cap)
+    const under = new THREE.Mesh(new THREE.CircleGeometry(0.5, 24), new THREE.MeshStandardMaterial({ color: 0xf3e2c4, roughness: 0.9, side: THREE.DoubleSide })); under.rotation.x = Math.PI / 2; g.add(under)
+    const dotGeo = new THREE.SphereGeometry(0.055, 10, 6)
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.4, r = i ? 0.18 + 0.17 * (i % 3) / 2 : 0, dot = new THREE.Mesh(dotGeo, wh)
+      dot.position.set(Math.cos(a) * r, 0.31 * Math.sqrt(Math.max(0, 1 - (r / 0.5) * (r / 0.5))), Math.sin(a) * r); dot.scale.set(1, 0.45, 1); g.add(dot)
+    }
+    g.position.y = 0.5; g.visible = false; hillG.add(g); return g
+  })()
+  /** Aspecto del hormiguero: recolorea el montículo y, en "hongo", le pone el sombrero. */
+  function ponerAspecto(s: AspectoHormiguero) {
+    const ca = new THREE.Color(s.a), cb = new THREE.Color(s.b), cc = new THREE.Color(), col = hillGeo.attributes.color as THREE.BufferAttribute
+    for (let i = 0; i < tonos.length; i++) { cc.copy(ca).lerp(cb, tonos[i]); col.setXYZ(i, cc.r, cc.g, cc.b) }
+    col.needsUpdate = true
+    lipMat.color.set(s.lip); pebMat.color.set(s.peb ?? 0xffffff); sombrero.visible = !!s.hongo
+  }
+
+  return { ponerAspecto, gastoHormiga, tick(dt: number) { tickAnts(dt); tickStrolls(dt) }, tocarHormiga, tocarHormiguero, groundY, hayHormigas: () => ants.length > 0 || antQueue.length > 0 }
 }
 

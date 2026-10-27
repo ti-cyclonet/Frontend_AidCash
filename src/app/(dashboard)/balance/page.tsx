@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import {
   Percent,
 } from "lucide-react"
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts"
 import { cn } from "@/lib/utils"
@@ -33,8 +33,8 @@ const TIMEFRAMES: { value: Timeframe; label: string }[] = [
 
 export default function BalancePage() {
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("balance")
-  const { formatAmount, metaAhorro, incomeFrequency, diasCobro } = useAppContext()
-  const { debts, impulseExpenses, fixedExpenses } = useFinanceData()
+  const { formatAmount, metaAhorro } = useAppContext()
+  const { debts } = useFinanceData()
 
   const [timeframe, setTimeframe] = useState<Timeframe>("month")
   const [report, setReport] = useState<BalanceReport | null>(null)

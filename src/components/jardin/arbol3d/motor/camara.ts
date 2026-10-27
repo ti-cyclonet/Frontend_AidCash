@@ -7,7 +7,7 @@ import { clamp, lerp, smooth } from "./utilidades"
  * La rueda sola no hace zoom para no robarle el scroll a la página.
  */
 export function crearCamara(canvas: HTMLCanvasElement, camera: THREE.PerspectiveCamera, alTocar: (cx: number, cy: number) => void) {
-  const cam = { drag: 0, r: 14, ty: 2.5, ph: 1.31, zoom: 1, zIdle: 0, pinch: 0 }
+  const cam = { drag: 0, r: 14, ty: 2.5, ph: 1.39, zoom: 1, zIdle: 0, pinch: 0 }
   const ptr = new Map<number, { x: number; y: number; sx: number; sy: number; moved: boolean }>()
 
   const down = (e: PointerEvent) => { try { canvas.setPointerCapture(e.pointerId) } catch { /* sin captura */ } ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false }) }
@@ -52,7 +52,8 @@ export function crearCamara(canvas: HTMLCanvasElement, camera: THREE.Perspective
        solo se sube si la copa no cabe arriba */
     const altoVista = dT * 2 * tanH
     cam.ty = lerp(cam.ty, Math.max(altoVista * 0.22, y1 - altoVista / 2 + 0.2), kc)
-    cam.ph = lerp(cam.ph, lerp(1.29, 1.33, kk), kc)
+    /* un poco menos inclinada: más cielo y el mar más cerca */
+    cam.ph = lerp(cam.ph, lerp(1.37, 1.41, kk), kc)
     const th = 0.28 + cam.drag, ph = cam.ph
     camera.position.set(cam.r * Math.sin(ph) * Math.sin(th), cam.ty + cam.r * Math.cos(ph), cam.r * Math.sin(ph) * Math.cos(th))
     camera.lookAt(0, cam.ty, 0)

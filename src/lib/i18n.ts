@@ -15,8 +15,13 @@
  * cambiarlo la app se recarga: así también se traducen las constantes que se
  * arman al importar un módulo (guías, filtros, pasos del test…). El idioma de
  * la cuenta vive en el backend (User.idioma); ver `sincronizarIdioma`.
+ *
+ * El diccionario inglés pesa ~80 KB comprimido y antes lo descargaba TODO el
+ * mundo. Ahora solo se pide en inglés y queda guardado en el navegador (clave
+ * con el hash del diccionario, que calcula next.config.ts): desde la segunda
+ * visita se lee al instante. La primera vez llega después de pintar y la app se
+ * recarga una sola vez para que también las constantes queden en inglés.
  */
-import { EN } from "@/lib/i18n-en"
 
 export type Idioma = "es" | "en"
 export const IDIOMAS: { v: Idioma; nombre: string; bandera: string }[] = [
@@ -37,6 +42,37 @@ function idiomaInicial(): Idioma {
 
 let idiomaActual: Idioma = idiomaInicial()
 if (typeof document !== "undefined") document.documentElement.lang = idiomaActual
+
+let EN: Record<string, string> = {}
+const CLAVE_EN = `kiri_en_${process.env.KIRI_EN_HASH || "dev"}`
+
+/** Descarga el diccionario inglés y lo deja guardado. true si quedó guardado en el navegador. */
+async function descargarIngles(): Promise<boolean> {
+  const m = await import("@/lib/i18n-en")
+  EN = m.EN
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (k?.startsWith("kiri_en_") && k !== CLAVE_EN) localStorage.removeItem(k)
+    }
+    localStorage.setItem(CLAVE_EN, JSON.stringify(m.EN))
+    return true
+  } catch { return false }
+}
+
+if (typeof window !== "undefined" && idiomaActual === "en") {
+  let enCache = false
+  try { const s = localStorage.getItem(CLAVE_EN); if (s) { EN = JSON.parse(s); enCache = true } } catch { /* sin storage */ }
+  if (!enCache) {
+    descargarIngles().then(guardado => {
+      // Una sola recarga (sessionStorage evita un bucle si el navegador no guarda nada)
+      try {
+        if (guardado && !sessionStorage.getItem("kiri_en_recargado")) { sessionStorage.setItem("kiri_en_recargado", "1"); window.location.reload(); return }
+      } catch { /* sin storage */ }
+      window.dispatchEvent(new Event("kiri:idioma-listo"))
+    }).catch(() => { /* sin red: se queda en español */ })
+  }
+}
 
 export const idioma = (): Idioma => idiomaActual
 
@@ -62,7 +98,10 @@ export function cambiarIdioma(nuevo: Idioma, recargar = true) {
   try { localStorage.setItem(CLAVE, nuevo) } catch { /* sin storage */ }
   if (nuevo === idiomaActual) return
   idiomaActual = nuevo
-  if (recargar && typeof window !== "undefined") window.location.reload()
+  if (!recargar || typeof window === "undefined") return
+  // Al pasar a inglés se descarga el diccionario ANTES de recargar (una sola recarga)
+  if (nuevo === "en") descargarIngles().catch(() => false).finally(() => window.location.reload())
+  else window.location.reload()
 }
 
 /**

@@ -26,9 +26,8 @@ import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/Tuto
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { useMemo } from "react"
 import { DebtSimulator } from "@/components/recommendations/debt-simulator"
-import { analyzeFinances } from "@/lib/recommendations"
 import { userApi, WalletState, loansApi, hogarApi } from "@/lib/api-client"
-import { debtsApi, fixedExpensesApi, impulseApi, budgetCategoriesApi } from "@/lib/api-client"
+import { debtsApi, budgetCategoriesApi } from "@/lib/api-client"
 import { DebtRegistrationForm } from "@/components/obligaciones/DebtRegistrationForm"
 import { MeDebenTab } from "@/components/obligaciones/MeDebenTab"
 import { BudgetCategorySelector } from "@/components/obligaciones/BudgetCategorySelector"
@@ -90,11 +89,11 @@ export default function ObligacionesPage() {
     addDebt, updateDebt, deleteDebt,
     addFixedExpense, updateFixedExpense, deleteFixedExpense,
     markPaid, undoPayDebt, marcarAtrasoPagado, markFixedPaid, undoPayFixed, marcarAtrasoFijoPagado,
-    extraIncomes, addImpulseExpense, refetch,
+    addImpulseExpense, refetch,
   } = useFinanceData()
   // "Actualizar saldo" de una tarjeta o crédito (lo que dice el banco)
   const [saldoTarget, setSaldoTarget] = useState<Debt | null>(null)
-  const { formatAmount, income, incomeFrequency, diasCobro } = useAppContext()
+  const { formatAmount, incomeFrequency, diasCobro } = useAppContext()
   const { user: authUser } = useAuth()
   const { toast } = useToast()
 
@@ -225,12 +224,6 @@ export default function ObligacionesPage() {
     periodData.periodFixed.forEach(f => ids.add(f.id))
     return ids
   }, [periodData.periodDebts, periodData.periodFixed])
-
-  // Estrategias de deuda
-  const recommendations = useMemo(
-    () => allocation ? analyzeFinances(allocation, debts, incomeFrequency) : null,
-    [allocation, debts, incomeFrequency]
-  )
 
   // ── Pay modal (deudas) ─────────────────────────────────────────────────────
   const [payDebt, setPayDebt] = useState<Debt | null>(null)
@@ -848,7 +841,6 @@ export default function ObligacionesPage() {
 
 
   // ── Saldo visible toggle ─────────────────────────────────────────────────
-  const [showSaldo, setShowSaldo] = useState(true)
 
   return (
     <>
@@ -3119,19 +3111,6 @@ function FixedFormFields({
           el pago automático (ver modal "Configurar pago automático"). */}
 
       <BudgetCategorySelector value={form.budgetCategoryId} onChange={v => set({ budgetCategoryId: v })} />
-    </div>
-  )
-}
-
-// ─── FieldInput helper ─────────────────────────────────────────────────────────
-function FieldInput({ label, value, onChange, type = "text", placeholder }: {
-  label: string; value: string; onChange: (v: string) => void
-  type?: string; placeholder?: string
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-bold">{label}</Label>
-      <Input type={type} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} className="h-11 rounded-xl" />
     </div>
   )
 }

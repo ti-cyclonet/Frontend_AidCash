@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { Eye, EyeOff, AlertCircle, CheckCircle2, Sprout, Sparkles } from "lucide-react"
+import { Eye, EyeOff, AlertCircle, CheckCircle2, Sprout } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
@@ -25,7 +25,6 @@ export default function RegisterPage() {
 function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const planFromUrl = searchParams.get("plan")
   const { signUp } = useAuth()
 
   // Llegó con un enlace de invitación: se guarda el código (el registro lo

@@ -3,11 +3,10 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
-  X, PiggyBank, Coins, Loader2, ChevronRight, ArrowLeft,
-  Heart, Users, Home, MessageCircle, Sparkles, ArrowRightLeft, Check,
+  X, PiggyBank, Coins, Loader2, ChevronRight, 
+  Heart, Users, Home, Sparkles, ArrowRightLeft, Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { connectionsApi } from "@/lib/api-client"

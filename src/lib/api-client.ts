@@ -13,7 +13,7 @@
 
 import type { MissionsResponse, RewardResult, SocialUser, FriendsGardenResponse, ConnectionSharedResponse, SharedDebt, ConnectionRole, DebtType, AvisoCupo } from './types'
 import { LEGAL_VERSIONS } from "./legal/kiri-legal"
-import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso } from './garden-events'
+import { marcarLluviaDeAhorro, marcarTormentaHormiga, marcarSolDeIngreso, marcarPagoRealizado } from './garden-events'
 import { tr, idioma } from "@/lib/i18n"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
@@ -327,6 +327,10 @@ export const userApi = {
   async getProfile() {
     return api<{ user: Record<string, unknown> }>('/auth/me')
   },
+  /** Elimina la cuenta de Kiri y todos sus datos (no se puede deshacer). */
+  async eliminarCuenta() {
+    return api<{ ok: boolean }>('/users/cuenta', { method: 'DELETE', body: { confirmacion: 'ELIMINAR' } })
+  },
 
   async updateProfile(data: Record<string, unknown>) {
     return api<{ user: Record<string, unknown> }>('/users/profile', {
@@ -477,10 +481,13 @@ export const debtsApi = {
    * opciones.cuotaCompleta: con este valor quedó pagada la cuota del periodo.
    */
   async pay(id: string, monto?: number, periodo?: string, opciones: { saldoReal?: number; cuotaCompleta?: boolean } = {}) {
-    return api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean; enCeros?: boolean; periodo: string; esPeriodoActual: boolean; amortizacion: { montoPagado: number; pagoInteres: number; abonoCapital: number }; tasaObservadaMensual: number | null; cuotaAjustada: boolean }>(`/debts/${id}/pay`, {
+    const res = await api<{ debt: Record<string, unknown>; pagado: number; saldoNuevo: number; liquidada: boolean; enCeros?: boolean; periodo: string; esPeriodoActual: boolean; amortizacion: { montoPagado: number; pagoInteres: number; abonoCapital: number }; tasaObservadaMensual: number | null; cuotaAjustada: boolean }>(`/debts/${id}/pay`, {
       method: 'POST',
       body: { ...(monto ? { monto } : {}), ...(periodo ? { periodo } : {}), ...opciones },
     })
+    // Monedas del árbol: el servidor ya las abonó; el Jardín se entera (ver lib/garden-events.ts)
+    if (res.data) marcarPagoRealizado(id, res.data.liquidada)
+    return res
   },
 
   /** "Esa cuota atrasada ya la había pagado por fuera de Kiri" — no toca la billetera. */
@@ -504,10 +511,12 @@ export const debtsApi = {
   },
 
   async payWithCard(data: { tarjetaId: string; monto: number; cuotas: number; sourceType: 'debt' | 'fixed'; sourceId: string }) {
-    return api<{ success: boolean; tarjeta: { id: string; nombre: string; saldoRestante: number; cuotaPeriodo: number } | null; avisoCupo: AvisoCupo | null; cuotasAgregadas: number; incrementoCuota: number; montoTotalAgregado: number }>('/debts/pay-with-card', {
+    const res = await api<{ success: boolean; tarjeta: { id: string; nombre: string; saldoRestante: number; cuotaPeriodo: number } | null; avisoCupo: AvisoCupo | null; cuotasAgregadas: number; incrementoCuota: number; montoTotalAgregado: number }>('/debts/pay-with-card', {
       method: 'POST',
       body: data,
     })
+    if (res.data) marcarPagoRealizado(data.sourceId)
+    return res
   },
 
   /**
@@ -546,10 +555,12 @@ export const fixedExpensesApi = {
 
   /** periodo: 'actual' | 'siguiente' (adelantar) | periodo de una cuota atrasada, ej. "2026-08". */
   async pay(id: string, monto?: number, periodo?: string, cuotaCompleta?: boolean) {
-    return api<{ fixedExpense: Record<string, unknown>; pagoConTarjeta: boolean; tarjetaNombre?: string; nuevoSaldoTarjeta?: number }>(`/fixed-expenses/${id}/pay`, {
+    const res = await api<{ fixedExpense: Record<string, unknown>; pagoConTarjeta: boolean; tarjetaNombre?: string; nuevoSaldoTarjeta?: number }>(`/fixed-expenses/${id}/pay`, {
       method: 'PATCH',
       body: { ...(monto ? { monto } : {}), ...(periodo ? { periodo } : {}), ...(cuotaCompleta ? { cuotaCompleta } : {}) },
     })
+    if (res.data) marcarPagoRealizado(id)
+    return res
   },
 
   async delete(id: string) {
@@ -829,9 +840,47 @@ export interface EstadoJardin {
   boost: boolean
 }
 
+/** Tienda del árbol 3D: saldo, catálogo con precios, inventario, lo equipado y cofres por abrir. */
+export type TipoCosmetico = 'especie' | 'color' | 'hormiguero' | 'cerca' | 'regadera' | 'frutos' | 'habitante'
+/** Espacios de un solo artículo; los habitantes van en una lista (pueden estar varios en la isla). */
+export type RanuraCosmetico = Exclude<TipoCosmetico, 'habitante'>
+export type EquipadoTienda = Record<RanuraCosmetico, string> & { habitantes: string[] }
+export interface ArticuloTienda { clave: string; precio: number; incluido: boolean; tiene: boolean }
+export interface EstadoTienda {
+  monedas: number
+  equipado: EquipadoTienda
+  /** Artículo del día con descuento (el servidor cobra este precio) */
+  oferta: { tipo: TipoCosmetico; clave: string; precio: number; precioNormal: number; fecha: string } | null
+  /** Monedas que el plan regala cada mes; regaloRecibido > 0 si se abonaron en esta consulta */
+  plan: { tier: string; monedasMes: number; regaloRecibido: number; porPlan: Record<string, number> }
+  catalogo: Record<TipoCosmetico, ArticuloTienda[]>
+  cofres: { id: string; tipo: 'comun' | 'raro' | 'legendario'; origen: string }[]
+  cofresInfo: { tipo: 'comun' | 'raro' | 'legendario'; monedasMin: number; monedasMax: number; probAspecto: number; probColor: number; precio: number; origen: string }[]
+  /** `producto`: ID en App Store / Google Play (en la app nativa se compran con la tienda) */
+  paquetes: { id: string; producto: string; monedas: number; precioCop: number; bono: number; disponible: boolean }[]
+  /** La primera compra de monedas trae el doble */
+  primeraCompraDoble: boolean
+  abonos: { ahorro: { monedas: number; maxDia: number; hoy: number }; pago: { monedas: number; maxDia: number; hoy: number }; deuda: { monedas: number } }
+}
+export interface PremioCofre { tipo: string; monedas: number; articulo: { tipo: TipoCosmetico; clave: string } | null }
+
 export const gamificationApi = {
   async getStatus() {
     return api<{ streak: { actual: number; mejor: number; ultimoCheck: string | null }; badges: Record<string, unknown>[]; xpFromMissions: number; xpFromWatering: number; xpFromJardin?: number; xpFromRacha?: number }>('/gamification/status')
+  },
+
+  // ── Tienda del árbol 3D: monedas, cosméticos y cofres (todo lo decide el servidor) ──
+  async tienda() {
+    return api<EstadoTienda>('/gamification/jardin/tienda')
+  },
+  async comprar(tipo: string, clave: string) {
+    return api<{ tienda: EstadoTienda; cofre?: { id: string; tipo: 'legendario' } }>('/gamification/jardin/tienda/comprar', { method: 'POST', body: { tipo, clave } })
+  },
+  async equipar(tipo: string, clave: string) {
+    return api<{ equipado: EstadoTienda['equipado'] }>('/gamification/jardin/tienda/equipar', { method: 'POST', body: { tipo, clave } })
+  },
+  async abrirCofre(id: string) {
+    return api<{ premio: PremioCofre; tienda: EstadoTienda }>(`/gamification/jardin/cofres/${id}/abrir`, { method: 'POST' })
   },
 
   // ── Minijuego del árbol (el servidor decide la XP; aquí solo se anima) ──
@@ -1338,32 +1387,6 @@ export const planApi = {
   cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean; billingCycle?: 'monthly' | 'annual' }) =>
     api<{ success: boolean; message?: string }>('/plan/upgrade', { method: 'POST', body: data }),
   uso: () => api<UsoPlan>('/usage-status'),
-}
-
-// ─── Home Budget API (Presupuesto de Pareja) ──────────────────────────────────
-
-export const homeBudgetApi = {
-  async get() {
-    return api<{
-      budget: {
-        ingresoTotal: number
-        ingresoUser1: number
-        ingresoUser2: number
-        obligacionesTotal: number
-        obligacionesUser1: number
-        obligacionesUser2: number
-        ahorro: number
-        ahorroPct: number
-        libre: number
-        librePct: number
-        capacidadEndeudamiento: number
-        capacidadPct: number
-        obligacionesPct: number
-        isOverloaded: boolean
-      }
-      partnerId: string
-    }>('/home-budget')
-  },
 }
 
 // ─── Savings Pockets API (Bolsillos de Ahorro Personales) ─────────────────────

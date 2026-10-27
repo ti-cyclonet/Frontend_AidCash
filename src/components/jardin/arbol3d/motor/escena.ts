@@ -4,14 +4,16 @@ import { glowTex, lienzo, rng } from "./utilidades"
 
 /** Renderer, cámara, cielo, luces, océano y nubes lejanas. */
 export function crearEscena(canvas: HTMLCanvasElement, mobile: boolean) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.75 : 2))
+  /* en pantallas densas de celular el antialias casi no se nota y cuesta mucho: se apaga */
+  const dpr = window.devicePixelRatio || 1
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !mobile || dpr < 1.5, powerPreference: "high-performance" })
+  renderer.setPixelRatio(Math.min(dpr, mobile ? 1.75 : 2))
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8
 
   const scene = new THREE.Scene()
   scene.fog = new THREE.Fog(new THREE.Color("#bcd9dc"), 26, 80)
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 300)
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 300)
 
   const skyU = { top: { value: new THREE.Color("#3a86b8") }, bottom: { value: new THREE.Color("#cfe6e4") } }
   const sky = new THREE.Mesh(new THREE.SphereGeometry(120, 24, 14), new THREE.ShaderMaterial({
@@ -23,6 +25,16 @@ export function crearEscena(canvas: HTMLCanvasElement, mobile: boolean) {
   const sunDir = new THREE.Vector3(0.5, 0.62, 0.6).normalize()
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex("rgba(255,240,200,1)", "rgba(255,240,200,0)"), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }))
   sunGlow.scale.set(60, 60, 1); sunGlow.position.copy(sunDir).multiplyScalar(100); scene.add(sunGlow)
+
+  /* sol visible: disco, núcleo y halo en el cielo de fondo (el motor lo mueve con la vista) */
+  const solTex = glowTex("rgba(255,252,236,1)", "rgba(255,246,210,0)"), haloTex = glowTex("rgba(255,236,190,.55)", "rgba(255,236,190,0)")
+  const sunDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: solTex, transparent: true, depthWrite: false, fog: false, toneMapped: false }))
+  sunDisc.scale.set(9, 9, 1); scene.add(sunDisc)
+  const sunCore = new THREE.Mesh(new THREE.CircleGeometry(2.1, 40), new THREE.MeshBasicMaterial({ color: 0xfffbe8, fog: false, toneMapped: false, transparent: true }))
+  scene.add(sunCore)
+  const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, fog: false, toneMapped: false }))
+  sunHalo.scale.set(34, 34, 1); scene.add(sunHalo)
+  const solVisible = { disco: sunDisc, nucleo: sunCore, halo: sunHalo }
 
   const hemi = new THREE.HemisphereLight(0xdcecf2, 0x56482f, 0.62); scene.add(hemi)
   const sun = new THREE.DirectionalLight(0xfff0d2, 1.05)
@@ -73,7 +85,7 @@ export function crearEscena(canvas: HTMLCanvasElement, mobile: boolean) {
     scene.add(m); farClouds.push(m)
   }
 
-  return { renderer, scene, camera, world, skyU, sunDir, sunGlow, hemi, sun, oceanU, puffTex, farClouds }
+  return { renderer, scene, camera, world, skyU, sunDir, sunGlow, solVisible, hemi, sun, oceanU, puffTex, farClouds }
 }
 
 export type Escena = ReturnType<typeof crearEscena>

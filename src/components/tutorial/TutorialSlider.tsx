@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, ChevronRight, ChevronLeft, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -77,7 +77,6 @@ export function TutorialSlider({ module, showAll = false, onClose }: TutorialSli
     : TUTORIAL_SLIDES.filter(s => s.id === module)
 
   const [currentIndex, setCurrentIndex] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const currentSlide = slides[currentIndex]
   const isLast = currentIndex === slides.length - 1

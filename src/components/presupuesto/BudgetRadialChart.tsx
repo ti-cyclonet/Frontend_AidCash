@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import {
   Utensils, Car, Home, Wrench, Gift, Heart, ShoppingBag, MoreHorizontal,
   Pencil, GraduationCap, PawPrint, Dumbbell, Plane, Gamepad2, Wifi, Baby, ReceiptText,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { getCategoryInsight } from "@/lib/budget-insights"
 import { tr } from "@/lib/i18n"
@@ -213,7 +212,6 @@ export function CategoryDetail({ cat, onEdit, frequency }: { cat: RadialCategory
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function BudgetRadialChart({ categories, onEdit, incomeFrequency, onSelectionChange }: Props) {
-  const { formatAmount } = useAppContext()
   const [hovered, setHovered] = useState<number | null>(null)
   const [view, setView] = useState<null | 'all' | number>(null)
   const [mounted, setMounted] = useState(false)

@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import {
   Heart, Sparkles,
   Flame, ChevronRight,
-  Droplets, Lock, Check, Gift, Lightbulb, UserPlus, Volume2, VolumeX, CloudLightning, CalendarClock,
+  Droplets, Lock, Check, Gift, Coins, Store, Lightbulb, UserPlus, Volume2, VolumeX, CloudLightning, CalendarClock,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { InviteLinkModal } from "@/components/social/InviteLinkPanel"
@@ -22,6 +22,10 @@ import {
   TOQUES_PARA_SACUDIR, ID_BARRA_XP,
 } from "@/components/jardin/juego"
 import { ArbolKiri3D, type ClimaArbol, type GastoHormigaCola } from "@/components/jardin/arbol3d/ArbolKiri3D"
+import { useTiendaJardin } from "@/components/jardin/tienda/useTiendaJardin"
+import { COFRE_INFO, premioArticulo, TiendaSheet, type PestanaTienda, type TipoCofre } from "@/components/jardin/tienda/TiendaSheet"
+import { useToast } from "@/hooks/use-toast"
+import { EQUIPADO_INICIAL, type Equipado } from "@/components/jardin/arbol3d/motor/especies"
 import { nombreBaseGasto } from "@/lib/hormiga"
 import { InvitaWidget } from "@/components/referidos/InvitaYGana"
 import { celebrarLogro } from "@/components/referidos/CompartirLogro"
@@ -34,14 +38,16 @@ import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
-import { userApi, loansApi, connectionsApi, WalletState } from "@/lib/api-client"
+import { userApi, loansApi, connectionsApi, emergencyFundApi, gamificationApi, WalletState } from "@/lib/api-client"
+import { analyzeEmergencyFund } from "@/lib/recommendations"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { calculateGardenXP, progresoNivel } from "@/lib/garden-xp"
 import { useBudgetCategories } from "@/hooks/use-budget-categories"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
-import type { Debt, FixedExpense, Loan } from "@/lib/types"
+import type { Loan } from "@/lib/types"
 import { tr, localeFecha } from "@/lib/i18n"
+import { vibrar } from "@/lib/nativo"
 
 // ─── Niveles del jardín ───────────────────────────────────────────────────────
 
@@ -229,9 +235,9 @@ function useCyclePhrase(list: string[], intervalMs = 4500): string {
 export default function JardinPage() {
   const router = useRouter()
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("jardin")
-  const { formatAmount, incomeFrequency, user } = useAppContext()
+  const { formatAmount, incomeFrequency, user, income } = useAppContext()
   const { user: authUser } = useAuth()
-  const { debts, fixedExpenses, totalAhorrado, loading: financeLoading } = useFinanceData()
+  const { debts, fixedExpenses, totalAhorrado, savingsHistory, loading: financeLoading } = useFinanceData()
   const { streakActual, badgesDesbloqueados, xpFromMissions, xpFromWatering, xpFromJardin, xpFromRacha, loading: streakLoading } = useStreaks(incomeFrequency)
   const { plan } = usePlan()
   const { budgetCategories } = useBudgetCategories()
@@ -291,7 +297,7 @@ export default function JardinPage() {
     }
     sacudiendo.current = true
     setSacudidaKey(k => k + 1)
-    try { navigator.vibrate?.([30, 40, 30, 40, 60]) } catch { /* sin vibración */ }
+    vibrar("fuerte")
     juego.sacudir().then(r => {
       sacudiendo.current = false
       if (!r) return
@@ -305,7 +311,7 @@ export default function JardinPage() {
   const onMetaToques = useCallback(() => {
     if (!juego.estado || juego.estado.premioToques || ganandoToques.current) return
     ganandoToques.current = true
-    try { navigator.vibrate?.([40, 30, 40, 30, 80]) } catch { /* sin vibración */ }
+    vibrar("logro")
     setSacudidaKey(k => k + 1)
     juego.ganarToques().then(r => {
       ganandoToques.current = false
@@ -315,12 +321,103 @@ export default function JardinPage() {
     })
   }, [juego, sonidoOn])
   const toquesDia = useToquesSeguidos(juego.estado?.toquesPremio ?? 50, onMetaToques)
-  const tocarArbol = useCallback(() => { combo.tocar(); toquesDia.contar() }, [combo, toquesDia])
+  const tocarArbol = useCallback(() => { vibrar("toque"); combo.tocar(); toquesDia.contar() }, [combo, toquesDia])
   const cosecha = useCosechaFrutos(sonidoOn, juego.cosechar)
   // Mientras se mantiene presionado Regar, la regadera del árbol 3D echa agua
   const [regandoBoton, setRegandoBoton] = useState(false)
   // Árbol 3D: si el dispositivo no tiene WebGL se vuelve al árbol en imágenes
   const [fallo3D, setFallo3D] = useState(false)
+  // Monedas, cofres y lo equipado vienen del servidor (lib/economia.ts del backend);
+  // la tienda compra y equipa por allá, y el cofre de la isla solo anima el premio que sorteó el servidor.
+  const tienda = useTiendaJardin()
+  const { toast } = useToast()
+  const equipado: Equipado = (tienda.estado?.equipado as Equipado | undefined) ?? EQUIPADO_INICIAL
+  const [tiendaAbierta, setTiendaAbierta] = useState(false)
+  const [pestanaTienda, setPestanaTienda] = useState<PestanaTienda>("habitantes")
+  const [cofreElegido, setCofreElegido] = useState<TipoCofre | null>(null)
+  const cofresPendientes = tienda.estado?.cofres ?? []
+  // En la isla sale el cofre que eligió en la tienda; si no, el mejor que tenga pendiente
+  const cofreIsla: TipoCofre | null = (cofreElegido && cofresPendientes.some(c => c.tipo === cofreElegido) ? cofreElegido : null)
+    ?? (["legendario", "raro", "comun"] as const).find(t => cofresPendientes.some(c => c.tipo === t)) ?? null
+  const abrirTienda = (p?: PestanaTienda) => { if (p) setPestanaTienda(p); setTiendaAbierta(true) }
+  const verCofre = (t: TipoCofre) => { setCofreElegido(t); setTiendaAbierta(false) }
+  /** Tocaron el cofre de la isla: el servidor sortea el premio; true = la tapa se abre. */
+  const abrirCofre = async (tipo: TipoCofre): Promise<boolean> => {
+    const id = tienda.estado?.cofres.find(c => c.tipo === tipo)?.id
+    if (!id) return false
+    const { data, error } = await gamificationApi.abrirCofre(id)
+    if (!data) {
+      toast({ title: tr("No se pudo abrir el cofre"), description: error ?? tr("Intenta de nuevo."), variant: "destructive" })
+      tienda.recargar()
+      return false
+    }
+    // El premio se anuncia cuando la tapa ya se abrió y saltan las monedas
+    window.setTimeout(() => {
+      tienda.setEstado(data.tienda)
+      const { monedas, articulo } = data.premio, nombre = tr(COFRE_INFO[tipo].nombre)
+      tienda.avisar(articulo
+        ? tr("{0}: +{1} monedas y {2}", [nombre, monedas, premioArticulo(articulo.tipo, articulo.clave)])
+        : tr("{0}: +{1} monedas", [nombre, monedas]))
+      if (sonidoOn) tocarPremio()
+      vibrar("logro")
+    }, 450)
+    return true
+  }
+
+  // ── Habitantes de la isla: muestran tus finanzas reales sin leer números ──
+  const habitantes = tienda.estado?.equipado.habitantes ?? ["chanchito"]
+  // Ahorro del mes contra una meta del 10 % del ingreso (mínimo $50.000)
+  const ahorroMes = useMemo(() => {
+    const mes = new Date().toISOString().slice(0, 7)
+    return savingsHistory.reduce((a, e) => !e.created_at?.startsWith(mes) ? a : e.tipo === "ahorro" ? a + e.monto : e.tipo === "retiro" ? a - e.monto : a, 0)
+  }, [savingsHistory])
+  const metaAhorroMes = Math.max(50000, Math.round((income || 0) * 0.1))
+  const finanzasIsla = useMemo(() => ({
+    ahorroPct: Math.max(0, ahorroMes) / metaAhorroMes,
+    racha: streakActual,
+  }), [ahorroMes, metaAhorroMes, streakActual])
+  const [avisoIsla, setAvisoIsla] = useState<{ id: number; texto: string } | null>(null)
+  const avisoIslaTimer = useRef<number | null>(null)
+  const decirIsla = (texto: string) => {
+    setAvisoIsla({ id: Date.now(), texto })
+    if (avisoIslaTimer.current) window.clearTimeout(avisoIslaTimer.current)
+    avisoIslaTimer.current = window.setTimeout(() => setAvisoIsla(null), 3800)
+  }
+  useEffect(() => () => { if (avisoIslaTimer.current) window.clearTimeout(avisoIslaTimer.current) }, [])
+  /** Al tocar un habitante te cuenta lo que muestra. */
+  const tocarHabitante = (clave: string) => {
+    vibrar("toque")
+    const f = finanzasIsla
+    switch (clave) {
+      case "chanchito":
+        decirIsla(ahorroMes > 0
+          ? tr("Llevas {0} ahorrados este mes ({1} % de tu meta de {2})", [formatAmount(ahorroMes), Math.round(f.ahorroPct * 100), formatAmount(metaAhorroMes)])
+          : tr("El chanchito tiene hambre: registra tu primer ahorro del mes"))
+        break
+      case "gnomo":
+        decirIsla(f.racha > 0 ? tr("Llevas {0} días de racha. ¡No la rompas!", [f.racha]) : tr("Tu racha está en cero. Registra algo hoy para despertar a Don Gnomo"))
+        break
+      case "pajaros":
+        decirIsla(tr("Los pájaros cantan cada vez que registras un ingreso"))
+        break
+    }
+  }
+
+  // ── Cerca del fondo de emergencia: se arma con el % real del fondo (misma
+  //    meta mínima de 3 meses de gastos fijos que muestra Ahorro → Emergencia).
+  //    Completa, los gastos hormiga ya no alcanzan el árbol.
+  const [fondoActual, setFondoActual] = useState(0)
+  useEffect(() => {
+    const cargar = () => emergencyFundApi.get().then(({ data }) => { if (data) setFondoActual(Number(data.fondoActual) || 0) })
+    cargar()
+    window.addEventListener("kiri:wallet-updated", cargar)
+    return () => window.removeEventListener("kiri:wallet-updated", cargar)
+  }, [])
+  const totalGastosFijos = fixedExpenses.reduce((a, fe) => a + Number(fe.monto), 0)
+  const fondoPct = analyzeEmergencyFund(totalGastosFijos, fondoActual, 0).pctMinima
+  const cercaCompleta = fondoPct >= 100
+  const cercaCompletaRef = useRef(cercaCompleta)
+  cercaCompletaRef.current = cercaCompleta
   // Regadera del árbol 3D tras regar, ahorrar o cuando un amigo riega: un
   // momento corto (el mensaje y el clima "¡Buen ahorro!" duran aparte)
   const [regadera, setRegadera] = useState(false)
@@ -503,8 +600,13 @@ export default function JardinPage() {
   }
   const llegaronGastosHormiga = (lista: { nombre?: string; monto?: number }[]) => {
     if (!lista.length) return
-    const ultimo = lista[lista.length - 1]
-    dispararTormentaHormiga(ultimo.nombre ? nombreBaseGasto(ultimo.nombre) : undefined)
+    const ultimo = lista[lista.length - 1], nombre = ultimo.nombre ? nombreBaseGasto(ultimo.nombre) : undefined
+    // Con la cerca completa no hay tormenta: el fondo de emergencia protege el jardín
+    if (cercaCompletaRef.current) {
+      setStormMessage(nombre ? tr("Gasto hormiga: \"{0}\". Tu fondo de emergencia protegió el jardín", [nombre]) : tr("Gasto hormiga registrado. Tu fondo de emergencia protegió el jardín"))
+      if (stormTimer.current) window.clearTimeout(stormTimer.current)
+      stormTimer.current = window.setTimeout(() => setStormMessage(null), 4500)
+    } else dispararTormentaHormiga(nombre)
     setGastosHormiga(prev => [...prev, ...lista.map(g => ({ id: ++gastoIdRef.current, nombre: nombreBaseGasto(g.nombre ?? "") || tr("Gasto"), monto: Number(g.monto) || 0 }))])
   }
   useEffect(() => {
@@ -677,6 +779,13 @@ export default function JardinPage() {
                 </div>
                 <ArbolKiri3D
                   datosListos={dataReady}
+                  equipado={equipado}
+                  habitantes={habitantes}
+                  finanzas={finanzasIsla}
+                  onHabitante={tocarHabitante}
+                  cofre={cofreIsla}
+                  onAbrirCofre={abrirCofre}
+                  fondo={fondoPct}
                   nivel={currentLevelIdx + 1}
                   progreso={nivelXp.meta > 0 ? nivelXp.xp / nivelXp.meta : 1}
                   clima={climaArbol}
@@ -702,6 +811,16 @@ export default function JardinPage() {
                       <Droplets className="inline h-3.5 w-3.5 -mt-0.5 mr-1" />{wateredMessage}
                     </MensajeEscena>
                   )}
+                  {avisoIsla && !tienda.aviso && (
+                    <MensajeEscena key={avisoIsla.id} className="top-14 text-white border-white/15" duracion={3.8}>
+                      <Sparkles className="inline h-3.5 w-3.5 -mt-0.5 mr-1 text-emerald-300" />{avisoIsla.texto}
+                    </MensajeEscena>
+                  )}
+                  {tienda.aviso && (
+                    <MensajeEscena key={tienda.aviso.id} className="top-14 text-amber-100 border-amber-400/40" brillo="rgba(251,191,36,0.4)" duracion={3.6}>
+                      <Coins className="inline h-3.5 w-3.5 -mt-0.5 mr-1 text-amber-300" />{tienda.aviso.texto}
+                    </MensajeEscena>
+                  )}
                   {stormMessage ? (
                     <MensajeEscena key={stormMessage} className="bottom-3 text-amber-200 border-amber-400/30" brillo="rgba(251,191,36,0.35)">{stormMessage}</MensajeEscena>
                   ) : incomeMessage ? (
@@ -715,6 +834,31 @@ export default function JardinPage() {
                     <ComboBadge combo={combo.combo} sacudidaLista={!!juego.estado && !juego.estado.sacudida} />
                   </div>
                   <PremioSacudida premio={premio} onCerrar={() => setPremio(null)} />
+                  {/* Saldo de monedas (abre la tienda) y cofres por abrir */}
+                  <div className="absolute left-2.5 top-2.5 z-40 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => abrirTienda()}
+                      className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/70 pl-2 pr-2.5 text-sm font-extrabold text-amber-200 backdrop-blur-sm hover:text-amber-100"
+                      aria-label={tr("Abrir la tienda del jardín. Tienes {0} monedas", [tienda.estado?.monedas ?? 0])}
+                    >
+                      <Coins className="h-4 w-4 text-amber-300" />
+                      {tienda.estado ? (tienda.estado.monedas).toLocaleString("es-CO") : "–"}
+                      <Store className="ml-0.5 h-3.5 w-3.5 text-white/70" />
+                    </button>
+                    {cofresPendientes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => abrirTienda("cofres")}
+                        className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300/30 bg-slate-900/70 text-amber-300 backdrop-blur-sm hover:text-amber-200"
+                        aria-label={tr("Tienes {0} cofres por abrir", [cofresPendientes.length])}
+                        title={tr("Toca el cofre en la isla para abrirlo")}
+                      >
+                        <Gift className="h-4 w-4" />
+                        <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-amber-500 px-1 text-center text-[10px] font-black leading-[18px] text-white">{cofresPendientes.length}</span>
+                      </button>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={toggleSonido}
@@ -725,6 +869,18 @@ export default function JardinPage() {
                     {sonidoOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 opacity-70" />}
                   </button>
                 </ArbolKiri3D>
+                <TiendaSheet
+                  abierta={tiendaAbierta}
+                  onAbierta={setTiendaAbierta}
+                  pestana={pestanaTienda}
+                  onPestana={setPestanaTienda}
+                  estado={tienda.estado}
+                  onEstado={tienda.setEstado}
+                  onVerCofre={verCofre}
+                  onError={m => toast({ title: m, variant: "destructive" })}
+                  onRecargar={() => tienda.recargar()}
+                  onAviso={m => tienda.avisar(m)}
+                />
                 <VuelosXP vuelos={cosecha.vuelos} />
               </div>
             ) : (

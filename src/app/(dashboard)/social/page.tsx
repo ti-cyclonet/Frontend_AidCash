@@ -45,7 +45,7 @@ function SocialContent() {
   const { user: authUser } = useAuth()
   // Solo notificaciones de Social (antes contaba también avisos de pagos y
   // misiones, y entrar aquí no marcaba nada como leído: el "1" no se iba).
-  const { connected, socialUnreadCount: unreadCount, markSocialRead } = useSocket()
+  const { socialUnreadCount: unreadCount, markSocialRead } = useSocket()
   const searchParams = useSearchParams()
 
   const [acceptedConnections, setAcceptedConnections] = useState<Connection[]>([])

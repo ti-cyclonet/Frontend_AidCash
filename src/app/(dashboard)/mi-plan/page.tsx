@@ -6,7 +6,6 @@ import {
   Check, Sparkles, Crown, ExternalLink, FileSignature, LogIn, AlertTriangle,
   Loader2, Eye, EyeOff, CheckCircle2, Clock, Gift, Gauge, Infinity as InfinityIcon,
 } from "lucide-react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -18,6 +17,11 @@ import { planApi, type FactonetInfo, type PlanDisponible, type UsoPlan } from "@
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
 import { InvitaYGana } from "@/components/referidos/InvitaYGana"
 import { tr, localeFecha } from "@/lib/i18n"
+import { comprarEnTienda, comprasDisponibles, esNativo, PRODUCTOS, restaurarCompras } from "@/lib/nativo"
+
+/* Plan de Authoriza → producto de suscripción en las tiendas (mismo criterio que tierDe) */
+const tierTienda = (p: PlanDisponible): "PLUS" | "PRO" | null => { const t = `${p.name} ${p.displayName ?? ""}`; return /pro|cyclon/i.test(t) ? "PRO" : /plus/i.test(t) ? "PLUS" : null }
+const idUsuario = () => { try { return localStorage.getItem("kiri_user_id") ?? "" } catch { return "" } }
 
 /**
  * Mi plan — cambiarse de plan sin salir de Kiri y acceso a FactoNet.
@@ -74,6 +78,25 @@ export default function MiPlanPage() {
   const [verPassword, setVerPassword] = useState(false)
   const [acepta, setAcepta] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  /* En la app nativa los planes se compran con la tienda (App Store / Google Play): nada de enlaces de pago externos */
+  const [nativo, setNativo] = useState(false)
+  useEffect(() => { setNativo(esNativo()) }, [])
+  const suscribirConTienda = async (p: PlanDisponible) => {
+    const tier = tierTienda(p)
+    if (!tier) return
+    setEnviando(true)
+    const r = await comprarEnTienda(idUsuario(), PRODUCTOS.planes[tier])
+    setEnviando(false)
+    if (r === "ok") {
+      toast({ title: tr("¡Listo! Activamos {0}", [p.displayName || p.name]), description: tr("Tu plan se activa en unos segundos.") })
+      window.setTimeout(() => window.location.reload(), 3500)
+    } else if (r === "error") toast({ title: tr("No se pudo completar la compra en la tienda"), variant: "destructive" })
+  }
+  const restaurar = async () => {
+    const ok = await restaurarCompras(idUsuario())
+    toast({ title: ok ? tr("Revisamos tus compras") : tr("No se pudieron restaurar las compras"), description: ok ? tr("Si tenías una suscripción, se activa en unos segundos.") : undefined })
+    if (ok) window.setTimeout(() => window.location.reload(), 3500)
+  }
   const [errorCambio, setErrorCambio] = useState<string | null>(null)
   const [listo, setListo] = useState<string | null>(null)
   const [resaltar, setResaltar] = useState(false)
@@ -251,8 +274,8 @@ export default function MiPlanPage() {
               {factura.vence && <>{" "}{tr("· vence el {0}", [fechaLarga(factura.vence)])}</>}
             </p>
           </div>
-          <Button onClick={abrirFactonet} className="gap-2 shrink-0">{tr("Ver y pagar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
-          </Button>
+          {!nativo && <Button onClick={abrirFactonet} className="gap-2 shrink-0">{tr("Ver y pagar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
+          </Button>}
         </div>
       )}
 
@@ -272,8 +295,8 @@ export default function MiPlanPage() {
               <p className="text-xs font-bold text-amber-700 dark:text-amber-300 mt-1">{tr("Tu primera factura trae {0}% de descuento por venir invitado.", [cambioPendiente!.descuentoPrimerMes])}</p>
             )}
           </div>
-          <Button onClick={abrirFactonet} variant="outline" className="gap-2 shrink-0 border-kiri-emerald/40 text-kiri-emerald">{listo || cambioPendiente?.firmado ? tr("Ver en FactoNet") : tr("Firmar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
-          </Button>
+          {!nativo && <Button onClick={abrirFactonet} variant="outline" className="gap-2 shrink-0 border-kiri-emerald/40 text-kiri-emerald">{listo || cambioPendiente?.firmado ? tr("Ver en FactoNet") : tr("Firmar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
+          </Button>}
         </div>
       )}
 
@@ -353,6 +376,14 @@ export default function MiPlanPage() {
                     <Button onClick={abrirFactonet} variant="outline" className="w-full gap-2"><Clock className="h-4 w-4" />{" "}{tr("Pendiente de firma")}</Button>
                   ) : p.price === 0 && tienePlanPago ? (
                     <p className="text-[11px] text-muted-foreground text-center">{tr("Para volver al plan gratis, escríbenos desde Perfil → Soporte.")}</p>
+                  ) : nativo ? (
+                    comprasDisponibles() && tierTienda(p) ? (
+                      <Button onClick={() => suscribirConTienda(p)} disabled={enviando} className={cn("w-full gap-2", p.isHighlighted && "bg-amber-500 hover:bg-amber-600 text-white")}>
+                        <Sparkles className="h-4 w-4" /> {tr("Suscribirme a {0}", [nombre])}
+                      </Button>
+                    ) : (
+                      <Button disabled variant="outline" className="w-full">{tr("Muy pronto en la app")}</Button>
+                    )
                   ) : (
                     <Button onClick={() => abrirCambio(p)} className={cn("w-full gap-2", p.isHighlighted && "bg-amber-500 hover:bg-amber-600 text-white")}>
                       <Sparkles className="h-4 w-4" /> {probando ? tr("Quedarme con {0}", [nombre]) : tr("Cambiarme a {0}", [nombre])}
@@ -410,8 +441,12 @@ export default function MiPlanPage() {
           <p className="text-xs text-muted-foreground">{tr("Cuando te cambies a un plan pago, aquí tendrás el acceso a tu contrato y a tus facturas.")}</p>
         )}
 
-        <Button onClick={abrirFactonet} disabled={!factonet?.url || !mostrarFactonet} className="gap-2">{tr("Ir a FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
-        </Button>
+        {nativo ? (
+          <Button onClick={restaurar} variant="outline" className="gap-2">{tr("Restaurar compras")}</Button>
+        ) : (
+          <Button onClick={abrirFactonet} disabled={!factonet?.url || !mostrarFactonet} className="gap-2">{tr("Ir a FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </section>
 
       {/* Tu uso este mes */}
