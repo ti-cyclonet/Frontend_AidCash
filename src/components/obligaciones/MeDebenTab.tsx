@@ -198,13 +198,13 @@ export function MeDebenTab() {
   const [confirm, setConfirm] = useState<{ loan: ExternalLoan; tipo: "perdonar" | "eliminar" } | null>(null)
 
   // El recordatorio también invita a Kiri: quien te debe recibe tu enlace (con
-  // 14 días de PLUS gratis). Se pide antes para que WhatsApp abra al instante.
+  // 30 días de PLUS gratis). Se pide antes para que WhatsApp abra al instante.
   const [enlace, setEnlace] = useState<string | null>(null)
   useEffect(() => {
     inviteLinksApi.get("FRIEND").then(({ data }) => { if (data?.code) setEnlace(urlInvitacion(data.code)) }).catch(() => {})
   }, [])
   const mensajeConInvitacion = (l: ExternalLoan) => mensajeCobro(l, formatAmount)
-    + (enlace ? `\n\n${tr("P.D.: yo llevo mis cuentas en Kiri 🌱 Si quieres organizar tu plata, entra con mi enlace y tienes 14 días de KIRI PLUS gratis:")} ${enlace}` : "")
+    + (enlace ? `\n\n${tr("P.D.: yo llevo mis cuentas en Kiri 🌱 Si quieres organizar tu plata, entra con mi enlace y tienes 30 días de KIRI PLUS gratis:")} ${enlace}` : "")
 
   const recordar = (l: ExternalLoan) => {
     const url = `https://wa.me/${numeroWhatsApp(l.telefono)}?text=${encodeURIComponent(mensajeConInvitacion(l))}`

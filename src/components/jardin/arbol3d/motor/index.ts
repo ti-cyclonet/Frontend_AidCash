@@ -400,7 +400,10 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     }
     blades.instanceMatrix.needsUpdate = true
     for (const f of flies) {
-      const u = f.userData, on = Lv === 6 && weather !== "storm" && cur.rain < 0.7; f.visible = on; if (!on) continue
+      /* Mariposas: llegan con 5 días de racha y se quedan mientras la racha siga (se esconden en la tormenta) */
+      const u = f.userData, on = (est.finanzas?.racha ?? 0) >= 5 && weather !== "storm" && cur.rain < 0.7
+      u.k = Math.max(0, Math.min(1, u.k + (on ? dt : -dt) * 1.2)); f.visible = u.k > 0.01; if (!f.visible) continue
+      f.scale.setScalar(0.62 * u.k)
       const fp = (tt: number) => { const a = tt * 0.5 * u.sp + u.ph; return [Math.cos(a) * u.R, u.h + Math.sin(tt * 1.3 + u.ph) * 0.4 + Math.sin(a * 2) * 0.3, Math.sin(a * 1.3) * u.R * 0.8] }
       const lift = u.low ? 0 : arbol.treeTop(G) * 0.25, dip = -1.4 * smooth((Math.sin(t * 0.27 + u.ph * 1.7) - 0.55) / 0.45)
       const p = fp(t), q2 = fp(t + 0.06); f.position.set(p[0], Math.max(0.55 + Hgt(p[0], p[2]), p[1] + lift + dip), p[2])

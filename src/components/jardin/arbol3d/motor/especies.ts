@@ -109,10 +109,13 @@ export const COLORES_HOJA = {
   atardecer: { nombre: "Atardecer", c: ["#ffd25a", "#f0507a", "#a8305a"], em: 0.14 },
   bosque: { nombre: "Bosque oscuro", c: ["#4a7a3a", "#1f4422", "#142e16"], em: 0.14 },
   noche: { nombre: "Azul noche", c: ["#86b6ff", "#3f5fc8", "#2c4596"], em: 0.14 },
+  /* exclusivos de los planes pagos (vienen con el plan, no se compran) */
+  aurora: { nombre: "Aurora", c: ["#8ff5e2", "#5b8ff0", "#8a4ad8"], em: 0.32 },
+  diamante: { nombre: "Diamante", c: ["#f4fcff", "#a9dcff", "#6fa3e6"], em: 0.5 },
 } satisfies Record<string, { nombre: string; c: [string, string, string]; em: number }>
 export type ClaveColor = keyof typeof COLORES_HOJA
-/** Los 15 de la tienda: "auto" es el color propio de cada especie. */
-export const COLORES_TIENDA = ["auto", "esmeralda", "menta", "bosque", "otono", "coral", "turquesa", "sakura", "lavanda", "morado", "noche", "carmesi", "blanco", "atardecer", "dorado"] as const
+/** Los de la tienda: "auto" es el color propio de cada especie; aurora (PLUS) y diamante (PRO) vienen con el plan. */
+export const COLORES_TIENDA = ["auto", "esmeralda", "menta", "bosque", "otono", "coral", "turquesa", "sakura", "lavanda", "morado", "noche", "carmesi", "blanco", "atardecer", "dorado", "aurora", "diamante"] as const
 export type ColorElegido = (typeof COLORES_TIENDA)[number]
 
 /**

@@ -234,7 +234,7 @@ export default function MisionesPage() {
                   <Button size="sm" onClick={() => setInvitarOpen(true)} className="h-8 gap-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold px-3">
                     <UserPlus className="h-3.5 w-3.5" />{" "}{tr("Invitar")}</Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-3">{tr("Cada amigo que llega con tu enlace y usa Kiri hace crecer tu árbol. Ellos tienen 14 días de KIRI PLUS gratis; los premios de cada nivel están en Mi plan → Invita y gana.")}{" "}{referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">{tr("Llevas {0}.", [referidos])}</strong>}
+                <p className="text-[11px] text-muted-foreground mb-3">{tr("Cada amigo que llega con tu enlace y usa Kiri hace crecer tu árbol. Ellos tienen 30 días de KIRI PLUS gratis; los premios de cada nivel están en Mi plan → Invita y gana.")}{" "}{referidos > 0 && <strong className="text-sky-600 dark:text-sky-400">{tr("Llevas {0}.", [referidos])}</strong>}
                   {" "}<Link href="/mi-plan#invita" className="font-bold text-sky-600 dark:text-sky-400 hover:underline">{tr("Ver premios")}</Link>
                 </p>
                 <div className="space-y-4">

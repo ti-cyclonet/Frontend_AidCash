@@ -100,7 +100,7 @@ export function LogroCompartible() {
   }, [logro, enlace])
 
   const mensaje = useCallback(() => logro
-    ? tr("{0} {1} en Kiri 🌱 Organiza tu plata conmigo: entra con mi enlace y tienes 14 días de KIRI PLUS gratis.", [logro.icono, logro.titulo])
+    ? tr("{0} {1} en Kiri 🌱 Organiza tu plata conmigo: entra con mi enlace y tienes 30 días de KIRI PLUS gratis.", [logro.icono, logro.titulo])
     : "", [logro])
 
   const compartirImagen = async () => {
@@ -148,7 +148,7 @@ export function LogroCompartible() {
             <DialogTitle className="text-xl">{tr("¡Lo lograste!")} {logro.titulo}</DialogTitle>
             <DialogDescription>{logro.detalle}</DialogDescription>
             <p className="text-xs rounded-xl bg-amber-400/10 border border-amber-400/30 px-3 py-2">
-              {tr("Compártelo e invita a un amigo: tiene 14 días de KIRI PLUS gratis y los dos ganan cuando empiece a usar Kiri.")}
+              {tr("Compártelo e invita a un amigo: tiene 30 días de KIRI PLUS gratis y los dos ganan cuando empiece a usar Kiri.")}
             </p>
             <div className="grid gap-2">
               <Button onClick={whatsapp} className="gap-2 bg-[#25D366] hover:bg-[#1ebe5b] text-white"><WhatsAppIcon className="h-4 w-4" />{" "}{tr("Compartir por WhatsApp")}</Button>

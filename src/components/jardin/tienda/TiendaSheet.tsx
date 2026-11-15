@@ -3,7 +3,7 @@
 /**
  * Tienda del árbol 3D: habitantes de la isla, especies, colores de hojas,
  * accesorios (con su vista previa 3D), cofres (comprar y regalar) y cómo ganar
- * monedas (por ahora no se venden). Los precios, el saldo, la oferta del
+ * monedas (solo se ganan usando Kiri). Los precios, el saldo, la oferta del
  * día y lo que el usuario tiene vienen del servidor (GET /gamification/jardin/tienda);
  * aquí solo se muestran. Comprar y equipar también pasan por el servidor, que
  * descuenta y valida.
@@ -18,12 +18,13 @@ import {
 } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { gamificationApi, type ArticuloTienda, type EstadoTienda, type RanuraCosmetico, type TipoCosmetico } from "@/lib/api-client"
+import { gamificationApi, planApi, type ArticuloTienda, type EstadoTienda, type RanuraCosmetico, type TipoCosmetico } from "@/lib/api-client"
 import { tr } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { ACCESORIOS, COLORES_HOJA, ESPECIES, type ClaveColor, type ClaveEspecie } from "@/components/jardin/arbol3d/motor/especies"
 import { vistaPrevia, type TipoVista } from "@/components/jardin/arbol3d/motor/vistaPrevia"
 import { RegalarCofre } from "./RegalarCofre"
+import { GanarMonedas } from "./GanarMonedas"
 
 export type PestanaTienda = "habitantes" | "arboles" | "colores" | "accesorios" | "cofres" | "monedas"
 export type TipoCofre = "comun" | "raro" | "legendario"
@@ -218,6 +219,16 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
       </button>
     )
     if (puesto) return <span className="flex h-8 items-center justify-center gap-1 rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{tr("Equipado")}</span>
+    /* Exclusivo de un plan que no tiene: no se compra con monedas, lleva a ver el plan */
+    if (a.exclusivo && !a.tiene) return (
+      <button type="button" onClick={() => {
+        planApi.evento("oferta_click", `tienda_exclusivo:${a.exclusivo}`)
+        window.dispatchEvent(new CustomEvent("kiri:limite", { detail: { codigo: "FUNCION", mensaje: tr("{0} es exclusivo de KIRI {1}: viene con el plan, no se compra con monedas.", [nombreArticulo(tipo, a.clave), a.exclusivo]), mejora: { plan: `KIRI ${a.exclusivo}` } } }))
+      }}
+        className={cn("flex h-8 items-center justify-center gap-1 rounded-lg text-xs font-extrabold text-white", a.exclusivo === "PRO" ? "bg-amber-500 hover:bg-amber-400" : "bg-kiri-emerald hover:bg-kiri-emerald/90")}>
+        <Crown className="h-3.5 w-3.5" />{tr("Con KIRI {0}", [a.exclusivo])}
+      </button>
+    )
     if (a.tiene || a.incluido) return (
       <button type="button" disabled={!!ocupado} onClick={() => equipar(tipo, a.clave)} className="flex h-8 items-center justify-center gap-1 rounded-lg border border-border text-xs font-bold hover:bg-muted disabled:opacity-60">
         {cargando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr("Equipar")}
@@ -231,6 +242,7 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
     return (
       <div className={cn("relative flex flex-col gap-2 rounded-xl border bg-card p-2.5", puesto ? "border-emerald-500/60 ring-1 ring-emerald-500/30" : "border-border")}>
         {enOferta && !a.tiene && <span className="absolute right-2 top-2 z-10 rounded-full bg-rose-500 px-1.5 text-[10px] font-black leading-4 text-white">-30%</span>}
+        {a.exclusivo && <span className={cn("absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-full px-1.5 text-[10px] font-black leading-4 text-white shadow", a.exclusivo === "PRO" ? "bg-amber-500" : "bg-kiri-emerald")}><Crown className="h-2.5 w-2.5" />{a.exclusivo}</span>}
         {esGrupo(tipo) ? <VistaAccesorio tipo={tipo} clave={a.clave} className="h-24" /> : (
           <div className="flex h-14 items-center justify-center rounded-lg" style={{ background: muestra(tipo, a.clave, especie) }}>
             {Icono && <Icono className="h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" />}
@@ -250,7 +262,7 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
 
   const pendientes = (t: TipoCofre) => estado?.cofres.filter(c => c.tipo === t).length ?? 0
   const pct = (p: number) => Math.round(p * 100)
-  const bonoPlan = estado?.plan.bonoPlan ?? { PLUS: 300, PRO: 700 }
+  const bonoPlan = estado?.plan.bonoPlan ?? { PLUS: 300, PRO: 500 }
 
   return (
     <Sheet open={abierta} onOpenChange={onAbierta}>
@@ -333,9 +345,10 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
 
               <TabsContent value="colores" className="mt-0">
                 <Rejilla>
-                  {estado.catalogo.color.map(a => <Tarjeta key={a.clave} tipo="color" a={a} descripcion={a.clave === "auto" ? tr("El de cada especie") : tr("Color de hojas")} />)}
+                  {/* Los exclusivos de los planes van primero */}
+                  {[...estado.catalogo.color].sort((x, y) => (y.exclusivo ? 1 : 0) - (x.exclusivo ? 1 : 0)).map(a => <Tarjeta key={a.clave} tipo="color" a={a} descripcion={a.exclusivo ? tr("Exclusivo de KIRI {0}", [a.exclusivo]) : a.clave === "auto" ? tr("El de cada especie") : tr("Color de hojas")} />)}
                 </Rejilla>
-                <Nota>{tr("Los colores sirven para cualquier especie.")}</Nota>
+                <Nota>{tr("Los colores sirven para cualquier especie. Aurora viene con KIRI PLUS y Diamante con KIRI PRO, mientras tengas el plan.")}</Nota>
               </TabsContent>
 
               <TabsContent value="accesorios" className="mt-0 space-y-3">
@@ -411,20 +424,10 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
                 {/* Bono del plan: una sola vez al pasarse a un plan pago */}
                 <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 text-[12px] leading-relaxed">
                   <p className="flex items-center gap-1.5 font-bold"><Crown className="h-4 w-4 text-amber-500" />{tr("Bono de bienvenida de tu plan")}</p>
-                  <p className="mt-0.5 text-muted-foreground">{tr("Al pasarte a KIRI PLUS recibes {0} monedas y a KIRI PRO {1}, una sola vez, además de todo lo que desbloquean.", [fmt(bonoPlan.PLUS ?? 300), fmt(bonoPlan.PRO ?? 700)])}</p>
+                  <p className="mt-0.5 text-muted-foreground">{tr("Al pasarte a KIRI PLUS recibes {0} monedas y a KIRI PRO {1}, una sola vez, además de todo lo que desbloquean.", [fmt(bonoPlan.PLUS ?? 300), fmt(bonoPlan.PRO ?? 500)])}</p>
                   {estado.plan.bono === 0 && <Link href="/mi-plan" onClick={() => onAbierta(false)} className="mt-2 inline-flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-500">{tr("Ver planes")}</Link>}
                 </div>
-                <div className="rounded-xl border border-border bg-muted/40 p-3 text-[12px] leading-relaxed">
-                  <p className="mb-1 font-bold">{tr("Cómo ganar monedas")}</p>
-                  <ul className="space-y-0.5">
-                    <li>{tr("Registrar un ahorro: +{0} (hasta {1} al día; hoy llevas {2})", [estado.abonos.ahorro.monedas, estado.abonos.ahorro.maxDia, estado.abonos.ahorro.hoy])}</li>
-                    <li>{tr("Pagar una obligación: +{0} (hasta {1} al día; hoy llevas {2})", [estado.abonos.pago.monedas, estado.abonos.pago.maxDia, estado.abonos.pago.hoy])}</li>
-                    <li>{tr("Saldar una deuda por completo: +{0} y un cofre común", [estado.abonos.deuda.monedas])}</li>
-                    <li>{tr("Lograr una semana de tu plan semanal: +5")}</li>
-                    <li>{tr("Subir de nivel: un cofre raro")}</li>
-                  </ul>
-                  <p className="mt-1.5 text-muted-foreground">{tr("Regar, sacudir y cosechar dan XP a tu árbol, no monedas. Por ahora las monedas no se venden: se ganan usando Kiri.")}</p>
-                </div>
+                <GanarMonedas abonos={estado.abonos} />
               </TabsContent>
             </div>
           </Tabs>

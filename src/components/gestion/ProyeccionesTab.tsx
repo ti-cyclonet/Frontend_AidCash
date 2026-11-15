@@ -20,6 +20,7 @@ import {
   type ProjectionResult, type ProjectionHito,
 } from "@/lib/projections-logic"
 import Link from "next/link"
+import { OfertaPlan } from "@/components/plan/OfertaPlan"
 import { tr, localeFecha } from "@/lib/i18n"
 
 /**
@@ -123,16 +124,41 @@ export function ProyeccionesTab() {
   const projection = useMemo((): ProjectionResult | null => listo && datos.ingresoMensual > 0
     ? calculateProjections({ ...datos, ahorroInicial: totalAhorrado, aporteExtra: aporteTotal, meses })
     : null, [listo, datos, totalAhorrado, aporteTotal, meses])
+  // KIRI FREE: la proyección a 12 meses con la sugerencia de Kiri, para mostrarla borrosa
+  const teaser = useMemo((): ProjectionResult | null => {
+    if (planLoading || maxMeses > 0 || !listo || datos.ingresoMensual <= 0) return null
+    const b0 = calculateProjections({ ...datos, ahorroInicial: totalAhorrado, aporteExtra: 0, meses: 12 })
+    return calculateProjections({ ...datos, ahorroInicial: totalAhorrado, aporteExtra: b0.aporteSugerido, meses: 12 })
+  }, [planLoading, maxMeses, listo, datos, totalAhorrado])
 
   if (!planLoading && maxMeses <= 0) {
+    /* KIRI FREE: en vez de un candado, SU proyección ya calculada pero borrosa
+       (el resultado existe; para verlo, PLUS). Es el momento de más deseo. */
+    const sinDatos = !teaser
+    const libre = teaser?.fechaLibreKiri ? fechaLarga(teaser.fechaLibreKiri) : datos.deudas.length === 0 ? tr("¡Ya lo estás!") : tr("Sube tu aporte")
     return (
-      <div className="flex flex-col items-center justify-center py-14 px-6 text-center space-y-4">
-        <div className="h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-          <Lock className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+      <div className="mx-auto max-w-lg space-y-4 py-6">
+        <div className="text-center">
+          <h3 className="text-lg font-bold">{tr("Tu futuro ya está calculado")}</h3>
+          <p className="text-sm text-muted-foreground">{tr("Kiri tomó tus ingresos, obligaciones y gastos reales. Esto es lo que te espera si sigues su plan:")}</p>
         </div>
-        <h3 className="text-lg font-bold">{tr("Proyecciones es de KIRI PLUS")}</h3>
-        <p className="text-sm text-muted-foreground max-w-sm">{tr("Mira cómo crece tu plata mes a mes, el día en que quedas libre de deudas y cuánto ahorras de 3 a 24 meses.")}</p>
-        <Link href="/mi-plan#planes" className="inline-flex items-center justify-center rounded-xl bg-kiri-emerald px-5 h-11 text-sm font-bold text-white">{tr("Ver planes")}</Link>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { k: tr("Quedas libre de deudas"), v: sinDatos ? "—" : libre },
+            { k: tr("Ahorrado en 12 meses"), v: sinDatos ? "—" : formatAmount(teaser!.kiriFinal.ahorro) },
+            { k: tr("Te ahorras en intereses"), v: sinDatos ? "—" : formatAmount(teaser!.interesesAhorrados) },
+            { k: tr("Tu patrimonio en 12 meses"), v: sinDatos ? "—" : formatAmount(teaser!.kiriFinal.patrimonio) },
+          ].map((x, i) => (
+            <div key={x.k} className="relative overflow-hidden rounded-2xl border bg-card p-3">
+              <p className="text-[11px] font-semibold text-muted-foreground">{x.k}</p>
+              <p className={cn("mt-1 text-lg font-black leading-tight", !sinDatos && "select-none blur-[7px]")} aria-hidden={!sinDatos}>{x.v}</p>
+              {!sinDatos && <Lock className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-amber-500" style={{ animationDelay: `${i * 120}ms` }} />}
+            </div>
+          ))}
+        </div>
+        <OfertaPlan origen="proyecciones" icono={TrendingUp}
+          titulo={sinDatos ? tr("Mira tu futuro mes a mes con KIRI PLUS") : tr("Desbloquea tu proyección y el día exacto en que quedas libre")}
+          texto={tr("Proyecciones de 3 a 24 meses, el recorte de gastos hormiga y cuánto se adelantan tus logros con cada aporte extra.")} />
       </div>
     )
   }

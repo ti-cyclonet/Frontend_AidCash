@@ -16,13 +16,14 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import {
   CalendarRange, PiggyBank, ShoppingBag, Sparkles, TrendingUp, Gauge, Landmark,
-  Bug, ArrowRightLeft, AlertTriangle, Wallet, Hourglass, Coins, Flame, CalendarX,
+  Bug, ArrowRightLeft, AlertTriangle, Wallet, Hourglass, Coins, Flame, CalendarX, Trophy,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { planSemanalApi, PlanSemanal, SemanaPlan, ConsejoPlan } from "@/lib/api-client"
 import { tr, localeFecha } from "@/lib/i18n"
 import { marcarSemanaDelPlan } from "@/lib/garden-events"
+import { OfertaPlan } from "@/components/plan/OfertaPlan"
 
 type Fmt = (n: number) => string
 
@@ -126,6 +127,17 @@ export function PlanSemanalCard({ obligaciones, saldo, formatAmount }: { obligac
             </div>
           )
         ) : null}
+
+        {/* Buen momento: acaba de lograr su semana (solo en FREE; OfertaPlan decide) */}
+        {(() => {
+          const cerradas = plan.semanas.filter(s => s.estado === "lograda" || s.estado === "fallida")
+          const ultima = cerradas[cerradas.length - 1]
+          return ultima?.estado === "lograda" ? (
+            <OfertaPlan origen="semana_lograda" icono={Trophy} cerrable
+              titulo={plan.racha > 1 ? tr("¡{0} semanas logradas seguidas! Mira a dónde te lleva ese ritmo", [plan.racha]) : tr("¡Lograste tu semana! Mira a dónde te lleva ese ritmo")}
+              texto={tr("Con KIRI PLUS ves tu proyección a 24 meses, cómo vas mes a mes con 2 años de historial y Kiri Coach con 150 mensajes.")} />
+          ) : null
+        })()}
 
         {actual && !sinSaldo && actual.meta > 0 && (
           <p className="text-[10px] text-muted-foreground text-center">

@@ -847,7 +847,7 @@ export type TipoCosmetico = 'especie' | 'color' | 'hormiguero' | 'cerca' | 'rega
 /** Espacios de un solo artículo; los habitantes van en una lista (pueden estar varios en la isla). */
 export type RanuraCosmetico = Exclude<TipoCosmetico, 'habitante'>
 export type EquipadoTienda = Record<RanuraCosmetico, string> & { habitantes: string[] }
-export interface ArticuloTienda { clave: string; precio: number; incluido: boolean; tiene: boolean }
+export interface ArticuloTienda { clave: string; precio: number; incluido: boolean; tiene: boolean; /** Viene con ese plan (no se compra) */ exclusivo?: 'PLUS' | 'PRO' | null }
 export interface EstadoTienda {
   monedas: number
   equipado: EquipadoTienda
@@ -863,7 +863,7 @@ export interface EstadoTienda {
   paquetes: { id: string; producto: string; monedas: number; precioCop: number; bono: number; disponible: boolean }[]
   /** La primera compra de monedas trae el doble */
   primeraCompraDoble: boolean
-  abonos: { ahorro: { monedas: number; maxDia: number; hoy: number }; pago: { monedas: number; maxDia: number; hoy: number }; deuda: { monedas: number } }
+  abonos: { ahorro: { monedas: number; maxDia: number; hoy: number }; obligaciones: { monedas: number; ganadasEstePeriodo: boolean }; deuda: { monedas: number } }
 }
 export interface PremioCofre { tipo: string; monedas: number; articulo: { tipo: TipoCosmetico; clave: string } | null }
 
@@ -1375,6 +1375,8 @@ export interface FactonetInfo {
   url: string
   correo: string
   facturaPendiente: FacturaPendiente | null
+  /** Enlace directo a pagar la factura pendiente en FactoNet */
+  urlPagar?: string | null
   cambioPlan: { packageId: string; plan: string | null; fecha: string; ciclo?: "mensual" | "anual"; descuentoPrimerMes?: number; firmado?: boolean } | null
 }
 
@@ -1391,9 +1393,12 @@ export const planApi = {
   disponibles: () => api<PlanDisponible[]>('/plan/available'),
   factonet: () => api<FactonetInfo>('/plan/factonet'),
   /** Cambio de plan: Authoriza valida la contraseña, crea el contrato y da acceso a FactoNet */
-  cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean; billingCycle?: 'monthly' | 'annual' }) =>
+  cambiar: (data: { packageId: string; packageName: string; password?: string; acceptTerms: boolean; acceptHabeasData: boolean; billingCycle?: 'monthly' | 'annual'; origen?: string }) =>
     api<{ success: boolean; message?: string }>('/plan/upgrade', { method: 'POST', body: data }),
   uso: () => api<UsoPlan>('/usage-status'),
+  /** Medición: se vio o se tocó una oferta de plan (origen = dónde) */
+  evento: (tipo: 'oferta_vista' | 'oferta_click', origen: string) =>
+    api<{ ok: boolean }>('/plan/evento', { method: 'POST', body: { tipo, origen } }),
 }
 
 // ─── Savings Pockets API (Bolsillos de Ahorro Personales) ─────────────────────

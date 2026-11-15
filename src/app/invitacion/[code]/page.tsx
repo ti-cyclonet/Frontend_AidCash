@@ -77,7 +77,7 @@ export default function InvitacionPage() {
               {!user && !propio && (
                 <div className="rounded-2xl border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-left flex items-center gap-3">
                   <span className="text-2xl">🎁</span>
-                  <p className="text-xs"><strong>{tr("Tienes 14 días de KIRI PLUS gratis")}</strong>{" "}{tr("por llegar con este enlace. Y cuando empieces a usar Kiri, los dos ganan más mensajes con Kiri Coach.")}</p>
+                  <p className="text-xs"><strong>{tr("Tienes 30 días de KIRI PLUS gratis")}</strong>{" "}{tr("por llegar con este enlace. Y cuando empieces a usar Kiri, los dos ganan más mensajes con Kiri Coach.")}</p>
                 </div>
               )}
 

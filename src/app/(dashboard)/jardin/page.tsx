@@ -17,6 +17,7 @@ import { InviteLinkModal } from "@/components/social/InviteLinkPanel"
 import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
 import { tocarTrueno, prepararAudio, tocarToque, tocarPremio } from "@/lib/thunder-sound"
 import { usePlan } from "@/lib/plan-context"
+import { OfertaPlan, irAPlanes } from "@/components/plan/OfertaPlan"
 import {
   useJardinJuego, useCombo, useToquesSeguidos, useCosechaFrutos, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin, VuelosXP,
   TOQUES_PARA_SACUDIR, ID_BARRA_XP,
@@ -747,7 +748,7 @@ export default function JardinPage() {
       { texto: tr("Cuando pagues una deuda, escribe el saldo que te muestra el banco: Kiri calcula el interés real que pagaste. 🏦") },
       { texto: tr("¿Le prestaste plata a alguien que no usa Kiri? Regístralo en Obligaciones → Me deben y recuérdale por WhatsApp. 🤝"), href: "/obligaciones?tab=me_deben", cta: tr("Ver") },
       { texto: tr("Los gastos hormiga de $5.000 al día suman $150.000 al mes. Anótalos todos, así ves a dónde se va tu plata. 🐜") },
-      { texto: tr("Invita a alguien con tu enlace: tiene 14 días de KIRI PLUS gratis y, cuando empiece a usar Kiri, los dos ganan más mensajes con Kiri Coach. 💌"), href: "/mi-plan#invita", cta: tr("Ver") },
+      { texto: tr("Invita a alguien con tu enlace: tiene 30 días de KIRI PLUS gratis y, cuando empiece a usar Kiri, los dos ganan más mensajes con Kiri Coach. 💌"), href: "/mi-plan#invita", cta: tr("Ver") },
       ...(currentLevelIdx >= 3 ? [{ texto: tr("Cada gasto, ingreso, pago o ahorro que registras hace caer un fruto de tu árbol. ¡Cosecha los 5 del día! 🍎") }] : []),
       { texto: tr("Completa tus misiones diarias: la racha de días es lo que más hace crecer tu árbol. 🔥"), href: "/misiones", cta: tr("Misiones") },
     )
@@ -792,6 +793,28 @@ export default function JardinPage() {
           </div>
         </div>
       </header>
+
+      {/* ═══ PLAN EN UN BUEN MOMENTO ═══ prueba de PLUS por terminar o recién
+          terminada, o una buena racha (en FREE). Una sola tarjeta a la vez. */}
+      {plan?.pruebaPlus?.activa && plan.pruebaPlus.diasRestantes <= 3 ? (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 rounded-2xl border border-kiri-emerald/30 bg-gradient-to-r from-emerald-50 to-sky-50 p-3 dark:from-emerald-500/10 dark:to-sky-500/5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white"><Sparkles className="h-5 w-5" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold">{plan.pruebaPlus.diasRestantes <= 1 ? tr("Hoy termina tu prueba de KIRI PLUS") : tr("Te quedan {0} días de KIRI PLUS", [plan.pruebaPlus.diasRestantes])}</p>
+            <p className="text-[11px] text-muted-foreground">{tr("Quédate con tus proyecciones y Kiri Coach · {0} al mes en el plan anual", ["$11.583"])}</p>
+          </div>
+          <Button size="sm" onClick={() => irAPlanes(router, "prueba_por_terminar")} className="shrink-0 bg-kiri-emerald text-white hover:bg-kiri-emerald/90">{tr("Quedarme")}</Button>
+        </motion.div>
+      ) : plan?.pruebaPlus?.recienTerminada ? (
+        <OfertaPlan origen="prueba_terminada" icono={Sparkles} cerrable
+          titulo={tr("Terminó tu prueba de KIRI PLUS")}
+          texto={tr("Todo lo que registraste sigue aquí. Vuelve a PLUS para recuperar tus proyecciones, tu historial de 2 años y Kiri Coach con 150 mensajes.")}
+          cta={tr("Volver a KIRI PLUS")} />
+      ) : streakActual >= 7 ? (
+        <OfertaPlan origen="racha" icono={Flame} cerrable compacta
+          titulo={tr("{0} días seguidos cuidando tu plata. Mira a dónde te lleva ese ritmo con tus proyecciones de KIRI PLUS", [streakActual])} />
+      ) : null}
 
       {/* ═══ JARDÍN PRINCIPAL ═══
           Un solo árbol (antes había uno para móvil y otro para escritorio

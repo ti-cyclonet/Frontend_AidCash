@@ -68,9 +68,10 @@ interface Props {
  *   localStorage kiri_clima_prueba = "sol" | "nubes" | "tormenta"
  *   localStorage kiri_fondo_prueba = "100"   (cerca del fondo de emergencia)
  *   localStorage kiri_manzanas_prueba = "1"  (frutos colgando aunque ya se sacudió hoy)
+ *   localStorage kiri_racha_prueba = "5"     (días de racha: con 5 llegan las mariposas)
  * En producción no hace nada: el nivel sigue saliendo solo de la XP del servidor.
  */
-function pruebasDesarrollo(p: Pick<Props, "nivel" | "progreso" | "clima" | "salud" | "fondo" | "manzanasArbol">) {
+function pruebasDesarrollo(p: Pick<Props, "nivel" | "progreso" | "clima" | "salud" | "fondo" | "manzanasArbol" | "finanzas">) {
   if (process.env.NODE_ENV === "production" || typeof window === "undefined") return p
   try {
     const nivelP = Number(localStorage.getItem("kiri_nivel_prueba")), saludP = Number(localStorage.getItem("kiri_salud_prueba"))
@@ -83,6 +84,7 @@ function pruebasDesarrollo(p: Pick<Props, "nivel" | "progreso" | "clima" | "salu
       clima: climaP === "sol" || climaP === "nubes" || climaP === "tormenta" ? climaP : p.clima,
       fondo: localStorage.getItem("kiri_fondo_prueba") ? Number(localStorage.getItem("kiri_fondo_prueba")) : p.fondo,
       manzanasArbol: localStorage.getItem("kiri_manzanas_prueba") === "1" ? true : p.manzanasArbol,
+      finanzas: localStorage.getItem("kiri_racha_prueba") ? { ...p.finanzas, racha: Number(localStorage.getItem("kiri_racha_prueba")) } : p.finanzas,
     }
   } catch { return p }
 }
@@ -176,8 +178,8 @@ export function ArbolKiri3D(props: Props) {
   }, [])
 
   // ── Estado → motor ────────────────────────────────────────────────────────
-  const { datosListos, tormentaHormiga, regando, ingreso, finanzas, frutos, sacudida, subioNivel, gastosHormiga } = props
-  const { nivel, progreso, clima, salud, fondo, manzanasArbol } = pruebasDesarrollo(props)
+  const { datosListos, tormentaHormiga, regando, ingreso, frutos, sacudida, subioNivel, gastosHormiga } = props
+  const { nivel, progreso, clima, salud, fondo, manzanasArbol, finanzas } = pruebasDesarrollo(props)
   // las finanzas llegan como objeto nuevo en cada render: se comparan por valor
   const claveFinanzas = JSON.stringify(finanzas)
   useEffect(() => {

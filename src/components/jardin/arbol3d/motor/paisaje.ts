@@ -37,13 +37,16 @@ export function crearPaisaje(scene: THREE.Scene) {
   farol.scale.setScalar(1.6); farol.position.set(0, 2.05, 0); velero.add(farol)
   velero.scale.setScalar(1.3); grupo.add(velero)
 
-  /* --- gaviotas: una "V" que aletea; cruzan cada tanto --- */
-  const alaGeo = new THREE.BoxGeometry(0.55, 0.03, 0.12), alaMat = new THREE.MeshBasicMaterial({ color: 0x3d4652 })
+  /* --- gaviotas: una "V" que aletea; cruzan cada tanto ---
+     Se ven de frente (la "V" completa) y con alas gruesas: antes iban de canto y
+     con 3 cm de grosor, y de lejos (sobre todo en celular) quedaban como píxeles
+     sueltos que titilaban en el cielo. */
+  const alaGeo = new THREE.BoxGeometry(0.62, 0.08, 0.16), alaMat = new THREE.MeshBasicMaterial({ color: 0x55606e, fog: false })
   const gaviotas = Array.from({ length: 3 }, () => {
     const g = new THREE.Group()
     const izq = new THREE.Mesh(alaGeo, alaMat), der = new THREE.Mesh(alaGeo, alaMat)
-    izq.geometry.translate(0, 0, 0); izq.position.x = -0.26; der.position.x = 0.26
-    g.add(izq, der); g.visible = false; grupo.add(g)
+    izq.position.x = -0.28; der.position.x = 0.28
+    g.add(izq, der); g.scale.setScalar(1.35); g.visible = false; grupo.add(g)
     return { g, izq, der, t: -1, dur: 0, y: 0, z: 0, dir: 1, ph: R() * 6 }
   })
   let proximaBandada = 6
@@ -81,7 +84,7 @@ export function crearPaisaje(scene: THREE.Scene) {
         const p = gv.t / gv.dur
         gv.g.visible = noche < 0.85
         gv.g.position.set(gv.dir * (-45 + p * 90), gv.y + Math.sin(gv.t * 1.5 + gv.ph) * 0.4, gv.z)
-        gv.g.rotation.y = gv.dir > 0 ? -Math.PI / 2 : Math.PI / 2
+        gv.g.rotation.set(0, 0, Math.sin(gv.t * 0.8 + gv.ph) * 0.08 * gv.dir)
         const aleteo = Math.sin(gv.t * 9 + gv.ph) * 0.5
         gv.izq.rotation.z = 0.35 + aleteo; gv.der.rotation.z = -0.35 - aleteo
       }

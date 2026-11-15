@@ -19,6 +19,7 @@ import { ExportButtons } from "@/components/balance/ExportButtons"
 import { MovementList, MOVEMENT_FILTERS, esEntrada } from "@/components/balance/MovementList"
 import { SemanasDelPeriodo, partirEnSemanas, enSemana } from "@/components/balance/SemanasDelPeriodo"
 import { usePlan } from "@/lib/plan-context"
+import { OfertaPlan } from "@/components/plan/OfertaPlan"
 import { tr, localeFecha } from "@/lib/i18n"
 
 /**
@@ -215,6 +216,18 @@ export default function HistorialPage() {
             </div>
           </div>
         </header>
+
+        {/* Buen momento: el mes se acaba y en FREE se oculta del historial el día 1 */}
+        {mesesPlan <= 1 && (() => {
+          const hoy = new Date(), fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
+          if (fin - hoy.getDate() > 4) return null
+          const mes = hoy.toLocaleDateString(localeFecha(), { month: "long" }), sig = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleDateString(localeFecha(), { month: "long" })
+          return (
+            <OfertaPlan origen="historial_cierre" icono={History} cerrable
+              titulo={tr("Tu {0} se oculta de tu historial el 1 de {1}", [mes, sig])}
+              texto={tr("Con KIRI PLUS conservas 24 meses de historial y comparas en qué se te va la plata mes a mes. Tus datos nunca se borran.")} />
+          )
+        })()}
 
         {/* Qué se está viendo */}
         <Card className="border-none bg-card shadow-sm rounded-2xl">

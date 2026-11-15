@@ -22,7 +22,8 @@ export function crearEscena(canvas: HTMLCanvasElement, mobile: boolean) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(120, 24, 14), new THREE.ShaderMaterial({
     uniforms: skyU, side: THREE.BackSide, depthWrite: false,
     vertexShader: "varying float h;void main(){h=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
-    fragmentShader: "uniform vec3 top;uniform vec3 bottom;varying float h;void main(){float k=smoothstep(-0.02,0.38,h);gl_FragColor=vec4(mix(bottom,top,k),1.0);}",
+    /* con un tramado muy fino: sin él, el degradado se partía en franjas y manchas (más en celular) */
+    fragmentShader: "uniform vec3 top;uniform vec3 bottom;varying float h;void main(){float k=smoothstep(-0.02,0.38,h);float n=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));gl_FragColor=vec4(mix(bottom,top,k)+(n-0.5)/180.0,1.0);}",
   }))
   scene.add(sky)
   const sunDir = new THREE.Vector3(0.5, 0.62, 0.6).normalize()
