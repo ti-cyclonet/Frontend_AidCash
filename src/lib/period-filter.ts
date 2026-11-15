@@ -1,4 +1,5 @@
 import { Debt, FixedExpense, IncomeFrequency } from './types'
+import { pendienteEnPeriodo, prestamoEnPeriodo, type PrestamoParaPeriodo } from './obligaciones-pendientes'
 import { localeFecha, tr } from "@/lib/i18n"
 
 /**
@@ -24,8 +25,13 @@ export interface PeriodInfo {
   periodDebts: Debt[]
   /** Gastos fijos pendientes que corresponden al periodo actual */
   periodFixed: FixedExpense[]
-  /** Suma monetaria de todas las obligaciones pendientes del periodo */
+  /** Suma monetaria de todas las obligaciones pendientes del periodo (incluye préstamos de Social que vencen) */
   totalObligations: number
+  /** Lo que falta pagar de cada deuda / gasto fijo en el periodo (por id) */
+  pendientePorId: Record<string, number>
+  /** Préstamos de Social que vencen en el periodo y lo que falta de ellos */
+  prestamosDelPeriodo: { prestamo: PrestamoParaPeriodo; monto: number }[]
+  totalPrestamos: number
   /** Quincena actual (null si es mensual) */
   quincena: Quincena | null
 }
@@ -143,13 +149,6 @@ export function getDaysElapsedAndTotal(frequency: IncomeFrequency, diasCobro: st
 
 // ─── Filtros de periodo ───────────────────────────────────────────────────────
 
-/** Construye una fecha para el día N de un mes, recortando al último día real
- * si N no existe ese mes (ej. día 31 en septiembre, que solo tiene 30). */
-function dateForDay(year: number, month: number, day: number): Date {
-  const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
-  return new Date(year, month, Math.min(day, lastDayOfMonth))
-}
-
 /**
  * Extrae los días de pago propios de un ítem (deuda o gasto fijo).
  */
@@ -173,53 +172,6 @@ function isOverdueThisMonth(days: number[], now: Date): boolean {
 }
 
 /**
- * Filtra obligaciones que corresponden al periodo actual, por FECHA REAL.
- *
- * Lógica de frecuencia de pago:
- *   - Si la obligación tiene frecuencia 'quincenal', se INCLUYE SIEMPRE
- *     (se paga cada quincena, sin importar el rango de fechas).
- *   - Si la obligación tiene frecuencia 'mensual' (o no especificada): se
- *     incluye si su PRÓXIMA ocurrencia este mes cae dentro de `periodRange`,
- *     o si ya está genuinamente vencida (ver `isOverdueThisMonth`) — una
- *     vencida se muestra siempre, sin importar qué periodo se esté viendo.
- *   - Items sin día definido: se incluyen siempre (conservador).
- */
-export function filterByCurrentQuincena<T extends { diasPago?: string; fechaCorte?: string; pagadoEstePeriodo?: boolean; pendienteProximoPeriodo?: boolean; frecuenciaPago?: string; frecuencia?: string }>(
-  items: T[],
-  periodRange: { start: Date; end: Date },
-  now: Date = new Date()
-): T[] {
-  return items.filter(item => {
-    // ═══ REGLA: Obligaciones con frecuencia QUINCENAL siempre se incluyen ═══
-    const itemFrequency = ('frecuenciaPago' in item ? item.frecuenciaPago : item.frecuencia) as string | undefined
-    if (itemFrequency === 'quincenal') return true
-
-    const days = itemDays(item)
-    if (days.length === 0) return true
-
-    // ¿La próxima ocurrencia de este mes cae dentro del periodo que se está mostrando?
-    const upcoming = days.filter(d => d >= now.getDate())
-    if (upcoming.length > 0) {
-      const nextDate = dateForDay(now.getFullYear(), now.getMonth(), Math.min(...upcoming))
-      if (nextDate >= periodRange.start && nextDate < periodRange.end) return true
-    }
-
-    // Genuinamente vencida (todos sus días ya pasaron este mes) y sigue sin pagar.
-    // Una obligación marcada "nueva, empieza el próximo periodo" NO cuenta acá
-    // aunque su día ya haya pasado en el calendario — todavía no le toca a este
-    // mes, así que forzarla a la quincena/mes actual la mostraría como vencida
-    // sin haber arrancado nunca.
-    if ('pagadoEstePeriodo' in item && item.pagadoEstePeriodo === false
-      && !item.pendienteProximoPeriodo
-      && isOverdueThisMonth(days, now)) {
-      return true
-    }
-
-    return false
-  })
-}
-
-/**
  * ¿Esta obligación mensual está genuinamente vencida ahora mismo? (unpaid +
  * su día ya pasó este mes). Las obligaciones quincenales nunca se marcan así
  * — se pagan cada quincena, no tienen "vencido" en este sentido. Útil para la
@@ -234,15 +186,6 @@ export function isGenuinelyOverdue<T extends { diasPago?: string; fechaCorte?: s
   if (!('pagadoEstePeriodo' in item) || item.pagadoEstePeriodo !== false) return false
   if (item.pendienteProximoPeriodo) return false
   return isOverdueThisMonth(itemDays(item), now)
-}
-
-/**
- * Excluye obligaciones ya pagadas Y las marcadas "nueva, empieza el próximo
- * periodo" — ninguna de las dos corresponde al periodo actual, así que no
- * deben sumar a `totalObligations` ni resaltarse como prioridad de este mes.
- */
-export function filterPendingOnly<T extends { pagadoEstePeriodo: boolean; pendienteProximoPeriodo?: boolean }>(items: T[]): T[] {
-  return items.filter(item => !item.pagadoEstePeriodo && !item.pendienteProximoPeriodo)
 }
 
 // ─── Función principal ────────────────────────────────────────────────────────
@@ -282,62 +225,44 @@ export function getPeriodData(
   frequency: IncomeFrequency,
   diasCobro: string = '',
   /** Lo que entra en ESTA quincena si no es la mitad del mes (quincenas distintas) */
-  ingresoPeriodo?: number
+  ingresoPeriodo?: number,
+  /** Préstamos de Social donde el usuario debe (activos) */
+  prestamos: PrestamoParaPeriodo[] = [],
 ): PeriodInfo {
-  if (frequency === 'mensual') {
-    // Mensual: todas las obligaciones PENDIENTES del mes completo
-    const pendingDebts = filterPendingOnly(debts.filter(d => d.estado !== 'saldada'))
-    const pendingFixed = filterPendingOnly(fixedExpenses)
-    const totalObligations = pendingDebts.reduce((acc, d) => acc + d.cuotaPeriodo, 0) +
-                             pendingFixed.reduce((acc, f) => acc + f.monto, 0)
-    return {
-      effectiveIncome: income + extraIncome,
-      periodDebts: pendingDebts,
-      periodFixed: pendingFixed,
-      totalObligations,
-      quincena: null,
-    }
-  }
-
-  // Quincenal: filtrar por el rango de fechas real del periodo actual + solo pendientes
+  // Todo lo que vence dentro del periodo (y lo vencido sin pagar) cuenta
+  // COMPLETO, buscado por su fecha real — ver lib/obligaciones-pendientes.ts.
+  // Antes las mensuales de un usuario quincenal se contaban por la mitad y lo
+  // que vencía el mes siguiente (periodo 29 nov – 14 dic) no sumaba: la
+  // Billetera mostraba menos obligaciones y más "disponible" del real.
   const now = new Date()
-  const periodRange = getCurrentPeriodDateRange(diasCobro, now)
-  const quincena = periodRange.quincena
-  const activeDebts = debts.filter(d => d.estado !== 'saldada')
-  const periodDebts = filterPendingOnly(filterByCurrentQuincena(activeDebts, periodRange, now))
-  const periodFixed = filterPendingOnly(filterByCurrentQuincena(fixedExpenses, periodRange, now))
+  const rango = getPeriodDateRange(frequency, diasCobro, now)
+  const pendientePorId: Record<string, number> = {}
+  const conPendiente = <T extends Debt | FixedExpense>(items: T[]) => items.filter(item => {
+    const monto = pendienteEnPeriodo(item, rango, now).monto
+    if (monto <= 0) return false
+    pendientePorId[item.id] = monto
+    return true
+  })
+  const periodDebts = conPendiente(debts.filter(d => d.estado !== 'saldada'))
+  const periodFixed = conPendiente(fixedExpenses)
+  const prestamosDelPeriodo = prestamos
+    .map(prestamo => ({ prestamo, monto: prestamoEnPeriodo(prestamo, rango) }))
+    .filter(p => p.monto > 0)
+  const totalPrestamos = prestamosDelPeriodo.reduce((a, p) => a + p.monto, 0)
+  const totalObligations = Object.values(pendientePorId).reduce((a, m) => a + m, 0) + totalPrestamos
 
-  // ═══ CÁLCULO DE OBLIGACIONES CON DIVISIÓN QUINCENAL + VENCIDAS ═══
-  // - Deudas con frecuencia 'quincenal': cuota completa (se paga cada quincena)
-  // - Deudas con frecuencia 'mensual', dentro de su ventana normal: cuota / 2
-  //   (se divide entre las 2 quincenas para suavizar el flujo de caja)
-  // - Deudas mensuales genuinamente vencidas (ver isOverdueThisMonth): cuota
-  //   completa — ya se debe el mes entero, no tiene sentido seguir partiéndola
-  const totalObligations = periodDebts.reduce((acc, d) => {
-    const itemFreq = d.frecuenciaPago ?? 'mensual'
-    const cuota = d.cuotaPeriodo
-    if (itemFreq === 'quincenal') return acc + cuota
-
-    const days = parseDays(d.diasPago)
-    if (isOverdueThisMonth(days, now)) return acc + cuota
-    return acc + Math.round(cuota / 2)
-  }, 0) + periodFixed.reduce((acc, f) => {
-    const itemFreq = f.frecuencia ?? 'mensual'
-    // Quincenal: se paga la mitad en cada quincena (igual que las deudas) — antes
-    // se sumaba el monto completo, contando doble entre Q1 y Q2.
-    if (itemFreq === 'quincenal') return acc + Math.round(f.monto / 2)
-
-    const days = parseDays(f.fechaCorte)
-    if (isOverdueThisMonth(days, now)) return acc + f.monto
-    return acc + Math.round(f.monto / 2)
-  }, 0)
-
+  if (frequency === 'mensual') {
+    return { effectiveIncome: income + extraIncome, periodDebts, periodFixed, totalObligations, pendientePorId, prestamosDelPeriodo, totalPrestamos, quincena: null }
+  }
   return {
     effectiveIncome: Math.round((ingresoPeriodo ?? income / 2) + extraIncome),
     periodDebts,
     periodFixed,
     totalObligations,
-    quincena,
+    pendientePorId,
+    prestamosDelPeriodo,
+    totalPrestamos,
+    quincena: getCurrentPeriodDateRange(diasCobro, now).quincena,
   }
 }
 

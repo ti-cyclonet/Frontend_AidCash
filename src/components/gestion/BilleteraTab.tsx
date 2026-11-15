@@ -27,6 +27,7 @@ import { ConfigIngresoDialog } from "./ConfigIngresoDialog"
 import { PlanSemanalCard } from "./PlanSemanalCard"
 import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/ingresos"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
+import { fechaDelPrestamo } from "@/lib/obligaciones-pendientes"
 import { tr } from "@/lib/i18n"
 import { toast } from "@/hooks/use-toast"
 
@@ -248,7 +249,7 @@ export function BilleteraTab() {
   }, [])
 
   const { allocation, periodData, pendingObligations } = usePeriodBudget()
-  const { periodDebts, periodFixed } = periodData
+  const { periodDebts, periodFixed, pendientePorId, prestamosDelPeriodo } = periodData
   const { addNotification } = useSocket()
 
   const periodNum = incomeFrequency === "mensual" ? 1 : getCurrentQuincena(diasCobro)
@@ -261,12 +262,9 @@ export function BilleteraTab() {
   const periodRange = getPeriodRangeLabel(incomeFrequency, diasCobro)
   const nextPeriodLabel = getNextPeriodLabel(incomeFrequency, diasCobro)
 
-  // Obligaciones con monto ajustado por frecuencia (quincenal = /2)
-  const displayObligationsTotal = useMemo(() => {
-    const debtsTotal = periodDebts.reduce((a, d) => a + getDisplayAmount(d), 0)
-    const fixedTotal = periodFixed.reduce((a, f) => a + getDisplayAmount(f), 0)
-    return debtsTotal + fixedTotal
-  }, [periodDebts, periodFixed])
+  // Todo lo que vence en el periodo (cuota completa, por fecha real), lo vencido
+  // sin pagar y los préstamos de Social que vencen — ver lib/obligaciones-pendientes.ts
+  const displayObligationsTotal = periodData.totalObligations
 
   const nextPeriodObligations = useMemo(() => {
     const currentIds = new Set([...periodDebts.map(d => d.id), ...periodFixed.map(f => f.id)])
@@ -643,27 +641,35 @@ export function BilleteraTab() {
           <CardContent className="p-4 space-y-3">
             <h3 className="font-bold text-sm">{tr("Obligaciones del período actual")}<span className="text-muted-foreground font-normal text-xs ml-1">({periodRange})</span>
             </h3>
-            {incomeFrequency === "quincenal" && (
-              <p className="text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{tr("💡 Las obligaciones con frecuencia")}{" "}<span className="font-bold">{tr("quincenal")}</span>{" "}{tr("se dividen entre las 2 quincenas. Solo se muestra la mitad correspondiente a este periodo.")}</p>
-            )}
-            {periodDebts.length === 0 && periodFixed.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{tr("Suma todo lo que vence en este periodo, lo vencido sin pagar y los préstamos de Social cuya fecha de pago llega.")}</p>
+            {periodDebts.length === 0 && periodFixed.length === 0 && prestamosDelPeriodo.length === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">{tr("🎉 No tienes obligaciones pendientes")}</p>
             ) : (
               <div className="divide-y divide-border/50">
                 {periodDebts.map(d => (
                   <ObligationRow key={d.id} name={d.nombre} day={d.diasPago}
-                    amount={getDisplayAmount(d)} fullAmount={d.cuotaPeriodo}
+                    amount={pendientePorId[d.id] ?? 0} fullAmount={d.cuotaPeriodo}
                     isQuincenal={d.frecuenciaPago === "quincenal"}
-                    isOverdue={isGenuinelyOverdue(d)}
-                    paid={d.pagadoEstePeriodo} formatAmount={formatAmount} />
+                    isOverdue={isGenuinelyOverdue(d) || (d.montoAtrasado ?? 0) > 0}
+                    paid={false} formatAmount={formatAmount} />
                 ))}
                 {periodFixed.map(f => (
                   <ObligationRow key={f.id} name={f.nombre} day={f.fechaCorte}
-                    amount={getDisplayAmount(f)} fullAmount={f.monto}
+                    amount={pendientePorId[f.id] ?? 0} fullAmount={f.monto}
                     isQuincenal={f.frecuencia === "quincenal"}
-                    isOverdue={isGenuinelyOverdue(f)}
-                    paid={f.pagadoEstePeriodo} formatAmount={formatAmount} />
+                    isOverdue={isGenuinelyOverdue(f) || (f.montoAtrasado ?? 0) > 0}
+                    paid={false} formatAmount={formatAmount} />
                 ))}
+                {prestamosDelPeriodo.map(({ prestamo, monto }, i) => {
+                  const fecha = fechaDelPrestamo(prestamo)
+                  return (
+                    <ObligationRow key={`prestamo-${i}`} name={(prestamo as { descripcion?: string }).descripcion || tr("Préstamo en Social")}
+                      day={fecha ? String(fecha.getDate()) : ""}
+                      amount={monto} fullAmount={monto} isQuincenal={false}
+                      isOverdue={!!fecha && fecha < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())}
+                      paid={false} formatAmount={formatAmount} />
+                  )
+                })}
               </div>
             )}
             <Link href="/obligaciones" className="block text-center text-kiri-emerald font-bold text-xs hover:underline">{tr("Ver todas las obligaciones")}</Link>
@@ -935,7 +941,11 @@ function ObligationRow({ name, day, amount, fullAmount, isQuincenal, isOverdue, 
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium truncate block">{name}</span>
         {isQuincenal && (
-          <span className="text-[9px] text-muted-foreground">{tr("Quincenal · Total: {0}", [formatAmount(fullAmount)])}</span>
+          <span className="text-[9px] text-muted-foreground">
+            {amount > fullAmount
+              ? tr("Quincenal · {0} cuotas de {1} en este periodo", [Math.round(amount / fullAmount), formatAmount(fullAmount)])
+              : tr("Quincenal · cuota de {0}", [formatAmount(fullAmount)])}
+          </span>
         )}
         {isOverdue && (
           <span className="text-[9px] text-red-500 font-medium">{tr("Venció el día {0} de este mes", [dayLabel])}</span>

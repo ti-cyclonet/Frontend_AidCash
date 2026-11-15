@@ -3375,6 +3375,14 @@ export const EN: Record<string, string> = {
   "Si llegas al cobro con plata de sobra, pásala a tu ahorro antes de que se vaya en gastos.": "If you reach payday with money to spare, move it to your savings before it gets spent.",
   "Registra tu ingreso para armar tu plan.": "Log your income to build your plan.",
   "Ya apartaste {0} para tu ahorro este periodo. Te quedan {1} para gastos libres.": "You already set aside {0} for savings this period. You have {1} left for free spending.",
+  // Obligaciones del periodo por fecha real
+  "Sin fecha de pago: no suma en tus obligaciones": "No payment date: it doesn't count in your obligations",
+  "Se paga el {0} · suma en este periodo": "Due on {0} · counts in this period",
+  "Se paga el {0} · sumará cuando llegue su periodo": "Due on {0} · it will count when its period comes",
+  "Suma todo lo que vence en este periodo, lo vencido sin pagar y los préstamos de Social cuya fecha de pago llega.": "Adds up everything due in this period, anything overdue and unpaid, and Social loans whose payment date arrives.",
+  "Préstamo en Social": "Social loan",
+  "Quincenal · {0} cuotas de {1} en este periodo": "Half-monthly · {0} payments of {1} in this period",
+  "Quincenal · cuota de {0}": "Half-monthly · {0} per payment",
   // Historial por semanas
   "Sin movimientos en la semana {0}.": "No activity in week {0}.",
   "Sin movimientos en el periodo {0}.": "No activity in period {0}.",
