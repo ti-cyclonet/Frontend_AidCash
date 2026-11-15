@@ -1,28 +1,29 @@
 import * as THREE from "three"
-import type { AspectoCerca } from "./especies"
+import { estiloCerca } from "./accesorios3d"
 import type { Brizna } from "./isla"
 import { Hgt, HILL_XZ } from "./terreno"
 import { backOut, clamp } from "./utilidades"
 
 /**
- * Cerca del fondo de emergencia: 40 tablitas alrededor de la cama del árbol.
- * El % del fondo decide cuántas están levantadas. Se arma desde el lado opuesto
+ * Cerca del fondo de emergencia: 40 puestos alrededor de la cama del árbol.
+ * El % del fondo decide cuántos están levantados. Se arma desde el lado opuesto
  * al hormiguero, así que el hueco que mira al hormiguero es lo último que se
  * cierra: mientras no esté completa, las hormigas siguen entrando por ahí.
+ *
+ * Cada estilo de la tienda (tablitas, troncos, bambú, púas, piedra, seto, reja,
+ * dorada) cambia la pieza de cada puesto, los travesaños y cada cuántos puestos
+ * va un poste (accesorios3d.ts → estiloCerca).
  */
 export const RADIO_CERCA = 1.72
-const N = 40
+const N = 40, MAX_RIELES = 3
 
 export function crearCerca(world: THREE.Group, bd: Brizna[], chispas: (x: number, y: number, z: number, n: number) => void) {
-  const picketGeo = (() => {
-    const s = new THREE.Shape(), w = 0.045, h = 0.44
-    s.moveTo(-w, 0); s.lineTo(w, 0); s.lineTo(w, h - 0.05); s.lineTo(0, h); s.lineTo(-w, h - 0.05); s.closePath()
-    const g = new THREE.ExtrudeGeometry(s, { depth: 0.028, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 1 }); g.translate(0, 0, -0.014); return g
-  })()
-  const mat = new THREE.MeshStandardMaterial({ color: 0xf1e4c8, roughness: 0.8 })
-  const pickets = new THREE.InstancedMesh(picketGeo, mat, N), rails = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.035, 0.022), mat, N * 2)
+  const inicial = estiloCerca("blanca")
+  const pickets = new THREE.InstancedMesh(inicial.poste.geo, inicial.poste.mat, N)
+  const rails = new THREE.InstancedMesh(inicial.riel!.geo, inicial.riel!.mat, N * MAX_RIELES)
   pickets.castShadow = true; pickets.receiveShadow = true; rails.castShadow = true
   world.add(pickets); world.add(rails)
+  let estilo = inicial
 
   const aHill = Math.atan2(HILL_XZ[1], HILL_XZ[0])
   const tablas = Array.from({ length: N }, (_, k) => {
@@ -46,7 +47,7 @@ export function crearCerca(world: THREE.Group, bd: Brizna[], chispas: (x: number
     sucio = true
     return n === N && antes < N
   }
-  /** Sin animación: cada tabla queda directamente arriba o abajo (al cargar). */
+  /** Sin animación: cada puesto queda directamente arriba o abajo (al cargar). */
   function fijar() { for (const p of tablas) p.s = p.on ? 1 : 0; sucio = true }
 
   function tick(dt: number, conChispas: boolean) {
@@ -60,12 +61,18 @@ export function crearCerca(world: THREE.Group, bd: Brizna[], chispas: (x: number
     }
     if (!sucio) return
     sucio = false
+    const alturas = estilo.riel ? estilo.alturasRiel : []
     for (let i = 0; i < N; i++) {
       const p = tablas[i], s = p.s > 0 ? backOut(p.s) : 0
-      dummy.position.set(p.x, p.y - 0.02, p.z); dummy.rotation.set(0, -p.a + Math.PI / 2, 0); dummy.scale.set(1, Math.max(0.0001, s), 1); dummy.updateMatrix(); pickets.setMatrixAt(i, dummy.matrix)
+      /* en cercas de alambre o troncos el poste va solo cada n puestos; el resto lo cubren los travesaños */
+      const conPoste = i % estilo.cadaN === 0
+      dummy.position.set(p.x, p.y - 0.02, p.z); dummy.rotation.set(0, -p.a + Math.PI / 2, 0); dummy.scale.set(1, conPoste ? Math.max(0.0001, s) : 0.0001, 1); dummy.updateMatrix(); pickets.setMatrixAt(i, dummy.matrix)
       const q = tablas[(i + 1) % N], ambas = Math.min(p.s, q.s), mx = (p.x + q.x) / 2, mz = (p.z + q.z) / 2, len = Math.hypot(q.x - p.x, q.z - p.z), ya = -Math.atan2(q.z - p.z, q.x - p.x)
-      for (let r = 0; r < 2; r++) {
-        dummy.position.set(mx, (p.y + q.y) / 2 + [0.13, 0.3][r] * Math.max(0.0001, ambas), mz); dummy.rotation.set(0, ya, 0); dummy.scale.set(ambas > 0.6 ? len : 0.0001, 1, 1); dummy.updateMatrix(); rails.setMatrixAt(i * 2 + r, dummy.matrix)
+      for (let r = 0; r < MAX_RIELES; r++) {
+        const h = alturas[r]
+        dummy.position.set(mx, (p.y + q.y) / 2 + (h ?? 0) * Math.max(0.0001, ambas), mz); dummy.rotation.set(0, ya, 0)
+        dummy.scale.set(h !== undefined && ambas > 0.6 ? len : 0.0001, h !== undefined ? 1 : 0.0001, h !== undefined ? 1 : 0.0001)
+        dummy.updateMatrix(); rails.setMatrixAt(i * MAX_RIELES + r, dummy.matrix)
       }
     }
     pickets.instanceMatrix.needsUpdate = true; rails.instanceMatrix.needsUpdate = true
@@ -74,6 +81,13 @@ export function crearCerca(world: THREE.Group, bd: Brizna[], chispas: (x: number
   return {
     ponerFondo, fijar, tick,
     completa: () => meta >= N,
-    ponerAspecto(a: AspectoCerca) { mat.color.set(a.c); mat.metalness = a.metal ?? 0; mat.roughness = a.metal ? 0.35 : 0.8 },
+    /** Cambia el estilo de la cerca (clave de la tienda). */
+    ponerAspecto(clave: string) {
+      estilo = estiloCerca(clave)
+      pickets.geometry = estilo.poste.geo; pickets.material = estilo.poste.mat
+      rails.visible = !!estilo.riel
+      if (estilo.riel) { rails.geometry = estilo.riel.geo; rails.material = estilo.riel.mat }
+      sucio = true
+    },
   }
 }

@@ -2,6 +2,7 @@ import * as THREE from "three"
 import { TEX } from "./isla"
 import { COLORES_HOJA, ESPECIES, type ClaveColor, type ClaveEspecie, type ColorElegido, type Especie } from "./especies"
 import { backOut, clamp, hash3, lerp, lienzo, piece, rng, smooth, type Rng } from "./utilidades"
+import { modeloFruto, type ModeloFruto } from "./accesorios3d"
 
 /** Contorno de la hoja en corazón (0,0 = base, 0,1 = punta). */
 const HN = 13
@@ -55,6 +56,10 @@ export function aplicarSequedad(mat: THREE.Material, uSeco: { value: number }, p
   mat.onBeforeCompile = sh => {
     previo?.(sh)
     sh.uniforms.uSeco = uSeco
+    /* una hoja vista por detrás usa la misma normal que por delante: antes three la
+       invertía (material de doble cara) y media copa se veía casi negra */
+    sh.fragmentShader = sh.fragmentShader.replace("#include <normal_fragment_begin>",
+      "#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif")
     sh.fragmentShader = "uniform float uSeco;\n" + sh.fragmentShader.replace("#include <color_fragment>",
       "#include <color_fragment>\nfloat lumSeca=dot(diffuseColor.rgb,vec3(0.299,0.587,0.114));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(lumSeca*1.2,lumSeca*0.78,lumSeca*0.4),uSeco);")
   }
@@ -79,7 +84,7 @@ function makeBranchGeo(len: number, rb: number, rt: number, bend: number, rad = 
 export const UNIT = HN * 2 * 3
 /** Vértices de un racimo en arreglos tipados (sin objetos temporales: hay ~7.800 hojas). */
 interface Acum { pos: Float32Array; nrm: Float32Array; uv: Float32Array; col: Float32Array; fl: Float32Array; v: number }
-const LEAF_TINTS = [[0.66, 0.69, 0.64], [0.82, 0.85, 0.8], [0.98, 1.0, 0.95], [1.0, 0.98, 0.9], [0.75, 0.78, 0.73]]
+const LEAF_TINTS = [[0.76, 0.79, 0.74], [0.86, 0.89, 0.84], [0.98, 1.0, 0.95], [1.0, 0.98, 0.9], [0.8, 0.83, 0.78]]
 /* contorno de medio corazón como triángulos (centro, p0, p1), ya en el orden de las dos mitades */
 const TRIS: number[] = []
 for (let i = 0; i < HN; i++) { const p0 = LEAF_LP[i], p1 = LEAF_LP[i + 1]; TRIS.push(0, 0.38, p0[0], p0[1], p1[0], p1[1], 0, 0.38, -p1[0], p1[1], -p0[0], p0[1]) }
@@ -110,7 +115,8 @@ function pushHeart(A: Acum, bx: number, by: number, bz: number, ax: number, ay: 
       const k = invertir && j ? 3 - j : j
       const px = QP[k * 3], py = QP[k * 3 + 1], pz = QP[k * 3 + 2], x = TRIS[t + k * 2], y = TRIS[t + k * 2 + 1]
       const ol = Math.sqrt(px * px + py * py + pz * pz) || 1
-      let mx = n2x * 0.38 + px / ol * 0.62, my = n2y * 0.38 + py / ol * 0.62, mz = n2z * 0.38 + pz / ol * 0.62
+      /* normal casi radial (hacia afuera del racimo): sombreado suave, sin hojas sueltas oscuras */
+      let mx = n2x * 0.22 + px / ol * 0.78, my = n2y * 0.22 + py / ol * 0.78 + 0.12, mz = n2z * 0.22 + pz / ol * 0.78
       const ml = Math.sqrt(mx * mx + my * my + mz * mz) || 1; mx /= ml; my /= ml; mz /= ml
       const v = A.v++, c = ao * (0.9 + 0.1 * Math.min(1, y))
       A.pos[v * 3] = px; A.pos[v * 3 + 1] = py; A.pos[v * 3 + 2] = pz
@@ -126,8 +132,10 @@ function makeCluster(seed: number, N: number, L0: number, spread: number, W = 1)
   const A: Acum = { pos: new Float32Array(nv * 3), nrm: new Float32Array(nv * 3), uv: new Float32Array(nv * 2), col: new Float32Array(nv * 3), fl: new Float32Array(nv * 2), v: 0 }
   for (let i = 0; i < N; i++) {
     const th = i * 2.399 + r() * 0.8, el = 0.05 + r() * 1.1, ce = Math.cos(el)
-    const dx = ce * Math.cos(th), dy = Math.sin(el), dz = ce * Math.sin(th), pl = (0.2 + 0.26 * r()) * spread
-    const ay = dy - (0.3 + 0.9 * r())
+    /* base de la hoja cerca del centro del racimo (antes algunas quedaban sueltas, "flotando") */
+    const dx = ce * Math.cos(th), dy = Math.sin(el), dz = ce * Math.sin(th), pl = (0.14 + 0.26 * r()) * spread
+    /* apuntan hacia afuera y algo hacia abajo, sin colgar como marchitas */
+    const ay = dy - (0.12 + 0.55 * r())
     const L = L0 * (0.82 + 0.36 * r()), ao = 0.72 + 0.28 * Math.min(1, (pl + L * 0.5) / 0.85)
     let tint = LEAF_TINTS[Math.floor(r() * LEAF_TINTS.length)]; if (dy < 0.05) tint = [tint[0] * 0.8, tint[1] * 0.82, tint[2] * 0.8]
     pushHeart(A, dx * pl, dy * pl, dz * pl, dx, ay, dz, (r() - .5) * 1.2, L, 0.04 + 0.1 * r(), 0.05 + 0.1 * r(), ao * (0.93 + 0.12 * r()), r() * 6.28, tint, W)
@@ -160,8 +168,39 @@ export function crearPiezasFruta() {
   const fruitLeafGeo = new THREE.SphereGeometry(1, 8, 5); fruitLeafGeo.scale(0.05, 0.008, 0.025); fruitLeafGeo.translate(0.04, 0.19, 0)
   const fruitStemMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1e, roughness: .9 }), fruitLeafMat = new THREE.MeshStandardMaterial({ color: 0x4f8a34, roughness: .8 })
   const fruitMat = new THREE.MeshStandardMaterial({ color: 0xd23a22, roughness: .38, emissive: 0x2a0602 })
-  const decorar = (m: THREE.Mesh) => { m.add(new THREE.Mesh(fruitStemGeo, fruitStemMat)); const l = new THREE.Mesh(fruitLeafGeo, fruitLeafMat); l.rotation.z = 0.3; m.add(l); return m }
-  return { fruitGeo, fruitMat, decorar }
+  const doradoMat = new THREE.MeshStandardMaterial({ color: 0xf6c544, roughness: .28, metalness: .35, emissive: 0x7a4a00 })
+
+  /* Forma de los frutos (tienda → Frutos): la manzana de la especie o un modelo
+     (bolas de Navidad, dulces, estrellas, balones, llantas, patillas, calabazas,
+     billetes, monedas). Todos los frutos que existen (en el árbol, los que caen y
+     los del minijuego) quedan registrados y cambian juntos. */
+  let modelo: ModeloFruto | null = null
+  const vivos = new Set<THREE.Mesh>()
+  function aplicar(m: THREE.Mesh) {
+    const i = m.userData.iFruto as number, dorado = !!m.userData.dorado
+    if (modelo) {
+      m.geometry = modelo.geo
+      m.material = dorado ? doradoMat : modelo.mats(i)
+    } else { m.geometry = fruitGeo; m.material = dorado ? doradoMat : fruitMat }
+    const tallo = !modelo || modelo.tallo
+    for (const h of m.children) h.visible = tallo
+  }
+  let contador = 0
+  const decorar = (m: THREE.Mesh, dorado = false) => {
+    m.add(new THREE.Mesh(fruitStemGeo, fruitStemMat)); const l = new THREE.Mesh(fruitLeafGeo, fruitLeafMat); l.rotation.z = 0.3; m.add(l)
+    m.userData.iFruto = contador++; m.userData.dorado = dorado
+    /* giro al azar para que los frutos con cara (billetes, monedas, estrellas) no queden todos iguales */
+    m.rotation.y = (m.userData.iFruto * 2.399) % 6.283 - 0.6
+    vivos.add(m); aplicar(m); return m
+  }
+  /** Nuevo fruto (manzana o el modelo puesto). */
+  const nuevo = (dorado = false) => decorar(new THREE.Mesh(fruitGeo, fruitMat), dorado)
+  /** Pone la forma de los frutos (clave de la tienda; "auto" = la manzana de la especie). */
+  function ponerModelo(clave: string) {
+    modelo = clave === "auto" ? null : modeloFruto(clave)
+    for (const m of [...vivos]) { if (!m.parent) { vivos.delete(m); continue } aplicar(m) }
+  }
+  return { fruitGeo, fruitMat, decorar, nuevo, ponerModelo, doradoMat }
 }
 export type PiezasFruta = ReturnType<typeof crearPiezasFruta>
 
@@ -217,13 +256,13 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
     return lista[seed % VARIANTES]
   }
 
-  function addCluster(pivot: THREE.Group, b: Rama, y: number, xOff: number, r: number, mid: boolean, N: number) {
+  function addCluster(pivot: THREE.Group, b: Rama, y: number, xOff: number, r: number, mid: boolean, N: number, azar: Rng = TR) {
     if (N <= 0) return null
     const g = new THREE.Group(); g.position.set(xOff, y, 0)
     const mesh = new THREE.Mesh(racimo(N), leafMat)
-    mesh.scale.set(r, r * S.flat, r); mesh.rotation.y = TR() * 6.28; mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.arbol = true
+    mesh.scale.set(r, r * S.flat, r); mesh.rotation.y = azar() * 6.28; mesh.castShadow = true; mesh.receiveShadow = true; mesh.userData.arbol = true
     g.add(mesh); pivot.add(g); hitMeshes.push(mesh)
-    const L: Racimo = { g, mesh, branch: b, mid, r, s: 0, seed: TR() * 6.28, N, n: N }; leaves.push(L); return L
+    const L: Racimo = { g, mesh, branch: b, mid, r, s: 0, seed: azar() * 6.28, N, n: N }; leaves.push(L); return L
   }
   function addBranch(parent: THREE.Object3D, parentB: Rama | null, depth: number, tilt: number, yaw: number, tFrac: number, leader: boolean, lenK = 1): Rama {
     const pivot = new THREE.Group(), len = S.len[depth] * (0.88 + TR() * 0.24) * (leader ? 1.06 : 1) * lenK, bend = (TR() - .5) * len * (depth === 0 ? S.bend0 : 0.3)
@@ -259,7 +298,7 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
     if (!tips.length) tips = leaves.filter(l => l.branch.depth >= 1)
     const pool = leaves.filter(l => l.branch.depth >= 2)
     for (let i = 0; i < (S.nFrutos ?? 26) && tips.length; i++) {
-      const L = tips[Math.floor(TR() * tips.length)], m = fruta.decorar(new THREE.Mesh(fruta.fruitGeo, fruta.fruitMat)); m.castShadow = true
+      const L = tips[Math.floor(TR() * tips.length)], m = fruta.nuevo(); m.castShadow = true
       m.position.set(TR() - .5, -0.55 - TR() * .4, TR() - .5).normalize().multiplyScalar(L.r * 0.8); m.scale.setScalar(0.0001); L.g.add(m); apples.push({ mesh: m, L, grow: 1 })
     }
     const flor = (L: Racimo, mat: THREE.Material, d: THREE.Vector3, dist: number, giro: number) => {
@@ -294,6 +333,16 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
     if (hijas.length >= 2) root.rotation.y = 0.28 + Math.PI / 2 - hijas[hijas.length - 2].pivot.rotation.y
     /* una rama más hacia la derecha de la vista, para equilibrar la copa */
     if (S.ramaExtra) { const b0 = branches[0], yaw = Math.PI / 2 + 0.28 - root.rotation.y + 0.15; b0.kids.push(addBranch(b0.pivot, b0, 1, 0.98, yaw, 0.74, false)) }
+    /* racimo a media rama en las ramas principales: en los niveles 3 y 4 ya no se ven
+       ramas largas peladas con una bola en la punta. Va con su propio azar y al final,
+       así la forma de las ramas, los frutos y las flores no cambian. */
+    if (!S.frond && S.midFrom > 1) {
+      const rj = rng(S.semilla + 977)
+      for (const b of branches.filter(x => x.depth === 1)) {
+        const f = 0.5 + rj() * 0.18
+        addCluster(b.pivot, b, b.len * f, b.bend * f * f, S.leafr[1] * 0.72, true, Math.round(S.mid * 0.8), rj)
+      }
+    }
     flareY = k === "bonsai" ? 1.25 : 1
     /* copas planas (bonsái, pino): el racimo queda horizontal aunque la rama esté inclinada */
     if (S.flat < 0.75) {
@@ -344,7 +393,8 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
   function applyGrowth(G: number, seco: number) {
     thick = piece(G, GX, [.13, .3, .58, .82, .95, 1.05])
     barkMat.color.copy(barkTint).lerp(barkWhite, smooth(G / 1.8))
-    const D = piece(G, GX, [.43, .47, .55, .8, 1, 1]) * (1 - 0.45 * seco)
+    /* densidad de cada racimo: antes en los niveles 2–4 se dibujaba menos de la mitad y la copa se veía deshilachada */
+    const D = piece(G, GX, [.6, .68, .76, .88, 1, 1]) * (1 - 0.45 * seco)
     for (const b of branches) {
       b.vis = b.depth === 0 ? (0.3 + 0.7 * smooth(G / 4.6)) : (b.early ? Math.max(0.95 * smooth((G + 0.3) / 1.1), smooth((G - BSTART[1]) / 1.8)) : smooth((G - BSTART[b.depth]) / 1.8))
       b.pivot.scale.setScalar(Math.max(b.vis, 0.0001)); b.pivot.visible = b.vis > 0.002; b.mesh.scale.set(thick, 1, thick); if (b.knob) b.knob.scale.setScalar(b.knob.userData.r * thick)
@@ -353,8 +403,10 @@ export function crearArbol(world: THREE.Group, R: Rng, fruta: PiezasFruta) {
     flare.scale.set(thick, flareY, thick)
     for (const L of leaves) {
       const b = L.branch; let s = backOut((G - (LSTART[b.depth] + (L.mid ? 0.5 : 0))) / 1.4)
-      if (b.early && !L.mid) s = Math.max(s, backOut((G + 0.1) / 1.0) * lerp(1.7, 1, smooth((G - 1.5) / 2.5)))
-      if (!L.mid && b.kids.length) s *= 1 - (b.depth === 0 ? 0.97 : 0.9) * b.kids[0].vis
+      if (b.early && !L.mid) s = Math.max(s, backOut((G + 0.1) / 1.0) * lerp(1.35, 1, smooth((G - 1.5) / 2.5)))
+      /* cuando le salen ramas hijas, el racimo de la punta se achica pero no desaparece: así
+         quedan hojas en las bifurcaciones y las ramas no se ven peladas (niveles 3 y 4) */
+      if (!L.mid && b.kids.length) s *= 1 - (b.depth === 0 ? 0.97 : 0.55) * b.kids[0].vis
       L.s = s; const n = Math.max(1, Math.round(L.N * D)); if (n !== L.n) { L.n = n; L.mesh.geometry.setDrawRange(0, n * UNIT) }
     }
     /* en el Kiri el florecido completo llega justo al empezar el nivel 6 (G 8.4) */

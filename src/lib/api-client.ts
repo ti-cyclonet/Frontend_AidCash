@@ -853,10 +853,11 @@ export interface EstadoTienda {
   equipado: EquipadoTienda
   /** Artículo del día con descuento (el servidor cobra este precio) */
   oferta: { tipo: TipoCosmetico; clave: string; precio: number; precioNormal: number; fecha: string } | null
-  /** Monedas que el plan regala cada mes; regaloRecibido > 0 si se abonaron en esta consulta */
-  plan: { tier: string; monedasMes: number; regaloRecibido: number; porPlan: Record<string, number> }
+  /** Bono de bienvenida por pasarse a un plan pago (una sola vez por plan); regaloRecibido > 0 si se abonó en esta consulta */
+  plan: { tier: string; bono: number; regaloRecibido: number; bonoPlan: Record<string, number> }
   catalogo: Record<TipoCosmetico, ArticuloTienda[]>
-  cofres: { id: string; tipo: 'comun' | 'raro' | 'legendario'; origen: string }[]
+  /** `de`: nombre de quien lo regaló (cofres regalados por un amigo de Social) */
+  cofres: { id: string; tipo: 'comun' | 'raro' | 'legendario'; origen: string; de: string | null }[]
   cofresInfo: { tipo: 'comun' | 'raro' | 'legendario'; monedasMin: number; monedasMax: number; probAspecto: number; probColor: number; precio: number; origen: string }[]
   /** `producto`: ID en App Store / Google Play (en la app nativa se compran con la tienda) */
   paquetes: { id: string; producto: string; monedas: number; precioCop: number; bono: number; disponible: boolean }[]
@@ -876,7 +877,11 @@ export const gamificationApi = {
     return api<EstadoTienda>('/gamification/jardin/tienda')
   },
   async comprar(tipo: string, clave: string) {
-    return api<{ tienda: EstadoTienda; cofre?: { id: string; tipo: 'legendario' } }>('/gamification/jardin/tienda/comprar', { method: 'POST', body: { tipo, clave } })
+    return api<{ tienda: EstadoTienda; cofre?: { id: string; tipo: 'comun' | 'raro' | 'legendario' } }>('/gamification/jardin/tienda/comprar', { method: 'POST', body: { tipo, clave } })
+  },
+  /** Regalar un cofre a un amigo de Social (se cobra al que regala) */
+  async regalarCofre(amigoId: string, tipo: 'comun' | 'raro' | 'legendario') {
+    return api<{ tienda: EstadoTienda; regalo: { id: string; tipo: string; para: string } }>('/gamification/jardin/tienda/regalar', { method: 'POST', body: { amigoId, tipo } })
   },
   async equipar(tipo: string, clave: string) {
     return api<{ equipado: EstadoTienda['equipado'] }>('/gamification/jardin/tienda/equipar', { method: 'POST', body: { tipo, clave } })

@@ -4,10 +4,13 @@ import { glowTex, lienzo, rng } from "./utilidades"
 
 /** Renderer, cámara, cielo, luces, océano y nubes lejanas. */
 export function crearEscena(canvas: HTMLCanvasElement, mobile: boolean) {
-  /* en pantallas densas de celular el antialias casi no se nota y cuesta mucho: se apaga */
+  /* Calidad igual en celular y escritorio: con antialias y hasta 2x de resolución.
+     Antes en celular se apagaba el antialias (bordes serruchados en hojas y
+     ramas) y la resolución podía bajar a 0,9x (se veía borroso). Si el celular
+     no da abasto, la resolución adaptable de index.ts baja un poco, pero no de 1,25x. */
   const dpr = window.devicePixelRatio || 1
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !mobile || dpr < 1.5, powerPreference: "high-performance" })
-  renderer.setPixelRatio(Math.min(dpr, mobile ? 1.75 : 2))
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" })
+  renderer.setPixelRatio(Math.min(dpr, 2))
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.8
 
@@ -39,7 +42,7 @@ export function crearEscena(canvas: HTMLCanvasElement, mobile: boolean) {
   const hemi = new THREE.HemisphereLight(0xdcecf2, 0x56482f, 0.62); scene.add(hemi)
   const sun = new THREE.DirectionalLight(0xfff0d2, 1.05)
   sun.position.copy(sunDir).multiplyScalar(22); sun.castShadow = true
-  sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048)
+  sun.shadow.mapSize.set(2048, 2048)
   const sc = sun.shadow.camera; sc.left = -9; sc.right = 9; sc.top = 11; sc.bottom = -5; sc.near = 4; sc.far = 50
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.035
   scene.add(sun); scene.add(sun.target)

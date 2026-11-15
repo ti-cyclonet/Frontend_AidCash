@@ -113,46 +113,9 @@ export interface OpcionesHormigas {
 export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flowerSp: THREE.InstancedMesh, op: OpcionesHormigas) {
   const { bd, flw, stems, mound } = isla
   const hillG = new THREE.Group(); hillG.position.copy(HILL); hillG.scale.setScalar(HS); world.add(hillG)
-  /* para cambiar de aspecto: cuánto mezcla cada vértice entre los dos colores, y los materiales */
-  const tonos: number[] = []
-  let hillGeo!: THREE.LatheGeometry, lipMat!: THREE.MeshStandardMaterial, pebMat!: THREE.MeshStandardMaterial
+  /* montículo, boca, piedritas y los estilos de la tienda (casita hongo, mini banco) */
+  const monticulo = construirMonticulo(hillG)
   {
-    /* montículo arenoso con bultos */
-    const prof = [[0.92, 0], [0.84, 0.05], [0.7, 0.15], [0.55, 0.29], [0.4, 0.43], [0.27, 0.54], [0.14, 0.61], [0.0, 0.635]].map(p => new THREE.Vector2(p[0], p[1]))
-    const g = new THREE.LatheGeometry(prof, 40); const p = g.attributes.position as THREE.BufferAttribute, cols: number[] = []
-    const ca = new THREE.Color(0xc98d4f), cb = new THREE.Color(0x9a6233), cc = new THREE.Color()
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = Math.hypot(x, z)
-      if (r > 0.01 && y > 0.01) { const k = 1 + (vnoise(x * 4.2 + 3, z * 4.2 + y * 3) - 0.5) * 0.22; p.setX(i, x * k); p.setZ(i, z * k); p.setY(i, y * (1 + (vnoise(z * 5, x * 5) - 0.5) * 0.12)) }
-      const tt = clamp(0.25 + (hash3(x * 9, y * 9, z * 9) - .5) * 0.6 + (0.4 - y) * 0.3); tonos.push(tt); cc.copy(ca).lerp(cb, tt); cols.push(cc.r, cc.g, cc.b)
-    }
-    g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3)); g.computeVertexNormals()
-    const hill = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })); hillGeo = g
-    hill.castShadow = true; hill.receiveShadow = true; hillG.add(hill)
-    /* boca: túnel oscuro + labio */
-    const a = Math.atan2(HOLE_DIR.x, HOLE_DIR.z)
-    const mouth = new THREE.Group(); mouth.rotation.y = a; hillG.add(mouth)
-    const tunMat = new THREE.MeshBasicMaterial({ color: 0x140b05, polygonOffset: true, polygonOffsetFactor: -2 })
-    const tun = new THREE.Mesh(new THREE.CircleGeometry(1, 24), tunMat)
-    tun.scale.set(0.19, 0.16, 1); tun.position.set(0, 0.165, 0.7); tun.rotation.x = -0.5; tun.renderOrder = 3; mouth.add(tun)
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(1, 0.22, 8, 24, Math.PI * 1.15), lipMat = new THREE.MeshStandardMaterial({ color: 0xb67a42, roughness: 1 }))
-    lip.scale.set(0.21, 0.19, 0.2); lip.position.set(0, 0.165, 0.675); lip.rotation.set(-0.55, 0, -0.07 * Math.PI); lip.castShadow = true; mouth.add(lip)
-    /* piedritas y granos */
-    const pb = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7), pebMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), 70)
-    const d = new THREE.Object3D(), rr = rng(919), holeAng = Math.atan2(HOLE_DIR.z, HOLE_DIR.x)
-    for (let i = 0; i < 70; i++) {
-      const ang = rr() * 6.283, onHill = i < 42, rad = onHill ? 0.15 + rr() * 0.7 : 0.85 + rr() * 0.55
-      const y = onHill ? Math.max(0.02, 0.63 * (1 - Math.pow(rad / 0.92, 1.3))) : 0.015
-      d.position.set(Math.cos(ang) * rad, y, Math.sin(ang) * rad); d.rotation.set(rr() * 3, rr() * 3, rr() * 3); const s = onHill ? 0.025 + rr() * 0.035 : 0.015 + rr() * 0.03; d.scale.set(s, s * 0.75, s)
-      if (Math.abs(Math.atan2(Math.sin(ang - holeAng), Math.cos(ang - holeAng))) < 0.4 && onHill && rad < 0.75) d.scale.setScalar(0.0001)
-      d.updateMatrix(); pb.setMatrixAt(i, d.matrix); pb.setColorAt(i, new THREE.Color().setHSL(0.07 + rr() * 0.03, 0.35 + rr() * 0.2, 0.38 + rr() * 0.25))
-    }
-    pb.instanceColor!.needsUpdate = true; pb.castShadow = true; hillG.add(pb)
-    /* mancha de tierra suelta alrededor */
-    const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d")!, gr = x.createRadialGradient(64, 64, 10, 64, 64, 64)
-    gr.addColorStop(0, "rgba(150,100,55,.95)"); gr.addColorStop(.6, "rgba(150,100,55,.55)"); gr.addColorStop(1, "rgba(150,100,55,0)"); x.fillStyle = gr; x.fillRect(0, 0, 128, 128)
-    const sp = new THREE.Mesh(new THREE.CircleGeometry(1.45, 32), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, roughness: 1 }))
-    sp.rotation.x = -Math.PI / 2; sp.position.y = 0.012; sp.receiveShadow = true; hillG.add(sp)
     /* despejar pasto y flores encima del hormiguero */
     const near = (px: number, pz: number, r: number) => Math.hypot(px - HILL.x, pz - HILL.z) < r
     for (let i = 0; i < bd.length; i++) if (near(bd[i].x, bd[i].z, 1.0 * HS)) bd[i].h = 0.0001
@@ -371,26 +334,160 @@ export function crearHormigas(world: THREE.Group, isla: Isla, arbol: Arbol, flow
   }
   function tocarHormiguero(ray: THREE.Raycaster) { if (!ray.intersectObjects(hillHit, false).length) return false; strollAnt(); return true }
 
-  /* "Casita hongo": sombrero de hongo rojo con puntos sobre el montículo */
-  const sombrero = (() => {
-    const g = new THREE.Group(), red = new THREE.MeshStandardMaterial({ color: 0xd8322c, roughness: 0.55 }), wh = new THREE.MeshStandardMaterial({ color: 0xfff7ea, roughness: 0.7 })
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 14, 0, 6.283, 0, Math.PI / 2), red); cap.scale.set(1, 0.62, 1); cap.castShadow = true; g.add(cap)
-    const under = new THREE.Mesh(new THREE.CircleGeometry(0.5, 24), new THREE.MeshStandardMaterial({ color: 0xf3e2c4, roughness: 0.9, side: THREE.DoubleSide })); under.rotation.x = Math.PI / 2; g.add(under)
-    const dotGeo = new THREE.SphereGeometry(0.055, 10, 6)
-    for (let i = 0; i < 9; i++) {
-      const a = i * 2.4, r = i ? 0.18 + 0.17 * (i % 3) / 2 : 0, dot = new THREE.Mesh(dotGeo, wh)
-      dot.position.set(Math.cos(a) * r, 0.31 * Math.sqrt(Math.max(0, 1 - (r / 0.5) * (r / 0.5))), Math.sin(a) * r); dot.scale.set(1, 0.45, 1); g.add(dot)
-    }
-    g.position.y = 0.5; g.visible = false; hillG.add(g); return g
-  })()
-  /** Aspecto del hormiguero: recolorea el montículo y, en "hongo", le pone el sombrero. */
-  function ponerAspecto(s: AspectoHormiguero) {
-    const ca = new THREE.Color(s.a), cb = new THREE.Color(s.b), cc = new THREE.Color(), col = hillGeo.attributes.color as THREE.BufferAttribute
-    for (let i = 0; i < tonos.length; i++) { cc.copy(ca).lerp(cb, tonos[i]); col.setXYZ(i, cc.r, cc.g, cc.b) }
-    col.needsUpdate = true
-    lipMat.color.set(s.lip); pebMat.color.set(s.peb ?? 0xffffff); sombrero.visible = !!s.hongo
-  }
+  /** Aspecto del hormiguero (tienda): recolorea el montículo y pone la casita hongo o el mini banco. */
+  const ponerAspecto = (asp: AspectoHormiguero) => monticulo.ponerAspecto(asp)
 
   return { ponerAspecto, gastoHormiga, tick(dt: number) { tickAnts(dt); tickStrolls(dt) }, tocarHormiga, tocarHormiguero, groundY, hayHormigas: () => ants.length > 0 || antQueue.length > 0 }
 }
 
+/**
+ * El hormiguero sin la isla: montículo con bultos, boca, piedritas y mancha de
+ * tierra, más los estilos de la tienda que cambian la forma:
+ *  - "hongo": casita de hongo (sombrero rojo con puntos, puerta de madera,
+ *    ventanas con luz y chimenea).
+ *  - "banco": mini banco de mármol con columnas, letrero, frontón con moneda,
+ *    escalinata y pilas de monedas (las hormigas entran por la puerta del banco).
+ * Lo usa la isla y también la vista previa de la tienda.
+ */
+export function construirMonticulo(hillG: THREE.Group) {
+  /* para cambiar de aspecto: cuánto mezcla cada vértice entre los dos colores, y los materiales */
+  const tonos: number[] = []
+  let hillGeo!: THREE.LatheGeometry, lipMat!: THREE.MeshStandardMaterial, pebMat!: THREE.MeshStandardMaterial, mouth!: THREE.Group
+    /* montículo arenoso con bultos */
+    const prof = [[0.92, 0], [0.84, 0.05], [0.7, 0.15], [0.55, 0.29], [0.4, 0.43], [0.27, 0.54], [0.14, 0.61], [0.0, 0.635]].map(p => new THREE.Vector2(p[0], p[1]))
+    const g = new THREE.LatheGeometry(prof, 40); const p = g.attributes.position as THREE.BufferAttribute, cols: number[] = []
+    const ca = new THREE.Color(0xc98d4f), cb = new THREE.Color(0x9a6233), cc = new THREE.Color()
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), r = Math.hypot(x, z)
+      if (r > 0.01 && y > 0.01) { const k = 1 + (vnoise(x * 4.2 + 3, z * 4.2 + y * 3) - 0.5) * 0.22; p.setX(i, x * k); p.setZ(i, z * k); p.setY(i, y * (1 + (vnoise(z * 5, x * 5) - 0.5) * 0.12)) }
+      const tt = clamp(0.25 + (hash3(x * 9, y * 9, z * 9) - .5) * 0.6 + (0.4 - y) * 0.3); tonos.push(tt); cc.copy(ca).lerp(cb, tt); cols.push(cc.r, cc.g, cc.b)
+    }
+    g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3)); g.computeVertexNormals()
+    const hill = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })); hillGeo = g
+    hill.castShadow = true; hill.receiveShadow = true; hillG.add(hill)
+    /* boca: túnel oscuro + labio */
+    const a = Math.atan2(HOLE_DIR.x, HOLE_DIR.z)
+    mouth = new THREE.Group(); mouth.rotation.y = a; hillG.add(mouth)
+    const tunMat = new THREE.MeshBasicMaterial({ color: 0x140b05, polygonOffset: true, polygonOffsetFactor: -2 })
+    const tun = new THREE.Mesh(new THREE.CircleGeometry(1, 24), tunMat)
+    tun.scale.set(0.19, 0.16, 1); tun.position.set(0, 0.165, 0.7); tun.rotation.x = -0.5; tun.renderOrder = 3; mouth.add(tun)
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(1, 0.22, 8, 24, Math.PI * 1.15), lipMat = new THREE.MeshStandardMaterial({ color: 0xb67a42, roughness: 1 }))
+    lip.scale.set(0.21, 0.19, 0.2); lip.position.set(0, 0.165, 0.675); lip.rotation.set(-0.55, 0, -0.07 * Math.PI); lip.castShadow = true; mouth.add(lip)
+    /* piedritas y granos */
+    const pb = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7), pebMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), 70)
+    const d = new THREE.Object3D(), rr = rng(919), holeAng = Math.atan2(HOLE_DIR.z, HOLE_DIR.x)
+    for (let i = 0; i < 70; i++) {
+      const ang = rr() * 6.283, onHill = i < 42, rad = onHill ? 0.15 + rr() * 0.7 : 0.85 + rr() * 0.55
+      const y = onHill ? Math.max(0.02, 0.63 * (1 - Math.pow(rad / 0.92, 1.3))) : 0.015
+      d.position.set(Math.cos(ang) * rad, y, Math.sin(ang) * rad); d.rotation.set(rr() * 3, rr() * 3, rr() * 3); const s = onHill ? 0.025 + rr() * 0.035 : 0.015 + rr() * 0.03; d.scale.set(s, s * 0.75, s)
+      if (Math.abs(Math.atan2(Math.sin(ang - holeAng), Math.cos(ang - holeAng))) < 0.4 && onHill && rad < 0.75) d.scale.setScalar(0.0001)
+      d.updateMatrix(); pb.setMatrixAt(i, d.matrix); pb.setColorAt(i, new THREE.Color().setHSL(0.07 + rr() * 0.03, 0.35 + rr() * 0.2, 0.38 + rr() * 0.25))
+    }
+    pb.instanceColor!.needsUpdate = true; pb.castShadow = true; hillG.add(pb)
+    /* mancha de tierra suelta alrededor */
+    const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d")!, gr = x.createRadialGradient(64, 64, 10, 64, 64, 64)
+    gr.addColorStop(0, "rgba(150,100,55,.95)"); gr.addColorStop(.6, "rgba(150,100,55,.55)"); gr.addColorStop(1, "rgba(150,100,55,0)"); x.fillStyle = gr; x.fillRect(0, 0, 128, 128)
+    const sp = new THREE.Mesh(new THREE.CircleGeometry(1.45, 32), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, roughness: 1 }))
+    sp.rotation.x = -Math.PI / 2; sp.position.y = 0.012; sp.receiveShadow = true; hillG.add(sp)
+
+  const M = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, ...extra })
+  const pieza = (padre: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], x = 0, y = 0, z = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; padre.add(m); return m
+  }
+  const letrero = (txt: string, fondo: string, color: string, w = 256, h = 64) => {
+    const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d")!
+    g.fillStyle = fondo; g.fillRect(0, 0, w, h); g.fillStyle = color; g.font = `900 ${Math.round(h * 0.62)}px sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, w / 2, h / 2 + 2)
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t
+  }
+
+  /* ---------- casita hongo ---------- */
+  const hongo = new THREE.Group(); hongo.visible = false; hillG.add(hongo)
+  {
+    const rojo = M(0xd8322c, { roughness: 0.5 }), blanco = M(0xfff7ea, { roughness: 0.6 }), crema = M(0xf3e2c4, { roughness: 0.9, side: THREE.DoubleSide })
+    /* sombrero grande que sobresale, con el borde ondulado */
+    const capGeo = new THREE.SphereGeometry(0.66, 36, 16, 0, Math.PI * 2, 0, Math.PI / 2), cp = capGeo.attributes.position as THREE.BufferAttribute
+    for (let i = 0; i < cp.count; i++) { const x = cp.getX(i), z = cp.getZ(i), y = cp.getY(i), k = 1 + 0.035 * Math.sin(Math.atan2(z, x) * 7) * (1 - y / 0.66); cp.setXYZ(i, x * k, y, z * k) }
+    capGeo.computeVertexNormals()
+    const cap = pieza(hongo, capGeo, rojo, 0, 0.5, 0); cap.scale.set(1, 0.6, 1)
+    pieza(hongo, new THREE.CircleGeometry(0.65, 36).rotateX(Math.PI / 2), crema, 0, 0.5, 0)
+    const rr = rng(212)
+    for (let i = 0; i < 13; i++) {
+      const ang = i * 2.399 + rr() * 0.3, rad = i ? 0.16 + 0.42 * ((i % 4) / 4) + rr() * 0.06 : 0, sz = 0.045 + rr() * 0.035
+      const yy = 0.5 + 0.6 * 0.66 * Math.sqrt(Math.max(0, 1 - (rad / 0.66) ** 2)) - 0.005
+      const d = pieza(hongo, new THREE.SphereGeometry(sz, 10, 6), blanco, Math.cos(ang) * rad, yy, Math.sin(ang) * rad); d.scale.y = 0.38
+      d.lookAt(Math.cos(ang) * rad * 2, yy + 0.6, Math.sin(ang) * rad * 2)
+    }
+    /* chimenea de piedra con su sombrerito */
+    const piedraM = M(0x8f8a80, { roughness: 0.95, flatShading: true })
+    pieza(hongo, new THREE.CylinderGeometry(0.06, 0.07, 0.24, 8), piedraM, -0.2, 0.86, -0.18)
+    pieza(hongo, new THREE.CylinderGeometry(0.085, 0.085, 0.03, 8), piedraM, -0.2, 0.99, -0.18)
+    /* en la boca: puerta de madera entreabierta con perilla (el labio hace de marco) */
+    const madera = M(0x8a5a34, { roughness: 0.85 }), oro = M(0xe8c050, { metalness: 0.8, roughness: 0.3 })
+    const puerta = new THREE.Group(); puerta.position.set(0.19, 0.06, 0.74); puerta.rotation.y = -1.15; mouth.add(puerta)
+    const hoja = new THREE.Shape(); hoja.moveTo(0, 0); hoja.lineTo(0.2, 0); hoja.lineTo(0.2, 0.17); hoja.absarc(0.1, 0.17, 0.1, 0, Math.PI, false); hoja.lineTo(0, 0)
+    pieza(puerta, new THREE.ExtrudeGeometry(hoja, { depth: 0.025, bevelEnabled: false }), madera, -0.2, 0, 0)
+    for (const x of [-0.15, -0.1, -0.05]) pieza(puerta, new THREE.BoxGeometry(0.006, 0.24, 0.006), M(0x6a4024), x, 0.13, 0.027)
+    pieza(puerta, new THREE.SphereGeometry(0.014, 8, 6), oro, -0.035, 0.12, 0.035)
+    /* dos ventanas redondas con luz cálida */
+    const vidrio = M(0xffe39a, { emissive: 0xffb84a, emissiveIntensity: 0.55, roughness: 0.3 })
+    for (const lado of [-1, 1]) {
+      const ang = lado * 1.05, rad = 0.6, y = 0.27
+      const v = new THREE.Group(); v.position.set(Math.sin(ang) * rad, y, Math.cos(ang) * rad); v.rotation.set(-0.35, ang, 0); mouth.add(v)
+      pieza(v, new THREE.CircleGeometry(0.075, 20), vidrio)
+      pieza(v, new THREE.TorusGeometry(0.078, 0.016, 6, 20), madera)
+      pieza(v, new THREE.BoxGeometry(0.15, 0.012, 0.01), madera, 0, 0, 0.005); pieza(v, new THREE.BoxGeometry(0.012, 0.15, 0.01), madera, 0, 0, 0.005)
+    }
+    /* hongos chiquitos al pie */
+    for (const [x, z, sc] of [[0.55, 0.62, 1], [0.7, 0.44, 0.7], [-0.62, 0.55, 0.85]] as const) {
+      const h = new THREE.Group(); h.position.set(x, 0, z); h.scale.setScalar(sc); mouth.add(h)
+      pieza(h, new THREE.CylinderGeometry(0.02, 0.026, 0.07, 8), blanco, 0, 0.035, 0)
+      const c = pieza(h, new THREE.SphereGeometry(0.055, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), rojo, 0, 0.065, 0); c.scale.y = 0.7
+    }
+  }
+
+  /* ---------- mini banco ---------- */
+  const banco = new THREE.Group(); banco.visible = false; banco.scale.setScalar(1.3); banco.position.z = -0.2; mouth.add(banco)
+  {
+    const marmol = M(0xf6f3ec, { roughness: 0.45 }), marmolOsc = M(0xb9b3a6, { roughness: 0.5 }), pizarra = M(0x4f6478, { roughness: 0.55 }), oro = M(0xe8c050, { metalness: 0.85, roughness: 0.25, emissive: 0x3a2800 })
+    /* escalinata delante de la puerta (la boca del hormiguero) */
+    ;[[0.62, 0.035, 0.24, 0.0175, 0.86], [0.56, 0.035, 0.18, 0.0525, 0.83], [0.5, 0.035, 0.12, 0.0875, 0.8]].forEach(([w, h, d, y, z]) => { pieza(banco, new THREE.BoxGeometry(w, h, d), marmolOsc, 0, y, z) })
+    /* columnas a los lados de la puerta */
+    for (const x of [-0.28, -0.2, 0.2, 0.28]) {
+      pieza(banco, new THREE.CylinderGeometry(0.024, 0.028, 0.36, 12), marmol, x, 0.29, 0.78)
+      pieza(banco, new THREE.BoxGeometry(0.07, 0.025, 0.07), marmolOsc, x, 0.115, 0.78)
+      pieza(banco, new THREE.BoxGeometry(0.07, 0.025, 0.07), marmolOsc, x, 0.48, 0.78)
+    }
+    /* viga con el letrero BANCO */
+    const viga = new THREE.MeshStandardMaterial({ map: letrero("BANCO", "#f1eee8", "#8a6a1a"), roughness: 0.5 })
+    pieza(banco, new THREE.BoxGeometry(0.7, 0.075, 0.14), [marmol, marmol, marmol, marmol, viga, marmol], 0, 0.53, 0.77)
+    /* frontón triangular con la moneda de oro */
+    const tri = new THREE.Shape(); tri.moveTo(-0.38, 0); tri.lineTo(0.38, 0); tri.lineTo(0, 0.17); tri.closePath()
+    pieza(banco, new THREE.ExtrudeGeometry(tri, { depth: 0.12, bevelEnabled: false }), pizarra, 0, 0.568, 0.71)
+    const moneda = new THREE.MeshStandardMaterial({ map: letrero("$", "#e8c050", "#8a5a10", 64, 64), metalness: 0.6, roughness: 0.3 })
+    const emblema = pieza(banco, new THREE.CylinderGeometry(0.048, 0.048, 0.014, 20), [oro, moneda, moneda], 0, 0.64, 0.835); emblema.rotation.x = Math.PI / 2
+    /* techo que se mete en el montículo */
+    pieza(banco, new THREE.BoxGeometry(0.76, 0.035, 0.5), pizarra, 0, 0.585, 0.53)
+    /* pilas de monedas junto a la escalinata */
+    for (const [x, z, n] of [[0.42, 0.86, 5], [0.5, 0.74, 3], [-0.44, 0.84, 4]] as const) {
+      for (let k = 0; k < n; k++) pieza(banco, new THREE.CylinderGeometry(0.035, 0.035, 0.012, 14), oro, x + (k % 2) * 0.004, 0.006 + k * 0.0125, z)
+    }
+  }
+
+  function ponerAspecto(asp: AspectoHormiguero) {
+    const ca = new THREE.Color(asp.a), cb = new THREE.Color(asp.b), cc = new THREE.Color(), col = hillGeo.attributes.color as THREE.BufferAttribute
+    for (let i = 0; i < tonos.length; i++) { cc.copy(ca).lerp(cb, tonos[i]); col.setXYZ(i, cc.r, cc.g, cc.b) }
+    col.needsUpdate = true
+    lipMat.color.set(asp.lip); pebMat.color.set(asp.peb ?? 0xffffff)
+    pebMat.metalness = asp.estilo === "banco" ? 0.7 : 0; pebMat.roughness = asp.estilo === "banco" ? 0.3 : 0.9
+    /* en el banco las piedritas son monedas: sin el tono café propio de cada una */
+    const pbs = hillG.children.find(o => o instanceof THREE.InstancedMesh) as THREE.InstancedMesh | undefined
+    if (pbs?.instanceColor) {
+      if (!pbs.userData.tonos) pbs.userData.tonos = Float32Array.from(pbs.instanceColor.array as Float32Array)
+      const orig = pbs.userData.tonos as Float32Array, arr = pbs.instanceColor.array as Float32Array
+      for (let i = 0; i < arr.length; i++) arr[i] = asp.estilo === "banco" ? 1 : orig[i]
+      pbs.instanceColor.needsUpdate = true
+    }
+    hongo.visible = asp.estilo === "hongo"; banco.visible = asp.estilo === "banco"
+  }
+  return { ponerAspecto }
+}

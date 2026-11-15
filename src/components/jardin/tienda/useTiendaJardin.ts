@@ -33,9 +33,9 @@ export function useTiendaJardin() {
     previo.current = data
     setEstado(data)
     // Los ahorros y pagos suelen hacerse en otras pantallas: al entrar se cuenta lo ganado desde la última visita
-    // Regalo mensual del plan (PLUS/PRO): se avisa aparte y no cuenta como "ganadas desde tu última visita"
+    // Bono de bienvenida del plan pago (una sola vez): se avisa aparte y no cuenta como "ganadas desde tu última visita"
     const regalo = data.plan?.regaloRecibido ?? 0
-    if (regalo > 0) avisar(tr("Tu plan {0} te regaló {1} monedas este mes", [data.plan.tier, regalo]))
+    if (regalo > 0) avisar(tr("¡Bienvenido a {0}! Te regalamos {1} monedas", [data.plan.tier, regalo]))
     try {
       const clave = claveVistas(), vistas = Number(localStorage.getItem(clave) ?? NaN)
       localStorage.setItem(clave, String(data.monedas))

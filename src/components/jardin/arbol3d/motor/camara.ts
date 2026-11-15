@@ -6,6 +6,11 @@ import { clamp, lerp, smooth } from "./utilidades"
  * (±0,85 rad) y vuelve sola; pellizco o Ctrl+rueda acercan y vuelven tras ~1,2 s.
  * La rueda sola no hace zoom para no robarle el scroll a la página.
  */
+/** Proporción de referencia (pantalla ancha): en pantallas más angostas la cercanía es la misma. */
+const ASPECTO_ANCHO = 1.45
+/** Ancho que siempre debe verse alrededor del árbol: [semilla, nivel 6] (alcanza para el hormiguero y el chanchito). */
+const COPA_VISIBLE: [number, number] = [6.8, 9]
+
 export function crearCamara(canvas: HTMLCanvasElement, camera: THREE.PerspectiveCamera, alTocar: (cx: number, cy: number) => void) {
   const cam = { drag: 0, r: 14, ty: 2.5, ph: 1.39, zoom: 1, zIdle: 0, pinch: 0 }
   const ptr = new Map<number, { x: number; y: number; sx: number; sy: number; moved: boolean }>()
@@ -44,8 +49,15 @@ export function crearCamara(canvas: HTMLCanvasElement, camera: THREE.Perspective
     /* en semilla y brote la cámara se acerca un poco más */
     const cerca = 1 - smooth((top - 1.0) / 3.2)
     const ancho = lerp(lerp(12.4, 11.6, clamp(top / 7)), 10.2, cerca)
-    const dH = visH / (2 * tanH), dW = ancho / (2 * tanH * aspect)
-    const dT = Math.max(dH, dW, 5.6), kc = intro ? 1 : 1 - Math.exp(-dt * (instant ? 40 : 2.2))
+    /* En pantallas angostas (celular, 4:5) ya no se exige que quepa TODA la isla a
+       lo ancho — eso alejaba mucho la cámara. Se encuadra con la misma cercanía
+       que en una pantalla ancha y solo se aleja lo que pida el árbol: que quepa
+       su altura y su copa (crece con el nivel). Los bordes de la isla quedan un
+       poco por fuera y se ven girando. */
+    const dH = visH / (2 * tanH), dW = ancho / (2 * tanH * Math.max(aspect, ASPECTO_ANCHO))
+    const copa = lerp(COPA_VISIBLE[0], COPA_VISIBLE[1], clamp(top / 7))
+    const dCopa = copa / (2 * tanH * aspect)
+    const dT = Math.max(dH, dW, dCopa, 5.6), kc = intro ? 1 : 1 - Math.exp(-dt * (instant ? 40 : 2.2))
     cam.zIdle += dt; if (cam.zIdle > 1.2 && !ptr.size) cam.zoom += (1 - cam.zoom) * (1 - Math.exp(-dt * 1.1))
     cam.r = lerp(cam.r, dT * cam.zoom, cam.zIdle < 0.05 ? 1 - Math.exp(-dt * 12) : kc)
     /* la isla va en la parte baja del cuadro (aunque la cascada no se vea entera);
