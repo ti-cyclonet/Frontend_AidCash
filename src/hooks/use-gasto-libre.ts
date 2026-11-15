@@ -26,7 +26,7 @@ export function useGastoLibre() {
   )
 
   const total = wallet?.cashBalance ?? 0
-  const dist = calcularDistribucionReal(total, obligaciones)
+  const dist = calcularDistribucionReal(total, obligaciones, wallet?.ahorradoPeriodo ?? 0)
   return {
     loaded: wallet !== null,
     wallet,

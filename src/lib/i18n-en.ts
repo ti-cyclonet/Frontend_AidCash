@@ -3374,4 +3374,14 @@ export const EN: Record<string, string> = {
   "Los gastos hormiga ya suman {0} este periodo. Pon un tope diario a cafés, domicilios y antojos.": "Small everyday expenses already add up to {0} this period. Set a daily cap on coffee, deliveries and treats.",
   "Si llegas al cobro con plata de sobra, pásala a tu ahorro antes de que se vaya en gastos.": "If you reach payday with money to spare, move it to your savings before it gets spent.",
   "Registra tu ingreso para armar tu plan.": "Log your income to build your plan.",
+  "Ya apartaste {0} para tu ahorro este periodo. Te quedan {1} para gastos libres.": "You already set aside {0} for savings this period. You have {1} left for free spending.",
+  // Historial por semanas
+  "Sin movimientos en la semana {0}.": "No activity in week {0}.",
+  "Sin movimientos en el periodo {0}.": "No activity in period {0}.",
+  "Tus semanas": "Your weeks",
+  "Ver todo el periodo": "See the whole period",
+  "Toca una semana para ver sus movimientos": "Tap a week to see its activity",
+  "Aún no llega": "Not here yet",
+  "de {0} planeado": "of {0} planned",
+  "En curso": "In progress",
 }

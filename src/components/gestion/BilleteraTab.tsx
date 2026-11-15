@@ -230,11 +230,19 @@ export function BilleteraTab() {
     setExtraIncomeFormOpen(false)
   }
 
-  useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
+  // Lo ahorrado en el periodo solo lo trae GET /users/wallet (las otras respuestas
+  // traen la billetera sin ese dato), así que se guarda aparte.
+  const [ahorradoPeriodo, setAhorradoPeriodo] = useState(0)
+  const cargarWallet = () => userApi.getWallet().then(({ data }) => {
+    if (!data) return
+    setWallet(data.wallet)
+    setAhorradoPeriodo(data.wallet.ahorradoPeriodo ?? 0)
+  })
+  useEffect(() => { cargarWallet() }, [])
 
   // Refrescar wallet cuando el coach u otro componente registra un ingreso/pago
   useEffect(() => {
-    const refresh = () => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }
+    const refresh = () => { cargarWallet() }
     window.addEventListener("kiri:wallet-updated", refresh)
     return () => window.removeEventListener("kiri:wallet-updated", refresh)
   }, [])
@@ -397,7 +405,7 @@ export function BilleteraTab() {
 
   // Calcular distribución real basada en lo que HAY disponible
   // Mismo cálculo que usan "Me deben" y Presupuesto (ver lib/distribucion-billetera.ts).
-  const realAllocation = useMemo(() => calcularDistribucionReal(realIncome, realObligations), [realIncome, realObligations])
+  const realAllocation = useMemo(() => calcularDistribucionReal(realIncome, realObligations, ahorradoPeriodo), [realIncome, realObligations, ahorradoPeriodo])
 
   const pocketValues: Record<string, number> = {
     ahorro: Math.round(realAllocation.savingsAmount),
@@ -721,6 +729,8 @@ export function BilleteraTab() {
                     ? tr("El {0}% de tu saldo va a obligaciones. Intenta reducir gastos fijos o generar un ingreso extra para tener más margen.", [Math.round(realAllocation.obligationsPct)])
                     : total <= 0 && displayObligationsTotal > 0
                       ? tr("Tienes {0} en obligaciones pendientes. Registra tu ingreso para ver cómo se distribuye tu dinero.", [formatAmount(displayObligationsTotal)])
+                      : total > 0 && realAllocation.savingsAmount <= 0 && ahorradoPeriodo > 0
+                        ? tr("Ya apartaste {0} para tu ahorro este periodo. Te quedan {1} para gastos libres.", [formatAmount(ahorradoPeriodo), formatAmount(pocketValues.libre)])
                       : total > 0 && realAllocation.savingsAmount > 0
                         ? tr("Puedes destinar {0} al ahorro ({1}%) y {2} a gastos libres este periodo.", [formatAmount(Math.round(realAllocation.savingsAmount)), Math.round(realAllocation.savingsPct), formatAmount(pocketValues.libre)]) /* el mismo "Gasto libre" de la tarjeta de arriba (antes solo la parte libre: $251.985 vs $945.020 en la misma pantalla) */
                         : tr("Estás distribuyendo tu dinero de forma inteligente.")

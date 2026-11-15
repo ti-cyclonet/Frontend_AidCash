@@ -441,6 +441,8 @@ export interface WalletState {
   obligaciones: number
   libre: number
   endeudamiento: number
+  /** Ahorrado en el periodo de cobro actual (solo lo trae GET /users/wallet) */
+  ahorradoPeriodo?: number
 }
 
 export type UndoAlcance = 'ultimo' | 'todo'
@@ -1803,7 +1805,11 @@ export interface PlanSemanal {
   saldo: number
   obligaciones: number
   remanente: number
+  /** Lo que FALTA ahorrar este periodo (0 si ya cumplió la meta: el plan no lo vuelve a pedir) */
   ahorro: number
+  /** Lo ya ahorrado en el periodo y la meta de ahorro del periodo */
+  ahorroHecho: number
+  metaAhorro: number
   disponible: number
   semanaActual: number
   hoyPuedes: number
@@ -1818,6 +1824,19 @@ export const planSemanalApi = {
   get: (obligaciones: number) => api<PlanSemanal>(`/plan-semanal?obligaciones=${Math.max(0, Math.round(obligaciones))}`),
   /** Para el Jardín: ritmo de la semana en curso y la última semana cerrada */
   arbol: () => api<PlanSemanalArbol>("/plan-semanal/arbol"),
+  /** Semanas del plan que empiezan entre `desde` y `hasta` (YYYY-MM-DD, incluidos) — Historial */
+  semanas: (desde: string, hasta: string) => api<{ semanas: SemanaPlanGuardada[] }>(`/plan-semanal/semanas?desde=${desde}&hasta=${hasta}`),
+}
+
+export interface SemanaPlanGuardada {
+  inicio: string
+  fin: string
+  indice: number
+  meta: number
+  gastado: number | null
+  estado: "abierta" | "lograda" | "fallida" | "sin_plan"
+  monedas: number
+  congelada: boolean
 }
 
 export interface PlanSemanalArbol {

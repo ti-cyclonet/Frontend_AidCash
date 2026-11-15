@@ -34,7 +34,23 @@ export interface DistribucionReal {
   isTight: boolean
 }
 
-export function calcularDistribucionReal(realIncome: number, realObligations: number): DistribucionReal {
+/** Ahorro sugerido del periodo sobre un saldo: 5/10/15/20 % según lo que deje libre de obligaciones. */
+function ahorroSugerido(saldo: number, obligaciones: number): number {
+  if (saldo <= 0 || obligaciones >= saldo) return 0
+  const remanentePct = ((saldo - obligaciones) / saldo) * 100
+  const pct = remanentePct >= 40 ? 20 : remanentePct >= 25 ? 15 : remanentePct >= 15 ? 10 : 5
+  return Math.min((pct / 100) * saldo, saldo - obligaciones)
+}
+
+/**
+ * `yaAhorrado` = lo ahorrado en el periodo de cobro (GET /users/wallet →
+ * ahorradoPeriodo). La meta de ahorro se calcula sobre el saldo de ANTES de
+ * ahorrar y se descuenta lo ya hecho: si no, al ahorrar lo sugerido el saldo
+ * baja y se volvía a pedir un % del saldo nuevo. Con la meta cumplida el
+ * bolsillo de ahorro queda en 0 y todo lo demás va a gasto libre. Misma regla
+ * que el plan semanal (Backend lib/plan-semanal.ts → disponibleParaGastar).
+ */
+export function calcularDistribucionReal(realIncome: number, realObligations: number, yaAhorrado = 0): DistribucionReal {
   // Sin saldo real → todo en 0, solo obligaciones muestra lo pendiente
   if (realIncome <= 0) return { obligationsPct: 0, savingsPct: 0, freePct: 0, debtCapPct: 0, obligationsAmount: realObligations, savingsAmount: 0, freeAmount: 0, debtCapAmount: 0, isOverloaded: realObligations > 0, isTight: false }
 
@@ -47,10 +63,10 @@ export function calcularDistribucionReal(realIncome: number, realObligations: nu
     return { obligationsPct: obligPct, savingsPct: 0, freePct: 0, debtCapPct: 0, obligationsAmount: realObligations, savingsAmount: 0, freeAmount: 0, debtCapAmount: 0, isOverloaded: true, isTight: true }
   }
 
-  // Escala de ahorro según salud
-  const remanentePct = (remanente / realIncome) * 100
-  const targetSavPct = remanentePct >= 40 ? 20 : remanentePct >= 25 ? 15 : remanentePct >= 15 ? 10 : 5
-  const savingsAmount = Math.min((targetSavPct / 100) * realIncome, remanente)
+  // Lo que FALTA ahorrar del periodo
+  const ahorrado = Math.max(0, yaAhorrado)
+  const metaAhorro = ahorroSugerido(realIncome + ahorrado, realObligations)
+  const savingsAmount = Math.min(Math.max(0, metaAhorro - ahorrado), remanente)
   const savingsPct = (savingsAmount / realIncome) * 100
 
   const afterSavings = remanente - savingsAmount
