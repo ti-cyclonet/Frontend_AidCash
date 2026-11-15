@@ -24,6 +24,7 @@ import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
 import { ConfigIngresoDialog } from "./ConfigIngresoDialog"
+import { PlanSemanalCard } from "./PlanSemanalCard"
 import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/ingresos"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
 import { tr } from "@/lib/i18n"
@@ -729,6 +730,9 @@ export function BilleteraTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ═══ PLAN SEMANAL: cuánto gastar cada semana hasta el próximo cobro ═══ */}
+      <PlanSemanalCard obligaciones={displayObligationsTotal} saldo={total} formatAmount={formatAmount} />
 
       {/* ═══ MODAL REGISTRAR INGRESO ═══ */}
       <Dialog open={incomeOpen} onOpenChange={v => { setIncomeOpen(v); if (!v) resetAvance() }}>

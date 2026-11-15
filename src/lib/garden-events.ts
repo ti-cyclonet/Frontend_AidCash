@@ -70,6 +70,28 @@ export function marcarSolDeIngreso(monto: number) {
   marcar(INGRESO_KEY, { monto }, GARDEN_EVENT_INCOME)
 }
 
+/**
+ * Se cerró una semana del plan semanal (Billetera). Cada semana se avisa una
+ * sola vez por dispositivo: al entrar al Jardín, si la logró sale el sol y caen
+ * monedas; si no, un aviso de que unas hojas se secaron.
+ */
+const SEMANA_KEY = "kiri_garden_pending_week"
+const SEMANAS_VISTAS_KEY = "kiri_plan_semanas_vistas"
+export const GARDEN_EVENT_SEMANA = "kiri:plan-week-closed"
+
+export function marcarSemanaDelPlan(clave: string, lograda: boolean) {
+  if (typeof window === "undefined") return
+  try {
+    const vistas: string[] = JSON.parse(localStorage.getItem(porUsuario(SEMANAS_VISTAS_KEY)) ?? "[]")
+    if (vistas.includes(clave)) return
+    localStorage.setItem(porUsuario(SEMANAS_VISTAS_KEY), JSON.stringify([...vistas, clave].slice(-30)))
+  } catch { /* sin storage: se avisa igual */ }
+  const indice = Number(clave.split("#")[1]) || 0
+  marcar(SEMANA_KEY, { indice, lograda }, GARDEN_EVENT_SEMANA)
+}
+
+export const consumirSemanaPendiente = () => consumir<{ indice: number; lograda: boolean }>(SEMANA_KEY)
+
 function consumir<T>(key: string): T | null {
   if (typeof window === "undefined") return null
   try {

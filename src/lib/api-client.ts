@@ -1771,6 +1771,61 @@ export const projectionsApi = {
 
 export interface EscenarioProyeccion { id: string; nombre: string; aporteExtra: number; recortarHormiga: boolean; meses: number; createdAt: string }
 
+// ─── Plan semanal (Billetera) — ver Backend lib/plan-semanal.ts ───────────────
+
+export type EstadoSemanaPlan = "actual" | "proxima" | "lograda" | "fallida" | "sin_plan" | "pasada_sin_plan"
+
+export interface SemanaPlan {
+  indice: number
+  inicio: string
+  fin: string
+  dias: number
+  meta: number
+  gastado: number
+  estado: EstadoSemanaPlan
+  monedas: number
+}
+
+export type ConsejoPlan =
+  | { tipo: "sobrecargado"; faltante: number }
+  | { tipo: "pasado_semana"; exceso: number }
+  | { tipo: "ritmo_rapido"; hoy: number }
+  | { tipo: "ritmo_bien" }
+  | { tipo: "deuda_cara"; nombre: string; tasa: number }
+  | { tipo: "deuda_pequena"; nombre: string; saldo: number }
+  | { tipo: "hormiga"; monto: number }
+  | { tipo: "sobrante" }
+  | { tipo: "sin_saldo" }
+
+export interface PlanSemanal {
+  frecuencia: "quincenal" | "mensual"
+  periodo: { inicio: string; fin: string; proximoCobro: string; diasRestantes: number }
+  saldo: number
+  obligaciones: number
+  remanente: number
+  ahorro: number
+  disponible: number
+  semanaActual: number
+  hoyPuedes: number
+  diasQuedanSemana: number
+  racha: number
+  semanas: SemanaPlan[]
+  consejos: ConsejoPlan[]
+}
+
+export const planSemanalApi = {
+  /** `obligaciones` = lo pendiente del periodo que muestra Billetera */
+  get: (obligaciones: number) => api<PlanSemanal>(`/plan-semanal?obligaciones=${Math.max(0, Math.round(obligaciones))}`),
+  /** Para el Jardín: ritmo de la semana en curso y la última semana cerrada */
+  arbol: () => api<PlanSemanalArbol>("/plan-semanal/arbol"),
+}
+
+export interface PlanSemanalArbol {
+  ritmo: "bien" | "rapido" | "pasado" | null
+  ultima: { estado: "lograda" | "fallida"; indice: number; monedas: number; fin: string } | null
+  racha: number
+}
+
 // ─── Notificaciones (campana) — persistidas en el backend ─────────────────────
 // `event`/`data` tienen la misma forma que espera KiriNotification en
 // socket-context.tsx, para no tener que reescribir cómo se arma cada tipo.
