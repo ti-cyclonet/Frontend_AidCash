@@ -31,7 +31,6 @@ import { useRouter } from "next/navigation"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
 import { AnimatedBalance } from "@/components/ui/animated-balance"
 import { CelebrationModal } from "@/components/ui/celebration-modal"
-import { FeatureGate } from "@/components/plan/feature-gate"
 import { SavingsSimulator } from "@/components/recommendations/savings-simulator"
 import type { SharedPocket } from "@/lib/types"
 import { tr } from "@/lib/i18n"
@@ -155,9 +154,8 @@ function calcularCuotaMensual(meta: number, acumulado: number, fechaLimite: stri
 
 export default function AhorroPage() {
   return (
-    <FeatureGate feature="savingsPockets">
-      <AhorroContent />
-    </FeatureGate>
+    // Los bolsillos vienen en todos los planes (los límites se avisan al crear)
+    <AhorroContent />
   )
 }
 

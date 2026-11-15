@@ -13,7 +13,6 @@ import { LoansTab } from "@/components/social/loans-tab"
 import { SocialDebtsTab } from "@/components/social/SocialDebtsTab"
 import type { Connection } from "@/lib/types"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
-import { FeatureGate } from "@/components/plan/feature-gate"
 import { tr } from "@/lib/i18n"
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
@@ -34,9 +33,8 @@ type TabId = typeof BASE_TABS[number]["id"] | typeof DEBTS_TAB["id"]
 
 export default function SocialPage() {
   return (
-    <FeatureGate feature="socialConnections">
-      <SocialContent />
-    </FeatureGate>
+    // Social viene en todos los planes (los límites se avisan en cada acción)
+    <SocialContent />
   )
 }
 

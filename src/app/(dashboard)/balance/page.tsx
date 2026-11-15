@@ -20,7 +20,6 @@ import { useCountUp } from "@/hooks/use-count-up"
 import { CategoryDistributionCard } from "@/components/gestion/CategoryDistributionCard"
 import { reportsApi, userApi, type BalanceReport, type Timeframe, type WalletState } from "@/lib/api-client"
 import { TutorialSlider, useTutorialFirstTime } from "@/components/tutorial/TutorialSlider"
-import { FeatureGate } from "@/components/plan/feature-gate"
 import Link from "next/link"
 import { tr, localeFecha } from "@/lib/i18n"
 
@@ -130,7 +129,6 @@ export default function BalancePage() {
 
 
   return (
-    <FeatureGate feature="basicReports">
     <>
       {showTutorial && <TutorialSlider module="balance" onClose={dismissTutorial} />}
     <div className="space-y-6 pb-10">
@@ -445,7 +443,6 @@ export default function BalancePage() {
       )}
     </div>
     </>
-    </FeatureGate>
   )
 }
 
