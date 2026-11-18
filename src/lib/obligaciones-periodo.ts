@@ -5,6 +5,7 @@
  */
 import { getDisplayAmount } from "@/lib/distribucion-billetera"
 import { isGenuinelyOverdue } from "@/lib/period-filter"
+import { pendienteEnPeriodo, type ObligacionParaPeriodo } from "@/lib/obligaciones-pendientes"
 
 interface ItemObligacion {
   pagadoEstePeriodo: boolean
@@ -50,32 +51,21 @@ export function diasParaVencer(item: ItemObligacion, now: Date = new Date()): nu
 }
 
 /**
- * ¿Le toca pagarse en el periodo [start, end)? Las quincenales siempre; las
- * mensuales si uno de sus días cae dentro del rango, o si están vencidas.
- * Las marcadas "empieza el próximo periodo" no.
+ * ¿Le toca pagarse en el periodo [start, end)? Si alguna de sus fechas de pago
+ * cae en el rango (aunque sea del mes siguiente), si está vencida o tiene
+ * atrasos. Misma regla que Billetera (lib/obligaciones-pendientes.ts).
  */
-export function esDelPeriodo(item: ItemObligacion, rango: { start: Date; end: Date }, now: Date = new Date()): boolean {
-  if (item.pendienteProximoPeriodo) return false
-  const frecuencia = item.frecuenciaPago ?? item.frecuencia
-  if (frecuencia === "quincenal") return true
-  const dias = diasDelItem(item)
-  if (dias.length === 0) return true
-  if (!item.pagadoEstePeriodo && isGenuinelyOverdue(item, now)) return true
-  for (const m of [-1, 0, 1]) {
-    for (const d of dias) {
-      const f = fechaDelDia(now.getFullYear(), now.getMonth() + m, d)
-      if (f >= rango.start && f < rango.end) return true
-    }
-  }
-  return false
+export function esDelPeriodo(item: ObligacionParaPeriodo, rango: { start: Date; end: Date }, now: Date = new Date()): boolean {
+  return pendienteEnPeriodo(item, rango, now).enPeriodo
 }
 
-/** Cuánto falta por pagar de esta obligación en el periodo (cuota − lo abonado + atrasos). */
-export function pendienteDelPeriodo(item: ItemObligacion): number {
-  const atrasos = item.montoAtrasado ?? 0
-  if (item.pagadoEstePeriodo) return atrasos
-  const cuota = getDisplayAmount(item)
-  return Math.max(0, cuota - (item.montoPagadoEstePeriodo ?? 0)) + atrasos
+/**
+ * Cuánto falta por pagar de esta obligación en el periodo: cada cuota que
+ * vence en el rango buscada en SU periodo de pago (la del mes siguiente no se
+ * da por pagada porque se pagó la de este mes), más lo vencido y los atrasos.
+ */
+export function pendienteDelPeriodo(item: ObligacionParaPeriodo, rango: { start: Date; end: Date }, now: Date = new Date()): number {
+  return pendienteEnPeriodo(item, rango, now).monto
 }
 
 /** Lo que ya se pagó de esta obligación en el periodo. */

@@ -7,7 +7,8 @@ import { clamp, lerp, lienzo, smooth } from "./utilidades"
  * tienda y reaccionan a las finanzas REALES del usuario. La isla funciona como
  * un tablero que se entiende sin leer números:
  *  - Chanchito (alcancía): engorda con el ahorro del mes; cada ahorro le cae una moneda.
- *  - Don Gnomo: carga la racha en un cartel; si la racha está en cero, se duerme.
+ *  - Don Gnomo: carga la racha en un cartel; si la racha está en cero, se sienta
+ *    a dormir recostado al cartel. Si llueve saca un paraguas (y lo guarda al escampar).
  *  - Casita de pájaros: al registrar un ingreso los pájaros vuelan cantando alrededor del árbol.
  * Solo anima: nada de esto da XP ni monedas.
  */
@@ -20,7 +21,7 @@ export interface FinanzasIsla {
   racha: number
 }
 
-interface EstadoVivo { fin: FinanzasIsla; ingreso: boolean; regando: boolean }
+interface EstadoVivo { fin: FinanzasIsla; ingreso: boolean; regando: boolean; /** 0–1: cuánto llueve */ lluvia: number }
 
 interface Contexto {
   world: THREE.Group
@@ -122,11 +123,21 @@ function gnomo(cx: Contexto): Habitante {
   malla(esfera(0.14, 20, 16), azul, 0, 0.15, 0, cuerpo).scale.set(1, 0.95, 0.92)
   const cinturon = malla(new THREE.TorusGeometry(0.126, 0.017, 8, 28), cafe, 0, 0.13, 0, cuerpo); cinturon.rotation.x = Math.PI / 2
   malla(new THREE.BoxGeometry(0.05, 0.04, 0.02), oro, 0, 0.13, 0.128, cuerpo)
+  const botas: THREE.Mesh[] = []
   for (const s of [-1, 1]) {
-    malla(esfera(0.055, 12, 10), cafe, s * 0.065, 0.028, 0.045, cuerpo).scale.set(1, 0.65, 1.3)
+    const bota = malla(esfera(0.055, 12, 10), cafe, s * 0.065, 0.028, 0.045, cuerpo); bota.scale.set(1, 0.65, 1.3); botas.push(bota)
     malla(esfera(0.045, 12, 10), azul, s * 0.135, 0.17, 0.02, cuerpo)
     malla(esfera(0.034, 12, 10), piel, s * 0.15, 0.115, 0.05, cuerpo)
   }
+  /* paraguas a rayas en la mano izquierda (lejos del cartel): sale cuando llueve */
+  const paraguas = new THREE.Group(); paraguas.position.set(-0.15, 0.115, 0.06); paraguas.visible = false; cuerpo.add(paraguas)
+  const mangoM = M(0x5a3a22, { roughness: 0.5 })
+  malla(new THREE.CylinderGeometry(0.009, 0.009, 0.8, 8), mangoM, 0, 0.4, 0, paraguas)
+  const gancho = malla(new THREE.TorusGeometry(0.028, 0.009, 6, 14, Math.PI), mangoM, 0.028, 0, 0, paraguas); gancho.rotation.z = Math.PI
+  const tela = new THREE.Group(); tela.position.y = 0.8; paraguas.add(tela)
+  const telaA = M(0xffc93c, { roughness: 0.6, side: THREE.DoubleSide }), telaB = M(0x3fb6a8, { roughness: 0.6, side: THREE.DoubleSide })
+  for (let i = 0; i < 8; i++) malla(new THREE.SphereGeometry(0.36, 4, 7, i * Math.PI / 4, Math.PI / 4, 0, 1.12), i % 2 ? telaB : telaA, 0, -0.15, 0, tela)
+  malla(esfera(0.018, 8, 6), mangoM, 0, 0.22, 0, tela)
   /* cabeza grande: ojos con brillo, cachetes, nariz de botón y barba esponjosa */
   const cabezaG = new THREE.Group(); cabezaG.position.y = 0.35; cuerpo.add(cabezaG)
   const cabeza = malla(esfera(0.135, 22, 18), piel, 0, 0, 0, cabezaG)
@@ -166,8 +177,13 @@ function gnomo(cx: Contexto): Habitante {
     ctx.font = `800 32px ${cx.fuente}`; ctx.fillText(n === 1 ? "día" : "días", 170, 128)
     tex.needsUpdate = true
   }
-  const zetas = [0, 1, 2].map(i => { const z = spriteTexto("z", "#5b6ea8", cx.fuente, 0.14 + i * 0.03); z.visible = false; g.add(z); return z })
-  let baile = 0, rachaAntes = -1, sueno = 0, parpadeo = 2.5
+  /* las z van DELANTE del cartel (antes subían justo por detrás del tablero) */
+  const zetas = [0, 1, 2].map(i => {
+    const z = spriteTexto("z", "#5b6ea8", cx.fuente, 0.14 + i * 0.03); z.visible = false
+    z.material.depthTest = false; z.renderOrder = 20; g.add(z); return z
+  })
+  const cabezaW = new THREE.Vector3()
+  let baile = 0, rachaAntes = -1, sueno = 0, parpadeo = 2.5, abierto = 0, quiereParaguas = false
   return {
     g, hit: [cabeza, gorro, tabla, ...barba], extra: zetas,
     tocar() { baile = 1 },
@@ -176,24 +192,43 @@ function gnomo(cx: Contexto): Habitante {
       if (racha !== rachaPintada) pintar(racha)
       if (rachaAntes >= 0 && racha > rachaAntes) baile = 1
       rachaAntes = racha
-      /* con la racha en cero se queda dormido (se despierta al tocarlo) */
+      /* con la racha en cero se sienta a dormir recostado al palo del cartel (se despierta al tocarlo) */
       sueno = lerp(sueno, racha === 0 && baile === 0 ? 1 : 0, 1 - Math.exp(-dt * 2.5))
-      cuerpo.rotation.z = 0.2 * sueno
-      /* parpadea de vez en cuando; dormido, ojos cerrados */
+      const sd = smooth(sueno)
+      cuerpo.position.x = 0.3 * sd
+      cuerpo.rotation.z = -0.36 * sd
+      cuerpo.scale.y = 1 - 0.06 * sd + Math.sin(t * 1.6) * 0.018 * sd
+      /* sentado: las botas salen hacia adelante, piernas estiradas */
+      botas.forEach((b, i) => b.position.set((i ? 1 : -1) * lerp(0.065, 0.075, sd), lerp(0.028, 0.03, sd), lerp(0.045, 0.16, sd)))
+      /* parpadea de vez en cuando; dormido, ojos cerrados y cabeza caída */
       parpadeo -= dt; if (parpadeo < 0) parpadeo = 2.5 + Math.random() * 3
-      const abierto = parpadeo < 0.12 ? 0.12 : 1
-      for (const o of ojos) o.scale.y = Math.max(0.08, abierto * (1 - 0.92 * sueno))
+      const ojoAbierto = parpadeo < 0.12 ? 0.12 : 1
+      for (const o of ojos) o.scale.y = Math.max(0.08, ojoAbierto * (1 - 0.92 * sueno))
+      cabezaG.rotation.x = 0.26 * sd
+      cabezaG.rotation.z = Math.sin(t * 1.1) * 0.05 * (1 - sueno) - 0.12 * sd
+      /* las z salen de la cabeza y suben hacia adelante, por delante del cartel */
+      cabezaG.getWorldPosition(cabezaW); g.worldToLocal(cabezaW)
       zetas.forEach((z, i) => {
         z.visible = sueno > 0.5
         const k = ((t * 0.45 + i / 3) % 1)
-        z.position.set(0.1 + k * 0.18, 0.66 + k * 0.4, 0.05); z.material.opacity = Math.sin(k * Math.PI)
+        z.position.set(cabezaW.x + 0.02 + k * 0.26, cabezaW.y + 0.18 + k * 0.42, cabezaW.z + 0.24 + k * 0.06); z.material.opacity = Math.sin(k * Math.PI)
       })
-      cartel.rotation.z = Math.sin(t * 1.3) * 0.04
-      cabezaG.rotation.z = Math.sin(t * 1.1) * 0.05 * (1 - sueno)
+      /* paraguas: se abre al empezar a llover y se guarda solo cuando escampa */
+      if (s.lluvia > 0.3) quiereParaguas = true; else if (s.lluvia < 0.12) quiereParaguas = false
+      abierto = clamp(abierto + (quiereParaguas ? dt : -dt) / 0.9)
+      paraguas.visible = abierto > 0.01
+      if (paraguas.visible) {
+        const sale = smooth(clamp(abierto / 0.35)), abre = smooth(clamp((abierto - 0.3) / 0.7))
+        paraguas.scale.setScalar(Math.max(0.001, sale))
+        tela.scale.set(lerp(0.16, 1, abre), lerp(1.45, 1, abre), lerp(0.16, 1, abre)); tela.position.y = lerp(0.62, 0.8, abre)
+        /* sobre la cabeza; dormido lo deja caer hacia adelante y lo tapa sin chocar con el tablero */
+        paraguas.rotation.set(0.62 * sd, 0, -0.2 + 0.3 * sd + Math.sin(t * 1.4) * 0.025)
+      }
+      cartel.rotation.z = Math.sin(t * 1.3) * 0.04 * (1 - sd)
       if (baile > 0) {
         baile = Math.max(0, baile - dt / 1.3); const k = 1 - baile
         cuerpo.position.y = Math.abs(Math.sin(k * Math.PI * 3)) * 0.12; cuerpo.rotation.y = smooth(k) * Math.PI * 2
-      } else { cuerpo.position.y = Math.abs(Math.sin(t * 2)) * 0.01; cuerpo.rotation.y = 0 }
+      } else { cuerpo.position.y = Math.abs(Math.sin(t * 2)) * 0.01 * (1 - sd) - 0.02 * sd; cuerpo.rotation.y = 0 }
     },
   }
 }

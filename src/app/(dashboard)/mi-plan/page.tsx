@@ -4,12 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { usePlan } from "@/lib/plan-context"
 import {
   Check, Sparkles, Crown, ExternalLink, FileSignature, LogIn, AlertTriangle,
-  Loader2, Eye, EyeOff, CheckCircle2, Clock, Gift, Gauge, Infinity as InfinityIcon,
+  Loader2, CheckCircle2, Clock, Gift, Gauge, Infinity as InfinityIcon, TrendingUp, History, Bot,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -69,13 +67,11 @@ const EVENTO_FACTURA: Record<string, { titulo: string; tono: "amber" | "red" }> 
 }
 
 export default function MiPlanPage() {
-  const { plan, loading: planLoading } = usePlan()
+  const { plan, loading: planLoading, refreshPlan } = usePlan()
   const { toast } = useToast()
   const [planes, setPlanes] = useState<PlanDisponible[] | null>(null)
   const [factonet, setFactonet] = useState<FactonetInfo | null>(null)
   const [elegido, setElegido] = useState<PlanDisponible | null>(null)
-  const [password, setPassword] = useState("")
-  const [verPassword, setVerPassword] = useState(false)
   const [acepta, setAcepta] = useState(false)
   const [enviando, setEnviando] = useState(false)
   /* En la app nativa los planes se compran con la tienda (App Store / Google Play): nada de enlaces de pago externos */
@@ -101,6 +97,9 @@ export default function MiPlanPage() {
   const [listo, setListo] = useState<string | null>(null)
   const [resaltar, setResaltar] = useState(false)
   const [ciclo, setCiclo] = useState<"monthly" | "annual">("monthly")
+  // De qué oferta llegó (proyecciones, semana_lograda…): viaja con el cambio de plan (medición)
+  const [origenOferta, setOrigenOferta] = useState<string | null>(null)
+  useEffect(() => { try { setOrigenOferta(new URLSearchParams(window.location.search).get("origen")) } catch { /* nada */ } }, [])
   const [uso, setUso] = useState<UsoPlan | null>(null)
   const [verPlanes, setVerPlanes] = useState(false)
   const { showTutorial, dismissTutorial } = useTutorialFirstTime("mi-plan")
@@ -180,25 +179,27 @@ export default function MiPlanPage() {
   const mostrarFactonet = tienePlanPago || !!cambioPendiente || !!factura
 
   const abrirFactonet = () => { if (factonet?.url) window.open(factonet.url, "_blank", "noopener") }
+  // Directo al pago de la factura (FactoNet la abre al entrar; con PSE, tarjeta o Nequi si está el pago en línea)
+  const pagarFactura = () => { const u = factonet?.urlPagar || factonet?.url; if (u) window.open(u, "_blank", "noopener") }
 
   const abrirCambio = (p: PlanDisponible) => {
     cerrarPlanes(false)
-    setElegido(p); setPassword(""); setAcepta(false); setErrorCambio(null); setVerPassword(false)
+    setElegido(p); setAcepta(false); setErrorCambio(null)
   }
 
   const confirmarCambio = async () => {
-    if (!elegido || !password || !acepta) return
+    if (!elegido || !acepta) return
     setEnviando(true)
     setErrorCambio(null)
     const nombre = elegido.displayName || elegido.name
     const anual = ciclo === "annual" && (elegido.annualPrice ?? 0) > 0
-    const { data, error } = await planApi.cambiar({ packageId: elegido.packageId, packageName: nombre, password, acceptTerms: true, acceptHabeasData: true, billingCycle: anual ? "annual" : "monthly" })
+    const { data, error } = await planApi.cambiar({ packageId: elegido.packageId, packageName: nombre, acceptTerms: true, acceptHabeasData: true, billingCycle: anual ? "annual" : "monthly", origen: origenOferta ?? "mi_plan" })
     setEnviando(false)
     if (error || !data?.success) { setErrorCambio(error ?? tr("No se pudo cambiar de plan. Intenta de nuevo.")); return }
     setElegido(null)
     setListo(nombre)
-    toast({ title: tr("Solicitaste {0}", [nombre]), description: tr("Firmaste tu contrato; falta la firma del administrador.") })
-    cargar()
+    toast({ title: tr("¡Ya tienes {0}!", [nombre]), description: tr("Tu plan quedó activo. La factura te llega al correo y la pagas en FactoNet.") })
+    cargar(); refreshPlan()
   }
 
   if (planLoading) {
@@ -226,8 +227,51 @@ export default function MiPlanPage() {
         </Button>
       </div>
 
-      {/* Plan prestado: prueba por llegar invitado o meses ganados invitando */}
-      {diasPrueba !== null && (
+      {/* Prueba de KIRI PLUS (bienvenida o por llegar invitado): días que quedan y "quedarme" */}
+      {plan?.pruebaPlus?.activa && diasPrueba !== null && (
+        <div className="relative overflow-hidden rounded-2xl border border-kiri-emerald/30 bg-gradient-to-br from-emerald-50 via-background to-sky-50 p-4 dark:from-emerald-500/10 dark:via-background dark:to-sky-500/5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative h-14 w-14 shrink-0">
+              <svg viewBox="0 0 36 36" className="h-14 w-14 -rotate-90">
+                <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-kiri-emerald/15" strokeWidth="3.5" />
+                <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-kiri-emerald" strokeWidth="3.5" strokeLinecap="round"
+                  strokeDasharray={`${Math.min(1, diasPrueba / 14) * 97.4} 97.4`} />
+              </svg>
+              <span className="absolute inset-0 flex flex-col items-center justify-center leading-none"><b className="text-base font-black">{diasPrueba}</b><span className="text-[8px] font-bold text-muted-foreground">{diasPrueba === 1 ? tr("día") : tr("días")}</span></span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black">{diasPrueba <= 1 ? tr("Tu prueba de KIRI PLUS termina hoy") : tr("Estás probando KIRI PLUS: te quedan {0} días", [diasPrueba])}</p>
+              <p className="text-xs text-muted-foreground">{tr("Usa tus proyecciones, el historial de 2 años y Kiri Coach con 150 mensajes. Al terminar vuelves a KIRI FREE sin perder nada.")}</p>
+            </div>
+            <Button onClick={() => setVerPlanes(true)} className="shrink-0 gap-1.5 bg-kiri-emerald text-white hover:bg-kiri-emerald/90"><Sparkles className="h-4 w-4" />{tr("Quedarme con PLUS")}</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Terminó la prueba hace poco: lo que tenía, para que quiera volver */}
+      {plan?.pruebaPlus?.recienTerminada && !cambioPendiente && !listo && (
+        <div className="rounded-2xl border border-amber-400/50 bg-amber-400/10 p-4">
+          <p className="text-sm font-black">{tr("Terminó tu prueba de KIRI PLUS")}</p>
+          <p className="text-xs text-muted-foreground">{tr("Todo lo que registraste sigue aquí. Esto es lo que tenías y puedes recuperar:")}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {[
+              { i: TrendingUp, t: tr("Tus proyecciones"), d: tr("El día en que quedas libre de deudas") },
+              { i: History, t: tr("Historial de 2 años"), d: tr("En FREE solo ves el mes actual") },
+              { i: Bot, t: tr("Kiri Coach con 150 mensajes"), d: tr("En FREE son 5 al mes") },
+            ].map(x => (
+              <div key={x.t} className="flex items-start gap-2 rounded-xl bg-background/70 p-2.5">
+                <x.i className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <div><p className="text-xs font-bold">{x.t}</p><p className="text-[11px] text-muted-foreground">{x.d}</p></div>
+              </div>
+            ))}
+          </div>
+          <Button onClick={() => { planApi.evento("oferta_click", "prueba_terminada"); setOrigenOferta("prueba_terminada"); setVerPlanes(true) }} className="mt-3 w-full gap-1.5 bg-amber-500 text-white hover:bg-amber-600 sm:w-auto"><Crown className="h-4 w-4" />{tr("Volver a KIRI PLUS")}</Button>
+          <p className="mt-1 text-[11px] text-muted-foreground">{tr("En el plan anual te sale a {0} al mes", ["$11.583"])}</p>
+        </div>
+      )}
+
+      {/* Plan prestado: meses ganados invitando (la prueba tiene su propio aviso arriba) */}
+      {diasPrueba !== null && !plan?.pruebaPlus?.activa && (
         <div className="rounded-2xl border border-kiri-emerald/30 bg-kiri-emerald/5 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="h-11 w-11 rounded-xl bg-kiri-emerald/10 text-kiri-emerald flex items-center justify-center shrink-0"><Gift className="h-5 w-5" /></div>
           <div className="flex-1 min-w-0">
@@ -274,7 +318,7 @@ export default function MiPlanPage() {
               {factura.vence && <>{" "}{tr("· vence el {0}", [fechaLarga(factura.vence)])}</>}
             </p>
           </div>
-          {!nativo && <Button onClick={abrirFactonet} className="gap-2 shrink-0">{tr("Ver y pagar en FactoNet")}{" "}<ExternalLink className="h-3.5 w-3.5" />
+          {!nativo && <Button onClick={pagarFactura} className="gap-2 shrink-0">{tr("Pagar factura")}{" "}<ExternalLink className="h-3.5 w-3.5" />
           </Button>}
         </div>
       )}
@@ -305,7 +349,7 @@ export default function MiPlanPage() {
         <DialogContent className="max-w-[388px] sm:max-w-2xl lg:max-w-5xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Crown className="h-5 w-5 text-amber-500" />{" "}{tr("Cambiar de plan")}</DialogTitle>
-            <DialogDescription>{tr("Mira lo que trae cada plan. Al elegir uno, tu contrato queda listo en FactoNet y sigues con tu plan actual hasta pagar la primera factura.")}</DialogDescription>
+            <DialogDescription>{tr("Mira lo que trae cada plan. Al elegir uno se activa al instante; la factura te llega después y la pagas en FactoNet.")}</DialogDescription>
           </DialogHeader>
       <section className="space-y-3">
         {hayAnual && (
@@ -350,13 +394,22 @@ export default function MiPlanPage() {
                   )}
                   <div>
                     <p className="font-bold flex items-center gap-1.5">{(p.isHighlighted || esPro) && <Crown className="h-4 w-4 text-amber-500" />}{nombre}</p>
+                    {/* Cada plan con su promesa: para empezar, para ti, para los dos */}
+                    <p className={cn("text-[11px] font-extrabold uppercase tracking-wider", esPro ? "text-amber-600" : tierDe(nombre) === "PLUS" ? "text-kiri-emerald" : "text-muted-foreground")}>
+                      {esPro ? tr("Para los dos · la plata del hogar") : tierDe(nombre) === "PLUS" ? tr("Para ti · planea tu futuro") : tr("Para empezar · organiza tu quincena")}
+                    </p>
                     <p className="text-2xl font-black mt-1">
                       {p.price > 0
                         ? <>{formatCOP(precioDe(p))}<span className="text-xs font-medium text-muted-foreground"> / {anual ? tr("año") : "mes"}</span></>
                         : tr("Gratis")}
                     </p>
                     {anual && (
-                      <p className="text-[11px] text-kiri-emerald font-bold">{tr("Equivale a {0} al mes{1}", [formatCOP(Math.round(p.annualPrice! / 12)), ahorroAnual(p) > 0 && tr(" · ahorras {0}%", [ahorroAnual(p)])])}</p>
+                      <p className="text-[11px] text-kiri-emerald font-bold">{tr("Equivale a {0} al mes · más de 2 meses gratis", [formatCOP(Math.round(p.annualPrice! / 12))])}</p>
+                    )}
+                    {!anual && p.price > 0 && (p.annualPrice ?? 0) > 0 && (
+                      <button type="button" onClick={() => setCiclo("annual")} className="text-[11px] font-bold text-kiri-emerald underline-offset-2 hover:underline">
+                        {tr("o {0} al mes pagando el año", [formatCOP(Math.round(p.annualPrice! / 12))])}
+                      </button>
                     )}
                     {descuentoDe(p) > 0 && !actual && (
                       <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-400/15 rounded-lg px-2 py-1 mt-1 inline-block">
@@ -496,21 +549,11 @@ export default function MiPlanPage() {
                 : tr("Sin costo.")])}</DialogDescription>
           </DialogHeader>
           <ol className="space-y-1.5 text-sm">
-            <li className="flex gap-2"><span className="font-black text-kiri-emerald">1.</span>{" "}{tr("Creamos tu contrato con el nuevo plan.")}</li>
-            <li className="flex gap-2"><span className="font-black text-kiri-emerald">2.</span>{" "}{tr("Al aceptar los Términos y la autorización de datos, firmas el contrato. Solo falta la firma del administrador de CycloNet.")}</li>
-            <li className="flex gap-2"><span className="font-black text-kiri-emerald">3.</span>{" "}{tr("Te llega la factura (aquí en Kiri también te avisamos) y, al pagarla, se activa tu plan.")}</li>
+            <li className="flex gap-2"><span className="font-black text-kiri-emerald">1.</span>{" "}{tr("Aceptas los Términos y tu plan se activa al instante, sin contraseña.")}</li>
+            <li className="flex gap-2"><span className="font-black text-kiri-emerald">2.</span>{" "}{tr("Esa aceptación es tu firma del contrato (queda en FactoNet).")}</li>
+            <li className="flex gap-2"><span className="font-black text-kiri-emerald">3.</span>{" "}{tr("Te llega la factura (aquí en Kiri también te avisamos) y la pagas en FactoNet.")}</li>
           </ol>
-          <p className="text-xs text-muted-foreground">{tr("Mientras tanto sigues usando tu plan actual sin perder nada.")}</p>
-          <div className="space-y-1.5">
-            <Label htmlFor="pwd-plan" className="text-xs font-bold">{tr("Confirma con tu contraseña de Kiri")}</Label>
-            <div className="relative">
-              <Input id="pwd-plan" type={verPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
-                autoComplete="current-password" className="pr-10" onKeyDown={e => { if (e.key === "Enter") confirmarCambio() }} />
-              <button type="button" onClick={() => setVerPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-label={verPassword ? tr("Ocultar contraseña") : tr("Mostrar contraseña")}>
-                {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground">{tr("No pierdes nada de lo que ya registraste.")}</p>
           <label className="flex items-start gap-2 text-xs cursor-pointer">
             <input type="checkbox" checked={acepta} onChange={e => setAcepta(e.target.checked)} className="accent-kiri-emerald h-4 w-4 mt-0.5" />
             <span>
@@ -523,8 +566,8 @@ export default function MiPlanPage() {
           {errorCambio && <p className="text-xs font-bold text-destructive bg-destructive/10 rounded-lg p-2">{errorCambio}</p>}
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setElegido(null)} disabled={enviando}>{tr("Cancelar")}</Button>
-            <Button onClick={confirmarCambio} disabled={!password || !acepta || enviando} className="gap-2">
-              {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{" "}{tr("Confirmar cambio")}</Button>
+            <Button onClick={confirmarCambio} disabled={!acepta || enviando} className="gap-2 bg-kiri-emerald text-white hover:bg-kiri-emerald/90">
+              {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{" "}{tr("Activar {0}", [elegido?.displayName || elegido?.name])}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

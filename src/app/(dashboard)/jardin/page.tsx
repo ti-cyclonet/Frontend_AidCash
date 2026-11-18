@@ -17,6 +17,7 @@ import { InviteLinkModal } from "@/components/social/InviteLinkPanel"
 import { calcularClima, type ObligacionClima } from "@/lib/garden-clima"
 import { tocarTrueno, prepararAudio, tocarToque, tocarPremio } from "@/lib/thunder-sound"
 import { usePlan } from "@/lib/plan-context"
+import { OfertaPlan, irAPlanes } from "@/components/plan/OfertaPlan"
 import {
   useJardinJuego, useCombo, useToquesSeguidos, useCosechaFrutos, FrutosArbol, ComboBadge, PremioSacudida, BotonRegar, HoyEnTuJardin, VuelosXP,
   TOQUES_PARA_SACUDIR, ID_BARRA_XP,
@@ -30,15 +31,15 @@ import { nombreBaseGasto } from "@/lib/hormiga"
 import { InvitaWidget } from "@/components/referidos/InvitaYGana"
 import { celebrarLogro } from "@/components/referidos/CompartirLogro"
 import {
-  GARDEN_EVENT_RAIN, GARDEN_EVENT_STORM, GARDEN_EVENT_INCOME,
-  consumirLluviaPendiente, consumirTormentasPendientes, consumirIngresoPendiente,
+  GARDEN_EVENT_RAIN, GARDEN_EVENT_STORM, GARDEN_EVENT_INCOME, GARDEN_EVENT_SEMANA,
+  consumirLluviaPendiente, consumirTormentasPendientes, consumirIngresoPendiente, consumirSemanaPendiente,
 } from "@/lib/garden-events"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useStreaks } from "@/hooks/use-streaks"
-import { userApi, loansApi, connectionsApi, emergencyFundApi, gamificationApi, WalletState } from "@/lib/api-client"
+import { userApi, loansApi, connectionsApi, emergencyFundApi, gamificationApi, planSemanalApi, WalletState, type PlanSemanalArbol } from "@/lib/api-client"
 import { analyzeEmergencyFund } from "@/lib/recommendations"
 import { useAuth } from "@/lib/auth-context"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
@@ -251,6 +252,18 @@ export default function JardinPage() {
     window.addEventListener("kiri:wallet-updated", refresh)
     return () => window.removeEventListener("kiri:wallet-updated", refresh)
   }, [])
+
+  // ── Plan semanal (Billetera): si la semana va rápido se nubla; si la última
+  //    semana se cerró fallida se secan unas hojas hasta lograr la siguiente ──
+  const [planArbol, setPlanArbol] = useState<PlanSemanalArbol | null>(null)
+  useEffect(() => {
+    const cargar = () => planSemanalApi.arbol().then(({ data }) => { if (data) setPlanArbol(data) })
+    cargar()
+    window.addEventListener("kiri:wallet-updated", cargar)
+    return () => window.removeEventListener("kiri:wallet-updated", cargar)
+  }, [])
+  const planNublado = planArbol?.ritmo === "rapido" || planArbol?.ritmo === "pasado"
+  const semanaFallida = planArbol?.ultima?.estado === "fallida"
 
   // ── Clima según obligaciones (vencidas → tormenta, próximas → nubes) ──────
   const clima = useMemo(() => calcularClima(debts, fixedExpenses), [debts, fixedExpenses])
@@ -534,6 +547,30 @@ export default function JardinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Semana del plan cerrada: lograda → sol y monedas; fallida → aviso ─────
+  const celebrarSemana = (indice: number, lograda: boolean) => {
+    if (lograda) {
+      setShowIncome(true)
+      setIncomeMessage(tr("Lograste la semana {0} de tu plan: +5 monedas", [indice]))
+      if (incomeTimer.current) window.clearTimeout(incomeTimer.current)
+      incomeTimer.current = window.setTimeout(() => { setShowIncome(false); setIncomeMessage(null) }, 6000)
+    } else {
+      toast({ title: tr("Semana {0}: te pasaste del plan", [indice]), description: tr("Unas hojas se secaron. Logra la próxima semana y tu árbol reverdece.") })
+    }
+  }
+  useEffect(() => {
+    const pendiente = consumirSemanaPendiente()
+    if (pendiente) window.setTimeout(() => celebrarSemana(pendiente.indice, pendiente.lograda), 1200)
+    const onSemana = (e: Event) => {
+      consumirSemanaPendiente()
+      const d = (e as CustomEvent<{ indice: number; lograda: boolean }>).detail
+      celebrarSemana(d.indice, d.lograda)
+    }
+    window.addEventListener(GARDEN_EVENT_SEMANA, onSemana)
+    return () => window.removeEventListener(GARDEN_EVENT_SEMANA, onSemana)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── "Fulano regó tu árbol" — mensajito flotante + lluvia después ──────────
   // Antes de esto, regar el jardín de un amigo no dejaba NADA visible para
   // quien lo recibía salvo un push genérico ("alguien regó tu jardín") — acá
@@ -655,7 +692,7 @@ export default function JardinPage() {
     totalDeuda,
     debts.length > 0,
     hasBudgetCategories,
-  ) - (hayVencidas ? Math.min(45, 15 + 10 * clima.vencidas.length) : 0))
+  ) - (hayVencidas ? Math.min(45, 15 + 10 * clima.vencidas.length) : 0) - (semanaFallida ? 12 : 0))
   const healthLabel = getHealthLabel(gardenHealth, hayVencidas)
   const healthEmoji = getHealthEmoji(gardenHealth, hayVencidas)
 
@@ -676,7 +713,8 @@ export default function JardinPage() {
   const gardenWeather = getGardenWeather(hayVencidas, clima.proximas.length > 0, showRainCelebration)
   // En el árbol 3D el ahorro y el riego no traen lluvia: sale la regadera.
   // El cielo solo depende de las obligaciones.
-  const climaArbol: ClimaArbol = hayVencidas ? "tormenta" : clima.proximas.length > 0 ? "nubes" : "sol"
+  // El plan semanal también nubla el cielo si esta semana vas más rápido de lo planeado.
+  const climaArbol: ClimaArbol = hayVencidas ? "tormenta" : clima.proximas.length > 0 || planNublado ? "nubes" : "sol"
   const frase = useCyclePhrase(GARDEN_PHRASES[healthLabel] ?? [])
   const cloudBadge = hayVencidas
     ? tr("⚡ {0} vencida{1} · toca aquí", [clima.vencidas.length, clima.vencidas.length === 1 ? "" : "s"])
@@ -695,6 +733,11 @@ export default function JardinPage() {
   // generales; "Otro consejo" los recorre aquí mismo.
   const consejos = useMemo(() => {
     const lista: { texto: string; href?: string; cta?: string }[] = []
+    const planHref = "/gestion?tab=billetera"
+    if (planArbol?.ritmo === "pasado") lista.push({ texto: tr("Esta semana ya pasaste lo que planeaste gastar y tu árbol se nubló. Mira cuánto te queda para llegar al cobro."), href: planHref, cta: tr("Ver plan") })
+    else if (planArbol?.ritmo === "rapido") lista.push({ texto: tr("Esta semana vas gastando más rápido de lo planeado y se acercan nubes. Baja el ritmo unos días y vuelve el sol."), href: planHref, cta: tr("Ver plan") })
+    if (semanaFallida) lista.push({ texto: tr("Unas hojas se secaron porque te pasaste en la semana {0} de tu plan. Logra la próxima y reverdecen.", [planArbol!.ultima!.indice]), href: planHref, cta: tr("Ver plan") })
+    else if (planArbol?.ultima?.estado === "lograda") lista.push({ texto: tr("Lograste la semana {0} de tu plan: tu árbol ganó XP y tú monedas. Llevas {1} seguida(s).", [planArbol.ultima.indice, planArbol.racha]), href: planHref, cta: tr("Ver plan") })
     if (hayVencidas) lista.push({ texto: tr("Tienes {0} pago{1} vencido{2}. Empieza por el más antiguo: los atrasos suelen cobrar intereses de mora. ⛈️", [clima.vencidas.length, clima.vencidas.length === 1 ? "" : "s", clima.vencidas.length === 1 ? "" : "s"]), href: "/obligaciones", cta: tr("Pagar") })
     if (clima.proximas.length > 0) lista.push({ texto: tr("{0} vence pronto ({1}). Separa ese dinero desde ya para no gastarlo. ☁️", [clima.proximas[0].nombre, clima.proximas[0].etiqueta.toLowerCase()]), href: "/obligaciones", cta: tr("Ver") })
     if (wallet.cashBalance <= 0) lista.push({ texto: tr("Registra tu sueldo real cuando lo recibas: es la base para que Kiri reparta tu dinero y veas el sol en tu jardín. ☀️"), href: "/gestion?tab=billetera", cta: tr("Registrar") })
@@ -705,12 +748,12 @@ export default function JardinPage() {
       { texto: tr("Cuando pagues una deuda, escribe el saldo que te muestra el banco: Kiri calcula el interés real que pagaste. 🏦") },
       { texto: tr("¿Le prestaste plata a alguien que no usa Kiri? Regístralo en Obligaciones → Me deben y recuérdale por WhatsApp. 🤝"), href: "/obligaciones?tab=me_deben", cta: tr("Ver") },
       { texto: tr("Los gastos hormiga de $5.000 al día suman $150.000 al mes. Anótalos todos, así ves a dónde se va tu plata. 🐜") },
-      { texto: tr("Invita a alguien con tu enlace: tiene 14 días de KIRI PLUS gratis y, cuando empiece a usar Kiri, los dos ganan más mensajes con Kiri Coach. 💌"), href: "/mi-plan#invita", cta: tr("Ver") },
+      { texto: tr("Invita a alguien con tu enlace: tiene 30 días de KIRI PLUS gratis y, cuando empiece a usar Kiri, los dos ganan más mensajes con Kiri Coach. 💌"), href: "/mi-plan#invita", cta: tr("Ver") },
       ...(currentLevelIdx >= 3 ? [{ texto: tr("Cada gasto, ingreso, pago o ahorro que registras hace caer un fruto de tu árbol. ¡Cosecha los 5 del día! 🍎") }] : []),
       { texto: tr("Completa tus misiones diarias: la racha de días es lo que más hace crecer tu árbol. 🔥"), href: "/misiones", cta: tr("Misiones") },
     )
     return lista
-  }, [hayVencidas, clima, wallet.cashBalance, totalAhorrado, mesesColchon, hasBudgetCategories, currentLevelIdx])
+  }, [hayVencidas, clima, wallet.cashBalance, totalAhorrado, mesesColchon, hasBudgetCategories, currentLevelIdx, planArbol, semanaFallida])
   const [consejoIdx, setConsejoIdx] = useState(0)
   const consejo = consejos[consejoIdx % consejos.length]
 
@@ -750,6 +793,28 @@ export default function JardinPage() {
           </div>
         </div>
       </header>
+
+      {/* ═══ PLAN EN UN BUEN MOMENTO ═══ prueba de PLUS por terminar o recién
+          terminada, o una buena racha (en FREE). Una sola tarjeta a la vez. */}
+      {plan?.pruebaPlus?.activa && plan.pruebaPlus.diasRestantes <= 3 ? (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 rounded-2xl border border-kiri-emerald/30 bg-gradient-to-r from-emerald-50 to-sky-50 p-3 dark:from-emerald-500/10 dark:to-sky-500/5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white"><Sparkles className="h-5 w-5" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold">{plan.pruebaPlus.diasRestantes <= 1 ? tr("Hoy termina tu prueba de KIRI PLUS") : tr("Te quedan {0} días de KIRI PLUS", [plan.pruebaPlus.diasRestantes])}</p>
+            <p className="text-[11px] text-muted-foreground">{tr("Quédate con tus proyecciones y Kiri Coach · {0} al mes en el plan anual", ["$11.583"])}</p>
+          </div>
+          <Button size="sm" onClick={() => irAPlanes(router, "prueba_por_terminar")} className="shrink-0 bg-kiri-emerald text-white hover:bg-kiri-emerald/90">{tr("Quedarme")}</Button>
+        </motion.div>
+      ) : plan?.pruebaPlus?.recienTerminada ? (
+        <OfertaPlan origen="prueba_terminada" icono={Sparkles} cerrable
+          titulo={tr("Terminó tu prueba de KIRI PLUS")}
+          texto={tr("Todo lo que registraste sigue aquí. Vuelve a PLUS para recuperar tus proyecciones, tu historial de 2 años y Kiri Coach con 150 mensajes.")}
+          cta={tr("Volver a KIRI PLUS")} />
+      ) : streakActual >= 7 ? (
+        <OfertaPlan origen="racha" icono={Flame} cerrable compacta
+          titulo={tr("{0} días seguidos cuidando tu plata. Mira a dónde te lleva ese ritmo con tus proyecciones de KIRI PLUS", [streakActual])} />
+      ) : null}
 
       {/* ═══ JARDÍN PRINCIPAL ═══
           Un solo árbol (antes había uno para móvil y otro para escritorio

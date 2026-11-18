@@ -441,6 +441,8 @@ export interface WalletState {
   obligaciones: number
   libre: number
   endeudamiento: number
+  /** Ahorrado en el periodo de cobro actual (solo lo trae GET /users/wallet) */
+  ahorradoPeriodo?: number
 }
 
 export type UndoAlcance = 'ultimo' | 'todo'
@@ -845,22 +847,23 @@ export type TipoCosmetico = 'especie' | 'color' | 'hormiguero' | 'cerca' | 'rega
 /** Espacios de un solo artículo; los habitantes van en una lista (pueden estar varios en la isla). */
 export type RanuraCosmetico = Exclude<TipoCosmetico, 'habitante'>
 export type EquipadoTienda = Record<RanuraCosmetico, string> & { habitantes: string[] }
-export interface ArticuloTienda { clave: string; precio: number; incluido: boolean; tiene: boolean }
+export interface ArticuloTienda { clave: string; precio: number; incluido: boolean; tiene: boolean; /** Viene con ese plan (no se compra) */ exclusivo?: 'PLUS' | 'PRO' | null }
 export interface EstadoTienda {
   monedas: number
   equipado: EquipadoTienda
   /** Artículo del día con descuento (el servidor cobra este precio) */
   oferta: { tipo: TipoCosmetico; clave: string; precio: number; precioNormal: number; fecha: string } | null
-  /** Monedas que el plan regala cada mes; regaloRecibido > 0 si se abonaron en esta consulta */
-  plan: { tier: string; monedasMes: number; regaloRecibido: number; porPlan: Record<string, number> }
+  /** Bono de bienvenida por pasarse a un plan pago (una sola vez por plan); regaloRecibido > 0 si se abonó en esta consulta */
+  plan: { tier: string; bono: number; regaloRecibido: number; bonoPlan: Record<string, number> }
   catalogo: Record<TipoCosmetico, ArticuloTienda[]>
-  cofres: { id: string; tipo: 'comun' | 'raro' | 'legendario'; origen: string }[]
+  /** `de`: nombre de quien lo regaló (cofres regalados por un amigo de Social) */
+  cofres: { id: string; tipo: 'comun' | 'raro' | 'legendario'; origen: string; de: string | null }[]
   cofresInfo: { tipo: 'comun' | 'raro' | 'legendario'; monedasMin: number; monedasMax: number; probAspecto: number; probColor: number; precio: number; origen: string }[]
   /** `producto`: ID en App Store / Google Play (en la app nativa se compran con la tienda) */
   paquetes: { id: string; producto: string; monedas: number; precioCop: number; bono: number; disponible: boolean }[]
   /** La primera compra de monedas trae el doble */
   primeraCompraDoble: boolean
-  abonos: { ahorro: { monedas: number; maxDia: number; hoy: number }; pago: { monedas: number; maxDia: number; hoy: number }; deuda: { monedas: number } }
+  abonos: { ahorro: { monedas: number; maxDia: number; hoy: number }; obligaciones: { monedas: number; ganadasEstePeriodo: boolean }; deuda: { monedas: number } }
 }
 export interface PremioCofre { tipo: string; monedas: number; articulo: { tipo: TipoCosmetico; clave: string } | null }
 
@@ -874,7 +877,11 @@ export const gamificationApi = {
     return api<EstadoTienda>('/gamification/jardin/tienda')
   },
   async comprar(tipo: string, clave: string) {
-    return api<{ tienda: EstadoTienda; cofre?: { id: string; tipo: 'legendario' } }>('/gamification/jardin/tienda/comprar', { method: 'POST', body: { tipo, clave } })
+    return api<{ tienda: EstadoTienda; cofre?: { id: string; tipo: 'comun' | 'raro' | 'legendario' } }>('/gamification/jardin/tienda/comprar', { method: 'POST', body: { tipo, clave } })
+  },
+  /** Regalar un cofre a un amigo de Social (se cobra al que regala) */
+  async regalarCofre(amigoId: string, tipo: 'comun' | 'raro' | 'legendario') {
+    return api<{ tienda: EstadoTienda; regalo: { id: string; tipo: string; para: string } }>('/gamification/jardin/tienda/regalar', { method: 'POST', body: { amigoId, tipo } })
   },
   async equipar(tipo: string, clave: string) {
     return api<{ equipado: EstadoTienda['equipado'] }>('/gamification/jardin/tienda/equipar', { method: 'POST', body: { tipo, clave } })
@@ -1368,6 +1375,8 @@ export interface FactonetInfo {
   url: string
   correo: string
   facturaPendiente: FacturaPendiente | null
+  /** Enlace directo a pagar la factura pendiente en FactoNet */
+  urlPagar?: string | null
   cambioPlan: { packageId: string; plan: string | null; fecha: string; ciclo?: "mensual" | "anual"; descuentoPrimerMes?: number; firmado?: boolean } | null
 }
 
@@ -1384,9 +1393,12 @@ export const planApi = {
   disponibles: () => api<PlanDisponible[]>('/plan/available'),
   factonet: () => api<FactonetInfo>('/plan/factonet'),
   /** Cambio de plan: Authoriza valida la contraseña, crea el contrato y da acceso a FactoNet */
-  cambiar: (data: { packageId: string; packageName: string; password: string; acceptTerms: boolean; acceptHabeasData: boolean; billingCycle?: 'monthly' | 'annual' }) =>
+  cambiar: (data: { packageId: string; packageName: string; password?: string; acceptTerms: boolean; acceptHabeasData: boolean; billingCycle?: 'monthly' | 'annual'; origen?: string }) =>
     api<{ success: boolean; message?: string }>('/plan/upgrade', { method: 'POST', body: data }),
   uso: () => api<UsoPlan>('/usage-status'),
+  /** Medición: se vio o se tocó una oferta de plan (origen = dónde) */
+  evento: (tipo: 'oferta_vista' | 'oferta_click', origen: string) =>
+    api<{ ok: boolean }>('/plan/evento', { method: 'POST', body: { tipo, origen } }),
 }
 
 // ─── Savings Pockets API (Bolsillos de Ahorro Personales) ─────────────────────
@@ -1770,6 +1782,78 @@ export const projectionsApi = {
 }
 
 export interface EscenarioProyeccion { id: string; nombre: string; aporteExtra: number; recortarHormiga: boolean; meses: number; createdAt: string }
+
+// ─── Plan semanal (Billetera) — ver Backend lib/plan-semanal.ts ───────────────
+
+export type EstadoSemanaPlan = "actual" | "proxima" | "lograda" | "fallida" | "sin_plan" | "pasada_sin_plan"
+
+export interface SemanaPlan {
+  indice: number
+  inicio: string
+  fin: string
+  dias: number
+  meta: number
+  gastado: number
+  estado: EstadoSemanaPlan
+  monedas: number
+}
+
+export type ConsejoPlan =
+  | { tipo: "sobrecargado"; faltante: number }
+  | { tipo: "pasado_semana"; exceso: number }
+  | { tipo: "ritmo_rapido"; hoy: number }
+  | { tipo: "ritmo_bien" }
+  | { tipo: "deuda_cara"; nombre: string; tasa: number }
+  | { tipo: "deuda_pequena"; nombre: string; saldo: number }
+  | { tipo: "hormiga"; monto: number }
+  | { tipo: "sobrante" }
+  | { tipo: "sin_saldo" }
+
+export interface PlanSemanal {
+  frecuencia: "quincenal" | "mensual"
+  periodo: { inicio: string; fin: string; proximoCobro: string; diasRestantes: number }
+  saldo: number
+  obligaciones: number
+  remanente: number
+  /** Lo que FALTA ahorrar este periodo (0 si ya cumplió la meta: el plan no lo vuelve a pedir) */
+  ahorro: number
+  /** Lo ya ahorrado en el periodo y la meta de ahorro del periodo */
+  ahorroHecho: number
+  metaAhorro: number
+  disponible: number
+  semanaActual: number
+  hoyPuedes: number
+  diasQuedanSemana: number
+  racha: number
+  semanas: SemanaPlan[]
+  consejos: ConsejoPlan[]
+}
+
+export const planSemanalApi = {
+  /** `obligaciones` = lo pendiente del periodo que muestra Billetera */
+  get: (obligaciones: number) => api<PlanSemanal>(`/plan-semanal?obligaciones=${Math.max(0, Math.round(obligaciones))}`),
+  /** Para el Jardín: ritmo de la semana en curso y la última semana cerrada */
+  arbol: () => api<PlanSemanalArbol>("/plan-semanal/arbol"),
+  /** Semanas del plan que empiezan entre `desde` y `hasta` (YYYY-MM-DD, incluidos) — Historial */
+  semanas: (desde: string, hasta: string) => api<{ semanas: SemanaPlanGuardada[] }>(`/plan-semanal/semanas?desde=${desde}&hasta=${hasta}`),
+}
+
+export interface SemanaPlanGuardada {
+  inicio: string
+  fin: string
+  indice: number
+  meta: number
+  gastado: number | null
+  estado: "abierta" | "lograda" | "fallida" | "sin_plan"
+  monedas: number
+  congelada: boolean
+}
+
+export interface PlanSemanalArbol {
+  ritmo: "bien" | "rapido" | "pasado" | null
+  ultima: { estado: "lograda" | "fallida"; indice: number; monedas: number; fin: string } | null
+  racha: number
+}
 
 // ─── Notificaciones (campana) — persistidas en el backend ─────────────────────
 // `event`/`data` tienen la misma forma que espera KiriNotification en

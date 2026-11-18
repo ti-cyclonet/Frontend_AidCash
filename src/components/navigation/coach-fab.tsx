@@ -140,7 +140,7 @@ export function CoachFab() {
   const router = useRouter()
   const pathname = usePathname()
   const { income, ingresoPeriodo, incomeFrequency, diasCobro, formatAmount, user } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes } = useFinanceData()
+  const { debts, fixedExpenses, extraIncomes, prestamosQueDebo } = useFinanceData()
   const { ejecutar } = useEjecutarAcciones()
 
   const [isOpen, setIsOpen] = useState(false)
@@ -220,7 +220,7 @@ export function CoachFab() {
   }, [])
 
   // ── Simulador (satélite) ──────────────────────────────────────────────────
-  const periodData = getPeriodData(income, extraIncomes.reduce((a, e) => a + e.monto, 0), debts, fixedExpenses, incomeFrequency, diasCobro, ingresoPeriodo)
+  const periodData = getPeriodData(income, extraIncomes.reduce((a, e) => a + e.monto, 0), debts, fixedExpenses, incomeFrequency, diasCobro, ingresoPeriodo, prestamosQueDebo)
   const allocation = periodData.effectiveIncome > 0
     ? calculateBudgetAllocation(periodData.effectiveIncome, periodData.totalObligations)
     : null

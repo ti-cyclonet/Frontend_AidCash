@@ -37,6 +37,8 @@ export interface PlanData {
   primerMesInvitado?: { pct: number; hasta: string } | null
   /** Invita y gana (lib/referidos.ts del backend) */
   referidos?: ResumenReferidos
+  /** Prueba de KIRI PLUS (bienvenida o de invitado): días que quedan o recién terminada */
+  pruebaPlus?: { tuvo: boolean; activa: boolean; hasta: string | null; diasRestantes: number; recienTerminada: boolean } | null
 }
 
 export interface NivelReferido { clave: string; amigos: number; pagados: number; titulo: string; icono: string; logrado: boolean }
@@ -107,8 +109,8 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }
   const FREE_LIMITS: PlanData["limits"] = {
     nCategorias: { displayName: tr("categorías"), maxValue: 3 },
-    nDeudas: { displayName: "deudas", maxValue: 3 },
-    nGastosFijos: { displayName: "gastos fijos", maxValue: 4 },
+    nDeudas: { displayName: "deudas", maxValue: 999999 },
+    nGastosFijos: { displayName: "gastos fijos", maxValue: 999999 },
     nBolsillos: { displayName: "bolsillos", maxValue: 2 },
     nMeDeben: { displayName: tr("personas que te deben"), maxValue: 1 },
     nIngresosExtra: { displayName: "ingresos extra", maxValue: 2 },

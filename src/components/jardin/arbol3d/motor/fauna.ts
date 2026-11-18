@@ -15,7 +15,8 @@ function wingTex(cA: string, cB: string, spot: string) {
 }
 
 export interface Mariposa extends THREE.Group {
-  userData: { wr: THREE.Group; wl: THREE.Group; ph: number; R: number; h: number; sp: number; low: boolean }
+  /** k: 0–1, cuánto se ve (aparece y se va suave con la racha) */
+  userData: { wr: THREE.Group; wl: THREE.Group; ph: number; R: number; h: number; sp: number; low: boolean; k: number }
 }
 
 export function crearMariposas(scene: THREE.Scene) {
@@ -37,7 +38,7 @@ export function crearMariposas(scene: THREE.Scene) {
     const wr = new THREE.Group(), wl = new THREE.Group()
     ;[wr, wl].forEach(w => { w.position.set(0, 0.04, 0.02); const m = new THREE.Mesh(wingGeo, wm); m.rotation.x = Math.PI / 2; m.scale.set(0.62, 0.62, 0.62); w.add(m); g.add(w) })
     wl.scale.x = -1; g.visible = false; g.scale.setScalar(0.62); scene.add(g)
-    g.userData = { wr, wl, ph: 0, R: 0, h: 0, sp: 0, low: false }
+    g.userData = { wr, wl, ph: 0, R: 0, h: 0, sp: 0, low: false, k: 0 }
     return g
   }
   const flies = [makeButterfly("#ffd36b", "#f08a24", "#fff3d0"), makeButterfly("#c8f0d8", "#4fb585", "#ffffff"), makeButterfly("#ffe98a", "#f2b705", "#fff8d6")]

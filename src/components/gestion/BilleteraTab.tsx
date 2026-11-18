@@ -24,8 +24,10 @@ import { getIncomeQuincenaLabel } from "@/hooks/use-smart-alerts"
 import { useSocket, SOCKET_EVENTS } from "@/lib/socket-context"
 import { RecommendationModal, RecommendationType } from "./RecommendationModal"
 import { ConfigIngresoDialog } from "./ConfigIngresoDialog"
+import { PlanSemanalCard } from "./PlanSemanalCard"
 import { diasDeQuincenas, ingresoDeQuincena, quincenasDistintas } from "@/lib/ingresos"
 import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
+import { fechaDelPrestamo } from "@/lib/obligaciones-pendientes"
 import { tr } from "@/lib/i18n"
 import { toast } from "@/hooks/use-toast"
 
@@ -229,17 +231,25 @@ export function BilleteraTab() {
     setExtraIncomeFormOpen(false)
   }
 
-  useEffect(() => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }, [])
+  // Lo ahorrado en el periodo solo lo trae GET /users/wallet (las otras respuestas
+  // traen la billetera sin ese dato), así que se guarda aparte.
+  const [ahorradoPeriodo, setAhorradoPeriodo] = useState(0)
+  const cargarWallet = () => userApi.getWallet().then(({ data }) => {
+    if (!data) return
+    setWallet(data.wallet)
+    setAhorradoPeriodo(data.wallet.ahorradoPeriodo ?? 0)
+  })
+  useEffect(() => { cargarWallet() }, [])
 
   // Refrescar wallet cuando el coach u otro componente registra un ingreso/pago
   useEffect(() => {
-    const refresh = () => { userApi.getWallet().then(({ data }) => { if (data) setWallet(data.wallet) }) }
+    const refresh = () => { cargarWallet() }
     window.addEventListener("kiri:wallet-updated", refresh)
     return () => window.removeEventListener("kiri:wallet-updated", refresh)
   }, [])
 
   const { allocation, periodData, pendingObligations } = usePeriodBudget()
-  const { periodDebts, periodFixed } = periodData
+  const { periodDebts, periodFixed, pendientePorId, prestamosDelPeriodo } = periodData
   const { addNotification } = useSocket()
 
   const periodNum = incomeFrequency === "mensual" ? 1 : getCurrentQuincena(diasCobro)
@@ -252,12 +262,9 @@ export function BilleteraTab() {
   const periodRange = getPeriodRangeLabel(incomeFrequency, diasCobro)
   const nextPeriodLabel = getNextPeriodLabel(incomeFrequency, diasCobro)
 
-  // Obligaciones con monto ajustado por frecuencia (quincenal = /2)
-  const displayObligationsTotal = useMemo(() => {
-    const debtsTotal = periodDebts.reduce((a, d) => a + getDisplayAmount(d), 0)
-    const fixedTotal = periodFixed.reduce((a, f) => a + getDisplayAmount(f), 0)
-    return debtsTotal + fixedTotal
-  }, [periodDebts, periodFixed])
+  // Todo lo que vence en el periodo (cuota completa, por fecha real), lo vencido
+  // sin pagar y los préstamos de Social que vencen — ver lib/obligaciones-pendientes.ts
+  const displayObligationsTotal = periodData.totalObligations
 
   const nextPeriodObligations = useMemo(() => {
     const currentIds = new Set([...periodDebts.map(d => d.id), ...periodFixed.map(f => f.id)])
@@ -396,7 +403,7 @@ export function BilleteraTab() {
 
   // Calcular distribución real basada en lo que HAY disponible
   // Mismo cálculo que usan "Me deben" y Presupuesto (ver lib/distribucion-billetera.ts).
-  const realAllocation = useMemo(() => calcularDistribucionReal(realIncome, realObligations), [realIncome, realObligations])
+  const realAllocation = useMemo(() => calcularDistribucionReal(realIncome, realObligations, ahorradoPeriodo), [realIncome, realObligations, ahorradoPeriodo])
 
   const pocketValues: Record<string, number> = {
     ahorro: Math.round(realAllocation.savingsAmount),
@@ -634,27 +641,35 @@ export function BilleteraTab() {
           <CardContent className="p-4 space-y-3">
             <h3 className="font-bold text-sm">{tr("Obligaciones del período actual")}<span className="text-muted-foreground font-normal text-xs ml-1">({periodRange})</span>
             </h3>
-            {incomeFrequency === "quincenal" && (
-              <p className="text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{tr("💡 Las obligaciones con frecuencia")}{" "}<span className="font-bold">{tr("quincenal")}</span>{" "}{tr("se dividen entre las 2 quincenas. Solo se muestra la mitad correspondiente a este periodo.")}</p>
-            )}
-            {periodDebts.length === 0 && periodFixed.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-1.5">{tr("Suma todo lo que vence en este periodo, lo vencido sin pagar y los préstamos de Social cuya fecha de pago llega.")}</p>
+            {periodDebts.length === 0 && periodFixed.length === 0 && prestamosDelPeriodo.length === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">{tr("🎉 No tienes obligaciones pendientes")}</p>
             ) : (
               <div className="divide-y divide-border/50">
                 {periodDebts.map(d => (
                   <ObligationRow key={d.id} name={d.nombre} day={d.diasPago}
-                    amount={getDisplayAmount(d)} fullAmount={d.cuotaPeriodo}
+                    amount={pendientePorId[d.id] ?? 0} fullAmount={d.cuotaPeriodo}
                     isQuincenal={d.frecuenciaPago === "quincenal"}
-                    isOverdue={isGenuinelyOverdue(d)}
-                    paid={d.pagadoEstePeriodo} formatAmount={formatAmount} />
+                    isOverdue={isGenuinelyOverdue(d) || (d.montoAtrasado ?? 0) > 0}
+                    paid={false} formatAmount={formatAmount} />
                 ))}
                 {periodFixed.map(f => (
                   <ObligationRow key={f.id} name={f.nombre} day={f.fechaCorte}
-                    amount={getDisplayAmount(f)} fullAmount={f.monto}
+                    amount={pendientePorId[f.id] ?? 0} fullAmount={f.monto}
                     isQuincenal={f.frecuencia === "quincenal"}
-                    isOverdue={isGenuinelyOverdue(f)}
-                    paid={f.pagadoEstePeriodo} formatAmount={formatAmount} />
+                    isOverdue={isGenuinelyOverdue(f) || (f.montoAtrasado ?? 0) > 0}
+                    paid={false} formatAmount={formatAmount} />
                 ))}
+                {prestamosDelPeriodo.map(({ prestamo, monto }, i) => {
+                  const fecha = fechaDelPrestamo(prestamo)
+                  return (
+                    <ObligationRow key={`prestamo-${i}`} name={(prestamo as { descripcion?: string }).descripcion || tr("Préstamo en Social")}
+                      day={fecha ? String(fecha.getDate()) : ""}
+                      amount={monto} fullAmount={monto} isQuincenal={false}
+                      isOverdue={!!fecha && fecha < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())}
+                      paid={false} formatAmount={formatAmount} />
+                  )
+                })}
               </div>
             )}
             <Link href="/obligaciones" className="block text-center text-kiri-emerald font-bold text-xs hover:underline">{tr("Ver todas las obligaciones")}</Link>
@@ -720,6 +735,8 @@ export function BilleteraTab() {
                     ? tr("El {0}% de tu saldo va a obligaciones. Intenta reducir gastos fijos o generar un ingreso extra para tener más margen.", [Math.round(realAllocation.obligationsPct)])
                     : total <= 0 && displayObligationsTotal > 0
                       ? tr("Tienes {0} en obligaciones pendientes. Registra tu ingreso para ver cómo se distribuye tu dinero.", [formatAmount(displayObligationsTotal)])
+                      : total > 0 && realAllocation.savingsAmount <= 0 && ahorradoPeriodo > 0
+                        ? tr("Ya apartaste {0} para tu ahorro este periodo. Te quedan {1} para gastos libres.", [formatAmount(ahorradoPeriodo), formatAmount(pocketValues.libre)])
                       : total > 0 && realAllocation.savingsAmount > 0
                         ? tr("Puedes destinar {0} al ahorro ({1}%) y {2} a gastos libres este periodo.", [formatAmount(Math.round(realAllocation.savingsAmount)), Math.round(realAllocation.savingsPct), formatAmount(pocketValues.libre)]) /* el mismo "Gasto libre" de la tarjeta de arriba (antes solo la parte libre: $251.985 vs $945.020 en la misma pantalla) */
                         : tr("Estás distribuyendo tu dinero de forma inteligente.")
@@ -729,6 +746,9 @@ export function BilleteraTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ═══ PLAN SEMANAL: cuánto gastar cada semana hasta el próximo cobro ═══ */}
+      <PlanSemanalCard obligaciones={displayObligationsTotal} saldo={total} formatAmount={formatAmount} />
 
       {/* ═══ MODAL REGISTRAR INGRESO ═══ */}
       <Dialog open={incomeOpen} onOpenChange={v => { setIncomeOpen(v); if (!v) resetAvance() }}>
@@ -921,7 +941,11 @@ function ObligationRow({ name, day, amount, fullAmount, isQuincenal, isOverdue, 
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium truncate block">{name}</span>
         {isQuincenal && (
-          <span className="text-[9px] text-muted-foreground">{tr("Quincenal · Total: {0}", [formatAmount(fullAmount)])}</span>
+          <span className="text-[9px] text-muted-foreground">
+            {amount > fullAmount
+              ? tr("Quincenal · {0} cuotas de {1} en este periodo", [Math.round(amount / fullAmount), formatAmount(fullAmount)])
+              : tr("Quincenal · cuota de {0}", [formatAmount(fullAmount)])}
+          </span>
         )}
         {isOverdue && (
           <span className="text-[9px] text-red-500 font-medium">{tr("Venció el día {0} de este mes", [dayLabel])}</span>

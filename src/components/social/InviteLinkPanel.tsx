@@ -19,7 +19,7 @@ const ROLE_TEXTO: Record<ConnectionRole, string> = { FRIEND: "amigo", FAMILY: "f
 
 /** Mensaje de invitación ya escrito, con lo que gana quien llega con el enlace. */
 export function mensajeInvitacion(rol = "amigo"): string {
-  return tr("¡Únete a Kiri Finance! Organizo mi plata, ahorro y cuido mi jardín financiero ahí 🌱 Entra con mi enlace: tienes 14 días de KIRI PLUS gratis y quedamos conectados como {0}.", [rol])
+  return tr("¡Únete a Kiri Finance! Organizo mi plata, ahorro y cuido mi jardín financiero ahí 🌱 Entra con mi enlace: tienes 30 días de KIRI PLUS gratis y quedamos conectados como {0}.", [rol])
 }
 
 /** Logo de WhatsApp (lucide no lo trae). */
@@ -131,7 +131,7 @@ export function InviteLinkPanel({ role: roleFijo, compact = false }: { role?: Co
       <Button type="button" onClick={whatsapp} disabled={!code} className="w-full h-11 rounded-xl gap-2 font-bold text-sm bg-[#25D366] hover:bg-[#1ebe5b] text-white">
         <WhatsAppIcon className="h-4 w-4" />{" "}{tr("Enviar por WhatsApp")}</Button>
 
-      <p className="text-[10.5px] text-muted-foreground leading-snug">{tr("Cuando se registre con este enlace, aparecerán conectados en Social como")}{" "}<strong>{ROLE_TEXTO[role]}</strong>{". "}{tr("Tiene 14 días de KIRI PLUS gratis. Cuando registre sus primeros movimientos, los dos ganan más mensajes con Kiri Coach, y si se suscribe, tú ganas 1 mes gratis de tu plan.")}{referidos > 0 && <> <span className="inline-flex items-center gap-1 font-bold text-kiri-emerald"><Users className="h-3 w-3" />{" "}{tr("{0} {1} con tus enlaces.", [referidos, referidos === 1 ? tr("persona se ha unido") : tr("personas se han unido")])}</span></>}
+      <p className="text-[10.5px] text-muted-foreground leading-snug">{tr("Cuando se registre con este enlace, aparecerán conectados en Social como")}{" "}<strong>{ROLE_TEXTO[role]}</strong>{". "}{tr("Tiene 30 días de KIRI PLUS gratis. Cuando registre sus primeros movimientos, los dos ganan más mensajes con Kiri Coach, y si se suscribe, tú ganas 1 mes gratis de tu plan.")}{referidos > 0 && <> <span className="inline-flex items-center gap-1 font-bold text-kiri-emerald"><Users className="h-3 w-3" />{" "}{tr("{0} {1} con tus enlaces.", [referidos, referidos === 1 ? tr("persona se ha unido") : tr("personas se han unido")])}</span></>}
       </p>
     </div>
   )
@@ -143,7 +143,7 @@ export function InviteLinkModal({ open, onClose }: { open: boolean; onClose: () 
       <DialogContent className="sm:max-w-md [&>*]:min-w-0 overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">{tr("💌 Invita a alguien a Kiri")}</DialogTitle>
-          <DialogDescription>{tr("Compártele tu enlace: tiene 14 días de KIRI PLUS gratis y los dos ganan cuando empiece a usar Kiri.")}</DialogDescription>
+          <DialogDescription>{tr("Compártele tu enlace: tiene 30 días de KIRI PLUS gratis y los dos ganan cuando empiece a usar Kiri.")}</DialogDescription>
         </DialogHeader>
         <InviteLinkPanel />
       </DialogContent>

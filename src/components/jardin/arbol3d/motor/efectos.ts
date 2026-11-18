@@ -1,6 +1,6 @@
 import * as THREE from "three"
 import { aplicarSequedad, LEAF_LP, type PiezasFruta } from "./arbol"
-import type { AspectoRegadera } from "./especies"
+import { crearModeloRegadera, type ModeloRegadera } from "./accesorios3d"
 import { Hgt } from "./terreno"
 import { clamp, glowTex, smooth } from "./utilidades"
 
@@ -9,21 +9,19 @@ import { clamp, glowTex, smooth } from "./utilidades"
 interface Particulas { p: THREE.Points; pos: Float32Array; col: Float32Array | null; vel: Float32Array; life: Float32Array; n: number; i: number }
 
 export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerTex: THREE.Texture, uSeco: { value: number }, fruta: PiezasFruta) {
-  /* ---------- regadera ---------- */
+  /* ---------- regadera ----------
+     El modelo depende de lo que se compró en la tienda: regadera clásica o dorada,
+     vaso, balde, pistola de agua o cartera (esa suelta monedas en vez de agua). */
   const can = new THREE.Group(); can.visible = false; scene.add(can)
-  const canMats: { b?: THREE.MeshStandardMaterial; d?: THREE.MeshStandardMaterial } = {}
-  {
-    const bm = new THREE.MeshStandardMaterial({ color: 0x3aa0c0, roughness: .45, metalness: .2 })
-    const dm = new THREE.MeshStandardMaterial({ color: 0x2a7a96, roughness: .45, metalness: .2 })
-    canMats.b = bm; canMats.d = dm
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.52, 16), bm); body.castShadow = true; can.add(body)
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.05, 16), dm); lid.position.y = 0.285; can.add(lid)
-    const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.085, 0.72, 10), dm); sp.position.set(-0.5, 0.1, 0); sp.rotation.z = 0.9; sp.castShadow = true; can.add(sp)
-    const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.06, 0.12, 12), bm); rose.position.set(-0.79, 0.37, 0); rose.rotation.z = 0.9; can.add(rose)
-    const h = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.04, 8, 16, Math.PI), dm); h.position.set(0.36, 0.04, 0); h.rotation.z = -Math.PI / 2; can.add(h)
-  }
   can.scale.setScalar(0.7)
-  const canTip = new THREE.Object3D(); canTip.position.set(-0.86, 0.4, 0); can.add(canTip)
+  const canTip = new THREE.Object3D(); can.add(canTip)
+  let regadera: ModeloRegadera = crearModeloRegadera("azul")
+  function armarRegadera(clave: string) {
+    can.remove(regadera.g)
+    regadera = crearModeloRegadera(clave)
+    can.add(regadera.g); canTip.position.copy(regadera.punta)
+  }
+  armarRegadera("azul")
   const canHome = new THREE.Vector3(1.75, 1.25, 0.6), canAway = new THREE.Vector3(3.0, 2.2, 0.6)
   let canP = 0, pourAcc = 0, vertiendo = false, motaAcc = 0
 
@@ -38,6 +36,8 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
     return { p, pos, col, vel: new Float32Array(n * 3), life: new Float32Array(n), n, i: 0 }
   }
   const drops = makePoints(260, { size: 0.15, color: 0x9bdcff })
+  /* monedas de la cartera: doradas, más grandes y con brillo */
+  const monedasP = makePoints(160, { size: 0.24, color: 0xffd34a, additive: true })
   const sparks = makePoints(220, { size: 0.3, color: 0xffffff, colors: true, additive: true })
   const motas = makePoints(240, { size: 0.22, color: 0xffffff, colors: true, additive: true })
   const motaGiro = new Float32Array(motas.n * 3) /* ángulo, radio, vida inicial */
@@ -58,7 +58,7 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
   const leafFall: { m: THREE.Mesh; on: boolean; state: number; age: number; seed: number; v: THREE.Vector3; spin: THREE.Vector3 }[] = []
   const appleFall: { m: THREE.Mesh; on: boolean; landed: boolean; rest: number; v: THREE.Vector3 }[] = []
   for (let i = 0; i < 160; i++) { const m = new THREE.Mesh(fallGeo, fallMats[i % 4]); m.visible = false; scene.add(m); leafFall.push({ m, on: false, state: 0, age: 0, seed: 0, v: new THREE.Vector3(), spin: new THREE.Vector3() }) }
-  for (let i = 0; i < 30; i++) { const m = fruta.decorar(new THREE.Mesh(fruta.fruitGeo, fruta.fruitMat)); m.visible = false; m.castShadow = true; scene.add(m); appleFall.push({ m, on: false, landed: false, rest: 0, v: new THREE.Vector3() }) }
+  for (let i = 0; i < 30; i++) { const m = fruta.nuevo(); m.visible = false; m.castShadow = true; scene.add(m); appleFall.push({ m, on: false, landed: false, rest: 0, v: new THREE.Vector3() }) }
 
   function spawnLeaf(x: number, y: number, z: number, petal: boolean) {
     for (let i = 0; i < leafFall.length; i++) {
@@ -95,7 +95,7 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
   function crearFruto(indice: number, dorado: boolean) {
     const slot = SLOTS[indice % SLOTS.length], a = FRENTE + slot[0], r = slot[1]
     const g = new THREE.Group(); g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r)
-    const m = fruta.decorar(new THREE.Mesh(fruta.fruitGeo, dorado ? doradoMat : fruta.fruitMat)); m.castShadow = true; m.scale.setScalar(1.5); g.add(m)
+    const m = fruta.nuevo(dorado); m.castShadow = true; m.scale.setScalar(1.5); g.add(m)
     const hit = new THREE.Mesh(hitGeo, hitMat); g.add(hit)
     let brillo: THREE.Sprite | null = null
     if (dorado) { brillo = new THREE.Sprite(new THREE.SpriteMaterial({ map: brilloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: .8 })); brillo.scale.set(1.1, 1.1, 1); g.add(brillo) }
@@ -133,20 +133,27 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
     can.visible = canP > 0.02
     if (can.visible) {
       can.position.lerpVectors(canAway, canHome, smooth(canP))
-      can.rotation.z = 0.74 * smooth((canP - 0.6) / 0.4)
+      can.rotation.z = regadera.inclinar * smooth((canP - 0.6) / 0.4)
       if (o.holding && canP > 0.9) {
         if (!vertiendo) { vertiendo = true; o.alRegar() }
-        pourAcc += dt * 90; can.updateMatrixWorld(true); canTip.getWorldPosition(vTmp)
-        while (pourAcc >= 1) { pourAcc -= 1; emit(drops, vTmp.x + (Math.random() - .5) * .1, vTmp.y, vTmp.z + (Math.random() - .5) * .18, -1.4 - Math.random() * .6, -0.3 + Math.random() * .4, (Math.random() - .5) * .5, 1.4) }
+        const monedas = regadera.particula === "monedas", [cx, cy] = regadera.chorro
+        pourAcc += dt * (monedas ? 30 : 90); can.updateMatrixWorld(true); canTip.getWorldPosition(vTmp)
+        while (pourAcc >= 1) {
+          pourAcc -= 1
+          emit(monedas ? monedasP : drops, vTmp.x + (Math.random() - .5) * .1, vTmp.y, vTmp.z + (Math.random() - .5) * .18, cx - Math.random() * .6, cy + Math.random() * .4, (Math.random() - .5) * .5, monedas ? 1.8 : 1.4)
+        }
       }
     }
     if (!o.holding) vertiendo = false
-    for (let i = 0; i < drops.n; i++) {
-      if (drops.life[i] <= 0) continue; drops.life[i] -= dt; drops.vel[i * 3 + 1] -= 18 * dt
-      drops.pos[i * 3] += drops.vel[i * 3] * dt; drops.pos[i * 3 + 1] += drops.vel[i * 3 + 1] * dt; drops.pos[i * 3 + 2] += drops.vel[i * 3 + 2] * dt
-      if (drops.pos[i * 3 + 1] < 0.05 || drops.life[i] <= 0) { drops.life[i] = 0; drops.pos[i * 3 + 1] = -100 }
+    for (const P of [drops, monedasP]) {
+      const g = P === monedasP ? 9 : 18
+      for (let i = 0; i < P.n; i++) {
+        if (P.life[i] <= 0) continue; P.life[i] -= dt; P.vel[i * 3 + 1] -= g * dt
+        P.pos[i * 3] += P.vel[i * 3] * dt; P.pos[i * 3 + 1] += P.vel[i * 3 + 1] * dt; P.pos[i * 3 + 2] += P.vel[i * 3 + 2] * dt
+        if (P.pos[i * 3 + 1] < 0.05 || P.life[i] <= 0) { P.life[i] = 0; P.pos[i * 3 + 1] = -100 }
+      }
+      P.p.geometry.attributes.position.needsUpdate = true
     }
-    drops.p.geometry.attributes.position.needsUpdate = true
 
     /* destellos */
     for (let i = 0; i < sparks.n; i++) {
@@ -237,7 +244,8 @@ export function crearEfectos(scene: THREE.Scene, leafTex: THREE.Texture, flowerT
     },
     /** Las hojas que caen usan la misma textura (el mismo color) que el árbol */
     ponerTexturaHojas(tex: THREE.Texture) { fallMats.forEach((m, i) => { m.map = tex; m.color.setScalar([0.85, 1, 1.08, 0.78][i]) }) },
-    ponerRegadera(a: AspectoRegadera) { canMats.b!.color.set(a.b); canMats.d!.color.set(a.d); canMats.b!.metalness = canMats.d!.metalness = a.metal ?? 0.2 },
+    /** Cambia la regadera (clave de la tienda). */
+    ponerRegadera(clave: string) { armarRegadera(clave) },
     setSuelo(fn: (x: number, z: number) => number) { sueloY = fn },
   }
 }

@@ -220,6 +220,9 @@ export interface Debt {
   cuotaBase?: number;
   cuotaAjustadaEstePeriodo?: boolean;
   /** Pago adelantado de la próxima cuota. */
+  /** Periodo con que se etiquetan sus pagos ahora ("2026-11", "2026-11-Q2") */
+  periodoActual?: string;
+  activoDesdePeriodo?: string | null;
   periodoSiguiente?: string;
   montoAdelantado?: number | null;
   proximaCuotaCubierta?: boolean;
@@ -298,6 +301,9 @@ export interface FixedExpense {
   /** Pagos registrados en el periodo actual — si hay más de uno (cuota +
    * abonos), "Deshacer pago" pregunta si deshacer solo el último o todos. */
   pagosPeriodo?: PagosPeriodo;
+  /** Periodo con que se etiquetan sus pagos ahora ("2026-11", "2026-11-Q2") */
+  periodoActual?: string;
+  activoDesdePeriodo?: string | null;
   periodoSiguiente?: string;
   montoAdelantado?: number | null;
   proximaCuotaCubierta?: boolean;

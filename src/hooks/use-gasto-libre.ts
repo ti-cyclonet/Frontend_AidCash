@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { userApi, type WalletState } from "@/lib/api-client"
 import { usePeriodBudget } from "@/hooks/use-period-budget"
-import { calcularDistribucionReal, getDisplayAmount } from "@/lib/distribucion-billetera"
+import { calcularDistribucionReal } from "@/lib/distribucion-billetera"
 
 /**
  * "Gasto libre" con EXACTAMENTE el mismo cálculo que la tarjeta de Billetera
@@ -20,13 +20,11 @@ export function useGastoLibre() {
   }, [])
 
   const { periodData } = usePeriodBudget()
-  const obligaciones = useMemo(
-    () => periodData.periodDebts.reduce((a, d) => a + getDisplayAmount(d), 0) + periodData.periodFixed.reduce((a, f) => a + getDisplayAmount(f), 0),
-    [periodData.periodDebts, periodData.periodFixed],
-  )
+  // Lo pendiente del periodo por fecha real (incluye préstamos de Social que vencen)
+  const obligaciones = periodData.totalObligations
 
   const total = wallet?.cashBalance ?? 0
-  const dist = calcularDistribucionReal(total, obligaciones)
+  const dist = calcularDistribucionReal(total, obligaciones, wallet?.ahorradoPeriodo ?? 0)
   return {
     loaded: wallet !== null,
     wallet,

@@ -2,13 +2,15 @@
 
 /**
  * Tienda del árbol 3D: habitantes de la isla, especies, colores de hojas,
- * accesorios, cofres y paquetes de monedas. Los precios, el saldo, la oferta del
+ * accesorios (con su vista previa 3D), cofres (comprar y regalar) y cómo ganar
+ * monedas (solo se ganan usando Kiri). Los precios, el saldo, la oferta del
  * día y lo que el usuario tiene vienen del servidor (GET /gamification/jardin/tienda);
  * aquí solo se muestran. Comprar y equipar también pasan por el servidor, que
  * descuenta y valida.
  */
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { AnimatePresence, motion } from "framer-motion"
 import type { LucideIcon } from "lucide-react"
 import {
   Apple, Bird, Bug, Check, Clock, Coins, Crown, Droplets, Fence, Flame, Flower2, Gem, Gift, Loader2, Lock, Palette, PiggyBank, Sparkles,
@@ -16,11 +18,13 @@ import {
 } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { gamificationApi, type ArticuloTienda, type EstadoTienda, type RanuraCosmetico, type TipoCosmetico } from "@/lib/api-client"
+import { gamificationApi, planApi, type ArticuloTienda, type EstadoTienda, type RanuraCosmetico, type TipoCosmetico } from "@/lib/api-client"
 import { tr } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { ACCESORIOS, COLORES_HOJA, ESPECIES, type ClaveColor, type ClaveEspecie } from "@/components/jardin/arbol3d/motor/especies"
-import { comprarEnTienda, comprasDisponibles, preciosTienda } from "@/lib/nativo"
+import { vistaPrevia, type TipoVista } from "@/components/jardin/arbol3d/motor/vistaPrevia"
+import { RegalarCofre } from "./RegalarCofre"
+import { GanarMonedas } from "./GanarMonedas"
 
 export type PestanaTienda = "habitantes" | "arboles" | "colores" | "accesorios" | "cofres" | "monedas"
 export type TipoCofre = "comun" | "raro" | "legendario"
@@ -39,12 +43,33 @@ const ICONO_ESPECIE: Record<ClaveEspecie, LucideIcon> = { kiri: TreeDeciduous, p
 type Grupo = "hormiguero" | "cerca" | "regadera" | "frutos"
 const ICONO_GRUPO: Record<Grupo, LucideIcon> = { hormiguero: Bug, cerca: Fence, regadera: Droplets, frutos: Apple }
 export const COFRE_INFO: Record<TipoCofre, { nombre: string; icono: LucideIcon; tono: string; como: string }> = {
-  comun: { nombre: "Cofre común", icono: Gift, tono: "text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-500/15", como: "Se gana al saldar una deuda por completo" },
-  raro: { nombre: "Cofre raro", icono: Gem, tono: "text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-500/15", como: "Se gana al subir de nivel" },
+  comun: { nombre: "Cofre común", icono: Gift, tono: "text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-500/15", como: "Se gana al saldar una deuda o se compra" },
+  raro: { nombre: "Cofre raro", icono: Gem, tono: "text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-500/15", como: "Se gana al subir de nivel o se compra" },
   legendario: { nombre: "Cofre legendario", icono: Crown, tono: "text-yellow-700 bg-yellow-100 dark:text-yellow-300 dark:bg-yellow-500/15", como: "Solo se compra con monedas" },
 }
 const TITULO_GRUPO: Record<Grupo, string> = {
-  hormiguero: "Hormiguero", cerca: "Cerca del fondo de emergencia", regadera: "Regadera", frutos: "Frutos",
+  hormiguero: "Hormiguero", cerca: "Cerca", regadera: "Regadera", frutos: "Frutos",
+}
+const QUE_HACE_GRUPO: Record<Grupo, string> = {
+  hormiguero: "La casa de tus gastos hormiga.",
+  cerca: "Protege tu árbol según tu fondo de emergencia.",
+  regadera: "Sale cuando ahorras o riegas tu árbol.",
+  frutos: "Cuelgan de tu árbol cuando está frondoso.",
+}
+const esGrupo = (t: TipoCosmetico): t is Grupo => t === "hormiguero" || t === "cerca" || t === "regadera" || t === "frutos"
+
+/** Imagen del accesorio armado con los mismos modelos 3D de la isla (se genera una vez y queda guardada). */
+function VistaAccesorio({ tipo, clave, className }: { tipo: TipoVista; clave: string; className?: string }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => { let vivo = true; vistaPrevia(tipo, clave).then(u => { if (vivo) setUrl(u) }); return () => { vivo = false } }, [tipo, clave])
+  const a = (ACCESORIOS[tipo] as Record<string, { c?: number }>)[clave]
+  return (
+    <div className={cn("relative overflow-hidden rounded-lg bg-gradient-to-b from-sky-100 to-emerald-50 dark:from-sky-950/40 dark:to-emerald-950/30", className)}>
+      {url
+        ? <motion.img src={url} alt="" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} className="absolute inset-0 h-full w-full object-contain" />
+        : <div className="absolute inset-0 animate-pulse" style={{ background: `radial-gradient(circle at 50% 60%, ${hex(a?.c ?? 0xcccccc)}55, transparent 65%)` }} />}
+    </div>
+  )
 }
 
 /** Nombre visible de un artículo ("Pino", "Sakura", "Michi"...). */
@@ -132,26 +157,10 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
   }, [abierta])
 
   const monedas = estado?.monedas ?? 0
-  /* En la app nativa los paquetes se compran con la tienda (App Store / Google Play) */
-  const conTienda = comprasDisponibles()
-  const [precios, setPrecios] = useState<Record<string, string>>({})
-  const userId = typeof window !== "undefined" ? (() => { try { return localStorage.getItem("kiri_user_id") ?? "" } catch { return "" } })() : ""
-  useEffect(() => {
-    if (!abierta || !conTienda || !estado || !userId) return
-    preciosTienda(userId, estado.paquetes.map(p => p.producto)).then(setPrecios)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierta, conTienda, userId, estado?.paquetes.length])
-  async function comprarPaquete(producto: string) {
-    if (!userId) return
-    setOcupado(producto)
-    const r = await comprarEnTienda(userId, producto)
-    if (r === "ok") {
-      onAviso(tr("¡Compra lista! Tus monedas llegan en unos segundos"))
-      // El webhook de la tienda abona las monedas: se revisa un par de veces
-      for (const espera of [2500, 4000, 7000]) { await new Promise(res => window.setTimeout(res, espera)); await onRecargar() }
-    } else if (r === "error") onError(tr("No se pudo completar la compra en la tienda"))
-    setOcupado(null)
-  }
+  /* Accesorios: un botón por grupo que despliega sus productos */
+  const [grupoAbierto, setGrupoAbierto] = useState<Grupo | null>(null)
+  /* Regalar un cofre a un amigo de Social */
+  const [regalar, setRegalar] = useState<TipoCofre | null>(null)
   const especie = (estado?.equipado.especie ?? "kiri") as ClaveEspecie
   const oferta = estado?.oferta ?? null
   const precioDe = (tipo: TipoCosmetico, a: ArticuloTienda) => oferta && oferta.tipo === tipo && oferta.clave === a.clave ? oferta.precio : a.precio
@@ -176,7 +185,7 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
     setOcupado(null)
     if (!data) { onError(error ?? tr("No se pudo completar la compra")); return }
     onEstado(data.tienda)
-    if (data.cofre) onVerCofre("legendario")
+    if (data.cofre) onVerCofre(data.cofre.tipo)
   }
 
   function BotonPrecio({ id, precio, normal, onClick }: { id: string; precio: number; normal?: number; onClick: () => void }) {
@@ -210,6 +219,16 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
       </button>
     )
     if (puesto) return <span className="flex h-8 items-center justify-center gap-1 rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{tr("Equipado")}</span>
+    /* Exclusivo de un plan que no tiene: no se compra con monedas, lleva a ver el plan */
+    if (a.exclusivo && !a.tiene) return (
+      <button type="button" onClick={() => {
+        planApi.evento("oferta_click", `tienda_exclusivo:${a.exclusivo}`)
+        window.dispatchEvent(new CustomEvent("kiri:limite", { detail: { codigo: "FUNCION", mensaje: tr("{0} es exclusivo de KIRI {1}: viene con el plan, no se compra con monedas.", [nombreArticulo(tipo, a.clave), a.exclusivo]), mejora: { plan: `KIRI ${a.exclusivo}` } } }))
+      }}
+        className={cn("flex h-8 items-center justify-center gap-1 rounded-lg text-xs font-extrabold text-white", a.exclusivo === "PRO" ? "bg-amber-500 hover:bg-amber-400" : "bg-kiri-emerald hover:bg-kiri-emerald/90")}>
+        <Crown className="h-3.5 w-3.5" />{tr("Con KIRI {0}", [a.exclusivo])}
+      </button>
+    )
     if (a.tiene || a.incluido) return (
       <button type="button" disabled={!!ocupado} onClick={() => equipar(tipo, a.clave)} className="flex h-8 items-center justify-center gap-1 rounded-lg border border-border text-xs font-bold hover:bg-muted disabled:opacity-60">
         {cargando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{tr("Equipar")}
@@ -223,9 +242,12 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
     return (
       <div className={cn("relative flex flex-col gap-2 rounded-xl border bg-card p-2.5", puesto ? "border-emerald-500/60 ring-1 ring-emerald-500/30" : "border-border")}>
         {enOferta && !a.tiene && <span className="absolute right-2 top-2 z-10 rounded-full bg-rose-500 px-1.5 text-[10px] font-black leading-4 text-white">-30%</span>}
-        <div className="flex h-14 items-center justify-center rounded-lg" style={{ background: muestra(tipo, a.clave, especie) }}>
-          {Icono && <Icono className="h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" />}
-        </div>
+        {a.exclusivo && <span className={cn("absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-full px-1.5 text-[10px] font-black leading-4 text-white shadow", a.exclusivo === "PRO" ? "bg-amber-500" : "bg-kiri-emerald")}><Crown className="h-2.5 w-2.5" />{a.exclusivo}</span>}
+        {esGrupo(tipo) ? <VistaAccesorio tipo={tipo} clave={a.clave} className="h-24" /> : (
+          <div className="flex h-14 items-center justify-center rounded-lg" style={{ background: muestra(tipo, a.clave, especie) }}>
+            {Icono && <Icono className="h-7 w-7 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]" />}
+          </div>
+        )}
         <div className="min-h-[2.25rem]">
           <p className="text-[13px] font-bold leading-tight">{nombreArticulo(tipo, a.clave)}</p>
           <p className="text-[11px] leading-snug text-muted-foreground">{descripcion}</p>
@@ -240,7 +262,7 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
 
   const pendientes = (t: TipoCofre) => estado?.cofres.filter(c => c.tipo === t).length ?? 0
   const pct = (p: number) => Math.round(p * 100)
-  const porPlan = estado?.plan.porPlan ?? { PLUS: 150, PRO: 400 }
+  const bonoPlan = estado?.plan.bonoPlan ?? { PLUS: 300, PRO: 500 }
 
   return (
     <Sheet open={abierta} onOpenChange={onAbierta}>
@@ -323,27 +345,48 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
 
               <TabsContent value="colores" className="mt-0">
                 <Rejilla>
-                  {estado.catalogo.color.map(a => <Tarjeta key={a.clave} tipo="color" a={a} descripcion={a.clave === "auto" ? tr("El de cada especie") : tr("Color de hojas")} />)}
+                  {/* Los exclusivos de los planes van primero */}
+                  {[...estado.catalogo.color].sort((x, y) => (y.exclusivo ? 1 : 0) - (x.exclusivo ? 1 : 0)).map(a => <Tarjeta key={a.clave} tipo="color" a={a} descripcion={a.exclusivo ? tr("Exclusivo de KIRI {0}", [a.exclusivo]) : a.clave === "auto" ? tr("El de cada especie") : tr("Color de hojas")} />)}
                 </Rejilla>
-                <Nota>{tr("Los colores sirven para cualquier especie.")}</Nota>
+                <Nota>{tr("Los colores sirven para cualquier especie. Aurora viene con KIRI PLUS y Diamante con KIRI PRO, mientras tengas el plan.")}</Nota>
               </TabsContent>
 
-              <TabsContent value="accesorios" className="mt-0 space-y-4">
-                {(Object.keys(TITULO_GRUPO) as Grupo[]).map(g => (
-                  <section key={g}>
-                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">{tr(TITULO_GRUPO[g])}</h3>
-                    <Rejilla>
-                      {estado.catalogo[g].map(a => <Tarjeta key={a.clave} tipo={g} a={a} descripcion={a.incluido ? tr("Incluido") : tr("Aspecto")} />)}
-                    </Rejilla>
-                  </section>
-                ))}
-                <Nota>{tr("Los accesorios cambian el hormiguero, la cerca del fondo de emergencia, la regadera y los frutos.")}</Nota>
+              <TabsContent value="accesorios" className="mt-0 space-y-3">
+                {/* Un botón por accesorio: al tocarlo se despliegan sus productos */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(Object.keys(TITULO_GRUPO) as Grupo[]).map(g => {
+                    const abierto = grupoAbierto === g, lista = estado.catalogo[g], tiene = lista.filter(a => a.tiene || a.incluido).length
+                    return (
+                      <motion.button key={g} type="button" whileTap={{ scale: 0.97 }} onClick={() => setGrupoAbierto(abierto ? null : g)}
+                        className={cn("flex flex-col gap-1.5 rounded-xl border-2 bg-card p-2 text-left transition-colors", abierto ? "border-emerald-500 bg-emerald-500/5" : "border-border hover:border-emerald-500/40")}>
+                        <VistaAccesorio tipo={g} clave={estado.equipado[g]} className="h-16" />
+                        <span className="text-[13px] font-bold leading-tight">{tr(TITULO_GRUPO[g])}</span>
+                        <span className="text-[10px] text-muted-foreground">{tr("{0} de {1} · toca para ver", [tiene, lista.length])}</span>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+                <AnimatePresence mode="wait">
+                  {grupoAbierto && (
+                    <motion.section key={grupoAbierto} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+                      <div className="mb-2 flex items-baseline justify-between gap-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{tr(TITULO_GRUPO[grupoAbierto])}</h3>
+                        <p className="text-[11px] text-muted-foreground">{tr(QUE_HACE_GRUPO[grupoAbierto])}</p>
+                      </div>
+                      <Rejilla>
+                        {estado.catalogo[grupoAbierto].map(a => <Tarjeta key={a.clave} tipo={grupoAbierto} a={a} descripcion={a.incluido ? tr("Incluido") : a.precio >= 2000 ? tr("Edición de lujo") : tr("Nuevo aspecto")} />)}
+                      </Rejilla>
+                    </motion.section>
+                  )}
+                </AnimatePresence>
+                {!grupoAbierto && <Nota>{tr("Cada accesorio cambia la forma de tu isla: el hormiguero, la cerca del fondo de emergencia, la regadera y los frutos de tu árbol.")}</Nota>}
               </TabsContent>
 
               <TabsContent value="cofres" className="mt-0">
                 <div className="space-y-2.5">
                   {estado.cofresInfo.map(c => {
                     const I = COFRE_INFO[c.tipo], n = pendientes(c.tipo), Icono = I.icono
+                    const regalados = estado.cofres.filter(x => x.tipo === c.tipo && x.de).map(x => x.de)
                     const partes = [tr("{0}–{1} monedas", [fmt(c.monedasMin), fmt(c.monedasMax)])]
                     if (c.probAspecto >= 1) partes.push(tr("un aspecto seguro que no tengas"))
                     else if (c.probAspecto > 0) partes.push(tr("{0} % de un aspecto", [pct(c.probAspecto)]))
@@ -355,6 +398,7 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
                           <p className="text-[13px] font-bold">{tr(I.nombre)}</p>
                           <p className="text-[11px] leading-snug">{partes.join(" · ")}</p>
                           <p className="text-[11px] text-muted-foreground">{tr(I.como)}</p>
+                          {regalados.length > 0 && <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400"><Gift className="h-3 w-3" />{tr("Regalo de {0}", [[...new Set(regalados)].join(", ")])}</p>}
                         </div>
                         <div className="flex w-28 shrink-0 flex-col gap-1.5">
                           {n > 0 && (
@@ -363,63 +407,33 @@ export function TiendaSheet({ abierta, onAbierta, pestana, onPestana, estado, on
                             </button>
                           )}
                           {c.precio > 0 && <BotonPrecio id={`cofre:${c.tipo}`} precio={c.precio} onClick={() => comprar("cofre", c.tipo)} />}
+                          {c.precio > 0 && (
+                            <button type="button" onClick={() => setRegalar(c.tipo)} className="flex h-8 items-center justify-center gap-1 rounded-lg border border-rose-400/50 text-xs font-bold text-rose-600 hover:bg-rose-500/10 dark:text-rose-300">
+                              <Gift className="h-3.5 w-3.5" />{tr("Regalar")}
+                            </button>
+                          )}
                         </div>
                       </div>
                     )
                   })}
                 </div>
-                <Nota>{tr("Las probabilidades se muestran en cada cofre y el premio lo sortea el servidor. Ningún cofre se vende por dinero real.")}</Nota>
+                <Nota>{tr("Las probabilidades se muestran en cada cofre y el premio lo sortea el servidor. Los cofres se pagan solo con monedas y puedes regalarlos a tus amigos de Social.")}</Nota>
               </TabsContent>
 
               <TabsContent value="monedas" className="mt-0">
-                {/* Monedas del plan: PLUS y PRO reciben un regalo cada mes */}
+                {/* Bono del plan: una sola vez al pasarse a un plan pago */}
                 <div className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 text-[12px] leading-relaxed">
-                  {estado.plan.monedasMes > 0 ? (
-                    <p className="flex items-center gap-1.5 font-semibold"><Crown className="h-4 w-4 text-amber-500" />{tr("Tu plan {0} te regala {1} monedas cada mes.", [estado.plan.tier, fmt(estado.plan.monedasMes)])}</p>
-                  ) : (
-                    <>
-                      <p className="flex items-center gap-1.5 font-bold"><Crown className="h-4 w-4 text-amber-500" />{tr("Monedas cada mes con tu plan")}</p>
-                      <p className="mt-0.5 text-muted-foreground">{tr("Con KIRI PLUS recibes {0} monedas al mes y con KIRI PRO {1}, además de todo lo que desbloquean.", [fmt(porPlan.PLUS ?? 150), fmt(porPlan.PRO ?? 400)])}</p>
-                      <Link href="/mi-plan" onClick={() => onAbierta(false)} className="mt-2 inline-flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-500">{tr("Ver planes")}</Link>
-                    </>
-                  )}
+                  <p className="flex items-center gap-1.5 font-bold"><Crown className="h-4 w-4 text-amber-500" />{tr("Bono de bienvenida de tu plan")}</p>
+                  <p className="mt-0.5 text-muted-foreground">{tr("Al pasarte a KIRI PLUS recibes {0} monedas y a KIRI PRO {1}, una sola vez, además de todo lo que desbloquean.", [fmt(bonoPlan.PLUS ?? 300), fmt(bonoPlan.PRO ?? 500)])}</p>
+                  {estado.plan.bono === 0 && <Link href="/mi-plan" onClick={() => onAbierta(false)} className="mt-2 inline-flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-500">{tr("Ver planes")}</Link>}
                 </div>
-                {conTienda && estado.primeraCompraDoble && (
-                  <p className="mb-2.5 flex items-center gap-1.5 rounded-lg bg-amber-400/15 px-3 py-2 text-[12px] font-bold text-amber-800 dark:text-amber-200"><Sparkles className="h-4 w-4" />{tr("Tu primera compra trae el doble de monedas")}</p>
-                )}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {estado.paquetes.map(p => (
-                    <div key={p.id} className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3">
-                      <p className="flex items-center gap-1 text-sm font-extrabold"><Coins className="h-4 w-4 text-amber-500" />{fmt(p.monedas)}{conTienda && estado.primeraCompraDoble && <span className="text-[11px] font-black text-amber-600">×2</span>}</p>
-                      <p className="text-[11px] text-muted-foreground">{p.bono ? tr("Bono +{0} %", [p.bono]) : tr("Paquete inicial")}</p>
-                      {conTienda ? (
-                        <button type="button" disabled={!!ocupado} onClick={() => comprarPaquete(p.producto)} className="mt-auto flex h-8 items-center justify-center gap-1 rounded-lg bg-amber-400 text-xs font-extrabold text-amber-950 hover:bg-amber-300 disabled:opacity-60">
-                          {ocupado === p.producto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : precios[p.producto] ?? tr("Comprar")}
-                        </button>
-                      ) : (
-                        <span className="mt-auto flex h-8 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
-                          {p.disponible ? `$${fmt(p.precioCop)} COP` : tr("Próximamente")}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {conTienda && <p className="pt-2 text-[10px] leading-snug text-muted-foreground">{tr("El pago lo hace la tienda de tu celular. Las monedas son para la tienda del jardín y no se pueden cambiar por dinero.")}</p>}
-                <div className="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-[12px] leading-relaxed">
-                  <p className="mb-1 font-bold">{tr("Cómo ganar monedas")}</p>
-                  <ul className="space-y-0.5">
-                    <li>{tr("Registrar un ahorro: +{0} (hasta {1} al día; hoy llevas {2})", [estado.abonos.ahorro.monedas, estado.abonos.ahorro.maxDia, estado.abonos.ahorro.hoy])}</li>
-                    <li>{tr("Pagar una obligación: +{0} (hasta {1} al día; hoy llevas {2})", [estado.abonos.pago.monedas, estado.abonos.pago.maxDia, estado.abonos.pago.hoy])}</li>
-                    <li>{tr("Saldar una deuda por completo: +{0} y un cofre común", [estado.abonos.deuda.monedas])}</li>
-                    <li>{tr("Subir de nivel: un cofre raro")}</li>
-                  </ul>
-                  <p className="mt-1.5 text-muted-foreground">{tr("Regar, sacudir y cosechar dan XP a tu árbol, no monedas.")}</p>
-                </div>
+                <GanarMonedas abonos={estado.abonos} />
               </TabsContent>
             </div>
           </Tabs>
         )}
       </SheetContent>
+      <RegalarCofre abierto={!!regalar} onAbierto={v => { if (!v) setRegalar(null) }} tipoInicial={regalar ?? undefined} onHecho={onEstado} />
     </Sheet>
   )
 }

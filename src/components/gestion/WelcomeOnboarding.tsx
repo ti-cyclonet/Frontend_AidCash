@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
   Wallet, ReceiptText, PieChart,
   ArrowRight, Sparkles, X, ChevronLeft, Info, ShieldCheck,
-  Mic, ScanLine, Bot, Sprout,
+  Mic, ScanLine, Bot, Sprout, CalendarDays, Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
@@ -60,6 +60,16 @@ const steps = [
   },
   {
     id: 4,
+    label: tr("Tu semana"),
+    title: tr("Sabe cuánto puedes"),
+    titleHighlight: tr("gastar cada semana"),
+    description: tr("En Billetera, Kiri te dice cuánto te queda si pagas tus obligaciones, aparta tu ahorro y divide el resto por semanas: 2 si te pagan quincenal, 4 si es mensual."),
+    cardExplanation: tr("Cada día ves cuánto puedes gastar hoy. Si cumples la semana ganas monedas para tu jardín; si te pasas, las semanas que siguen se ajustan solas."),
+    icon: <CalendarDays className="h-6 w-6" />,
+    accentColor: "from-sky-500/20 to-sky-600/5",
+  },
+  {
+    id: 5,
     label: tr("Registro rápido"),
     title: tr("Registra sin"),
     titleHighlight: "escribir nada",
@@ -69,12 +79,12 @@ const steps = [
     accentColor: "from-kiri-emerald/20 to-kiri-forest/5",
   },
   {
-    id: 5,
+    id: 6,
     label: tr("Tu jardín"),
     title: tr("Tu árbol"),
     titleHighlight: tr("reacciona a tus finanzas"),
     description: tr("Cada decisión que tomas se ve en tu árbol 3D: crece con tus buenos hábitos, se seca si lo descuidas y te avisa cuando algo necesita atención."),
-    cardExplanation: tr("Completa misiones diarias e invita amigos con tu enlace para ganar XP y subir de nivel. Y si conectas a tu pareja en Social, llevan juntos el presupuesto del hogar."),
+    cardExplanation: tr("Ahorrar, pagar a tiempo y cumplir tu semana te da monedas para decorar tu isla en la tienda o regalarle un cofre a un amigo. Completa misiones e invita amigos para ganar XP y subir de nivel."),
     icon: <Sprout className="h-6 w-6" />,
     accentColor: "from-emerald-500/20 to-emerald-600/5",
   },
@@ -373,8 +383,56 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                 </div>
               )}
 
-              {/* Step 4: Registro rápido — voz, escáner y Kiri Coach */}
+              {/* Step 4: Plan semanal — te quedan, ahorro aparte y semanas */}
               {currentStep === 3 && (
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="flex flex-col justify-center space-y-3">
+                    <div className="h-14 w-14 rounded-2xl bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
+                      <CalendarDays className="h-7 w-7" />
+                    </div>
+                    <h2 className="text-xl font-black leading-tight">
+                      {step.title}{" "}
+                      <span className="text-sky-600 dark:text-sky-400">{step.titleHighlight}</span>
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
+                    <p className="text-xs text-sky-700/80 dark:text-sky-300/70 leading-relaxed">{step.cardExplanation}</p>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-3 shadow-lg flex flex-col justify-center">
+                    <div className="text-center">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">{tr("Si pagas tus obligaciones te quedan")}</p>
+                      <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{formatAmount(930000)}</p>
+                      <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400">{tr("Ahorro aparte: {0}", [formatAmount(230000)])}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { n: 1, meta: 350000, lleva: 312000, lograda: true },
+                        { n: 2, meta: 350000, lleva: 120000, lograda: false },
+                      ].map((w, i) => (
+                        <motion.div key={w.n} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.12 }}
+                          className={cn("rounded-xl border p-2.5", w.lograda ? "border-gray-200 dark:border-slate-700 opacity-70" : "border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/5")}>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-black text-gray-900 dark:text-white">{tr("Semana {0}", [w.n])}</p>
+                            {w.lograda && <span className="flex items-center gap-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-2.5 w-2.5" />{tr("Lograda")}</span>}
+                          </div>
+                          <p className="text-sm font-black text-gray-900 dark:text-white mt-1">{formatAmount(w.meta)}</p>
+                          <div className="mt-1.5 h-1.5 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
+                            <motion.div className={cn("h-full rounded-full", w.lograda ? "bg-emerald-500" : "bg-sky-500")}
+                              initial={{ width: 0 }} animate={{ width: `${Math.round(w.lleva / w.meta * 100)}%` }} transition={{ delay: 0.3 + i * 0.12, duration: 0.6 }} />
+                          </div>
+                          <p className="text-[9px] text-gray-500 dark:text-gray-400 mt-1">{tr("Llevas {0}", [formatAmount(w.lleva)])}</p>
+                        </motion.div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-center gap-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 px-3 py-2">
+                      <span className="text-[11px] text-gray-700 dark:text-gray-200">{tr("Hoy puedes gastar")}</span>
+                      <span className="text-sm font-black text-sky-600 dark:text-sky-400">{formatAmount(50000)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5: Registro rápido — voz, escáner y Kiri Coach */}
+              {currentStep === 4 && (
                 <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* Left: text */}
                   <div className="flex flex-col justify-center space-y-3">
@@ -425,7 +483,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                   </div>
                 </div>
               )}
-              {currentStep === 4 && (
+              {currentStep === 5 && (
                 <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
                   <div className="flex flex-col justify-center space-y-3">
                     <div className="h-14 w-14 rounded-2xl bg-kiri-emerald/10 flex items-center justify-center">
@@ -445,6 +503,7 @@ export function WelcomeOnboarding({ onComplete }: WelcomeOnboardingProps) {
                       { e: "🐜", t: tr("Haces un gasto hormiga"), d: tr("Una hormiga sube al árbol y se lleva lo que compraste.") },
                       { e: "☁️", t: tr("Un pago está por vencer"), d: tr("Se nubla. Toca las nubes para ver cuál.") },
                       { e: "⛈️", t: tr("Tienes pagos vencidos"), d: tr("Llega la tormenta hasta que te pongas al día.") },
+                      { e: "🪙", t: tr("Cumples tu semana"), d: tr("Sale el sol y ganas monedas para la tienda del jardín.") },
                     ].map(x => (
                       <div key={x.t} className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2.5">
                         <span className="text-xl shrink-0">{x.e}</span>

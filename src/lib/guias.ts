@@ -17,7 +17,8 @@ import { api, getUserId } from "@/lib/api-client"
  */
 const VERSION_GUIA: Record<string, number> = {
   social: 3, // + registrar préstamos, ahorros y deudas que ya existían
-  gestion: 3, // v2 Proyecciones reales; v3 cómo recibes tu plata (fijo, quincenas distintas, variable)
+  gestion: 4, // v2 Proyecciones reales; v3 cómo recibes tu plata (fijo, quincenas distintas, variable); v4 plan semanal
+  jardin: 2, // v2 monedas, tienda, cofres para amigos y plan semanal
   "registro-rapido": 2, // cuota mensual de IA por plan
 }
 const conVersion = (id: string) => (VERSION_GUIA[id] ?? 1) > 1 ? `${id}@${VERSION_GUIA[id]}` : id

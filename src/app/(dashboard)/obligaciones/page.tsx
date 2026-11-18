@@ -44,10 +44,11 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import type { Loan } from "@/lib/types"
-import { tr } from "@/lib/i18n"
+import { tr, localeFecha } from "@/lib/i18n"
 import { celebrarLogro } from "@/components/referidos/CompartirLogro"
 import { getPeriodDateRange, getPeriodRangeLabel } from "@/lib/period-filter"
 import { esDelPeriodo, pendienteDelPeriodo, pagadoDelPeriodo, ordenarObligaciones } from "@/lib/obligaciones-periodo"
+import { fechaDelPrestamo, prestamoEnPeriodo } from "@/lib/obligaciones-pendientes"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Tab = "gastos_fijos" | "deudas" | "me_deben"
@@ -949,7 +950,7 @@ export default function ObligacionesPage() {
         <div className="space-y-3">
           <FiltrosEstado value={statusFilter} onChange={setStatusFilter} />
           {statusFilter === "periodo" && !loading && (
-            <ResumenPeriodo items={fixedExpenses.filter(fe => esDelPeriodo(fe, rangoPeriodo))} rango={getPeriodRangeLabel(incomeFrequency, diasCobro ?? "")} formatAmount={formatAmount} tipo="gastos" />
+            <ResumenPeriodo items={fixedExpenses.filter(fe => esDelPeriodo(fe, rangoPeriodo))} rango={getPeriodRangeLabel(incomeFrequency, diasCobro ?? "")} rangoFechas={rangoPeriodo} formatAmount={formatAmount} tipo="gastos" />
           )}
 
           {loading ? (
@@ -1004,7 +1005,7 @@ export default function ObligacionesPage() {
         <div className="space-y-3">
           <FiltrosEstado value={statusFilter} onChange={setStatusFilter} />
           {statusFilter === "periodo" && !loading && (
-            <ResumenPeriodo items={debts.filter(d => esDelPeriodo(d, rangoPeriodo))} rango={getPeriodRangeLabel(incomeFrequency, diasCobro ?? "")} formatAmount={formatAmount} tipo="deudas" />
+            <ResumenPeriodo items={debts.filter(d => esDelPeriodo(d, rangoPeriodo))} rango={getPeriodRangeLabel(incomeFrequency, diasCobro ?? "")} rangoFechas={rangoPeriodo} formatAmount={formatAmount} tipo="deudas" />
           )}
 
           {loading ? (
@@ -1104,6 +1105,18 @@ export default function ObligacionesPage() {
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-sm truncate">{tr("Le debo a {0}", [lenderName])}</p>
                           <p className="text-[10px] text-muted-foreground">{loan.descripcion || tr("Préstamo P2P")}</p>
+                          {(() => {
+                            const fecha = fechaDelPrestamo(loan)
+                            if (!fecha) return <p className="text-[9px] text-muted-foreground">{tr("Sin fecha de pago: no suma en tus obligaciones")}</p>
+                            const cuenta = prestamoEnPeriodo(loan, rangoPeriodo) > 0
+                            return (
+                              <p className={cn("text-[9px] font-bold", cuenta ? "text-amber-600" : "text-muted-foreground")}>
+                                {cuenta
+                                  ? tr("Se paga el {0} · suma en este periodo", [fecha.toLocaleDateString(localeFecha(), { day: "numeric", month: "short" })])
+                                  : tr("Se paga el {0} · sumará cuando llegue su periodo", [fecha.toLocaleDateString(localeFecha(), { day: "numeric", month: "short" })])}
+                              </p>
+                            )
+                          })()}
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-sm font-black text-amber-600">{formatAmount(loan.remainingAmount)}</p>
@@ -3134,15 +3147,16 @@ function FiltrosEstado({ value, onChange }: { value: FiltroEstado; onChange: (f:
 }
 
 /** Cuánto toca pagar en el periodo actual: lo que falta, lo ya pagado y cuántas quedan. */
-function ResumenPeriodo({ items, rango, formatAmount, tipo }: {
+function ResumenPeriodo({ items, rango, rangoFechas, formatAmount, tipo }: {
   items: (Debt | FixedExpense)[]
   rango: string
+  rangoFechas: { start: Date; end: Date }
   formatAmount: (n: number) => string
   tipo: "gastos" | "deudas"
 }) {
-  const falta = items.reduce((a, i) => a + pendienteDelPeriodo(i), 0)
+  const falta = items.reduce((a, i) => a + pendienteDelPeriodo(i, rangoFechas), 0)
   const pagado = items.reduce((a, i) => a + pagadoDelPeriodo(i), 0)
-  const pendientes = items.filter(i => pendienteDelPeriodo(i) > 0).length
+  const pendientes = items.filter(i => pendienteDelPeriodo(i, rangoFechas) > 0).length
   const total = falta + pagado
   const pct = total > 0 ? Math.round((pagado / total) * 100) : 0
   if (items.length === 0) {

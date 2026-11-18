@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   X, PiggyBank, Coins, Loader2, ChevronRight, 
-  Heart, Users, Home, Sparkles, ArrowRightLeft, Check,
+  Heart, Users, Home, Sparkles, ArrowRightLeft, Check, Gift,
 } from "lucide-react"
+import { RegalarCofre } from "@/components/jardin/tienda/RegalarCofre"
 import { cn } from "@/lib/utils"
 import { connectionsApi } from "@/lib/api-client"
 import { useAppContext } from "@/lib/app-context"
@@ -87,6 +88,8 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
   // El cambio de rol nunca es instantáneo: elegir una opción abre esta modal
   // de confirmación primero — es la que realmente manda la solicitud.
   const [roleConfirmTarget, setRoleConfirmTarget] = useState<ConnectionRole | null>(null)
+  /* Regalarle un cofre del jardín (se paga con monedas) */
+  const [regalarAbierto, setRegalarAbierto] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -199,6 +202,11 @@ export function ConnectionProfileCard({ connectionId, myId, open, onClose, onCha
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">{tr("Conectados desde {0}", [formatDate(data.connection.createdAt)])}</p>
             </div>
+            <button type="button" onClick={() => setRegalarAbierto(true)}
+              className="flex items-center gap-1.5 rounded-full bg-rose-500 px-4 py-2 text-xs font-extrabold text-white shadow-md shadow-rose-500/25 transition-transform hover:scale-105 active:scale-95">
+              <Gift className="h-4 w-4" />{tr("Regalarle un cofre")}
+            </button>
+            <RegalarCofre abierto={regalarAbierto} onAbierto={setRegalarAbierto} amigo={{ id: data.peer.id, nombre: data.peer.nombre }} />
           </div>
 
           {/* Rol en tu vida — cambiar de opción NUNCA aplica al instante: abre

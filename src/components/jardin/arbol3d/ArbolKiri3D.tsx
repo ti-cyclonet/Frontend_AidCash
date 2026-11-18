@@ -60,6 +60,35 @@ interface Props {
   children?: ReactNode
 }
 
+/**
+ * Solo en desarrollo (como "kiri_hora_prueba" del motor): permite revisar el
+ * árbol en cualquier nivel, sano y con cualquier clima sin tocar datos.
+ *   localStorage kiri_nivel_prueba = "3.5"   (nivel 3 a la mitad)
+ *   localStorage kiri_salud_prueba = "100"
+ *   localStorage kiri_clima_prueba = "sol" | "nubes" | "tormenta"
+ *   localStorage kiri_fondo_prueba = "100"   (cerca del fondo de emergencia)
+ *   localStorage kiri_manzanas_prueba = "1"  (frutos colgando aunque ya se sacudió hoy)
+ *   localStorage kiri_racha_prueba = "5"     (días de racha: con 5 llegan las mariposas)
+ * En producción no hace nada: el nivel sigue saliendo solo de la XP del servidor.
+ */
+function pruebasDesarrollo(p: Pick<Props, "nivel" | "progreso" | "clima" | "salud" | "fondo" | "manzanasArbol" | "finanzas">) {
+  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return p
+  try {
+    const nivelP = Number(localStorage.getItem("kiri_nivel_prueba")), saludP = Number(localStorage.getItem("kiri_salud_prueba"))
+    const climaP = localStorage.getItem("kiri_clima_prueba") as ClimaArbol | null
+    const nivel = localStorage.getItem("kiri_nivel_prueba") && nivelP >= 1 && nivelP <= 6.99 ? nivelP : null
+    return {
+      nivel: nivel ? Math.floor(nivel) : p.nivel,
+      progreso: nivel ? nivel - Math.floor(nivel) : p.progreso,
+      salud: localStorage.getItem("kiri_salud_prueba") && Number.isFinite(saludP) ? saludP : p.salud,
+      clima: climaP === "sol" || climaP === "nubes" || climaP === "tormenta" ? climaP : p.clima,
+      fondo: localStorage.getItem("kiri_fondo_prueba") ? Number(localStorage.getItem("kiri_fondo_prueba")) : p.fondo,
+      manzanasArbol: localStorage.getItem("kiri_manzanas_prueba") === "1" ? true : p.manzanasArbol,
+      finanzas: localStorage.getItem("kiri_racha_prueba") ? { ...p.finanzas, racha: Number(localStorage.getItem("kiri_racha_prueba")) } : p.finanzas,
+    }
+  } catch { return p }
+}
+
 function soportaWebGL() {
   try {
     const c = document.createElement("canvas")
@@ -149,7 +178,8 @@ export function ArbolKiri3D(props: Props) {
   }, [])
 
   // ── Estado → motor ────────────────────────────────────────────────────────
-  const { datosListos, nivel, progreso, clima, tormentaHormiga, regando, ingreso, salud, manzanasArbol, fondo, finanzas, frutos, sacudida, subioNivel, gastosHormiga } = props
+  const { datosListos, tormentaHormiga, regando, ingreso, frutos, sacudida, subioNivel, gastosHormiga } = props
+  const { nivel, progreso, clima, salud, fondo, manzanasArbol, finanzas } = pruebasDesarrollo(props)
   // las finanzas llegan como objeto nuevo en cada render: se comparan por valor
   const claveFinanzas = JSON.stringify(finanzas)
   useEffect(() => {

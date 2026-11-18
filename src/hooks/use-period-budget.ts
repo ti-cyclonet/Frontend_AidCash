@@ -54,7 +54,7 @@ export interface PeriodBudgetResult {
 
 export function usePeriodBudget(): PeriodBudgetResult {
   const { income, ingresoPeriodo, incomeFrequency, diasCobro } = useAppContext()
-  const { debts, fixedExpenses, extraIncomes } = useFinanceData()
+  const { debts, fixedExpenses, extraIncomes, prestamosQueDebo } = useFinanceData()
 
   const totalExtraIncome = useMemo(
     () => extraIncomes.reduce((acc, e) => acc + e.monto, 0),
@@ -64,10 +64,11 @@ export function usePeriodBudget(): PeriodBudgetResult {
   // ═══ PASO 1: PeriodManager filtra obligaciones del periodo actual ═══
   // Esto se recalcula cada vez que cambian debts, fixedExpenses, o la frecuencia.
   // Cuando markPaid() actualiza el estado local de una deuda (pagadoEstePeriodo = true),
-  // filterPendingOnly la excluye → totalObligations baja → allocation se recalcula.
+  // ya no tiene pendiente en el periodo → totalObligations baja → allocation se recalcula
+  // (ver lib/obligaciones-pendientes.ts).
   const periodData = useMemo(
-    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency, diasCobro, ingresoPeriodo),
-    [income, ingresoPeriodo, totalExtraIncome, debts, fixedExpenses, incomeFrequency, diasCobro]
+    () => getPeriodData(income, totalExtraIncome, debts, fixedExpenses, incomeFrequency, diasCobro, ingresoPeriodo, prestamosQueDebo),
+    [income, ingresoPeriodo, totalExtraIncome, debts, fixedExpenses, incomeFrequency, diasCobro, prestamosQueDebo]
   )
 
   // ═══ PASO 2: "El Cerebro" calcula la distribución con datos dinámicos ═══

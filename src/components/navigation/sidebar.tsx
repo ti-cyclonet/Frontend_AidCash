@@ -96,7 +96,11 @@ export function Sidebar() {
 
   return (
     <aside className={cn(
-      "hidden lg:flex flex-col h-screen bg-card border-r border-border sticky top-0 shrink-0 transition-all duration-300 z-40",
+      "hidden lg:flex flex-col h-screen bg-card border-r border-border sticky top-0 shrink-0 transition-all duration-300",
+      // El panel de notificaciones vive dentro de la barra (sticky = su propio
+      // contexto de capas): con z-40 quedaba DEBAJO de lo que la página pone en
+      // z-40, como el saldo de monedas del jardín. Abierto, la barra sube.
+      notifsOpen ? "z-[70]" : "z-40",
       collapsed ? "w-[68px]" : "w-[280px]"
     )}>
       {/* Header */}

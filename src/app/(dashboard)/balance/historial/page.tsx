@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { ArrowLeft, Calendar, History, Search, Trash2, X, Lock } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,15 +10,16 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useAppContext } from "@/lib/app-context"
-import { impulseApi, reportsApi, userApi, type BalanceReport, type Movement, type MovementType } from "@/lib/api-client"
+import { impulseApi, reportsApi, userApi, planSemanalApi, type BalanceReport, type Movement, type MovementType, type SemanaPlanGuardada } from "@/lib/api-client"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useToast } from "@/hooks/use-toast"
 import { buildMovements } from "@/lib/balance-movements"
 import { getCurrentQuincena, getPeriodDateRange, getQuincenasDelMes } from "@/lib/period-filter"
 import { ExportButtons } from "@/components/balance/ExportButtons"
 import { MovementList, MOVEMENT_FILTERS, esEntrada } from "@/components/balance/MovementList"
-import { FeatureGate } from "@/components/plan/feature-gate"
+import { SemanasDelPeriodo, partirEnSemanas, enSemana } from "@/components/balance/SemanasDelPeriodo"
 import { usePlan } from "@/lib/plan-context"
+import { OfertaPlan } from "@/components/plan/OfertaPlan"
 import { tr, localeFecha } from "@/lib/i18n"
 
 /**
@@ -28,8 +30,10 @@ import { tr, localeFecha } from "@/lib/i18n"
  * Por defecto muestra SOLO el periodo de ingreso actual (la quincena o el mes
  * en curso): cuando empieza el siguiente, lo anterior deja de verse aquí. Los
  * periodos pasados se consultan con "Elegir mes" — para un usuario quincenal,
- * ese mes se muestra separado en Periodo 1 y Periodo 2. "PDF" abre el
- * selector de meses y descarga solo después de elegir.
+ * ese mes trae dos botones, Periodo 1 y Periodo 2, y se ve uno a la vez. El
+ * periodo se parte en las semanas del plan semanal (2 o 4): cada una muestra
+ * lo gastado y su sello, y al tocarla la lista queda solo con esa semana.
+ * "PDF" abre el selector de meses y descarga solo después de elegir.
  */
 
 type Vista = { tipo: "actual" } | { tipo: "mes"; year: number; month: number }
@@ -121,15 +125,35 @@ export default function HistorialPage() {
     refetch()
   }
 
-  // Rango [start, end) de lo que se está viendo.
-  const rango = useMemo(() => {
-    if (vista.tipo === "actual") return getPeriodDateRange(incomeFrequency, diasCobro)
-    if (quincenal) {
-      const [q1, q2] = getQuincenasDelMes(diasCobro, vista.year, vista.month)
-      return { start: q1.start, end: q2.end }
-    }
-    return { start: new Date(vista.year, vista.month, 1), end: new Date(vista.year, vista.month + 1, 1) }
+  // Periodos de lo que se está viendo: uno (periodo actual o un mes mensual) o
+  // dos (un mes de un usuario quincenal: Periodo 1 y Periodo 2).
+  const periodos = useMemo(() => {
+    if (vista.tipo === "actual") return [{ periodo: 1, ...getPeriodDateRange(incomeFrequency, diasCobro) }]
+    if (quincenal) return getQuincenasDelMes(diasCobro, vista.year, vista.month)
+    return [{ periodo: 1, start: new Date(vista.year, vista.month, 1), end: new Date(vista.year, vista.month + 1, 1) }]
   }, [vista, incomeFrequency, diasCobro, quincenal])
+  // Rango [start, end) que se pide al servidor (todo lo que se está viendo)
+  const rango = useMemo(() => ({ start: periodos[0].start, end: periodos[periodos.length - 1].end }), [periodos])
+
+  // Periodo elegido (por defecto, el que contiene hoy) y semana elegida
+  const [periodoSel, setPeriodoSel] = useState(0)
+  const [semanaSel, setSemanaSel] = useState<number | null>(null)
+  useEffect(() => {
+    const hoy = new Date()
+    const i = periodos.findIndex(p => hoy >= p.start && hoy < p.end)
+    setPeriodoSel(i >= 0 ? i : 0)
+    setSemanaSel(null)
+  }, [periodos])
+  const periodo = periodos[Math.min(periodoSel, periodos.length - 1)]
+  const semanas = useMemo(() => partirEnSemanas(periodo.start, periodo.end, quincenal ? 2 : 4), [periodo, quincenal])
+
+  // Semanas guardadas del plan (meta y sello) en lo que se está viendo
+  const [planSemanas, setPlanSemanas] = useState<SemanaPlanGuardada[]>([])
+  useEffect(() => {
+    let vigente = true
+    planSemanalApi.semanas(ymd(rango.start), ymd(new Date(rango.end.getTime() - DIA))).then(({ data }) => { if (vigente) setPlanSemanas(data?.semanas ?? []) })
+    return () => { vigente = false }
+  }, [rango, recarga])
 
   useEffect(() => {
     let vigente = true
@@ -142,39 +166,33 @@ export default function HistorialPage() {
     return () => { vigente = false }
   }, [rango, recarga])
 
+  // Todo lo del periodo elegido (sin filtros): para los totales y las semanas
+  const delPeriodo = useMemo(() => buildMovements(report).filter(m => {
+    const f = new Date(m.fecha)
+    return f >= periodo.start && f < periodo.end
+  }), [report, periodo])
+
   const movimientos = useMemo(() => {
-    let res = buildMovements(report).filter(m => {
-      const f = new Date(m.fecha)
-      return f >= rango.start && f < rango.end
-    })
+    let res = delPeriodo
+    const semana = semanaSel !== null ? semanas.find(s => s.indice === semanaSel) : null
+    if (semana) res = res.filter(m => enSemana(m, semana))
     if (filtro !== "todos") res = res.filter(m => m.tipo === filtro)
     if (busqueda) {
       const q = busqueda.toLowerCase()
       res = res.filter(m => m.nombre.toLowerCase().includes(q) || m.tipoLabel.toLowerCase().includes(q) || (m.acreedor ?? "").toLowerCase().includes(q) || (m.categoriaNombre ?? "").toLowerCase().includes(q) || (m.tarjetaNombre ?? "").toLowerCase().includes(q))
     }
     return res
-  }, [report, rango, filtro, busqueda])
-
-  // Secciones: un mes pasado de un usuario quincenal se parte en Periodo 1 / 2.
-  const secciones = useMemo(() => {
-    if (vista.tipo === "mes" && quincenal) {
-      return getQuincenasDelMes(diasCobro, vista.year, vista.month).map(q => ({
-        key: `p${q.periodo}`,
-        titulo: tr("Periodo {0}", [q.periodo]),
-        subtitulo: fmtRango(q.start, q.end),
-        movs: movimientos.filter(m => { const f = new Date(m.fecha); return f >= q.start && f < q.end }),
-      }))
-    }
-    return [{ key: "todo", titulo: "", subtitulo: "", movs: movimientos }]
-  }, [vista, quincenal, diasCobro, movimientos])
+  }, [delPeriodo, semanas, semanaSel, filtro, busqueda])
 
   const titulo = vista.tipo === "actual"
     ? (quincenal ? tr("Quincena actual · Periodo {0}", [getCurrentQuincena(diasCobro)]) : tr("Mes actual"))
     : nombreMes(vista.year, vista.month)
-  const total = totales(movimientos)
+  const total = totales(delPeriodo)
+  const semanaElegida = semanaSel !== null ? semanas.find(s => s.indice === semanaSel) : null
+  const totalLista = totales(movimientos)
 
   return (
-    <FeatureGate feature="basicReports">
+    <>
       <div className="space-y-5 pb-10">
         {/* Encabezado */}
         <header className="space-y-3">
@@ -199,19 +217,47 @@ export default function HistorialPage() {
           </div>
         </header>
 
+        {/* Buen momento: el mes se acaba y en FREE se oculta del historial el día 1 */}
+        {mesesPlan <= 1 && (() => {
+          const hoy = new Date(), fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
+          if (fin - hoy.getDate() > 4) return null
+          const mes = hoy.toLocaleDateString(localeFecha(), { month: "long" }), sig = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1).toLocaleDateString(localeFecha(), { month: "long" })
+          return (
+            <OfertaPlan origen="historial_cierre" icono={History} cerrable
+              titulo={tr("Tu {0} se oculta de tu historial el 1 de {1}", [mes, sig])}
+              texto={tr("Con KIRI PLUS conservas 24 meses de historial y comparas en qué se te va la plata mes a mes. Tus datos nunca se borran.")} />
+          )
+        })()}
+
         {/* Qué se está viendo */}
         <Card className="border-none bg-card shadow-sm rounded-2xl">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-black">{titulo}</p>
-                <p className="text-[11px] text-muted-foreground">{fmtRango(rango.start, rango.end)}</p>
+                <p className="text-[11px] text-muted-foreground">{fmtRango(periodo.start, periodo.end)}</p>
               </div>
               {vista.tipo === "mes" && (
                 <button onClick={() => setVista({ tipo: "actual" })} className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-kiri-emerald bg-kiri-emerald/10 hover:bg-kiri-emerald/20 rounded-lg px-2.5 py-1.5">
                   <X className="h-3 w-3" />{" "}{tr("Volver al periodo actual")}</button>
               )}
             </div>
+            {/* Mes de un usuario quincenal: se ve un periodo a la vez */}
+            {periodos.length > 1 && (
+              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-muted/50 p-1">
+                {periodos.map((p, i) => (
+                  <button key={p.periodo} onClick={() => { setPeriodoSel(i); setSemanaSel(null) }}
+                    className="relative rounded-xl px-3 py-2 text-left">
+                    {periodoSel === i && (
+                      <motion.span layoutId="periodo-elegido" className="absolute inset-0 rounded-xl bg-kiri-emerald shadow-sm"
+                        transition={{ type: "spring", stiffness: 420, damping: 32 }} />
+                    )}
+                    <span className={cn("relative block text-xs font-black transition-colors", periodoSel === i ? "text-white" : "text-foreground/70")}>{tr("Periodo {0}", [p.periodo])}</span>
+                    <span className={cn("relative block text-[9px] transition-colors", periodoSel === i ? "text-white/70" : "text-muted-foreground")}>{fmtRango(p.start, p.end)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-emerald-500/5 px-3 py-2">
                 <p className="text-[9px] font-bold uppercase text-muted-foreground">{tr("Entró")}</p>
@@ -227,6 +273,15 @@ export default function HistorialPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Semanas del periodo (las mismas del plan semanal) */}
+        {!loading && (
+          <AnimatePresence mode="wait">
+            <motion.div key={ymd(periodo.start)} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }}>
+              <SemanasDelPeriodo semanas={semanas} movimientos={delPeriodo} plan={planSemanas} seleccion={semanaSel} onSeleccion={setSemanaSel} formatAmount={formatAmount} />
+            </motion.div>
+          </AnimatePresence>
+        )}
 
         {/* Búsqueda y filtros */}
         <div className="relative">
@@ -253,32 +308,27 @@ export default function HistorialPage() {
             {[0, 1, 2].map(i => <div key={i} className="h-16 rounded-2xl bg-muted/20 animate-pulse" />)}
           </div>
         ) : (
-          secciones.map(sec => {
-            const t = totales(sec.movs)
-            return (
-              <section key={sec.key} className="space-y-2">
-                {sec.titulo && (
-                  <div className="flex items-end justify-between px-1 pt-2">
-                    <div>
-                      <h2 className="text-sm font-black">{sec.titulo}</h2>
-                      <p className="text-[10px] text-muted-foreground">{sec.subtitulo}</p>
-                    </div>
-                    <p className="text-[10px] font-bold">
-                      <span className="text-emerald-500">+{formatAmount(t.entradas)}</span>
-                      <span className="text-muted-foreground"> · </span>
-                      <span className="text-red-500">-{formatAmount(t.salidas)}</span>
-                    </p>
-                  </div>
-                )}
-                <MovementList
-                  movements={sec.movs}
-                  formatAmount={formatAmount}
-                  onEliminar={setAEliminar}
-                  vacio={sec.titulo ? tr("Sin movimientos en el {0}.", [sec.titulo.toLowerCase()]) : tr("No hay movimientos que mostrar.")}
-                />
-              </section>
-            )
-          })
+          <section className="space-y-2">
+            {semanaElegida && (
+              <div className="flex items-end justify-between px-1">
+                <div>
+                  <h2 className="text-sm font-black">{tr("Semana {0}", [semanaElegida.indice])}</h2>
+                  <p className="text-[10px] text-muted-foreground">{fmtRango(semanaElegida.start, semanaElegida.end)}</p>
+                </div>
+                <p className="text-[10px] font-bold">
+                  <span className="text-emerald-500">+{formatAmount(totalLista.entradas)}</span>
+                  <span className="text-muted-foreground"> · </span>
+                  <span className="text-red-500">-{formatAmount(totalLista.salidas)}</span>
+                </p>
+              </div>
+            )}
+            <MovementList
+              movements={movimientos}
+              formatAmount={formatAmount}
+              onEliminar={setAEliminar}
+              vacio={semanaElegida ? tr("Sin movimientos en la semana {0}.", [semanaElegida.indice]) : periodos.length > 1 ? tr("Sin movimientos en el periodo {0}.", [periodo.periodo]) : tr("No hay movimientos que mostrar.")}
+            />
+          </section>
         )}
 
         {/* Confirmar eliminación de un gasto */}
@@ -348,6 +398,6 @@ export default function HistorialPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </FeatureGate>
+    </>
   )
 }

@@ -3,7 +3,7 @@ import { crearArbol, crearPiezasFruta, GX } from "./arbol"
 import { crearCerca, RADIO_CERCA } from "./cerca"
 import { crearCofre, type TipoCofre3D } from "./cofre"
 import { crearHabitantes, type ClaveHabitante, type FinanzasIsla } from "./habitantes"
-import { ACCESORIOS, EQUIPADO_INICIAL, type AspectoFruto, type Equipado } from "./especies"
+import { ACCESORIOS, EQUIPADO_INICIAL, type Equipado } from "./especies"
 import { crearCamara } from "./camara"
 import { climaActual, crearLluvia, crearNubes, crearRayos, WX, type ClimaWX } from "./clima"
 import { crearEfectos } from "./efectos"
@@ -194,12 +194,12 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     }
     if (cambia("color") || cambia("especie")) { arbol.ponerColor(eq.color); efectos.ponerTexturaHojas(arbol.texturaHojas) }
     if (cambia("hormiguero")) hormigas.ponerAspecto(ACCESORIOS.hormiguero[eq.hormiguero] ?? ACCESORIOS.hormiguero.arena)
-    if (cambia("cerca")) cerca.ponerAspecto(ACCESORIOS.cerca[eq.cerca] ?? ACCESORIOS.cerca.blanca)
-    if (cambia("regadera")) efectos.ponerRegadera(ACCESORIOS.regadera[eq.regadera] ?? ACCESORIOS.regadera.azul)
+    if (cambia("cerca")) cerca.ponerAspecto(eq.cerca in ACCESORIOS.cerca ? eq.cerca : "blanca")
+    if (cambia("regadera")) efectos.ponerRegadera(eq.regadera in ACCESORIOS.regadera ? eq.regadera : "azul")
     if (cambia("frutos") || cambia("especie")) {
-      /* "auto" = el fruto propio de la especie; los dorados del minijuego no cambian */
-      const f = (ACCESORIOS.frutos[eq.frutos] ?? {}) as AspectoFruto
-      fruta.fruitMat.color.set(f.c ?? arbol.especie.fruta.color); fruta.fruitMat.metalness = f.metal ?? 0; fruta.fruitMat.roughness = f.metal ? 0.25 : 0.38
+      /* "auto" = la manzana con el color de la especie; el resto son modelos (accesorios3d.ts) */
+      fruta.fruitMat.color.set(arbol.especie.fruta.color)
+      fruta.ponerModelo(eq.frutos in ACCESORIOS.frutos ? eq.frutos : "auto")
     }
     equipado = true
   }
@@ -270,7 +270,8 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
    * de a poco (y se sube si sobra). En reposo se dibuja a 30 fps (el viento se ve
    * igual y el celular no se calienta); con un toque, arrastre, lluvia o cualquier
    * efecto vuelve a 60 fps unos segundos. */
-  const dprMax = Math.min(window.devicePixelRatio || 1, mobile ? 1.75 : 2), dprMin = Math.min(dprMax, mobile ? 0.9 : 1)
+  /* en celular nunca baja de 1,25x: por debajo el árbol se ve borroso (pedido del usuario: misma calidad que en escritorio) */
+  const dprMax = Math.min(window.devicePixelRatio || 1, 2), dprMin = Math.min(dprMax, mobile ? 1.25 : 1)
   let dpr = dprMax, turboHasta = 0, medida = 0, cuadros = 0, holgura = 0
   const animar = (seg = 6) => { turboHasta = Math.max(turboHasta, performance.now() + seg * 1000) }
   const alInteractuar = () => animar()
@@ -399,7 +400,10 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
     }
     blades.instanceMatrix.needsUpdate = true
     for (const f of flies) {
-      const u = f.userData, on = Lv === 6 && weather !== "storm" && cur.rain < 0.7; f.visible = on; if (!on) continue
+      /* Mariposas: llegan con 5 días de racha y se quedan mientras la racha siga (se esconden en la tormenta) */
+      const u = f.userData, on = (est.finanzas?.racha ?? 0) >= 5 && weather !== "storm" && cur.rain < 0.7
+      u.k = Math.max(0, Math.min(1, u.k + (on ? dt : -dt) * 1.2)); f.visible = u.k > 0.01; if (!f.visible) continue
+      f.scale.setScalar(0.62 * u.k)
       const fp = (tt: number) => { const a = tt * 0.5 * u.sp + u.ph; return [Math.cos(a) * u.R, u.h + Math.sin(tt * 1.3 + u.ph) * 0.4 + Math.sin(a * 2) * 0.3, Math.sin(a * 1.3) * u.R * 0.8] }
       const lift = u.low ? 0 : arbol.treeTop(G) * 0.25, dip = -1.4 * smooth((Math.sin(t * 0.27 + u.ph * 1.7) - 0.55) / 0.45)
       const p = fp(t), q2 = fp(t + 0.06); f.position.set(p[0], Math.max(0.55 + Hgt(p[0], p[2]), p[1] + lift + dip), p[2])
@@ -424,7 +428,7 @@ export async function crearMotorArbol(canvas: HTMLCanvasElement, op: OpcionesMot
 
     sprouts.visible = Lv >= 3
     fallU.uTime.value = t; { const ms = 1 + 0.06 * Math.sin(t * 2.3); mist.scale.set(2.6 * ms, 1.2 * ms, 1) }
-    cerca.tick(dt, !instant); cofre.tick(dt, !intro && t > 2.5); habitantes.tick(dt, t, { fin: est.finanzas, ingreso: est.ingreso, regando: est.regando }); hormigas.tick(dt); waterTex.offset.y -= dt * 0.08; waterTex.offset.x += dt * 0.01
+    cerca.tick(dt, !instant); cofre.tick(dt, !intro && t > 2.5); habitantes.tick(dt, t, { fin: est.finanzas, ingreso: est.ingreso, regando: est.regando, lluvia: cur.rain }); hormigas.tick(dt); waterTex.offset.y -= dt * 0.08; waterTex.offset.x += dt * 0.01
     oceanU.uTime.value = t; oceanU.uBright.value = (0.55 + 0.45 * clamp(cur.sun / 1.05)) * (1 - 0.5 * noche) + flash * 0.3
     for (const fc of farClouds) { fc.material.color.copy(cur.cloud).multiplyScalar(1 - 0.5 * noche); fc.material.opacity = 0.95 * (1 - cur.cover * 0.5) }
     paisaje.tick(dt, t, noche, cur.cover)

@@ -109,51 +109,62 @@ export const COLORES_HOJA = {
   atardecer: { nombre: "Atardecer", c: ["#ffd25a", "#f0507a", "#a8305a"], em: 0.14 },
   bosque: { nombre: "Bosque oscuro", c: ["#4a7a3a", "#1f4422", "#142e16"], em: 0.14 },
   noche: { nombre: "Azul noche", c: ["#86b6ff", "#3f5fc8", "#2c4596"], em: 0.14 },
+  /* exclusivos de los planes pagos (vienen con el plan, no se compran) */
+  aurora: { nombre: "Aurora", c: ["#8ff5e2", "#5b8ff0", "#8a4ad8"], em: 0.32 },
+  diamante: { nombre: "Diamante", c: ["#f4fcff", "#a9dcff", "#6fa3e6"], em: 0.5 },
 } satisfies Record<string, { nombre: string; c: [string, string, string]; em: number }>
 export type ClaveColor = keyof typeof COLORES_HOJA
-/** Los 15 de la tienda: "auto" es el color propio de cada especie. */
-export const COLORES_TIENDA = ["auto", "esmeralda", "menta", "bosque", "otono", "coral", "turquesa", "sakura", "lavanda", "morado", "noche", "carmesi", "blanco", "atardecer", "dorado"] as const
+/** Los de la tienda: "auto" es el color propio de cada especie; aurora (PLUS) y diamante (PRO) vienen con el plan. */
+export const COLORES_TIENDA = ["auto", "esmeralda", "menta", "bosque", "otono", "coral", "turquesa", "sakura", "lavanda", "morado", "noche", "carmesi", "blanco", "atardecer", "dorado", "aurora", "diamante"] as const
 export type ColorElegido = (typeof COLORES_TIENDA)[number]
 
-/** Aspectos de los accesorios. El primero de cada grupo viene incluido. */
+/**
+ * Accesorios de la tienda. El primero de cada grupo viene incluido. Ya no son
+ * solo colores: cada uno cambia la forma (los modelos están en accesorios3d.ts y,
+ * los del hormiguero, en hormigas.ts). `c` es el color de muestra de la tarjeta.
+ */
 export const ACCESORIOS = {
   hormiguero: {
-    arena: { nombre: "Arena", ic: "🏜️", a: 0xc98d4f, b: 0x9a6233, lip: 0xb67a42 },
-    arcilla: { nombre: "Arcilla roja", ic: "🧱", a: 0xc4643c, b: 0x8a3a22, lip: 0xb0583a },
-    piedra: { nombre: "Piedra", ic: "🪨", a: 0xb8b3a8, b: 0x7a756c, lip: 0x9a958c, peb: 0xd0d0d0 },
-    musgo: { nombre: "Musgo", ic: "🌿", a: 0x7aa64e, b: 0x46743a, lip: 0x5d8a3e },
-    hongo: { nombre: "Casita hongo", ic: "🍄", a: 0xc98d4f, b: 0x9a6233, lip: 0xb67a42, hongo: true },
+    arena: { nombre: "Arena", c: 0xc98d4f, a: 0xc98d4f, b: 0x9a6233, lip: 0xb67a42 },
+    arcilla: { nombre: "Arcilla roja", c: 0xc4643c, a: 0xc4643c, b: 0x8a3a22, lip: 0xb0583a },
+    piedra: { nombre: "Piedra", c: 0xb8b3a8, a: 0xb8b3a8, b: 0x7a756c, lip: 0x9a958c, peb: 0xd0d0d0 },
+    musgo: { nombre: "Musgo", c: 0x7aa64e, a: 0x7aa64e, b: 0x46743a, lip: 0x5d8a3e },
+    hongo: { nombre: "Casita hongo", c: 0xd8322c, a: 0xf6e7cc, b: 0xe2cba4, lip: 0x8a5a34, estilo: "hongo" as const },
+    banco: { nombre: "Mini banco", c: 0xe8c050, a: 0xe9e6de, b: 0xc9c4b8, lip: 0xb9b2a4, peb: 0xf2c230, estilo: "banco" as const },
   },
   cerca: {
-    blanca: { nombre: "Blanca", ic: "🤍", c: 0xf1e4c8 },
-    madera: { nombre: "Madera", ic: "🪵", c: 0xa8784a },
-    bambu: { nombre: "Bambú", ic: "🎋", c: 0xc2cf6e },
-    azul: { nombre: "Azul pastel", ic: "💙", c: 0x9cc4e8 },
-    rosa: { nombre: "Rosa", ic: "🩷", c: 0xf2b6c8 },
-    dorada: { nombre: "Dorada", ic: "✨", c: 0xe8c050, metal: 0.55 },
+    blanca: { nombre: "Tablitas blancas", c: 0xf1e4c8 },
+    madera: { nombre: "Troncos rústicos", c: 0x8a5a34 },
+    bambu: { nombre: "Bambú", c: 0xc2c45a },
+    puas: { nombre: "Alambre de púas", c: 0x8a8f96 },
+    piedra: { nombre: "Muro de piedra", c: 0x9c978d },
+    seto: { nombre: "Seto de arbustos", c: 0x4f8f3a },
+    reja: { nombre: "Reja de hierro", c: 0x2c2d33 },
+    dorada: { nombre: "Reja dorada", c: 0xe8c050 },
   },
   regadera: {
-    azul: { nombre: "Azul", ic: "🔵", b: 0x3aa0c0, d: 0x2a7a96 },
-    roja: { nombre: "Roja", ic: "🔴", b: 0xd94a3a, d: 0xa83228 },
-    verde: { nombre: "Verde", ic: "🟢", b: 0x5fae4a, d: 0x3f8030 },
-    rosa: { nombre: "Rosa", ic: "🌷", b: 0xf08ab0, d: 0xc25c86 },
-    cobre: { nombre: "Cobre", ic: "🟠", b: 0xc97a46, d: 0x9a5630, metal: 0.6 },
-    dorada: { nombre: "Dorada", ic: "🌟", b: 0xe8b82e, d: 0xb8901a, metal: 0.6 },
+    azul: { nombre: "Regadera clásica", c: 0x3aa0c0 },
+    vaso: { nombre: "Vaso de agua", c: 0x9fd8f5 },
+    balde: { nombre: "Balde", c: 0xa8b2bc },
+    pistola: { nombre: "Pistola de agua", c: 0xff8a2a },
+    dorada: { nombre: "Regadera dorada", c: 0xe8b82e },
+    cartera: { nombre: "Cartera de monedas", c: 0x7a4a26 },
   },
   frutos: {
-    auto: { nombre: "Los de la especie", ic: "🍎" },
-    naranja: { nombre: "Naranjas", ic: "🍊", c: 0xf08a24 },
-    durazno: { nombre: "Duraznos", ic: "🍑", c: 0xf7a07a },
-    limon: { nombre: "Limones", ic: "🍋", c: 0xf2d93a },
-    ciruela: { nombre: "Ciruelas", ic: "🫐", c: 0x5e2a78 },
-    dorada: { nombre: "Manzanas doradas", ic: "🏅", c: 0xf2c230, metal: 0.5 },
+    auto: { nombre: "Los de la especie", c: 0xd23a22 },
+    patilla: { nombre: "Patillas", c: 0x79b84a },
+    calabaza: { nombre: "Calabazas", c: 0xf08a24 },
+    llanta: { nombre: "Llantas", c: 0x2c2c30 },
+    balon: { nombre: "Balones", c: 0xf4f4ee },
+    dulces: { nombre: "Dulces", c: 0xff5a8a },
+    estrella: { nombre: "Estrellas", c: 0xffd23a },
+    navidad: { nombre: "Bolas de Navidad", c: 0xd8263a },
+    moneda: { nombre: "Monedas de oro", c: 0xe8b82e },
+    billete: { nombre: "Billetes", c: 0x86c98a },
   },
 }
 export type GrupoAccesorio = keyof typeof ACCESORIOS
-export interface AspectoHormiguero { a: number; b: number; lip: number; peb?: number; hongo?: boolean }
-export interface AspectoRegadera { b: number; d: number; metal?: number }
-export interface AspectoFruto { c?: number; metal?: number }
-export interface AspectoCerca { c: number; metal?: number }
+export interface AspectoHormiguero { a: number; b: number; lip: number; peb?: number; estilo?: "hongo" | "banco" }
 
 /** Lo que el usuario tiene puesto en su árbol. */
 export interface Equipado {

@@ -8,9 +8,10 @@ import {
   extraIncomesApi,
   impulseApi,
   userApi,
+  loansApi,
   UndoAlcance,
 } from "@/lib/api-client"
-import { Debt, FixedExpense, ExtraIncome, ImpulseExpense, ImpulseCategory, IncomeFrequency, PagosPeriodo, CuotaAtrasada, AvisoCupo } from "@/lib/types"
+import { Debt, FixedExpense, ExtraIncome, ImpulseExpense, ImpulseCategory, IncomeFrequency, PagosPeriodo, CuotaAtrasada, AvisoCupo, Loan } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/hooks/use-toast"
 import { tr } from "@/lib/i18n"
@@ -95,6 +96,8 @@ function mapDebt(row: Record<string, unknown>): Debt {
     pagosPeriodo: mapPagosPeriodo(row.pagosPeriodo),
     cuotaBase: row.cuotaBase != null ? Number(row.cuotaBase) : undefined,
     cuotaAjustadaEstePeriodo: Boolean(row.cuotaAjustadaEstePeriodo),
+    periodoActual: row.periodoActual as string | undefined,
+    activoDesdePeriodo: (row.activoDesdePeriodo ?? null) as string | null,
     periodoSiguiente: row.periodoSiguiente as string | undefined,
     montoAdelantado: row.montoAdelantado != null ? Number(row.montoAdelantado) : null,
     proximaCuotaCubierta: Boolean(row.proximaCuotaCubierta),
@@ -127,6 +130,8 @@ function mapFixed(row: Record<string, unknown>): FixedExpense {
     budgetCategoryId: (row.budgetCategoryId ?? row.budget_category_id ?? null) as string | null,
     pendienteProximoPeriodo: (row.pendienteProximoPeriodo ?? row.pendiente_proximo_periodo ?? false) as boolean,
     pagosPeriodo: mapPagosPeriodo(row.pagosPeriodo),
+    periodoActual: row.periodoActual as string | undefined,
+    activoDesdePeriodo: (row.activoDesdePeriodo ?? null) as string | null,
     periodoSiguiente: row.periodoSiguiente as string | undefined,
     montoAdelantado: row.montoAdelantado != null ? Number(row.montoAdelantado) : null,
     proximaCuotaCubierta: Boolean(row.proximaCuotaCubierta),
@@ -184,6 +189,9 @@ function useFinanceDataInternal() {
   const [totalAhorradoServidor, setTotalAhorradoServidor] = useState<number | null>(null)
   const [extraIncomes, setExtraIncomes] = useState<ExtraIncome[]>([])
   const [impulseExpenses, setImpulseExpenses] = useState<ImpulseExpense[]>([])
+  // Préstamos de Social donde el usuario DEBE (activos): suman a las obligaciones
+  // del periodo solo cuando su fecha de pago llega (ver lib/obligaciones-pendientes.ts)
+  const [prestamosQueDebo, setPrestamosQueDebo] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState<string | null>(null)
 
@@ -197,13 +205,18 @@ function useFinanceDataInternal() {
     if (!cargadoRef.current) setLoading(true)
     setDbError(null)
     try {
-      const [debtsRes, fixedRes, savingsRes, extraRes, impulseRes] = await Promise.all([
+      const [debtsRes, fixedRes, savingsRes, extraRes, impulseRes, loansRes] = await Promise.all([
         debtsApi.list(),
         fixedExpensesApi.list(),
         savingsApi.list(),
         extraIncomesApi.list(),
         impulseApi.list(),
+        // Si Social falla, el resto de la app sigue igual
+        loansApi.list().catch(() => ({ data: null, error: null })),
       ])
+      if (loansRes.data?.loans) {
+        setPrestamosQueDebo((loansRes.data.loans as unknown as Loan[]).filter(l => l.status === "ACTIVE" && l.borrowerId === userId))
+      }
 
       const firstError = debtsRes.error || fixedRes.error || savingsRes.error || extraRes.error || impulseRes.error
       if (firstError) {
@@ -716,7 +729,7 @@ function useFinanceDataInternal() {
 
   return {
     debts, fixedExpenses, savingsHistory, totalAhorrado,
-    extraIncomes, totalExtraIncome,
+    extraIncomes, totalExtraIncome, prestamosQueDebo,
     loading, dbError,
 
     impulseExpenses, impulseThisPeriod, totalImpulseThisPeriod,
